@@ -16,11 +16,11 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  // Estado do formulário de novo produto
+  // Estado do formulário
   const [newProduct, setNewProduct] = useState({ 
     name: '', 
     campaign_name: '', 
-    platform: '', // Agora começa vazio para digitação
+    platform: '', 
     currency: 'BRL', 
     status: 'active' 
   });
@@ -29,34 +29,46 @@ export default function ProductsPage() {
 
   async function fetchProducts() {
     setLoading(true);
-    const { data } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    
+    // Tenta pegar produtos filtrados pelo usuário atual (se existir ID salvo)
+    // Se não, pega todos (comportamento padrão inicial)
+    const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('autometrics_user_id') : null;
+    
+    let query = supabase.from('products').select('*').order('created_at', { ascending: false });
+    
+    if (currentUserId) {
+      query = query.eq('user_id', currentUserId);
+    }
+
+    const { data } = await query;
     if (data) setProducts(data);
     setLoading(false);
   }
 
+  // --- AQUI ESTAVA O ERRO: Adicionamos 'async' antes dos parenteses ---
   const handleSave = async () => {
+    // Validação
     if (!newProduct.name || !newProduct.campaign_name || !newProduct.platform) {
       return alert("Preencha todos os campos obrigatórios.");
     }
 
-    // 1. RECUPERA O ID AUTOMÁTICO DO NAVEGADOR
-    // Isso garante que o produto tenha o mesmo ID do script gerado na outra página
+    // 1. Lógica Automática de ID do Usuário
     let currentUserId = localStorage.getItem('autometrics_user_id');
-    
     if (!currentUserId) {
-      // Se por algum milagre não tiver ID, cria um agora
       currentUserId = crypto.randomUUID();
       localStorage.setItem('autometrics_user_id', currentUserId);
     }
 
     setSaving(true);
+
+    // 2. Salva no banco com o user_id
     const { data, error } = await supabase.from('products').insert([{
       name: newProduct.name,
       google_ads_campaign_name: newProduct.campaign_name,
       platform: newProduct.platform,
       currency: newProduct.currency,
       status: newProduct.status,
-      user_id: currentUserId // <--- AQUI ESTÁ A MÁGICA
+      user_id: currentUserId // Vínculo automático
     }]).select();
 
     if (error) {
@@ -64,27 +76,6 @@ export default function ProductsPage() {
     } else if (data) {
       setProducts([data[0], ...products]);
       setIsModalOpen(false);
-      setNewProduct({ name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active' });
-      alert('Produto salvo com sucesso!');
-    }
-    setSaving(false);
-  };
-
-    setSaving(true);
-    const { data, error } = await supabase.from('products').insert([{
-      name: newProduct.name,
-      google_ads_campaign_name: newProduct.campaign_name,
-      platform: newProduct.platform, // Salva o texto que você digitou
-      currency: newProduct.currency,
-      status: newProduct.status
-    }]).select();
-
-    if (error) {
-      alert(error.code === '23505' ? 'Erro: Já existe um produto com esse nome de campanha.' : 'Erro ao salvar: ' + error.message);
-    } else if (data) {
-      setProducts([data[0], ...products]);
-      setIsModalOpen(false);
-      // Limpa o formulário
       setNewProduct({ name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active' });
       alert('Produto salvo com sucesso!');
     }
@@ -93,7 +84,6 @@ export default function ProductsPage() {
 
   return (
     <div className="min-h-screen bg-black text-slate-200 font-sans flex">
-      {/* Sidebar simples para voltar */}
       <aside className="w-16 md:w-64 bg-slate-950 border-r border-slate-900 flex flex-col fixed h-full z-20">
         <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-slate-900">
            <Link href="/dashboard" className="flex items-center gap-2 text-white font-bold hover:text-indigo-400 transition-colors"><ArrowLeft size={20} /><span className="hidden md:inline">Voltar</span></Link>
@@ -106,14 +96,12 @@ export default function ProductsPage() {
           <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2"><Plus size={18} /> Novo Produto</button>
         </div>
 
-        {/* Barra de Busca */}
         <div className="bg-slate-900/50 border border-slate-900 p-4 rounded-xl mb-6 flex gap-4 items-center">
           <Search className="text-slate-500" size={18} />
           <input type="text" placeholder="Buscar produto..." className="bg-transparent text-white w-full outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           <button onClick={() => fetchProducts()}><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
         </div>
 
-        {/* Grid de Produtos */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).map((product) => (
             <div key={product.id} className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-indigo-500/30 transition-all group">
@@ -142,7 +130,6 @@ export default function ProductsPage() {
           ))}
         </div>
 
-        {/* Modal de Novo Produto */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg p-6 shadow-2xl">
@@ -166,29 +153,19 @@ export default function ProductsPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {/* ALTERAÇÃO 1: INPUT DE TEXTO LIVRE PARA PLATAFORMA */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Plataforma</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-indigo-500 outline-none transition-colors" 
-                      placeholder="Ex: Kiwify, Eduzz..."
-                      value={newProduct.platform} 
-                      onChange={(e) => setNewProduct({...newProduct, platform: e.target.value})} 
-                    />
+                    <input type="text" className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-indigo-500 outline-none transition-colors" placeholder="Ex: Kiwify, Eduzz..."
+                      value={newProduct.platform} onChange={(e) => setNewProduct({...newProduct, platform: e.target.value})} />
                   </div>
 
-                  {/* ALTERAÇÃO 2: MOEDA COM EURO */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Moeda</label>
-                    <select 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-indigo-500 outline-none appearance-none cursor-pointer"
-                      value={newProduct.currency} 
-                      onChange={(e) => setNewProduct({...newProduct, currency: e.target.value})}
-                    >
+                    <select className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-indigo-500 outline-none appearance-none cursor-pointer"
+                      value={newProduct.currency} onChange={(e) => setNewProduct({...newProduct, currency: e.target.value})}>
                       <option value="BRL">Real (BRL)</option>
                       <option value="USD">Dólar (USD)</option>
-                      <option value="EUR">Euro (EUR)</option> {/* ADICIONADO EURO */}
+                      <option value="EUR">Euro (EUR)</option>
                     </select>
                   </div>
                 </div>
