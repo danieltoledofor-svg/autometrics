@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, ExternalLink, X, ArrowLeft, RefreshCw, 
   Briefcase, Folder, Layers, LayoutGrid, ChevronRight, 
-  Eye, EyeOff, Archive, AlertTriangle
+  Eye, EyeOff, PlayCircle, PauseCircle, AlertTriangle
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -49,75 +49,74 @@ export default function ProductsPage() {
     setLoading(false);
   }
 
-  // --- LÓGICA DE OCULTAR/MOSTRAR ---
+  // --- AÇÕES DO USUÁRIO ---
 
-  // 1. Ocultar/Restaurar um Produto Individual
-  const toggleProductVisibility = async (product: any, e: React.MouseEvent) => {
-    e.preventDefault(); // Evita abrir o link
+  // 1. Alternar Status (Ativo/Pausado) - MANUAL
+  const toggleStatus = async (product: any, e: React.MouseEvent) => {
+    e.preventDefault(); // Não entra no produto
     e.stopPropagation();
+
+    const newStatus = product.status === 'active' ? 'paused' : 'active';
     
-    const newStatus = !product.is_hidden;
-    
-    // Otimista (Atualiza na tela antes do banco)
-    const updatedProducts = products.map(p => p.id === product.id ? { ...p, is_hidden: newStatus } : p);
+    // Atualiza na tela (Otimista)
+    const updatedProducts = products.map(p => p.id === product.id ? { ...p, status: newStatus } : p);
     setProducts(updatedProducts);
 
-    await supabase.from('products').update({ is_hidden: newStatus }).eq('id', product.id);
+    // Atualiza no Banco
+    await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
   };
 
-  // 2. Ocultar/Restaurar TODOS da Conta Selecionada (Ex: Conta Suspensa)
+  // 2. Ocultar/Restaurar (Arquivar)
+  const toggleProductVisibility = async (product: any, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const newHidden = !product.is_hidden;
+    const updatedProducts = products.map(p => p.id === product.id ? { ...p, is_hidden: newHidden } : p);
+    setProducts(updatedProducts);
+
+    await supabase.from('products').update({ is_hidden: newHidden }).eq('id', product.id);
+  };
+
+  // 3. Ocultar Conta Inteira
   const toggleAccountVisibility = async () => {
     if (selectedAccount === 'ALL') return;
-    
-    const shouldHide = !isAccountHidden; // Se está oculto, vamos mostrar. Se visível, ocultar.
+    const shouldHide = !isAccountHidden;
     const confirmMsg = shouldHide 
       ? `Tem certeza que deseja OCULTAR toda a conta "${selectedAccount}"?` 
       : `Deseja RESTAURAR a conta "${selectedAccount}"?`;
 
     if (!confirm(confirmMsg)) return;
 
-    // Atualiza localmente
     const updatedProducts = products.map(p => 
       p.account_name === selectedAccount ? { ...p, is_hidden: shouldHide } : p
     );
     setProducts(updatedProducts);
 
-    // Atualiza no banco
-    await supabase.from('products')
-      .update({ is_hidden: shouldHide })
-      .eq('account_name', selectedAccount);
-      
-    // Se ocultou a conta atual, volta para 'ALL'
+    await supabase.from('products').update({ is_hidden: shouldHide }).eq('account_name', selectedAccount);
     if (shouldHide) setSelectedAccount('ALL');
   };
 
   // --- FILTROS ---
 
-  // Agrupa contas (Mostra na sidebar apenas contas que têm produtos visíveis, a menos que showHidden esteja ativo)
   const accounts = useMemo(() => {
     const relevantProducts = showHidden ? products : products.filter(p => !p.is_hidden);
     const accSet = new Set(relevantProducts.map(p => p.account_name || 'Sem Conta Vinculada'));
     return Array.from(accSet).sort();
   }, [products, showHidden]);
 
-  // Filtra produtos da grid
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesAccount = selectedAccount === 'ALL' || (p.account_name || 'Sem Conta Vinculada') === selectedAccount;
-    const matchesHidden = showHidden ? true : !p.is_hidden; // Se showHidden=false, esconde os hidden=true
-    
+    const matchesHidden = showHidden ? true : !p.is_hidden;
     return matchesSearch && matchesAccount && matchesHidden;
   });
 
-  // Verifica se a conta atual está "toda oculta" (para mudar o botão de ação)
   const isAccountHidden = useMemo(() => {
      if (selectedAccount === 'ALL') return false;
      const accountProducts = products.filter(p => p.account_name === selectedAccount);
-     // Se todos os produtos da conta estão hidden, consideramos a conta oculta
      return accountProducts.length > 0 && accountProducts.every(p => p.is_hidden);
   }, [products, selectedAccount]);
-
-  // --- RENDER ---
 
   const handleSave = async () => {
     if (!newProduct.name || !newProduct.campaign_name) return alert("Preencha os campos obrigatórios.");
@@ -151,12 +150,7 @@ export default function ProductsPage() {
 
            <div className="pt-4 pb-2 px-2 flex justify-between items-center">
               <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Contas de Anúncio</p>
-              {/* Toggle de Visualização na Sidebar */}
-              <button 
-                onClick={() => setShowHidden(!showHidden)}
-                className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${showHidden ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-slate-900 text-slate-600 border-slate-800'}`}
-                title={showHidden ? "Ocultar Arquivados" : "Ver Arquivados"}
-              >
+              <button onClick={() => setShowHidden(!showHidden)} className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${showHidden ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-slate-900 text-slate-600 border-slate-800'}`}>
                 {showHidden ? <Eye size={10} /> : <EyeOff size={10} />}
                 {showHidden ? 'Ver Ativos' : 'Ver Ocultos'}
               </button>
@@ -169,10 +163,6 @@ export default function ProductsPage() {
                 {selectedAccount === acc && <ChevronRight size={14} className="ml-auto text-indigo-500"/>}
              </button>
            ))}
-           
-           {accounts.length === 0 && (
-             <p className="text-xs text-slate-600 p-4 text-center">Nenhuma conta visível.</p>
-           )}
         </div>
       </aside>
 
@@ -184,101 +174,77 @@ export default function ProductsPage() {
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               {selectedAccount === 'ALL' ? 'Visão Geral' : selectedAccount}
-              {/* Badge se a conta estiver oculta */}
               {isAccountHidden && selectedAccount !== 'ALL' && (
-                <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded border border-amber-500/30 flex items-center gap-1">
-                  <EyeOff size={12}/> Oculta
-                </span>
+                <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-1 rounded border border-amber-500/30 flex items-center gap-1"><EyeOff size={12}/> Oculta</span>
               )}
             </h1>
-            <p className="text-slate-500 text-sm mt-1">
-              {selectedAccount === 'ALL' 
-                ? `Exibindo ${filteredProducts.length} campanhas de todas as contas.` 
-                : `Gerenciando campanhas da conta ${selectedAccount}.`}
-            </p>
+            <p className="text-slate-500 text-sm mt-1">{selectedAccount === 'ALL' ? `Exibindo ${filteredProducts.length} campanhas.` : `Gerenciando campanhas da conta ${selectedAccount}.`}</p>
           </div>
           
           <div className="flex gap-3">
-            {/* Botão de Ocultar Conta Inteira (Só aparece se selecionar uma conta específica) */}
             {selectedAccount !== 'ALL' && (
-              <button 
-                onClick={toggleAccountVisibility}
-                className={`px-4 py-2.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-2 ${
-                  isAccountHidden 
-                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' 
-                    : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'
-                }`}
-              >
+              <button onClick={toggleAccountVisibility} className={`px-4 py-2.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-2 ${isAccountHidden ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>
                 {isAccountHidden ? <Eye size={14}/> : <EyeOff size={14}/>}
-                {isAccountHidden ? 'Restaurar Conta' : 'Ocultar Conta (Suspensa)'}
+                {isAccountHidden ? 'Restaurar Conta' : 'Ocultar Conta'}
               </button>
             )}
-
-            <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg">
-              <Plus size={18} /> Novo Produto
-            </button>
+            <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Plus size={18} /> Novo Produto</button>
           </div>
         </div>
 
-        {/* Busca e Aviso de Filtro */}
+        {/* Busca */}
         <div className="flex gap-4 mb-6">
            <div className="bg-slate-900/50 border border-slate-900 p-4 rounded-xl flex-1 flex gap-4 items-center">
              <Search className="text-slate-500" size={18} />
              <input type="text" placeholder="Buscar campanha..." className="bg-transparent text-white w-full outline-none placeholder:text-slate-600" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
              <button onClick={() => fetchProducts()} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
-           
-           {/* Botão Toggle Rápido para Ocultos */}
-           {showHidden && (
-             <div className="bg-amber-500/10 border border-amber-500/20 px-4 rounded-xl flex items-center gap-2 text-amber-500 text-xs font-bold animate-pulse">
-                <AlertTriangle size={16} />
-                Modo de Edição: Exibindo Ocultos
-             </div>
-           )}
+           {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 px-4 rounded-xl flex items-center gap-2 text-amber-500 text-xs font-bold animate-pulse"><AlertTriangle size={16} /> Exibindo Ocultos</div>}
         </div>
 
         {/* GRID */}
         {loading && products.length === 0 ? (
           <div className="flex justify-center items-center h-64 text-slate-500">Carregando...</div>
         ) : filteredProducts.length === 0 ? (
-           <div className="flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed border-slate-800 rounded-xl">
-              <Layers size={32} className="mb-2 opacity-50"/>
-              <p>Nenhuma campanha encontrada.</p>
-           </div>
+           <div className="flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed border-slate-800 rounded-xl"><Layers size={32} className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada.</p></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
             {filteredProducts.map((product) => (
               <Link key={product.id} href={`/products/${product.id}`} className="block group">
-                <div className={`border rounded-xl p-6 transition-all h-full relative overflow-hidden flex flex-col ${
-                  product.is_hidden 
-                    ? 'bg-black border-slate-800 opacity-60 hover:opacity-100' // Estilo se oculto
-                    : 'bg-slate-900 border-slate-800 hover:border-indigo-500/50 hover:bg-slate-900/80' // Estilo normal
-                }`}>
+                <div className={`border rounded-xl p-6 transition-all h-full relative overflow-hidden flex flex-col ${product.is_hidden ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/50 hover:bg-slate-900/80'}`}>
                   
-                  {/* Botão de Ocultar/Mostrar no Card */}
-                  <div className="absolute top-4 right-4 flex gap-2">
+                  {/* Controles de Topo: Ocultar + Status */}
+                  <div className="absolute top-4 right-4 flex gap-2 z-10">
+                     
+                     {/* BOTÃO DE STATUS MANUAL */}
+                     <button 
+                       onClick={(e) => toggleStatus(product, e)}
+                       className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors border ${
+                         product.status === 'active' 
+                           ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' 
+                           : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'
+                       }`}
+                       title={product.status === 'active' ? "Pausar Campanha" : "Ativar Campanha"}
+                     >
+                        {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
+                        {product.status === 'active' ? 'Ativo' : 'Pausado'}
+                     </button>
+
+                     {/* Botão de Arquivar */}
                      <button 
                        onClick={(e) => toggleProductVisibility(product, e)}
-                       className={`p-1.5 rounded-lg transition-colors z-10 ${
-                         product.is_hidden 
-                           ? 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30' 
-                           : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-rose-500/20 hover:text-rose-500'
-                       }`}
-                       title={product.is_hidden ? "Restaurar" : "Arquivar/Ocultar"}
+                       className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-rose-500/20 hover:text-rose-500'}`}
+                       title={product.is_hidden ? "Restaurar" : "Arquivar"}
                      >
                         {product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}
                      </button>
                   </div>
 
-                  {/* Moeda e Status */}
-                  <div className="flex justify-between items-start mb-4 pr-10">
-                    <div className={`p-3 rounded-xl flex items-center justify-center w-12 h-12 
-                      ${product.currency === 'USD' ? 'bg-indigo-500/10 text-indigo-500' : product.currency === 'EUR' ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                  {/* Moeda */}
+                  <div className="flex justify-between items-start mb-4 pr-32"> {/* Padding maior para não bater nos botões */}
+                    <div className={`p-3 rounded-xl flex items-center justify-center w-12 h-12 ${product.currency === 'USD' ? 'bg-indigo-500/10 text-indigo-500' : product.currency === 'EUR' ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
                         {product.currency === 'USD' ? '$' : product.currency === 'EUR' ? '€' : 'R$'}
                     </div>
-                    {product.is_hidden && (
-                       <span className="text-[10px] uppercase font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Arquivado</span>
-                    )}
                   </div>
                   
                   <h3 className="text-lg font-bold text-white mb-1 group-hover:text-indigo-400 transition-colors line-clamp-2">
@@ -286,16 +252,8 @@ export default function ProductsPage() {
                   </h3>
                   
                   <div className="mt-auto pt-4 space-y-2 border-t border-slate-800/50">
-                     <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <Folder size={12}/>
-                        <span className="truncate max-w-[200px]">{product.account_name || 'Sem Conta'}</span>
-                     </div>
-                     <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <Layers size={12}/>
-                        <span className="font-mono bg-black/30 px-1.5 py-0.5 rounded truncate max-w-[200px]">
-                          {product.google_ads_campaign_name}
-                        </span>
-                     </div>
+                     <div className="flex items-center gap-2 text-xs text-slate-500"><Folder size={12}/><span className="truncate max-w-[200px]">{product.account_name || 'Sem Conta'}</span></div>
+                     <div className="flex items-center gap-2 text-xs text-slate-500"><Layers size={12}/><span className="font-mono bg-black/30 px-1.5 py-0.5 rounded truncate max-w-[200px]">{product.google_ads_campaign_name}</span></div>
                   </div>
                 </div>
               </Link>
