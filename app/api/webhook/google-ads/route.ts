@@ -43,22 +43,38 @@ export async function POST(request: Request) {
       product = newProduct;
     }
 
-    // 2. Prepara Payload (CORRIGIDO: conversion_value)
+    // CORREÇÃO DO CTR: Garante que tratamos como string antes de remover o %
+    let cleanCtr = 0;
+    if (metrics.ctr) {
+       // Converte para string, remove %, e volta para numero
+       const ctrString = String(metrics.ctr).replace('%', '');
+       cleanCtr = parseFloat(ctrString);
+       
+       // Se o valor for muito baixo (ex: 0.05), significa que veio em decimal (5%). 
+       // Se veio "5.00", é 5%. O banco espera o numero inteiro da porcentagem? 
+       // Vamos manter o padrão visual. Se for < 1, multiplicamos por 100 para ficar legível (5% em vez de 0.05)
+       if (cleanCtr < 1 && cleanCtr > 0) {
+          cleanCtr = cleanCtr * 100;
+       }
+    }
+
+    // 2. Prepara Payload
     const payload = {
       product_id: product.id,
       date: date,
       impressions: metrics.impressions,
       clicks: metrics.clicks,
       cost: metrics.cost_micros / 1000000, 
-      ctr: parseFloat(metrics.ctr.replace('%', '') || '0'),
+      
+      ctr: cleanCtr, // Usa o valor corrigido
+      
       avg_cpc: metrics.average_cpc / 1000000,
       
-      // Mapeamento correto das colunas do banco
-      conversion_value: 0, // O script atual manda custo, mas se mandar receita futuramente, mapeamos aqui
+      conversion_value: 0, 
       
-      search_impression_share: metrics.search_impression_share || '0%',
-      search_top_impression_share: metrics.search_top_impression_share || '0%',
-      search_abs_top_share: metrics.search_abs_top_share || '0%',
+      search_impression_share: String(metrics.search_impression_share || '0%'),
+      search_top_impression_share: String(metrics.search_top_impression_share || '0%'),
+      search_abs_top_share: String(metrics.search_abs_top_share || '0%'),
       budget_micros: metrics.budget_micros,
       bidding_strategy: metrics.bidding_strategy_type,
       currency: currency_code || 'BRL',
