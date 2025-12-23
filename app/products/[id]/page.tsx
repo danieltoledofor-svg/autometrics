@@ -20,6 +20,7 @@ const supabase = createClient(
 const ALL_COLUMNS = [
   // GERAL
   { key: 'date', label: 'Data', category: 'Geral', default: true },
+  { key: 'account_name', label: 'Conta', category: 'Geral', default: true }, // NOVA COLUNA
   
   // TRÁFEGO
   { key: 'impressions', label: 'Impressões', category: 'Tráfego', default: true },
@@ -31,7 +32,7 @@ const ALL_COLUMNS = [
   { key: 'budget', label: 'Orçamento Diário', category: 'Custo', default: true, format: 'currency' },
   { key: 'cost', label: 'Custo Ads', category: 'Custo', default: true, format: 'currency' },
   
-  // FUNIL (MANUAL)
+  // FUNIL
   { key: 'visits', label: 'Visitas Pág.', category: 'Funil', default: true },
   { key: 'checkouts', label: 'Checkout', category: 'Funil', default: true },
   
@@ -44,10 +45,11 @@ const ALL_COLUMNS = [
   { key: 'roi', label: 'ROI (%)', category: 'Financeiro', default: true, format: 'percentage' },
   
   // GOOGLE ADS AVANÇADO
-  { key: 'strategy', label: 'Tipo Campanha', category: 'Google Ads', default: true },
-  { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false },
-  { key: 'search_top_share', label: 'Parc. Topo', category: 'Google Ads', default: false },
-  { key: 'search_abs_share', label: 'Parc. Absoluta', category: 'Google Ads', default: false },
+  { key: 'strategy', label: 'Estratégia', category: 'Google Ads', default: true },
+  { key: 'target_cpa', label: 'Meta (CPA/CPC)', category: 'Google Ads', default: true, format: 'currency' }, // NOVA COLUNA
+  { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false, format: 'percentage_share' }, // FORMATO NOVO
+  { key: 'search_top_share', label: 'Parc. Topo', category: 'Google Ads', default: false, format: 'percentage_share' },
+  { key: 'search_abs_share', label: 'Parc. Absoluta', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'final_url', label: 'Página Anúncio', category: 'Google Ads', default: false, type: 'link' },
 ];
 
@@ -55,7 +57,6 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // Datas Padrão
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
@@ -71,17 +72,13 @@ export default function ProductDetailPage() {
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [viewCurrency, setViewCurrency] = useState('BRL');
   
-  // Estado das colunas visíveis
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
 
-  // --- FUNÇÃO DE TOGGLE (QUE FALTAVA CONECTAR) ---
   const toggleColumn = (key: string) => {
     setVisibleColumns(prev => 
-      prev.includes(key) 
-        ? prev.filter(k => k !== key) // Remove se já existe
-        : [...prev, key] // Adiciona se não existe
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
     );
   };
 
@@ -93,6 +90,10 @@ export default function ProductDetailPage() {
         const { data: prodData } = await supabase.from('products').select('*').eq('id', productId).single();
         if (prodData) setProduct(prodData);
 
+        // Agora busca também 'account_name' e outros campos extras se você tiver adicionado no banco
+        // Se 'account_name' não existir no banco, ele virá null. (Precisaríamos ter salvo isso no webhook)
+        // O webhook atual JÁ SALVA 'account_name' no payload, mas precisamos garantir que a tabela tenha a coluna.
+        // Se não tiver, o dado se perdeu. Mas vamos assumir que pode vir no futuro.
         const { data: metricsData } = await supabase
           .from('daily_metrics')
           .select('*')
@@ -124,12 +125,18 @@ export default function ProductDetailPage() {
       let cpc = Number(row.avg_cpc || 0);
       let budget = Number(row.budget_micros || 0) / 1000000;
       
+      // Tenta pegar o Target CPA/ROAS que pode estar salvo em 'bidding_strategy_target' ou algo similar
+      // Como não criamos uma coluna específica 'target_value' no banco, vamos improvisar ou deixar 0 por enquanto.
+      // SE você quiser exibir isso, precisamos garantir que o Webhook esteja salvando em alguma coluna (ex: 'cpa_target').
+      // Por enquanto, vou deixar 0.
+      let targetValue = 0; 
+      
       const rowCurrency = row.currency || 'BRL';
       
       if (viewCurrency === 'BRL' && rowCurrency === 'USD') {
-        cost *= exchangeRate; revenue *= exchangeRate; refunds *= exchangeRate; cpc *= exchangeRate; budget *= exchangeRate;
+        cost *= exchangeRate; revenue *= exchangeRate; refunds *= exchangeRate; cpc *= exchangeRate; budget *= exchangeRate; targetValue *= exchangeRate;
       } else if (viewCurrency === 'ORIGINAL' && rowCurrency === 'BRL') {
-        cost /= exchangeRate; revenue /= exchangeRate; refunds /= exchangeRate; cpc /= exchangeRate; budget /= exchangeRate;
+        cost /= exchangeRate; revenue /= exchangeRate; refunds /= exchangeRate; cpc /= exchangeRate; budget /= exchangeRate; targetValue /= exchangeRate;
       }
 
       const profit = revenue - refunds - cost;
@@ -148,18 +155,30 @@ export default function ProductDetailPage() {
       const shortDate = `${dateParts[2]}/${dateParts[1]}`;
       const fullDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
 
+      // Tratamento das Parcelas de Impressão (Conversão para Número)
+      // O Google manda "0.0999" (texto ou numero). Precisamos garantir que seja numero para formatar.
+      const parseShare = (val: any) => {
+        if (!val || val === '< 10%') return 0;
+        return parseFloat(val);
+      };
+
       return {
         ...row,
         date: fullDate, shortDate,
         cost, revenue, refunds, profit, roi, 
         avg_cpc: cpc, 
-        budget, cpa,
+        budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0),
+        
+        // Dados de Texto / Links
+        account_name: row.account_name || '-', // Se não tiver no banco, mostra traço
         strategy: row.bidding_strategy || '-',
-        search_impr_share: row.search_impression_share || '-',
-        search_top_share: row.search_top_impression_share || '-',
-        search_abs_share: row.search_abs_top_share || '-',
-        final_url: row.final_url
+        final_url: row.final_url, // URL Final
+        
+        // Parcelas (Já convertidas para número puro, ex: 0.375)
+        search_impr_share: parseShare(row.search_impression_share),
+        search_top_share: parseShare(row.search_top_impression_share),
+        search_abs_share: parseShare(row.search_abs_top_share),
       };
     });
 
@@ -173,7 +192,14 @@ export default function ProductDetailPage() {
   }, [metrics, viewCurrency, startDate, endDate]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
+  
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
+  
+  // Nova formatação para Parcelas de Impressão (0.375 -> 37.50%)
+  const formatShare = (val: number) => {
+     if (val === 0) return '< 10%'; // Google costuma mandar 0.0999 ou vazio quando é baixo
+     return `${(val * 100).toFixed(2)}%`;
+  };
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-500 animate-pulse">Carregando dados...</div>;
   if (!product) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-500">Produto não encontrado.</div>;
@@ -288,11 +314,18 @@ export default function ProductDetailPage() {
                     
                     if (col.type === 'link') {
                         content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14}/></a> : '-';
-                    } else if (col.format === 'currency') {
+                    } 
+                    else if (col.format === 'currency') {
                       content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold') : 'text-slate-300'}>{formatMoney(val)}</span>;
-                    } else if (col.format === 'percentage') {
+                    } 
+                    else if (col.format === 'percentage') {
                       content = <span className={`px-2 py-1 rounded text-xs border ${val < 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>{formatPercent(val)}</span>;
-                    } else {
+                    } 
+                    else if (col.format === 'percentage_share') {
+                      // Formatação especial para Parcelas de Impressão
+                      content = <span className="text-slate-400">{formatShare(val)}</span>;
+                    }
+                    else {
                       content = <span className="text-slate-400">{val !== undefined && val !== null ? val : '-'}</span>;
                     }
 
@@ -312,7 +345,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL DE COLUNAS - AGORA FUNCIONAL */}
+      {/* MODAL DE COLUNAS */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
@@ -331,7 +364,6 @@ export default function ProductDetailPage() {
                           {ALL_COLUMNS.filter(c => c.category === category).map(col => (
                             <div 
                               key={col.key} 
-                              /* AQUI ESTAVA FALTANDO O CLICK */
                               onClick={() => toggleColumn(col.key)} 
                               className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded cursor-pointer group transition-colors"
                             >
