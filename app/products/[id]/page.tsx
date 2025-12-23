@@ -16,7 +16,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// --- DEFINIÇÃO COMPLETA DAS COLUNAS (BASEADO NA SUA PLANILHA) ---
+// --- DEFINIÇÃO COMPLETA DAS COLUNAS ---
 const ALL_COLUMNS = [
   // GERAL
   { key: 'date', label: 'Data', category: 'Geral', default: true },
@@ -55,7 +55,7 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // Datas Padrão (Início do Mês Atual)
+  // Datas Padrão
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
@@ -70,7 +70,20 @@ export default function ProductDetailPage() {
   
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [viewCurrency, setViewCurrency] = useState('BRL');
-  const [visibleColumns, setVisibleColumns] = useState(ALL_COLUMNS.filter(c => c.default).map(c => c.key));
+  
+  // Estado das colunas visíveis
+  const [visibleColumns, setVisibleColumns] = useState(
+    ALL_COLUMNS.filter(c => c.default).map(c => c.key)
+  );
+
+  // --- FUNÇÃO DE TOGGLE (QUE FALTAVA CONECTAR) ---
+  const toggleColumn = (key: string) => {
+    setVisibleColumns(prev => 
+      prev.includes(key) 
+        ? prev.filter(k => k !== key) // Remove se já existe
+        : [...prev, key] // Adiciona se não existe
+    );
+  };
 
   useEffect(() => {
     if (!productId) return;
@@ -99,14 +112,12 @@ export default function ProductDetailPage() {
   const processedData = useMemo(() => {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     
-    // Inicializa totais
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
 
-    const exchangeRate = 6.15; // Em produção, viria de uma API ou do banco
+    const exchangeRate = 6.15;
 
     const rows = filteredMetrics.map(row => {
-      // Conversão e Tratamento de Valores
       let cost = Number(row.cost || 0);
       let revenue = Number(row.conversion_value || 0);
       let refunds = Number(row.refunds || 0);
@@ -115,7 +126,6 @@ export default function ProductDetailPage() {
       
       const rowCurrency = row.currency || 'BRL';
       
-      // Lógica de Câmbio
       if (viewCurrency === 'BRL' && rowCurrency === 'USD') {
         cost *= exchangeRate; revenue *= exchangeRate; refunds *= exchangeRate; cpc *= exchangeRate; budget *= exchangeRate;
       } else if (viewCurrency === 'ORIGINAL' && rowCurrency === 'BRL') {
@@ -125,11 +135,8 @@ export default function ProductDetailPage() {
       const profit = revenue - refunds - cost;
       const roi = cost > 0 ? (profit / cost) * 100 : 0;
       const conversions = Number(row.conversions || 0);
-      
-      // Cálculo do CPA (Custo por Conversão)
       const cpa = conversions > 0 ? cost / conversions : 0;
 
-      // Acumula Totais
       stats.revenue += revenue;
       stats.cost += cost;
       stats.profit += profit;
@@ -137,7 +144,6 @@ export default function ProductDetailPage() {
       stats.clicks += Number(row.clicks || 0);
       stats.visits += Number(row.visits || 0);
 
-      // Formata Data
       const dateParts = row.date.split('-');
       const shortDate = `${dateParts[2]}/${dateParts[1]}`;
       const fullDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
@@ -148,9 +154,7 @@ export default function ProductDetailPage() {
         cost, revenue, refunds, profit, roi, 
         avg_cpc: cpc, 
         budget, cpa,
-        // Garante que CTR seja tratado como número corretamente para formatação
         ctr: Number(row.ctr || 0),
-        // Mapeia colunas de texto do Google Ads
         strategy: row.bidding_strategy || '-',
         search_impr_share: row.search_impression_share || '-',
         search_top_share: row.search_top_impression_share || '-',
@@ -159,10 +163,8 @@ export default function ProductDetailPage() {
       };
     });
 
-    // Totais Finais
     stats.roi = stats.cost > 0 ? (stats.profit / stats.cost) * 100 : 0;
 
-    // Gráfico
     const chartData = rows.map(r => ({
       day: r.shortDate, lucro: r.profit, custo: r.cost, receita: r.revenue
     }));
@@ -171,8 +173,6 @@ export default function ProductDetailPage() {
   }, [metrics, viewCurrency, startDate, endDate]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
-  
-  // Função auxiliar para formatar porcentagem sem excesso de casas decimais
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-500 animate-pulse">Carregando dados...</div>;
@@ -219,7 +219,7 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* CARDS KPI */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl">
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p>
@@ -240,7 +240,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* GRÁFICO */}
+      {/* Gráfico */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 h-64">
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
@@ -254,7 +254,7 @@ export default function ProductDetailPage() {
          </ResponsiveContainer>
       </div>
 
-      {/* TABELA DETALHADA */}
+      {/* Tabela Detalhada */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm relative flex flex-col h-[600px]">
         <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center bg-slate-900/50 gap-4 shrink-0">
           <div className="flex items-center gap-3">
@@ -262,7 +262,7 @@ export default function ProductDetailPage() {
             <span className="text-xs text-slate-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">{rows.length} registros</span>
           </div>
           <button onClick={() => setShowColumnModal(true)} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded transition-colors border border-slate-700">
-            <Columns size={14} /> Colunas
+            <Columns size={14} /> Personalizar Colunas
           </button>
         </div>
 
@@ -284,7 +284,6 @@ export default function ProductDetailPage() {
                     const val = row[col.key];
                     let content;
 
-                    // Lógica de Renderização por Tipo
                     if (col.key === 'date') return <td key={col.key} className="px-4 py-4 font-medium text-white sticky left-0 bg-slate-900 group-hover:bg-slate-800 border-r border-slate-800">{val}</td>
                     
                     if (col.type === 'link') {
@@ -313,7 +312,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL DE COLUNAS */}
+      {/* MODAL DE COLUNAS - AGORA FUNCIONAL */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
@@ -330,12 +329,17 @@ export default function ProductDetailPage() {
                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 border-b border-slate-800 pb-2">{category}</h3>
                         <div className="space-y-2">
                           {ALL_COLUMNS.filter(c => c.category === category).map(col => (
-                            <label key={col.key} className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded cursor-pointer group transition-colors">
+                            <div 
+                              key={col.key} 
+                              /* AQUI ESTAVA FALTANDO O CLICK */
+                              onClick={() => toggleColumn(col.key)} 
+                              className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded cursor-pointer group transition-colors"
+                            >
                               <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${visibleColumns.includes(col.key) ? 'bg-indigo-600 border-indigo-600' : 'bg-transparent border-slate-600'}`}>
                                 {visibleColumns.includes(col.key) && <ArrowDownRight size={14} className="text-white" />}
                               </div>
                               <span className={visibleColumns.includes(col.key) ? 'text-white font-medium' : 'text-slate-400'}>{col.label}</span>
-                            </label>
+                            </div>
                           ))}
                         </div>
                       </>
