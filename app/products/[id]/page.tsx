@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation'; 
 import { 
-  ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, PauseCircle, PlayCircle
+  ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
+  PlayCircle, PauseCircle // <--- Novos Ícones
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
@@ -19,7 +20,7 @@ const supabase = createClient(
 const ALL_COLUMNS = [
   // GERAL
   { key: 'date', label: 'Data', category: 'Geral', default: true },
-  { key: 'campaign_status', label: 'Status', category: 'Geral', default: true }, // NOVA
+  { key: 'campaign_status', label: 'Status Dia', category: 'Geral', default: true },
   { key: 'account_name', label: 'Conta', category: 'Geral', default: true },
   
   // TRÁFEGO
@@ -71,28 +72,20 @@ export default function ProductDetailPage() {
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [viewCurrency, setViewCurrency] = useState('BRL');
   
-  // Estado inicial das colunas (será atualizado pelo localStorage)
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
 
-  // 1. CARREGAR PREFERÊNCIAS SALVAS (PERSISTÊNCIA)
   useEffect(() => {
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) {
-      try {
-        setVisibleColumns(JSON.parse(savedColumns));
-      } catch (e) {
-        console.error("Erro ao carregar colunas salvas");
-      }
+      try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
     }
   }, []);
 
-  // 2. FUNÇÃO DE TOGGLE COM SALVAMENTO
   const toggleColumn = (key: string) => {
     setVisibleColumns(prev => {
       const newColumns = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      // Salva no navegador
       localStorage.setItem('autometrics_visible_columns', JSON.stringify(newColumns));
       return newColumns;
     });
@@ -121,6 +114,19 @@ export default function ProductDetailPage() {
     }
     fetchData();
   }, [productId]);
+
+  // --- NOVA FUNÇÃO: ALTERAR STATUS MANUALMENTE ---
+  const toggleStatus = async () => {
+    if (!product) return;
+
+    const newStatus = product.status === 'active' ? 'paused' : 'active';
+    
+    // Atualiza na tela imediatamente (Otimista)
+    setProduct({ ...product, status: newStatus });
+
+    // Salva no Banco
+    await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
+  };
 
   const processedData = useMemo(() => {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
@@ -161,7 +167,6 @@ export default function ProductDetailPage() {
       const dateParts = row.date.split('-');
       const shortDate = `${dateParts[2]}/${dateParts[1]}`;
       const fullDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-
       const parseShare = (val: any) => (!val || val === '< 10%') ? 0 : parseFloat(val);
 
       return {
@@ -169,12 +174,11 @@ export default function ProductDetailPage() {
         date: fullDate, shortDate,
         cost, revenue, refunds, profit, roi, 
         avg_cpc: cpc, 
-        budget, cpa, 
-        target_cpa: targetValue,
+        budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0),
         
         account_name: row.account_name || '-', 
-        campaign_status: row.campaign_status || 'ENABLED', // Padrão Ativo se não vier
+        campaign_status: row.campaign_status || 'ENABLED', 
         strategy: row.bidding_strategy || '-',
         final_url: row.final_url,
         
@@ -185,10 +189,7 @@ export default function ProductDetailPage() {
     });
 
     stats.roi = stats.cost > 0 ? (stats.profit / stats.cost) * 100 : 0;
-
-    const chartData = rows.map(r => ({
-      day: r.shortDate, lucro: r.profit, custo: r.cost, receita: r.revenue
-    }));
+    const chartData = rows.map(r => ({ day: r.shortDate, lucro: r.profit, custo: r.cost, receita: r.revenue }));
 
     return { rows: rows.reverse(), chart: chartData, stats };
   }, [metrics, viewCurrency, startDate, endDate]);
@@ -212,10 +213,23 @@ export default function ProductDetailPage() {
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-white">{product.name}</h1>
-              <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">{product.status}</span>
+              
+              {/* --- BOTÃO DE STATUS (INTERATIVO) --- */}
+              <button 
+                onClick={toggleStatus}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase transition-all border shadow-sm ${
+                  product.status === 'active' 
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 hover:shadow-emerald-900/20' 
+                    : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20 hover:shadow-rose-900/20'
+                }`}
+              >
+                {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
+                {product.status === 'active' ? 'Ativo' : 'Pausado'}
+              </button>
             </div>
+
             <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
               <span className="flex items-center gap-1"><ExternalLink size={12}/> {product.platform}</span>
               <span>•</span>
@@ -241,7 +255,7 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* KPI Cards */}
+      {/* KPI CARDS (Mesmo código anterior...) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl">
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p>
@@ -262,7 +276,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* Gráfico */}
+      {/* GRÁFICO */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 h-64">
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
@@ -276,7 +290,7 @@ export default function ProductDetailPage() {
          </ResponsiveContainer>
       </div>
 
-      {/* Tabela Detalhada */}
+      {/* TABELA DETALHADA */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm relative flex flex-col h-[600px]">
         <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center bg-slate-900/50 gap-4 shrink-0">
           <div className="flex items-center gap-3">
@@ -308,14 +322,9 @@ export default function ProductDetailPage() {
 
                     if (col.key === 'date') return <td key={col.key} className="px-4 py-4 font-medium text-white sticky left-0 bg-slate-900 group-hover:bg-slate-800 border-r border-slate-800">{val}</td>
                     
-                    // STATUS COM ÍCONE
                     if (col.key === 'campaign_status') {
                         const isPaused = val === 'PAUSED' || val === 'REMOVED';
-                        content = (
-                           <span className={`flex items-center justify-end gap-1.5 ${isPaused ? 'text-slate-500' : 'text-emerald-400'}`}>
-                             {val} {isPaused ? <PauseCircle size={14}/> : <PlayCircle size={14}/>}
-                           </span>
-                        );
+                        content = <span className={`flex items-center justify-end gap-1.5 ${isPaused ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {isPaused ? <PauseCircle size={14}/> : <PlayCircle size={14}/>}</span>;
                     }
                     else if (col.type === 'link') {
                         content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14}/></a> : '-';
@@ -339,9 +348,7 @@ export default function ProductDetailPage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={visibleColumns.length} className="text-center py-12 text-slate-500">
-                    Nenhum dado encontrado para o período.
-                  </td>
+                  <td colSpan={visibleColumns.length} className="text-center py-12 text-slate-500">Nenhum dado encontrado para o período.</td>
                 </tr>
               )}
             </tbody>
@@ -349,7 +356,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL */}
+      {/* MODAL COLUNAS */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
@@ -366,11 +373,7 @@ export default function ProductDetailPage() {
                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 border-b border-slate-800 pb-2">{category}</h3>
                         <div className="space-y-2">
                           {ALL_COLUMNS.filter(c => c.category === category).map(col => (
-                            <div 
-                              key={col.key} 
-                              onClick={() => toggleColumn(col.key)} 
-                              className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded cursor-pointer group transition-colors"
-                            >
+                            <div key={col.key} onClick={() => toggleColumn(col.key)} className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded cursor-pointer group transition-colors">
                               <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${visibleColumns.includes(col.key) ? 'bg-indigo-600 border-indigo-600' : 'bg-transparent border-slate-600'}`}>
                                 {visibleColumns.includes(col.key) && <ArrowDownRight size={14} className="text-white" />}
                               </div>
