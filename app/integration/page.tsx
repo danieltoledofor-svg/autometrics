@@ -1,22 +1,18 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Code, ArrowLeft, ShieldAlert, Calendar, Clock, ChevronRight, Settings } from 'lucide-react';
+import { Copy, Check, Code, ArrowLeft, ShieldAlert, Calendar, Clock, Settings, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 export default function IntegrationPage() {
   const [userId, setUserId] = useState('');
-  const [activeTab, setActiveTab] = useState<'daily' | 'historical'>('daily');
-  
-  // Estado para as datas do Histórico
+  // Agora temos apenas um modo principal: O Universal
   const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-
-  // Estado da Geração do Script
+  
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // 1. Recupera ID e Define datas padrão
+  // 1. Recupera ID e Define Data Padrão (Início do Mês Atual)
   useEffect(() => {
     let storedId = localStorage.getItem('autometrics_user_id');
     if (!storedId) {
@@ -25,25 +21,20 @@ export default function IntegrationPage() {
     }
     setUserId(storedId);
 
-    // Datas padrão para histórico (Início do mês até hoje)
-    const today = new Date().toISOString().split('T')[0];
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
     setStartDate(firstDay);
-    setEndDate(today);
   }, []);
 
-  // Quando troca de aba, limpa o script gerado para forçar nova geração
-  useEffect(() => {
-    setGeneratedScript(null);
-  }, [activeTab]);
-
-  // Função que MONTA o script baseado nas escolhas
+  // Função que MONTA o script Universal
   const handleGenerateScript = () => {
-    const isHistorical = activeTab === 'historical';
     
     const scriptTemplate = `/**
- * Script AutoMetrics - ${isHistorical ? 'CARGA HISTÓRICA' : 'AUTOMAÇÃO DIÁRIA'}
+ * Script AutoMetrics - UNIVERSAL (HISTÓRICO + TEMPO REAL)
  * Gerado em: ${new Date().toLocaleString()}
+ * * COMO FUNCIONA:
+ * 1. Começa na DATA DE INÍCIO configurada abaixo.
+ * 2. Busca dados dia após dia até chegar em HOJE.
+ * 3. Se agendado de HORA EM HORA, ele mantém tudo atualizado (Passado e Presente).
  */
 
 const CONFIG = {
@@ -52,14 +43,14 @@ const CONFIG = {
   // SEU TOKEN EXCLUSIVO
   USER_ID: '${userId}', 
 
-  // CONFIGURAÇÃO DE DATAS
-  HISTORICAL_MODE: ${isHistorical}, 
-  ${isHistorical ? `START_DATE: "${startDate}", // Data Início escolhida` : '// Modo Diário (Ontem)'}
-  ${isHistorical ? `END_DATE: "${endDate}"      // Data Fim escolhida` : ''}
+  // --- CONFIGURAÇÃO ---
+  // Defina aqui a partir de quando você quer puxar os dados.
+  // O script vai ler desta data até o momento AGORA (Hoje).
+  START_DATE: "${startDate}" // Formato: Ano-Mês-Dia
 };
 
 function main() {
-  Logger.log('🚀 Iniciando AutoMetrics (${isHistorical ? 'Histórico' : 'Diário'}) para: ' + CONFIG.USER_ID);
+  Logger.log('🚀 Iniciando AutoMetrics Universal para: ' + CONFIG.USER_ID);
   
   if (typeof AdsManagerApp !== 'undefined') {
     const accountIterator = AdsManagerApp.accounts().get();
@@ -71,28 +62,32 @@ function main() {
   } else {
     processAccount(AdsApp.currentAccount());
   }
+  Logger.log('✅ Finalizado com sucesso.');
 }
 
 function processAccount(account) {
-  ${isHistorical ? `
-  // Modo Histórico: Itera sobre as datas
+  // 1. Define o intervalo: Da DATA INICIO até HOJE
   let currentDate = parseDate(CONFIG.START_DATE);
-  const endDate = parseDate(CONFIG.END_DATE);
+  const today = new Date(); 
+  
+  // Zera as horas para comparar apenas datas
+  today.setHours(0,0,0,0);
+  currentDate.setHours(0,0,0,0);
 
-  while (currentDate <= endDate) {
+  // Loop: Enquanto a data processada for menor ou igual a hoje
+  while (currentDate <= today) {
     const dateString = Utilities.formatDate(currentDate, account.getTimeZone(), "yyyy-MM-dd");
+    
+    // Logger.log('   Processing: ' + dateString); // Descomente para debug
     fetchAndSend(dateString, account);
+    
+    // Avança para o próximo dia
     currentDate.setDate(currentDate.getDate() + 1);
   }
-  ` : `
-  // Modo Diário: Pega apenas ontem
-  const d = new Date(); d.setDate(d.getDate() - 1);
-  const dateString = Utilities.formatDate(d, account.getTimeZone(), "yyyy-MM-dd");
-  fetchAndSend(dateString, account);
-  `}
 }
 
 function fetchAndSend(dateString, account) {
+  // Busca campanhas com IMPRESSÕES > 0 (Ativas)
   const query = \`
     SELECT
       campaign.id, campaign.name,
@@ -104,7 +99,7 @@ function fetchAndSend(dateString, account) {
       customer.currency_code
     FROM campaign
     WHERE segments.date = '\${dateString}'
-    AND metrics.cost_micros > 0
+    AND metrics.impressions > 0 
   \`;
 
   const report = AdsApp.search(query);
@@ -138,16 +133,18 @@ function sendToWebhook(payload) {
   const options = { 'method': 'post', 'contentType': 'application/json', 'payload': JSON.stringify(payload), 'muteHttpExceptions': true };
   try {
     const r = UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, options);
-    if (r.getResponseCode() === 200) Logger.log('📤 Enviado: ' + payload.campaign_name + ' [' + payload.date + ']');
+    // Log apenas se for o dia de HOJE para não poluir o histórico
+    const isToday = payload.date === Utilities.formatDate(new Date(), AdsApp.currentAccount().getTimeZone(), "yyyy-MM-dd");
+    if (r.getResponseCode() === 200 && isToday) {
+       Logger.log('📤 [Tempo Real] Enviado: ' + payload.campaign_name);
+    }
   } catch (e) { Logger.log('❌ Erro: ' + e.message); }
 }
 
-${isHistorical ? `
 function parseDate(str) {
   const parts = str.split('-');
   return new Date(parts[0], parts[1] - 1, parts[2]);
 }
-` : ''}
 `;
     
     setGeneratedScript(scriptTemplate);
@@ -171,9 +168,9 @@ function parseDate(str) {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Code className="text-indigo-500" /> Integração Google Ads
+              <Code className="text-indigo-500" /> Integração Universal
             </h1>
-            <p className="text-slate-500 text-sm">Gerador de scripts seguros para suas contas.</p>
+            <p className="text-slate-500 text-sm">Gere um único script inteligente para Histórico e Tempo Real.</p>
           </div>
         </div>
 
@@ -181,96 +178,53 @@ function parseDate(str) {
         <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-xl mb-6 flex gap-3 items-center">
           <ShieldAlert className="text-indigo-400 shrink-0" size={20} />
           <p className="text-xs text-indigo-200/80">
-            Seu Token Único <span className="font-mono bg-indigo-500/20 px-1 rounded text-white mx-1">{userId}</span> será inserido automaticamente no código.
+            Seu Token Único <span className="font-mono bg-indigo-500/20 px-1 rounded text-white mx-1">{userId}</span> será inserido automaticamente.
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex bg-slate-900 p-1 rounded-xl mb-8 w-fit border border-slate-800">
-          <button 
-            onClick={() => setActiveTab('daily')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
-              activeTab === 'daily' 
-                ? 'bg-indigo-600 text-white shadow-lg' 
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Clock size={16} /> Automação Diária
-          </button>
-          <button 
-            onClick={() => setActiveTab('historical')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
-              activeTab === 'historical' 
-                ? 'bg-indigo-600 text-white shadow-lg' 
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Calendar size={16} /> Carga Histórica
-          </button>
-        </div>
-
-        {/* CONTEÚDO PRINCIPAL: CONFIGURAÇÃO OU CÓDIGO */}
+        {/* ÁREA DE CONFIGURAÇÃO */}
         {!generatedScript ? (
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            {activeTab === 'daily' ? (
-              <div className="text-center space-y-6 py-4">
-                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Clock className="text-emerald-500" size={32} />
+            <div className="max-w-lg mx-auto space-y-8">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-500/20">
+                  <Zap className="text-white" size={32} fill="currentColor" />
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-2">Script de Automação Diária</h3>
-                  <p className="text-slate-400 max-w-md mx-auto">
-                    Este script não precisa de configuração de datas. Ele é programado para rodar todos os dias e capturar os dados de <strong>ontem</strong>.
-                  </p>
-                </div>
-                <button 
-                  onClick={handleGenerateScript}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-emerald-900/20 transition-all flex items-center gap-2 mx-auto"
-                >
-                  <Settings size={18} />
-                  Gerar Script Diário
-                </button>
+                <h3 className="text-xl font-bold text-white mb-3">Script Híbrido Automático</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Este script entende o que fazer. Ele vai processar todo o intervalo desde a data que você escolher abaixo 
+                  até o dia de <strong>HOJE</strong>. E continuará atualizando o hoje a cada execução.
+                </p>
               </div>
-            ) : (
-              <div className="max-w-lg mx-auto space-y-6">
-                <div className="text-center mb-8">
-                  <h3 className="text-xl font-bold text-white mb-2">Configurar Intervalo</h3>
-                  <p className="text-slate-400 text-sm">
-                    Defina o período que você deseja importar. O script será gerado especificamente para essas datas.
-                  </p>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Data Início</label>
-                    <input 
-                      type="date" 
-                      className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-lg focus:border-indigo-500 outline-none [&::-webkit-calendar-picker-indicator]:invert"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Data Fim</label>
-                    <input 
-                      type="date" 
-                      className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-lg focus:border-indigo-500 outline-none [&::-webkit-calendar-picker-indicator]:invert"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
+              <div className="bg-slate-950 p-6 rounded-xl border border-slate-800">
+                <label className="block text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">
+                  A partir de quando quer os dados?
+                </label>
+                <div className="relative">
+                  <input 
+                    type="date" 
+                    className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all [&::-webkit-calendar-picker-indicator]:invert font-mono text-lg"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                  <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={20} />
                 </div>
-
-                <button 
-                  onClick={handleGenerateScript}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-900/20 transition-all flex items-center justify-center gap-2 mt-4"
-                >
-                  <Code size={18} />
-                  Gerar Script Histórico
-                </button>
+                <p className="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
+                  <Clock size={10} /> O script buscará de {startDate} até Agora (Tempo Real).
+                </p>
               </div>
-            )}
+
+              <button 
+                onClick={handleGenerateScript}
+                className="w-full bg-white hover:bg-slate-200 text-black px-8 py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-95"
+              >
+                <Code size={20} />
+                Gerar Script Definitivo
+              </button>
+            </div>
+
           </div>
         ) : (
           // --- ÁREA DO CÓDIGO GERADO ---
@@ -278,10 +232,10 @@ function parseDate(str) {
             <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <button onClick={() => setGeneratedScript(null)} className="text-slate-500 hover:text-white text-xs font-medium flex items-center gap-1">
-                  <ArrowLeft size={14} /> Voltar
+                  <ArrowLeft size={14} /> Configurar
                 </button>
                 <span className="text-xs font-mono text-emerald-400">
-                  {activeTab === 'daily' ? 'autometrics-daily.js' : 'autometrics-history.js'}
+                  autometrics-universal.js
                 </span>
               </div>
               
@@ -292,14 +246,21 @@ function parseDate(str) {
                 }`}
               >
                 {copied ? <Check size={14} /> : <Copy size={14} />}
-                {copied ? 'Copiado!' : 'Copiar Código'}
+                {copied ? 'Copiado!' : 'Copiar Script'}
               </button>
             </div>
             
-            <div className="p-0 overflow-x-auto">
-              <pre className="font-mono text-xs text-slate-300 leading-relaxed p-6 min-h-[400px]">
-                {generatedScript}
-              </pre>
+            <div className="relative">
+              <div className="absolute top-0 right-0 p-4 pointer-events-none">
+                 <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] px-2 py-1 rounded backdrop-blur-sm">
+                    Modo: Histórico + Tempo Real
+                 </div>
+              </div>
+              <div className="p-0 overflow-x-auto">
+                <pre className="font-mono text-xs text-slate-300 leading-relaxed p-6 min-h-[400px]">
+                  {generatedScript}
+                </pre>
+              </div>
             </div>
           </div>
         )}
