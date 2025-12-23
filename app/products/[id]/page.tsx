@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation'; 
 import { 
-  ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon
+  ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, PauseCircle, PlayCircle
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
@@ -16,11 +16,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// --- DEFINIÇÃO COMPLETA DAS COLUNAS ---
 const ALL_COLUMNS = [
   // GERAL
   { key: 'date', label: 'Data', category: 'Geral', default: true },
-  { key: 'account_name', label: 'Conta', category: 'Geral', default: true }, // NOVA COLUNA
+  { key: 'campaign_status', label: 'Status', category: 'Geral', default: true }, // NOVA
+  { key: 'account_name', label: 'Conta', category: 'Geral', default: true },
   
   // TRÁFEGO
   { key: 'impressions', label: 'Impressões', category: 'Tráfego', default: true },
@@ -46,8 +46,8 @@ const ALL_COLUMNS = [
   
   // GOOGLE ADS AVANÇADO
   { key: 'strategy', label: 'Estratégia', category: 'Google Ads', default: true },
-  { key: 'target_cpa', label: 'Meta (CPA/CPC)', category: 'Google Ads', default: true, format: 'currency' }, // NOVA COLUNA
-  { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false, format: 'percentage_share' }, // FORMATO NOVO
+  { key: 'target_cpa', label: 'Meta (CPA/ROAS)', category: 'Google Ads', default: true, format: 'currency' },
+  { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'search_top_share', label: 'Parc. Topo', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'search_abs_share', label: 'Parc. Absoluta', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'final_url', label: 'Página Anúncio', category: 'Google Ads', default: false, type: 'link' },
@@ -68,18 +68,34 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [viewCurrency, setViewCurrency] = useState('BRL');
   
+  // Estado inicial das colunas (será atualizado pelo localStorage)
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
 
+  // 1. CARREGAR PREFERÊNCIAS SALVAS (PERSISTÊNCIA)
+  useEffect(() => {
+    const savedColumns = localStorage.getItem('autometrics_visible_columns');
+    if (savedColumns) {
+      try {
+        setVisibleColumns(JSON.parse(savedColumns));
+      } catch (e) {
+        console.error("Erro ao carregar colunas salvas");
+      }
+    }
+  }, []);
+
+  // 2. FUNÇÃO DE TOGGLE COM SALVAMENTO
   const toggleColumn = (key: string) => {
-    setVisibleColumns(prev => 
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
+    setVisibleColumns(prev => {
+      const newColumns = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+      // Salva no navegador
+      localStorage.setItem('autometrics_visible_columns', JSON.stringify(newColumns));
+      return newColumns;
+    });
   };
 
   useEffect(() => {
@@ -90,10 +106,6 @@ export default function ProductDetailPage() {
         const { data: prodData } = await supabase.from('products').select('*').eq('id', productId).single();
         if (prodData) setProduct(prodData);
 
-        // Agora busca também 'account_name' e outros campos extras se você tiver adicionado no banco
-        // Se 'account_name' não existir no banco, ele virá null. (Precisaríamos ter salvo isso no webhook)
-        // O webhook atual JÁ SALVA 'account_name' no payload, mas precisamos garantir que a tabela tenha a coluna.
-        // Se não tiver, o dado se perdeu. Mas vamos assumir que pode vir no futuro.
         const { data: metricsData } = await supabase
           .from('daily_metrics')
           .select('*')
@@ -124,12 +136,7 @@ export default function ProductDetailPage() {
       let refunds = Number(row.refunds || 0);
       let cpc = Number(row.avg_cpc || 0);
       let budget = Number(row.budget_micros || 0) / 1000000;
-      
-      // Tenta pegar o Target CPA/ROAS que pode estar salvo em 'bidding_strategy_target' ou algo similar
-      // Como não criamos uma coluna específica 'target_value' no banco, vamos improvisar ou deixar 0 por enquanto.
-      // SE você quiser exibir isso, precisamos garantir que o Webhook esteja salvando em alguma coluna (ex: 'cpa_target').
-      // Por enquanto, vou deixar 0.
-      let targetValue = 0; 
+      let targetValue = Number(row.target_cpa || 0);
       
       const rowCurrency = row.currency || 'BRL';
       
@@ -155,27 +162,22 @@ export default function ProductDetailPage() {
       const shortDate = `${dateParts[2]}/${dateParts[1]}`;
       const fullDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
 
-      // Tratamento das Parcelas de Impressão (Conversão para Número)
-      // O Google manda "0.0999" (texto ou numero). Precisamos garantir que seja numero para formatar.
-      const parseShare = (val: any) => {
-        if (!val || val === '< 10%') return 0;
-        return parseFloat(val);
-      };
+      const parseShare = (val: any) => (!val || val === '< 10%') ? 0 : parseFloat(val);
 
       return {
         ...row,
         date: fullDate, shortDate,
         cost, revenue, refunds, profit, roi, 
         avg_cpc: cpc, 
-        budget, cpa, target_cpa: targetValue,
+        budget, cpa, 
+        target_cpa: targetValue,
         ctr: Number(row.ctr || 0),
         
-        // Dados de Texto / Links
-        account_name: row.account_name || '-', // Se não tiver no banco, mostra traço
+        account_name: row.account_name || '-', 
+        campaign_status: row.campaign_status || 'ENABLED', // Padrão Ativo se não vier
         strategy: row.bidding_strategy || '-',
-        final_url: row.final_url, // URL Final
+        final_url: row.final_url,
         
-        // Parcelas (Já convertidas para número puro, ex: 0.375)
         search_impr_share: parseShare(row.search_impression_share),
         search_top_share: parseShare(row.search_top_impression_share),
         search_abs_share: parseShare(row.search_abs_top_share),
@@ -192,14 +194,8 @@ export default function ProductDetailPage() {
   }, [metrics, viewCurrency, startDate, endDate]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
-  
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
-  
-  // Nova formatação para Parcelas de Impressão (0.375 -> 37.50%)
-  const formatShare = (val: number) => {
-     if (val === 0) return '< 10%'; // Google costuma mandar 0.0999 ou vazio quando é baixo
-     return `${(val * 100).toFixed(2)}%`;
-  };
+  const formatShare = (val: number) => val === 0 ? '< 10%' : `${(val * 100).toFixed(2)}%`;
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-500 animate-pulse">Carregando dados...</div>;
   if (!product) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-500">Produto não encontrado.</div>;
@@ -312,7 +308,16 @@ export default function ProductDetailPage() {
 
                     if (col.key === 'date') return <td key={col.key} className="px-4 py-4 font-medium text-white sticky left-0 bg-slate-900 group-hover:bg-slate-800 border-r border-slate-800">{val}</td>
                     
-                    if (col.type === 'link') {
+                    // STATUS COM ÍCONE
+                    if (col.key === 'campaign_status') {
+                        const isPaused = val === 'PAUSED' || val === 'REMOVED';
+                        content = (
+                           <span className={`flex items-center justify-end gap-1.5 ${isPaused ? 'text-slate-500' : 'text-emerald-400'}`}>
+                             {val} {isPaused ? <PauseCircle size={14}/> : <PlayCircle size={14}/>}
+                           </span>
+                        );
+                    }
+                    else if (col.type === 'link') {
                         content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14}/></a> : '-';
                     } 
                     else if (col.format === 'currency') {
@@ -322,7 +327,6 @@ export default function ProductDetailPage() {
                       content = <span className={`px-2 py-1 rounded text-xs border ${val < 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>{formatPercent(val)}</span>;
                     } 
                     else if (col.format === 'percentage_share') {
-                      // Formatação especial para Parcelas de Impressão
                       content = <span className="text-slate-400">{formatShare(val)}</span>;
                     }
                     else {
@@ -345,7 +349,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL DE COLUNAS */}
+      {/* MODAL */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">

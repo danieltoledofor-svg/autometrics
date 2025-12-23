@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Dados incompletos.' }, { status: 400 });
     }
 
-    // 1. Busca ou Cria Produto
+    // 1. Busca/Cria Produto
     let { data: product, error: findError } = await supabase
       .from('products')
       .select('id')
@@ -35,7 +35,6 @@ export async function POST(request: Request) {
         }])
         .select('id')
         .single();
-
       if (createError) return NextResponse.json({ error: createError.message }, { status: 500 });
       product = newProduct;
     }
@@ -48,7 +47,7 @@ export async function POST(request: Request) {
        if (cleanCtr < 1 && cleanCtr > 0) cleanCtr = cleanCtr * 100;
     }
 
-    // 3. Prepara Payload com as NOVAS COLUNAS
+    // 3. Payload Atualizado
     const payload = {
       product_id: product.id,
       date: date,
@@ -58,12 +57,11 @@ export async function POST(request: Request) {
       ctr: cleanCtr,
       avg_cpc: metrics.average_cpc / 1000000,
       
-      // --- NOVOS CAMPOS ---
-      account_name: account_name, // Nome da Conta
-      target_cpa: metrics.target_value || 0, // Meta de CPA/ROAS
-      final_url: metrics.final_url, // Link do Anúncio
-      // --------------------
-
+      account_name: account_name,
+      target_cpa: metrics.target_value || 0, // Meta CPA
+      final_url: metrics.final_url,
+      campaign_status: metrics.status, // NOVO: Ativa/Pausada
+      
       conversion_value: 0, 
       search_impression_share: String(metrics.search_impression_share || '0%'),
       search_top_impression_share: String(metrics.search_top_impression_share || '0%'),
