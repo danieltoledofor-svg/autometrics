@@ -150,13 +150,15 @@ export default function DashboardPage() {
           <button className="ml-auto lg:hidden" onClick={() => setSidebarOpen(false)}><X size={20}/></button>
         </div>
         <nav className="flex-1 px-3 py-6 space-y-1">
-          <Link href="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"><LayoutDashboard size={18} /> Visão Geral</Link>
-          <Link href="/products" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900"><Package size={18} /> Meus Produtos</Link>
-          <Link href="/manual-entry" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900"><Settings size={18} /> Lançamento Manual</Link>
-          <Link href="/integration" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors">
+  <Link href="/dashboard" className="...classes..."><LayoutDashboard size={18} /> Visão Geral</Link>
+  <Link href="/products" className="...classes..."><Package size={18} /> Meus Produtos</Link>
+  <Link href="/manual-entry" className="...classes..."><Settings size={18} /> Lançamento Manual</Link>
+  
+  {/* NOVO LINK DE INTEGRAÇÃO */}
+  <Link href="/integration" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors">
     <Code size={18} /> Integração
   </Link>
-        </nav>
+</nav>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 bg-black overflow-hidden relative">
