@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation'; 
 import { 
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
-  PlayCircle, PauseCircle // <--- Novos Ícones
+  PlayCircle, PauseCircle, RefreshCw // <--- Ícone de Atualizar Dólar
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
@@ -18,34 +18,23 @@ const supabase = createClient(
 );
 
 const ALL_COLUMNS = [
-  // GERAL
   { key: 'date', label: 'Data', category: 'Geral', default: true },
   { key: 'campaign_status', label: 'Status Dia', category: 'Geral', default: true },
   { key: 'account_name', label: 'Conta', category: 'Geral', default: true },
-  
-  // TRÁFEGO
   { key: 'impressions', label: 'Impressões', category: 'Tráfego', default: true },
   { key: 'clicks', label: 'Cliques', category: 'Tráfego', default: true },
   { key: 'ctr', label: 'CTR', category: 'Tráfego', default: true, format: 'percentage' },
-  
-  // CUSTOS
   { key: 'avg_cpc', label: 'CPC Médio', category: 'Custo', default: true, format: 'currency' }, 
   { key: 'budget', label: 'Orçamento Diário', category: 'Custo', default: true, format: 'currency' },
   { key: 'cost', label: 'Custo Ads', category: 'Custo', default: true, format: 'currency' },
-  
-  // FUNIL
   { key: 'visits', label: 'Visitas Pág.', category: 'Funil', default: true },
   { key: 'checkouts', label: 'Checkout', category: 'Funil', default: true },
-  
-  // FINANCEIRO
   { key: 'conversions', label: 'Conversões', category: 'Financeiro', default: true },
   { key: 'revenue', label: 'Receita Total', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'refunds', label: 'Reembolso', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'cpa', label: 'Custo/Conv (CPA)', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'profit', label: 'Lucro (R$)', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'roi', label: 'ROI (%)', category: 'Financeiro', default: true, format: 'percentage' },
-  
-  // GOOGLE ADS AVANÇADO
   { key: 'strategy', label: 'Estratégia', category: 'Google Ads', default: true },
   { key: 'target_cpa', label: 'Meta (CPA/ROAS)', category: 'Google Ads', default: true, format: 'currency' },
   { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false, format: 'percentage_share' },
@@ -58,6 +47,7 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
+  // Datas
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
@@ -66,22 +56,46 @@ export default function ProductDetailPage() {
     return new Date().toISOString().split('T')[0];
   });
 
+  // Dados
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // UI & Moedas
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [viewCurrency, setViewCurrency] = useState('BRL');
-  
+  const [liveDollar, setLiveDollar] = useState(6.00); // Custo
+  const [manualDollar, setManualDollar] = useState(5.60); // Receita (Padrão inicial)
+
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
 
+  // 1. Carrega Preferências (Colunas e Dólar Manual Salvo)
   useEffect(() => {
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
-    if (savedColumns) {
-      try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
-    }
+    if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
+
+    const savedDollar = localStorage.getItem('autometrics_manual_dollar');
+    if (savedDollar) setManualDollar(parseFloat(savedDollar));
+
+    fetchLiveDollar();
   }, []);
+
+  // 2. Busca Dólar Real
+  async function fetchLiveDollar() {
+    try {
+      const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+      const data = await res.json();
+      if (data.USDBRL) setLiveDollar(parseFloat(data.USDBRL.bid));
+    } catch (e) { console.error(e); }
+  }
+
+  // 3. Salva Dólar Manual ao alterar
+  const handleManualDollarChange = (val: number) => {
+    setManualDollar(val);
+    localStorage.setItem('autometrics_manual_dollar', val.toString());
+  };
 
   const toggleColumn = (key: string) => {
     setVisibleColumns(prev => {
@@ -106,37 +120,28 @@ export default function ProductDetailPage() {
           .order('date', { ascending: true });
 
         setMetrics(metricsData || []);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (error) { console.error(error); } 
+      finally { setLoading(false); }
     }
     fetchData();
   }, [productId]);
 
-  // --- NOVA FUNÇÃO: ALTERAR STATUS MANUALMENTE ---
   const toggleStatus = async () => {
     if (!product) return;
-
     const newStatus = product.status === 'active' ? 'paused' : 'active';
-    
-    // Atualiza na tela imediatamente (Otimista)
     setProduct({ ...product, status: newStatus });
-
-    // Salva no Banco
     await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
   };
 
+  // --- LÓGICA DE CÁLCULO ATUALIZADA ---
   const processedData = useMemo(() => {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
 
-    const exchangeRate = 6.15;
-
     const rows = filteredMetrics.map(row => {
+      // Valores Originais (Banco)
       let cost = Number(row.cost || 0);
       let revenue = Number(row.conversion_value || 0);
       let refunds = Number(row.refunds || 0);
@@ -144,12 +149,26 @@ export default function ProductDetailPage() {
       let budget = Number(row.budget_micros || 0) / 1000000;
       let targetValue = Number(row.target_cpa || 0);
       
-      const rowCurrency = row.currency || 'BRL';
+      const rowCurrency = row.currency || 'BRL'; // Moeda original do dado (USD ou BRL)
       
+      // Se estamos vendo em BRL e o dado é em Dólar:
       if (viewCurrency === 'BRL' && rowCurrency === 'USD') {
-        cost *= exchangeRate; revenue *= exchangeRate; refunds *= exchangeRate; cpc *= exchangeRate; budget *= exchangeRate; targetValue *= exchangeRate;
-      } else if (viewCurrency === 'ORIGINAL' && rowCurrency === 'BRL') {
-        cost /= exchangeRate; revenue /= exchangeRate; refunds /= exchangeRate; cpc /= exchangeRate; budget /= exchangeRate; targetValue /= exchangeRate;
+        // Custo -> Usa Dólar Real (API)
+        cost *= liveDollar;
+        cpc *= liveDollar;
+        budget *= liveDollar;
+        targetValue *= liveDollar;
+
+        // Receita -> Usa Dólar Manual (Seguro)
+        revenue *= manualDollar;
+        refunds *= manualDollar;
+      } 
+      // Se estamos vendo em USD e o dado é BRL (caso raro, mas possível)
+      else if (viewCurrency === 'ORIGINAL' && rowCurrency === 'BRL') {
+        cost /= liveDollar;
+        revenue /= manualDollar;
+        refunds /= manualDollar;
+        // ... (divisões análogas)
       }
 
       const profit = revenue - refunds - cost;
@@ -192,7 +211,7 @@ export default function ProductDetailPage() {
     const chartData = rows.map(r => ({ day: r.shortDate, lucro: r.profit, custo: r.cost, receita: r.revenue }));
 
     return { rows: rows.reverse(), chart: chartData, stats };
-  }, [metrics, viewCurrency, startDate, endDate]);
+  }, [metrics, viewCurrency, startDate, endDate, liveDollar, manualDollar]); // <--- Dependências Atualizadas
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
@@ -215,21 +234,18 @@ export default function ProductDetailPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-white">{product.name}</h1>
-              
-              {/* --- BOTÃO DE STATUS (INTERATIVO) --- */}
               <button 
                 onClick={toggleStatus}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase transition-all border shadow-sm ${
                   product.status === 'active' 
-                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 hover:shadow-emerald-900/20' 
-                    : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20 hover:shadow-rose-900/20'
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' 
+                    : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'
                 }`}
               >
                 {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
                 {product.status === 'active' ? 'Ativo' : 'Pausado'}
               </button>
             </div>
-
             <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
               <span className="flex items-center gap-1"><ExternalLink size={12}/> {product.platform}</span>
               <span>•</span>
@@ -239,6 +255,31 @@ export default function ProductDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-4 w-full xl:w-auto items-end">
+          
+          {/* --- NOVO: CONTROLE DE CÂMBIO --- */}
+          <div className="flex bg-slate-900 p-1.5 rounded-lg border border-slate-800 items-center gap-3">
+             {/* Dólar Custo (Real) */}
+             <div className="flex flex-col px-2">
+                <span className="text-[9px] text-amber-500 uppercase font-bold">Custo (API)</span>
+                <span className="text-xs font-mono font-bold text-amber-400">R$ {liveDollar.toFixed(2)}</span>
+             </div>
+             <div className="w-px h-6 bg-slate-700"></div>
+             {/* Dólar Receita (Manual) */}
+             <div className="flex flex-col px-2">
+                <span className="text-[9px] text-emerald-500 uppercase font-bold">Receita (Manual)</span>
+                <div className="flex items-center gap-1">
+                   <span className="text-[10px] text-slate-500">R$</span>
+                   <input 
+                     type="number" 
+                     step="0.01" 
+                     className="w-12 bg-transparent text-xs font-mono font-bold text-white outline-none border-b border-slate-600 focus:border-emerald-500"
+                     value={manualDollar}
+                     onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))}
+                   />
+                </div>
+             </div>
+          </div>
+
           <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800 items-center">
             <div className="flex items-center gap-2 px-3 border-r border-slate-800">
                <Calendar size={14} className="text-indigo-400"/>
@@ -255,7 +296,7 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* KPI CARDS (Mesmo código anterior...) */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl">
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p>
@@ -276,7 +317,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* GRÁFICO */}
+      {/* Gráfico */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 h-64">
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
@@ -290,7 +331,7 @@ export default function ProductDetailPage() {
          </ResponsiveContainer>
       </div>
 
-      {/* TABELA DETALHADA */}
+      {/* Tabela Detalhada */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm relative flex flex-col h-[600px]">
         <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center bg-slate-900/50 gap-4 shrink-0">
           <div className="flex items-center gap-3">
@@ -356,7 +397,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL COLUNAS */}
+      {/* MODAL */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
