@@ -5,7 +5,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { 
-  Activity, DollarSign, TrendingDown, LayoutDashboard, 
+  Code, Activity, DollarSign, TrendingDown, LayoutDashboard, 
   Package, Settings, Menu, X, Coins, RotateCcw
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
@@ -80,7 +80,7 @@ export default function DashboardPage() {
       
       // Taxas de câmbio fixas (para exemplo)
       const rates = {
-        USD: 6.10, // Dólar
+        USD: 5.40, // Dólar
         EUR: 6.40  // Euro (Adicionado)
       };
 
@@ -153,6 +153,9 @@ export default function DashboardPage() {
           <Link href="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"><LayoutDashboard size={18} /> Visão Geral</Link>
           <Link href="/products" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900"><Package size={18} /> Meus Produtos</Link>
           <Link href="/manual-entry" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900"><Settings size={18} /> Lançamento Manual</Link>
+          <Link href="/integration" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors">
+    <Code size={18} /> Integração
+  </Link>
         </nav>
       </aside>
 

@@ -35,10 +35,40 @@ export default function ProductsPage() {
   }
 
   const handleSave = async () => {
-    // Validação básica
     if (!newProduct.name || !newProduct.campaign_name || !newProduct.platform) {
-      return alert("Preencha todos os campos obrigatórios (Nome, Campanha e Plataforma).");
+      return alert("Preencha todos os campos obrigatórios.");
     }
+
+    // 1. RECUPERA O ID AUTOMÁTICO DO NAVEGADOR
+    // Isso garante que o produto tenha o mesmo ID do script gerado na outra página
+    let currentUserId = localStorage.getItem('autometrics_user_id');
+    
+    if (!currentUserId) {
+      // Se por algum milagre não tiver ID, cria um agora
+      currentUserId = crypto.randomUUID();
+      localStorage.setItem('autometrics_user_id', currentUserId);
+    }
+
+    setSaving(true);
+    const { data, error } = await supabase.from('products').insert([{
+      name: newProduct.name,
+      google_ads_campaign_name: newProduct.campaign_name,
+      platform: newProduct.platform,
+      currency: newProduct.currency,
+      status: newProduct.status,
+      user_id: currentUserId // <--- AQUI ESTÁ A MÁGICA
+    }]).select();
+
+    if (error) {
+      alert(error.code === '23505' ? 'Erro: Já existe um produto com esse nome de campanha.' : 'Erro ao salvar: ' + error.message);
+    } else if (data) {
+      setProducts([data[0], ...products]);
+      setIsModalOpen(false);
+      setNewProduct({ name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active' });
+      alert('Produto salvo com sucesso!');
+    }
+    setSaving(false);
+  };
 
     setSaving(true);
     const { data, error } = await supabase.from('products').insert([{
