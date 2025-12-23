@@ -1,45 +1,43 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Package, Plus, Search, ExternalLink, X, ArrowLeft, RefreshCw, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Package, Plus, Search, ExternalLink, X, ArrowLeft, RefreshCw, 
+  Briefcase, Folder, Layers, LayoutGrid, ChevronRight
+} from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 
-// Configuração Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   
-  // Estado do formulário de novo produto
-  const [newProduct, setNewProduct] = useState({ 
-    name: '', 
-    campaign_name: '', 
-    platform: '', 
-    currency: 'BRL', 
-    status: 'active' 
-  });
+  // Estado para seleção de conta
+  const [selectedAccount, setSelectedAccount] = useState<string | null>('ALL');
 
-  // Busca produtos ao carregar a página
+  // Estados do Modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newProduct, setNewProduct] = useState({ 
+    name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active', account_name: 'Manual' 
+  });
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => { 
     fetchProducts(); 
   }, []);
 
   async function fetchProducts() {
     setLoading(true);
-    
-    // Tenta recuperar o ID do usuário localmente para filtrar (se houver)
-    const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('autometrics_user_id') : null;
+    const currentUserId = localStorage.getItem('autometrics_user_id');
     
     let query = supabase.from('products').select('*').order('created_at', { ascending: false });
     
-    // Se tivermos um ID de usuário, filtramos apenas os produtos dele
     if (currentUserId) {
       query = query.eq('user_id', currentUserId);
     }
@@ -49,70 +47,108 @@ export default function ProductsPage() {
     setLoading(false);
   }
 
-  const handleSave = async () => {
-    // Validação
-    if (!newProduct.name || !newProduct.campaign_name || !newProduct.platform) {
-      return alert("Preencha todos os campos obrigatórios.");
-    }
+  // Agrupa produtos por Conta
+  const accounts = useMemo(() => {
+    const accSet = new Set(products.map(p => p.account_name || 'Sem Conta Vinculada'));
+    return Array.from(accSet).sort();
+  }, [products]);
 
-    // 1. Lógica Automática de ID do Usuário (Segurança)
+  // Filtra produtos baseado na busca e na conta selecionada
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesAccount = selectedAccount === 'ALL' || (p.account_name || 'Sem Conta Vinculada') === selectedAccount;
+    return matchesSearch && matchesAccount;
+  });
+
+  const handleSave = async () => {
+    // ... (Mantendo a lógica de salvamento existente)
+    if (!newProduct.name || !newProduct.campaign_name) return alert("Preencha os campos obrigatórios.");
+    
     let currentUserId = localStorage.getItem('autometrics_user_id');
     if (!currentUserId) {
-      // Se não tiver ID, cria um novo e salva
-      currentUserId = crypto.randomUUID();
-      localStorage.setItem('autometrics_user_id', currentUserId);
+       currentUserId = crypto.randomUUID();
+       localStorage.setItem('autometrics_user_id', currentUserId);
     }
-
     setSaving(true);
-
-    // 2. Salva no banco com o user_id
     const { data, error } = await supabase.from('products').insert([{
       name: newProduct.name,
       google_ads_campaign_name: newProduct.campaign_name,
       platform: newProduct.platform,
       currency: newProduct.currency,
       status: newProduct.status,
-      user_id: currentUserId // Vínculo automático para o script
+      user_id: currentUserId,
+      account_name: 'Manual'
     }]).select();
 
-    if (error) {
-      // Tratamento de erro de duplicidade (Nome de campanha já existe para este usuário)
-      if (error.code === '23505') {
-        alert('Erro: Você já cadastrou uma campanha com esse nome exato.');
-      } else {
-        alert('Erro ao salvar: ' + error.message);
-      }
-    } else if (data) {
-      // Sucesso: Atualiza a lista e fecha o modal
+    if (error) alert('Erro: ' + error.message);
+    else if (data) {
       setProducts([data[0], ...products]);
       setIsModalOpen(false);
-      setNewProduct({ name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active' });
-      alert('Produto salvo com sucesso!');
     }
     setSaving(false);
   };
 
   return (
-    <div className="min-h-screen bg-black text-slate-200 font-sans flex">
+    <div className="min-h-screen bg-black text-slate-200 font-sans flex flex-col md:flex-row">
       
-      {/* Sidebar de Navegação (Fixo à esquerda) */}
-      <aside className="w-16 md:w-64 bg-slate-950 border-r border-slate-900 flex flex-col fixed h-full z-20">
-        <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-slate-900">
-           <Link href="/dashboard" className="flex items-center gap-2 text-white font-bold hover:text-indigo-400 transition-colors">
-             <ArrowLeft size={20} />
-             <span className="hidden md:inline">Voltar</span>
+      {/* --- SIDEBAR DE CONTAS (NOVO) --- */}
+      <aside className="w-full md:w-72 bg-slate-950 border-r border-slate-900 flex flex-col h-screen sticky top-0">
+        
+        {/* Logo / Voltar */}
+        <div className="p-6 border-b border-slate-900 flex items-center gap-3">
+           <Link href="/dashboard" className="p-2 bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-white">
+             <ArrowLeft size={18} />
            </Link>
+           <span className="font-bold text-white tracking-wide">Minhas Contas</span>
+        </div>
+
+        {/* Lista de Contas */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
+           <button 
+             onClick={() => setSelectedAccount('ALL')}
+             className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all ${selectedAccount === 'ALL' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}
+           >
+              <LayoutGrid size={18} />
+              <span className="font-medium text-sm">Todas as Contas</span>
+              <span className="ml-auto text-xs bg-black/20 px-2 py-0.5 rounded-full">{products.length}</span>
+           </button>
+
+           <div className="pt-4 pb-2 px-2">
+              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Contas de Anúncio</p>
+           </div>
+
+           {accounts.map(acc => (
+             <button 
+               key={acc}
+               onClick={() => setSelectedAccount(acc)}
+               className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all group ${selectedAccount === acc ? 'bg-slate-800 text-white border border-slate-700' : 'text-slate-400 hover:bg-slate-900 hover:text-white border border-transparent'}`}
+             >
+                <Briefcase size={18} className={selectedAccount === acc ? 'text-indigo-400' : 'text-slate-600 group-hover:text-slate-400'} />
+                <span className="font-medium text-sm truncate">{acc}</span>
+                {selectedAccount === acc && <ChevronRight size={14} className="ml-auto text-indigo-500"/>}
+             </button>
+           ))}
+        </div>
+        
+        {/* Footer Sidebar */}
+        <div className="p-4 border-t border-slate-900 text-center">
+           <p className="text-[10px] text-slate-600">AutoMetrics v3.0</p>
         </div>
       </aside>
 
-      {/* Conteúdo Principal */}
-      <main className="flex-1 ml-16 md:ml-64 p-4 md:p-8">
+      {/* --- ÁREA PRINCIPAL (CAMPANHAS) --- */}
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen">
         
         {/* Cabeçalho */}
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Package className="text-indigo-500" /> Meus Produtos
-          </h1>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              {selectedAccount === 'ALL' ? 'Todas as Campanhas' : selectedAccount}
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">
+              Gerenciando {filteredProducts.length} campanhas {selectedAccount !== 'ALL' && 'nesta conta'}.
+            </p>
+          </div>
           <button 
             onClick={() => setIsModalOpen(true)} 
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-indigo-900/20"
@@ -121,12 +157,12 @@ export default function ProductsPage() {
           </button>
         </div>
 
-        {/* Barra de Busca */}
+        {/* Busca */}
         <div className="bg-slate-900/50 border border-slate-900 p-4 rounded-xl mb-6 flex gap-4 items-center">
           <Search className="text-slate-500" size={18} />
           <input 
             type="text" 
-            placeholder="Buscar produto..." 
+            placeholder="Buscar campanha..." 
             className="bg-transparent text-white w-full outline-none placeholder:text-slate-600" 
             value={searchTerm} 
             onChange={(e) => setSearchTerm(e.target.value)} 
@@ -136,23 +172,24 @@ export default function ProductsPage() {
           </button>
         </div>
 
-        {/* Grid de Produtos */}
+        {/* Grid de Cards */}
         {loading && products.length === 0 ? (
-          <div className="flex justify-center items-center h-64 text-slate-500">Carregando produtos...</div>
+          <div className="flex justify-center items-center h-64 text-slate-500">Carregando campanhas...</div>
+        ) : filteredProducts.length === 0 ? (
+           <div className="flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed border-slate-800 rounded-xl">
+              <Layers size={32} className="mb-2 opacity-50"/>
+              <p>Nenhuma campanha encontrada nesta conta.</p>
+           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).map((product) => (
-              
-              /* LINK CLICÁVEL: Envolve todo o card */
+            {filteredProducts.map((product) => (
               <Link key={product.id} href={`/products/${product.id}`} className="block group">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-indigo-500/50 hover:bg-slate-900/80 transition-all h-full relative overflow-hidden">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-indigo-500/50 hover:bg-slate-900/80 transition-all h-full relative overflow-hidden flex flex-col">
                   
-                  {/* Ícone de Hover */}
                   <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity transform group-hover:translate-x-0 translate-x-4">
                      <ExternalLink size={18} className="text-indigo-400" />
                   </div>
 
-                  {/* Ícone da Moeda */}
                   <div className="flex justify-between items-start mb-4">
                     <div className={`p-3 rounded-xl flex items-center justify-center w-12 h-12 
                       ${product.currency === 'USD' ? 'bg-indigo-500/10 text-indigo-500' : 
@@ -160,27 +197,29 @@ export default function ProductsPage() {
                         'bg-emerald-500/10 text-emerald-500'}`}>
                         {product.currency === 'USD' ? '$' : product.currency === 'EUR' ? '€' : 'R$'}
                     </div>
-                    <span className="text-xs font-medium border border-slate-700 px-2 py-1 rounded bg-slate-800 text-slate-400 uppercase">
-                      {product.currency}
+                    {/* Status Badge */}
+                    <span className={`text-[10px] px-2 py-1 rounded border uppercase font-bold ${
+                      product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-slate-800 text-slate-500 border-slate-700'
+                    }`}>
+                      {product.status || 'Active'}
                     </span>
                   </div>
                   
-                  {/* Nome e Plataforma */}
-                  <h3 className="text-lg font-bold text-white mb-1 group-hover:text-indigo-400 transition-colors">
+                  <h3 className="text-lg font-bold text-white mb-1 group-hover:text-indigo-400 transition-colors line-clamp-2">
                     {product.name}
                   </h3>
-                  <p className="text-xs text-slate-500 flex items-center gap-1 mb-4">
-                    {product.platform}
-                  </p>
                   
-                  {/* Footer do Card: Campanha Vinculada */}
-                  <div className="space-y-3 border-t border-slate-800 pt-4">
-                    <div>
-                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Campanha Vinculada</span>
-                      <p className="text-xs text-slate-300 font-mono bg-black/50 border border-slate-800 px-2 py-1.5 rounded mt-1 truncate group-hover:border-indigo-500/30 transition-colors">
-                        {product.google_ads_campaign_name}
-                      </p>
-                    </div>
+                  <div className="mt-auto pt-4 space-y-2 border-t border-slate-800/50">
+                     <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <Folder size={12}/>
+                        <span className="truncate max-w-[200px]">{product.account_name || 'Sem Conta'}</span>
+                     </div>
+                     <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <Layers size={12}/>
+                        <span className="font-mono bg-black/30 px-1.5 py-0.5 rounded truncate max-w-[200px]">
+                          {product.google_ads_campaign_name}
+                        </span>
+                     </div>
                   </div>
                   
                 </div>
@@ -189,80 +228,23 @@ export default function ProductsPage() {
           </div>
         )}
 
-        {/* Modal de Novo Produto */}
+        {/* Modal de Novo Produto (Mantido Simplificado) */}
         {isModalOpen && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg p-6 shadow-2xl">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-white">Novo Produto</h2>
+                <h2 className="text-xl font-bold text-white">Novo Produto Manual</h2>
                 <button onClick={() => setIsModalOpen(false)}><X size={24} className="text-slate-400 hover:text-white" /></button>
               </div>
-              
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Nome do Produto</label>
-                  <input 
-                    type="text" 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-indigo-500 outline-none transition-colors placeholder:text-slate-600" 
-                    placeholder="Ex: Epicooler 85" 
-                    value={newProduct.name} 
-                    onChange={(e) => setNewProduct({...newProduct, name: e.target.value})} 
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Nome Exato da Campanha (Google Ads)</label>
-                  <input 
-                    type="text" 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white font-mono text-sm focus:border-indigo-500 outline-none transition-colors placeholder:text-slate-600" 
-                    placeholder="Ex: [FF] EPICOOLER 85" 
-                    value={newProduct.campaign_name} 
-                    onChange={(e) => setNewProduct({...newProduct, campaign_name: e.target.value})} 
-                  />
-                  <p className="text-[10px] text-indigo-400 mt-1">* Deve ser idêntico ao nome no Google Ads.</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Plataforma</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-indigo-500 outline-none transition-colors placeholder:text-slate-600" 
-                      placeholder="Ex: Kiwify, Eduzz..."
-                      value={newProduct.platform} 
-                      onChange={(e) => setNewProduct({...newProduct, platform: e.target.value})} 
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Moeda</label>
-                    <select 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-indigo-500 outline-none appearance-none cursor-pointer"
-                      value={newProduct.currency} 
-                      onChange={(e) => setNewProduct({...newProduct, currency: e.target.value})}
-                    >
-                      <option value="BRL">Real (BRL)</option>
-                      <option value="USD">Dólar (USD)</option>
-                      <option value="EUR">Euro (EUR)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-slate-800">
-                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancelar</button>
-                <button 
-                  onClick={handleSave} 
-                  disabled={saving} 
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-2 transition-all disabled:opacity-50"
-                >
-                  {saving && <Loader2 className="animate-spin" size={16} />}
-                  Salvar Produto
-                </button>
+              <div className="space-y-4">
+                <input type="text" className="w-full bg-slate-950 border-slate-800 rounded-lg p-3 text-white" placeholder="Nome do Produto" value={newProduct.name} onChange={e=>setNewProduct({...newProduct, name: e.target.value})} />
+                <input type="text" className="w-full bg-slate-950 border-slate-800 rounded-lg p-3 text-white" placeholder="Campanha Google Ads (Exato)" value={newProduct.campaign_name} onChange={e=>setNewProduct({...newProduct, campaign_name: e.target.value})} />
+                <button onClick={handleSave} className="w-full bg-indigo-600 py-3 rounded-lg text-white font-bold">{saving ? 'Salvando...' : 'Salvar'}</button>
               </div>
             </div>
           </div>
         )}
+
       </main>
     </div>
   );

@@ -14,8 +14,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Dados incompletos.' }, { status: 400 });
     }
 
-    // 1. Busca/Cria Produto
-    let { data: product, error: findError } = await supabase
+    // 1. Busca produto existente
+    let { data: product } = await supabase
       .from('products')
       .select('id')
       .eq('google_ads_campaign_name', campaign_name)
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       .single();
 
     if (!product) {
+      // Cria novo produto COM O NOME DA CONTA
       const { data: newProduct, error: createError } = await supabase
         .from('products')
         .insert([{
@@ -31,12 +32,20 @@ export async function POST(request: Request) {
             user_id: user_id,
             platform: 'Google Ads (Auto)',
             currency: currency_code || 'BRL',
-            status: 'active'
+            status: 'active',
+            account_name: account_name || 'Conta Desconhecida' // <--- NOVO
         }])
         .select('id')
         .single();
+
       if (createError) return NextResponse.json({ error: createError.message }, { status: 500 });
       product = newProduct;
+    } else {
+      // Se já existe, atualiza o nome da conta caso tenha mudado ou esteja vazio
+      await supabase
+        .from('products')
+        .update({ account_name: account_name })
+        .eq('id', product.id);
     }
 
     // 2. Tratamento de CTR
@@ -47,7 +56,7 @@ export async function POST(request: Request) {
        if (cleanCtr < 1 && cleanCtr > 0) cleanCtr = cleanCtr * 100;
     }
 
-    // 3. Payload Atualizado
+    // 3. Salva Métricas
     const payload = {
       product_id: product.id,
       date: date,
@@ -58,9 +67,9 @@ export async function POST(request: Request) {
       avg_cpc: metrics.average_cpc / 1000000,
       
       account_name: account_name,
-      target_cpa: metrics.target_value || 0, // Meta CPA
+      target_cpa: metrics.target_value || 0,
       final_url: metrics.final_url,
-      campaign_status: metrics.status, // NOVO: Ativa/Pausada
+      campaign_status: metrics.status,
       
       conversion_value: 0, 
       search_impression_share: String(metrics.search_impression_share || '0%'),
