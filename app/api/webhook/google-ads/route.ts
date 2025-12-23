@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Configuração do Cliente Supabase (Service Role para ignorar RLS)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -9,13 +8,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { campaign_name, date, metrics, currency_code, user_id } = body;
+    const { campaign_name, date, metrics, currency_code, user_id, account_name } = body;
 
     if (!user_id || !campaign_name) {
       return NextResponse.json({ message: 'Dados incompletos.' }, { status: 400 });
     }
 
-    // 1. Busca ou Cria o Produto
+    // 1. Busca ou Cria Produto
     let { data: product, error: findError } = await supabase
       .from('products')
       .select('id')
@@ -37,41 +36,35 @@ export async function POST(request: Request) {
         .select('id')
         .single();
 
-      if (createError) {
-        return NextResponse.json({ error: `Erro ao criar produto: ${createError.message}` }, { status: 500 });
-      }
+      if (createError) return NextResponse.json({ error: createError.message }, { status: 500 });
       product = newProduct;
     }
 
-    // CORREÇÃO DO CTR: Garante que tratamos como string antes de remover o %
+    // 2. Tratamento de CTR
     let cleanCtr = 0;
     if (metrics.ctr) {
-       // Converte para string, remove %, e volta para numero
        const ctrString = String(metrics.ctr).replace('%', '');
        cleanCtr = parseFloat(ctrString);
-       
-       // Se o valor for muito baixo (ex: 0.05), significa que veio em decimal (5%). 
-       // Se veio "5.00", é 5%. O banco espera o numero inteiro da porcentagem? 
-       // Vamos manter o padrão visual. Se for < 1, multiplicamos por 100 para ficar legível (5% em vez de 0.05)
-       if (cleanCtr < 1 && cleanCtr > 0) {
-          cleanCtr = cleanCtr * 100;
-       }
+       if (cleanCtr < 1 && cleanCtr > 0) cleanCtr = cleanCtr * 100;
     }
 
-    // 2. Prepara Payload
+    // 3. Prepara Payload com as NOVAS COLUNAS
     const payload = {
       product_id: product.id,
       date: date,
       impressions: metrics.impressions,
       clicks: metrics.clicks,
-      cost: metrics.cost_micros / 1000000, 
-      
-      ctr: cleanCtr, // Usa o valor corrigido
-      
+      cost: metrics.cost_micros / 1000000,
+      ctr: cleanCtr,
       avg_cpc: metrics.average_cpc / 1000000,
       
+      // --- NOVOS CAMPOS ---
+      account_name: account_name, // Nome da Conta
+      target_cpa: metrics.target_value || 0, // Meta de CPA/ROAS
+      final_url: metrics.final_url, // Link do Anúncio
+      // --------------------
+
       conversion_value: 0, 
-      
       search_impression_share: String(metrics.search_impression_share || '0%'),
       search_top_impression_share: String(metrics.search_top_impression_share || '0%'),
       search_abs_top_share: String(metrics.search_abs_top_share || '0%'),
@@ -81,14 +74,11 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString()
     };
 
-    // 3. Tenta Inserir (Upsert)
     const { error: upsertError } = await supabase
       .from('daily_metrics')
       .upsert(payload, { onConflict: 'product_id, date' });
 
-    if (upsertError) {
-      return NextResponse.json({ error: `Erro SQL: ${upsertError.message}` }, { status: 500 });
-    }
+    if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
 
     return NextResponse.json({ success: true });
 
