@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Sun, Moon, LayoutGrid, Package, Settings, FileText, 
-  LogOut, RefreshCw
+  LogOut, RefreshCw, Target, ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
@@ -13,11 +13,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
+// Configuração Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Função para garantir data no fuso local (evita erros de UTC)
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -30,30 +32,40 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   
+  // Dados
   const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   
+  // Filtros
   const [dateRange, setDateRange] = useState('this_month'); 
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
+  // Configurações Globais (Moeda e Tema)
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
   const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // --- PROTEÇÃO DE ROTA E CARREGAMENTO ---
+  // --- INICIALIZAÇÃO E AUTENTICAÇÃO ---
   useEffect(() => {
-    async function checkUserAndLoad() {
+    async function init() {
+      // 1. Recupera Preferências Salvas
+      const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
+      if (savedTheme) setTheme(savedTheme);
+
+      const savedDollar = localStorage.getItem('autometrics_manual_dollar');
+      if (savedDollar) setManualDollar(parseFloat(savedDollar));
+
+      // 2. Verifica Login
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session) {
         router.push('/'); 
         return;
       }
-
       setUser(session.user); 
 
+      // 3. Carrega Dados
       await Promise.all([
         fetchInitialData(session.user.id), 
         fetchLiveDollar()
@@ -61,15 +73,7 @@ export default function DashboardPage() {
       
       setLoading(false);
     }
-
-    checkUserAndLoad();
-
-    const savedDollar = localStorage.getItem('autometrics_manual_dollar');
-    if (savedDollar) setManualDollar(parseFloat(savedDollar));
-    
-    // Recupera tema salvo
-    const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
-    if (savedTheme) setTheme(savedTheme);
+    init();
   }, []);
 
   const toggleTheme = () => {
@@ -92,6 +96,7 @@ export default function DashboardPage() {
   }
 
   async function fetchInitialData(userId: string) {
+    // Busca produtos do usuário
     const { data: prodData } = await supabase
       .from('products')
       .select('id, currency')
@@ -99,6 +104,7 @@ export default function DashboardPage() {
 
     setProducts(prodData || []);
 
+    // Se tiver produtos, busca as métricas deles
     if (prodData && prodData.length > 0) {
         const productIds = prodData.map(p => p.id);
         const { data: metData } = await supabase
@@ -117,6 +123,7 @@ export default function DashboardPage() {
     localStorage.setItem('autometrics_manual_dollar', val.toString());
   };
 
+  // --- PROCESSAMENTO DE DADOS ---
   const processedData = useMemo(() => {
     if (loading || !metrics.length) return { chart: [], table: [], totals: null };
 
@@ -124,18 +131,15 @@ export default function DashboardPage() {
     let start = new Date();
     let end = new Date();
 
-    if (dateRange === 'today') { /* ... */ }
+    // Lógica de Datas
+    if (dateRange === 'today') { /* hoje */ }
     else if (dateRange === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
     else if (dateRange === '7d') { start.setDate(now.getDate() - 7); }
     else if (dateRange === '30d') { start.setDate(now.getDate() - 30); }
     else if (dateRange === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
     else if (dateRange === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
-    else if (dateRange === 'custom' && customStart && customEnd) { 
-        const s = new Date(customStart); s.setMinutes(s.getMinutes() + s.getTimezoneOffset());
-        const e = new Date(customEnd); e.setMinutes(e.getMinutes() + e.getTimezoneOffset());
-        start = s; end = e; 
-    }
     
+    // Datas Formatadas YYYY-MM-DD
     const startStr = dateRange === 'custom' ? customStart : getLocalYYYYMMDD(start);
     const endStr = dateRange === 'custom' ? customEnd : getLocalYYYYMMDD(end);
 
@@ -143,81 +147,127 @@ export default function DashboardPage() {
 
     metrics.forEach(row => {
       if (row.date < startStr || row.date > endStr) return;
+
       const product = products.find(p => p.id === row.product_id);
       const isUSD = product?.currency === 'USD';
+
       let cost = Number(row.cost || 0);
       let revenue = Number(row.conversion_value || 0);
       let refunds = Number(row.refunds || 0);
 
+      // Conversão de Moeda
       if (viewCurrency === 'BRL') {
-        if (isUSD) { cost *= liveDollar; revenue *= manualDollar; refunds *= manualDollar; }
+        if (isUSD) {
+          cost *= liveDollar;      // Custo: Dólar do Dia
+          revenue *= manualDollar; // Receita: Dólar Manual
+          refunds *= manualDollar;
+        }
       } else {
-        if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; }
+        if (!isUSD) {
+          cost /= liveDollar;
+          revenue /= manualDollar;
+          refunds /= manualDollar;
+        }
       }
+
       const profit = revenue - cost - refunds;
 
+      // Agrupamento por Dia
       if (!dailyMap.has(row.date)) dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0 });
       const day = dailyMap.get(row.date);
-      day.cost += cost; day.revenue += revenue; day.refunds += refunds; day.profit += profit;
+      
+      day.cost += cost;
+      day.revenue += revenue;
+      day.refunds += refunds;
+      day.profit += profit;
     });
 
     const resultRows = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
+    
+    // Totais Gerais
     const totals = { cost: 0, revenue: 0, profit: 0, refunds: 0, roi: 0 };
     resultRows.forEach(r => {
-      totals.cost += r.cost; totals.revenue += r.revenue; totals.profit += r.profit; totals.refunds += r.refunds;
+      totals.cost += r.cost;
+      totals.revenue += r.revenue;
+      totals.profit += r.profit;
+      totals.refunds += r.refunds;
       r.roi = r.cost > 0 ? (r.profit / r.cost) * 100 : 0;
     });
     totals.roi = totals.cost > 0 ? (totals.profit / totals.cost) * 100 : 0;
-    const chartData = [...resultRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({ ...r, shortDate: r.date.split('-').slice(1).reverse().join('/') }));
+
+    // Dados para Gráfico (Ordem Cronológica)
+    const chartData = [...resultRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({
+      ...r, shortDate: r.date.split('-').slice(1).reverse().join('/')
+    }));
 
     return { chart: chartData, table: resultRows, totals };
   }, [metrics, products, dateRange, customStart, customEnd, liveDollar, manualDollar, viewCurrency, loading]);
 
+  // --- ESTILOS DINÂMICOS ---
   const isDark = theme === 'dark';
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
+  const textMuted = 'text-slate-500';
+  
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
 
-  if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando perfil...</div>;
+  if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
   return (
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
+      
+      {/* SIDEBAR */}
       <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
-        {/* --- LOGO NA SIDEBAR (COM SOMBRA SE CLARO) --- */}
+        {/* Logo */}
         <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
-           
-           {/* Versão Desktop */}
            <div className="hidden md:block relative"> 
+             {/* Logo com Sombra no modo Claro para garantir visibilidade */}
              <Image 
                src="/logo.png" 
                alt="Logo" 
                width={180} 
-               height={60}
+               height={60} 
                className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} 
                priority 
              />
            </div>
-
-           {/* Versão Mobile */}
            <div className="md:hidden">
              <Image 
-               src="/logo.png" 
-               alt="Logo" 
-               width={40} 
-               height={40}
-               className={`w-8 h-8 object-contain ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`}
+                src="/logo.png" 
+                alt="Logo" 
+                width={40} 
+                height={40} 
+                className={`w-8 h-8 object-contain ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`}
              />
            </div>
         </div>
         
+        {/* Menu de Navegação */}
         <nav className="flex-1 p-4 space-y-2">
-           <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
-           <Link href="/products" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
-           <Link href="/manual-entry" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><FileText size={20} /> <span className="hidden md:block font-medium">Lançamento</span></Link>
-           <Link href="/integration" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
+           <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
+              <LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span>
+           </Link>
+           
+           <Link href="/planning" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+              <Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span>
+           </Link>
+           
+           <Link href="/products" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+              <Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span>
+           </Link>
+           
+           <Link href="/manual-entry" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+              <FileText size={20} /> <span className="hidden md:block font-medium">Lançamento</span>
+           </Link>
+           
+           <Link href="/integration" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+              <Settings size={20} /> <span className="hidden md:block font-medium">Integração</span>
+           </Link>
         </nav>
+
+        {/* Footer Sidebar */}
         <div className="p-4 border-t border-inherit">
            <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}>
               <LogOut size={20} /> <span className="hidden md:block font-medium">Sair ({user?.email?.split('@')[0]})</span>
@@ -225,10 +275,19 @@ export default function DashboardPage() {
         </div>
       </aside>
 
+      {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+        
+        {/* Header Superior */}
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-          <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className="text-slate-500 text-sm">Acompanhe seus resultados consolidados.</p></div>
+          <div>
+            <h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1>
+            <p className={textMuted}>Acompanhe seus resultados consolidados.</p>
+          </div>
+
           <div className="flex flex-wrap gap-4 items-center w-full xl:w-auto">
+             
+             {/* Seletor de Data */}
              <div className={`flex items-center p-1 rounded-lg border ${bgCard} relative`}>
                 <div className="flex items-center gap-2 px-3 border-r border-inherit">
                    <Calendar size={16} className="text-indigo-500"/>
@@ -244,20 +303,38 @@ export default function DashboardPage() {
                 </div>
                 {dateRange === 'custom' && (<div className="flex gap-2 px-2"><input type="date" className="bg-transparent text-xs outline-none" onChange={e => setCustomStart(e.target.value)} /><input type="date" className="bg-transparent text-xs outline-none" onChange={e => setCustomEnd(e.target.value)} /></div>)}
              </div>
+
+             {/* Configurações de Dólar e Visualização */}
              <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
                 <div className="flex gap-3 px-2 border-r border-inherit pr-4">
-                   <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
-                   <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textHead}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
+                   <div>
+                     <span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span>
+                     <span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span>
+                   </div>
+                   <div>
+                     <span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span>
+                     <div className="flex items-center gap-1">
+                        <span className={`text-[10px] ${textMuted}`}>R$</span>
+                        <input type="number" step="0.01" className={`w-12 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} />
+                     </div>
+                   </div>
                 </div>
-                <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-md">
-                   <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-white dark:bg-slate-800 shadow text-indigo-600' : 'text-slate-400') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>R$</button>
-                   <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-white dark:bg-slate-800 shadow text-indigo-600' : 'text-slate-400') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>$</button>
+
+                {/* Toggle Moeda */}
+                <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
+                   <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
+                   <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
                 </div>
-                <button onClick={toggleTheme} className="text-slate-400 hover:text-indigo-500">{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+
+                {/* Toggle Tema */}
+                <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500`}>
+                   {isDark ? <Sun size={18} /> : <Moon size={18} />}
+                </button>
              </div>
           </div>
         </header>
 
+        {/* --- KPI CARDS --- */}
         {processedData.totals ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
             <div className={`${bgCard} border-t-4 border-t-blue-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
@@ -272,13 +349,14 @@ export default function DashboardPage() {
            </div>
         )}
 
+        {/* --- GRÁFICO --- */}
         <div className={`${bgCard} rounded-xl p-6 mb-8 h-80 shadow-sm`}>
            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={processedData.chart}>
                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
                  <XAxis dataKey="shortDate" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                  <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val:any) => formatMoney(val)} />
+                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0' }} formatter={(val:any) => formatMoney(val)} />
                  <Legend />
                  <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                  <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -287,6 +365,7 @@ export default function DashboardPage() {
            </ResponsiveContainer>
         </div>
 
+        {/* --- TABELA --- */}
         <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border border-inherit`}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
