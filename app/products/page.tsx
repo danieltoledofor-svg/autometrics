@@ -88,7 +88,7 @@ export default function ProductsPage() {
     }));
   }, [products, showHidden]);
 
-  // --- AÇÕES DE EXCLUSÃO (NOVO) ---
+  // --- AÇÕES DE EXCLUSÃO ---
   
   const handleDeleteMcc = async (mccName: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -96,7 +96,6 @@ export default function ProductsPage() {
     
     if (!confirm(confirmMsg)) return;
 
-    // Remove do Banco
     const { error } = await supabase
       .from('products')
       .delete()
@@ -106,7 +105,6 @@ export default function ProductsPage() {
     if (error) {
       alert("Erro ao excluir: " + error.message);
     } else {
-      // Atualiza interface
       setProducts(prev => prev.filter(p => p.mcc_name !== mccName));
       if (selectedMcc === mccName) resetFilters();
     }
@@ -118,7 +116,6 @@ export default function ProductsPage() {
     
     if (!confirm(confirmMsg)) return;
 
-    // Remove do Banco (Filtra por MCC e Conta para evitar nomes duplicados em outras MCCs)
     const { error } = await supabase
       .from('products')
       .delete()
@@ -129,9 +126,28 @@ export default function ProductsPage() {
     if (error) {
       alert("Erro ao excluir: " + error.message);
     } else {
-      // Atualiza interface
       setProducts(prev => prev.filter(p => !(p.mcc_name === mccName && p.account_name === accountName)));
       if (selectedAccount === accountName) resetFilters();
+    }
+  };
+
+  // --- NOVA FUNÇÃO: DELETAR PRODUTO INDIVIDUAL ---
+  const handleDeleteProduct = async (productId: string, e: React.MouseEvent) => {
+    e.preventDefault(); 
+    e.stopPropagation();
+    
+    if (!confirm("Tem certeza que deseja excluir este produto permanentemente?")) return;
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', productId);
+
+    if (error) {
+      alert("Erro ao excluir produto: " + error.message);
+    } else {
+      setProducts(prev => prev.filter(p => p.id !== productId));
     }
   };
 
@@ -245,7 +261,6 @@ export default function ProductsPage() {
                        <span className="truncate w-32">{mcc.name}</span>
                     </button>
 
-                    {/* BOTÃO EXCLUIR MCC (NOVO) - Só aparece no hover */}
                     <button 
                        onClick={(e) => handleDeleteMcc(mcc.name, e)}
                        className="p-1.5 text-slate-700 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -270,7 +285,6 @@ export default function ProductsPage() {
                                 <span className="truncate w-32">{acc}</span>
                             </button>
                             
-                            {/* BOTÃO EXCLUIR CONTA (NOVO) */}
                             <button 
                                 onClick={(e) => handleDeleteAccount(mcc.name, acc, e)}
                                 className="p-1.5 text-slate-700 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1"
@@ -337,8 +351,19 @@ export default function ProductsPage() {
                      <button onClick={(e) => toggleStatus(product, e)} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'}`} title="Status">
                         {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
                      </button>
-                     <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-rose-500/20 hover:text-rose-500'}`}>
+                     
+                     {/* BOTÃO DE ARQUIVAR */}
+                     <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-slate-700'}`}>
                         {product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+                     </button>
+
+                     {/* BOTÃO DE DELETAR (NOVO) */}
+                     <button 
+                       onClick={(e) => handleDeleteProduct(product.id, e)}
+                       className="p-1.5 rounded-lg transition-colors bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white"
+                       title="Excluir Definitivamente"
+                     >
+                       <Trash2 size={14} />
                      </button>
                   </div>
 
