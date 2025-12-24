@@ -73,18 +73,19 @@ export default function LoginPage() {
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
         
-        <div className="text-center mb-8">
-          {/* --- LOGO GRANDE (LOGIN) --- */}
-          {/* Aumentei para w-80 (320px) de largura para acomodar logos retangulares */}
-          <div className="relative w-80 h-24 mx-auto mb-2">
-             <Image 
-               src="/logo.png" 
-               alt="AutoMetrics Logo" 
-               fill
-               className="object-contain" // Garante que a logo use todo o espaço disponível sem cortar
-               priority
-             />
-          </div>
+        <div className="text-center mb-8 flex flex-col items-center">
+          
+          {/* --- LOGO GRANDE (FORÇADA) --- */}
+          {/* w-[300px] força a largura para 300 pixels */}
+          <Image 
+            src="/logo.png" 
+            alt="AutoMetrics Logo" 
+            width={400} 
+            height={120}
+            className="w-[300px] h-auto object-contain mb-4" 
+            priority
+          />
+          
           <p className="text-slate-400 text-sm">Acesse sua central de inteligência.</p>
         </div>
 

@@ -170,15 +170,30 @@ export default function DashboardPage() {
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
       <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
-        {/* --- LOGO GRANDE NA SIDEBAR --- */}
-        {/* Aumentei a largura para w-52 e ajustei para object-left */}
-        <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
-           <div className="hidden md:block relative w-52 h-10"> 
-             <Image src="/logo.png" alt="Logo" fill className="object-contain object-left" priority />
+        {/* --- LOGO NA SIDEBAR (FORÇADA GRANDE) --- */}
+        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
+           
+           {/* Versão Desktop: Ocupa 180px */}
+           <div className="hidden md:block"> 
+             <Image 
+               src="/logo.png" 
+               alt="Logo" 
+               width={180} 
+               height={60}
+               className="w-[180px] h-auto object-contain object-left" 
+               priority 
+             />
            </div>
-           {/* Mobile Icon */}
-           <div className="md:hidden relative w-8 h-8">
-             <Image src="/logo.png" alt="Logo" fill className="object-contain" />
+
+           {/* Versão Mobile: Pequena */}
+           <div className="md:hidden">
+             <Image 
+               src="/logo.png" 
+               alt="Logo" 
+               width={40} 
+               height={40}
+               className="w-8 h-8 object-contain"
+             />
            </div>
         </div>
         
