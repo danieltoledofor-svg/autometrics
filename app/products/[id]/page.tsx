@@ -47,7 +47,6 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // Estados principais
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
@@ -60,14 +59,12 @@ export default function ProductDetailPage() {
   const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // UI
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [viewCurrency, setViewCurrency] = useState('BRL');
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
-  // Estado do Lançamento Manual
   const [manualData, setManualData] = useState({ date: new Date().toISOString().split('T')[0], visits: 0, sales: 0, revenue: 0, refunds: 0 });
   const [isSavingManual, setIsSavingManual] = useState(false);
 
@@ -75,7 +72,6 @@ export default function ProductDetailPage() {
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
 
-  // Carregamentos
   useEffect(() => {
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
@@ -119,7 +115,6 @@ export default function ProductDetailPage() {
       };
       const { error } = await supabase.from('daily_metrics').upsert(payload, { onConflict: 'product_id, date' });
       if(error) throw error;
-      
       alert('Dados salvos!');
       setShowManualEntry(false);
       fetchData();
@@ -134,17 +129,14 @@ export default function ProductDetailPage() {
     await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
   };
 
-  // --- CORREÇÃO DA VARIÁVEL 'new' AQUI EMBAIXO ---
   const toggleColumn = (key: string) => {
     setVisibleColumns(prev => {
-      // Renomeado de "new" para "updatedColumns"
       const updatedColumns = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
       localStorage.setItem('autometrics_visible_columns', JSON.stringify(updatedColumns));
       return updatedColumns;
     });
   };
 
-  // --- CÁLCULOS ---
   const processedData = useMemo(() => {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
@@ -248,7 +240,7 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* KPI CARDS */}
+      {/* KPI CARDS (CORES ATUALIZADAS) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-blue-500">
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
@@ -268,7 +260,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* GRÁFICO */}
+      {/* GRÁFICO (CORES ATUALIZADAS) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 h-64">
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
@@ -307,7 +299,7 @@ export default function ProductDetailPage() {
                     if (col.key === 'date') return <td key={col.key} className="px-4 py-4 font-medium text-white sticky left-0 bg-slate-900 group-hover:bg-slate-800 border-r border-slate-800">{val}</td>
                     if (col.key === 'campaign_status') content = <span className={`flex items-center justify-end gap-1.5 ${val === 'PAUSED' ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {val === 'PAUSED' ? <PauseCircle size={14}/> : <PlayCircle size={14}/>}</span>;
                     else if (col.type === 'link') content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14}/></a> : '-';
-                    else if (col.format === 'currency') content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold') : (col.key === 'revenue' ? 'text-blue-400 font-bold' : 'text-slate-300')}>{formatMoney(val)}</span>;
+                    else if (col.format === 'currency') content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold') : (col.key === 'revenue' ? 'text-blue-500 font-bold' : (col.key === 'cost' ? 'text-orange-500 font-medium' : 'text-slate-300'))}>{formatMoney(val)}</span>;
                     else if (col.format === 'percentage') content = <span>{formatPercent(val)}</span>;
                     else if (col.format === 'percentage_share') content = <span>{formatShare(val)}</span>;
                     else content = <span className="text-slate-400">{val}</span>;
@@ -320,7 +312,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL LANÇAMENTO MANUAL */}
+      {/* MODAL LANÇAMENTO MANUAL (NOVO) */}
       {showManualEntry && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl">

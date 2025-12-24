@@ -27,12 +27,11 @@ export default function DashboardPage() {
   const [dateRange, setDateRange] = useState('this_month'); 
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
-  const [isDateMenuOpen, setIsDateMenuOpen] = useState(false);
 
   // Moedas e Taxas
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
-  const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL'); // Toggle de Visualização
+  const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL');
 
   // UI
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -81,6 +80,7 @@ export default function DashboardPage() {
     else if (dateRange === '7d') { start.setDate(now.getDate() - 7); }
     else if (dateRange === '30d') { start.setDate(now.getDate() - 30); }
     else if (dateRange === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+    else if (dateRange === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
     else if (dateRange === 'custom' && customStart && customEnd) { start = new Date(customStart); end = new Date(customEnd); }
 
     const startStr = start.toISOString().split('T')[0];
@@ -101,15 +101,12 @@ export default function DashboardPage() {
 
       // Conversão Baseada na Visualização (viewCurrency)
       if (viewCurrency === 'BRL') {
-        // Se a conta é USD, converte pra BRL
         if (isUSD) {
           cost = cost * liveDollar;
           revenue = revenue * manualDollar;
           refunds = refunds * manualDollar;
         }
       } else {
-        // Visualizando em USD
-        // Se a conta é BRL, converte pra USD (divisão)
         if (!isUSD) {
           cost = cost / liveDollar;
           revenue = revenue / manualDollar;
@@ -140,6 +137,7 @@ export default function DashboardPage() {
     });
     totals.roi = totals.cost > 0 ? (totals.profit / totals.cost) * 100 : 0;
 
+    // Dados para Gráfico
     const chartData = [...resultRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({
       ...r, shortDate: r.date.split('-').slice(1).reverse().join('/')
     }));
@@ -193,7 +191,7 @@ export default function DashboardPage() {
 
           <div className="flex flex-wrap gap-4 items-center w-full xl:w-auto">
              
-             {/* Seletor de Data Compacto */}
+             {/* Seletor de Data */}
              <div className={`flex items-center p-1 rounded-lg border ${bgCard} relative`}>
                 <div className="flex items-center gap-2 px-3 border-r border-inherit">
                    <Calendar size={16} className="text-indigo-500"/>
@@ -221,11 +219,9 @@ export default function DashboardPage() {
 
              {/* Configurações de Dólar e Visualização */}
              <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
-                
-                {/* Inputs de Taxa */}
                 <div className="flex gap-3 px-2 border-r border-inherit pr-4">
                    <div>
-                      <span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (Real)</span>
+                      <span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span>
                       <span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span>
                    </div>
                    <div>
@@ -243,7 +239,6 @@ export default function DashboardPage() {
                    <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? 'bg-white dark:bg-slate-800 shadow text-indigo-600' : 'text-slate-400'}`}>$</button>
                 </div>
 
-                {/* Tema */}
                 <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className="text-slate-400 hover:text-indigo-500">
                    {isDark ? <Sun size={18} /> : <Moon size={18} />}
                 </button>
@@ -251,32 +246,32 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* --- KPI CARDS (CORES ATUALIZADAS) --- */}
+        {/* --- KPI CARDS (CORES CORRIGIDAS) --- */}
         {processedData.totals && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
-            {/* Receita (AZUL) */}
+            {/* Receita: AZUL */}
             <div className={`${bgCard} border-t-4 border-t-blue-500 p-5 rounded-xl shadow-sm`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-2">Receita Total</p>
               <p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p>
             </div>
-            {/* Custos (LARANJA) */}
+            {/* Custos: LARANJA */}
             <div className={`${bgCard} border-t-4 border-t-orange-500 p-5 rounded-xl shadow-sm`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-2">Custos Totais</p>
               <p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.cost)}</p>
             </div>
-            {/* Lucro (VERDE/VERMELHO) */}
+            {/* Lucro: VERDE ou VERMELHO */}
             <div className={`${bgCard} border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} p-5 rounded-xl shadow-sm`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-2">Lucro Líquido</p>
               <p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                 {formatMoney(processedData.totals.profit)}
               </p>
             </div>
-            {/* ROI */}
+            {/* ROI: ROXO/INDIGO */}
             <div className={`${bgCard} border-t-4 border-t-indigo-500 p-5 rounded-xl shadow-sm`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-2">ROI</p>
               <p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p>
             </div>
-            {/* Reembolso */}
+            {/* Reembolso: VERMELHO CLARO */}
             <div className={`${bgCard} border-t-4 border-t-rose-500 p-5 rounded-xl shadow-sm`}>
                <p className="text-xs font-bold text-slate-500 uppercase mb-2">Reembolsos</p>
                <p className="text-2xl font-bold text-rose-500">{formatMoney(processedData.totals.refunds)}</p>
@@ -296,7 +291,7 @@ export default function DashboardPage() {
                    formatter={(val:any) => formatMoney(val)} 
                  />
                  <Legend />
-                 {/* Cores Atualizadas: Receita (Azul), Custo (Laranja), Lucro (Verde) */}
+                 {/* Cores no Gráfico */}
                  <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                  <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
                  <Bar dataKey="profit" name="Lucro" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -304,7 +299,7 @@ export default function DashboardPage() {
            </ResponsiveContainer>
         </div>
 
-        {/* --- TABELA --- */}
+        {/* --- TABELA (CORREÇÃO DA DATA) --- */}
         <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border border-inherit`}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
@@ -318,15 +313,21 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                {processedData.table.map((row: any) => (
-                  <tr key={row.date} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                    <td className={`px-6 py-4 font-bold ${textHead}`}>{row.shortDate}</td>
-                    <td className="px-6 py-4 text-right font-bold text-blue-500 bg-blue-500/5">{formatMoney(row.revenue)}</td>
-                    <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(row.cost)}</td>
-                    <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
-                    <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{row.roi.toFixed(0)}%</td>
-                  </tr>
-                ))}
+                {processedData.table.map((row: any) => {
+                  // Correção da DATA aqui:
+                  const dateParts = row.date.split('-');
+                  const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+                  
+                  return (
+                    <tr key={row.date} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
+                      <td className={`px-6 py-4 font-bold ${textHead}`}>{formattedDate}</td>
+                      <td className="px-6 py-4 text-right font-bold text-blue-500 bg-blue-500/5">{formatMoney(row.revenue)}</td>
+                      <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(row.cost)}</td>
+                      <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
+                      <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{row.roi.toFixed(0)}%</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
