@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Sun, Moon, LayoutGrid, Package, Settings, FileText, 
-  LogOut, RefreshCw, Target 
+  LogOut, RefreshCw
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
@@ -66,7 +66,17 @@ export default function DashboardPage() {
 
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
+    
+    // Recupera tema salvo
+    const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
+    if (savedTheme) setTheme(savedTheme);
   }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('autometrics_theme', newTheme);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -120,6 +130,11 @@ export default function DashboardPage() {
     else if (dateRange === '30d') { start.setDate(now.getDate() - 30); }
     else if (dateRange === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
     else if (dateRange === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
+    else if (dateRange === 'custom' && customStart && customEnd) { 
+        const s = new Date(customStart); s.setMinutes(s.getMinutes() + s.getTimezoneOffset());
+        const e = new Date(customEnd); e.setMinutes(e.getMinutes() + e.getTimezoneOffset());
+        start = s; end = e; 
+    }
     
     const startStr = dateRange === 'custom' ? customStart : getLocalYYYYMMDD(start);
     const endStr = dateRange === 'custom' ? customEnd : getLocalYYYYMMDD(end);
@@ -170,29 +185,29 @@ export default function DashboardPage() {
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
       <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
-        {/* --- LOGO NA SIDEBAR (FORÇADA GRANDE) --- */}
+        {/* --- LOGO NA SIDEBAR (COM SOMBRA SE CLARO) --- */}
         <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
            
-           {/* Versão Desktop: Ocupa 180px */}
-           <div className="hidden md:block"> 
+           {/* Versão Desktop */}
+           <div className="hidden md:block relative"> 
              <Image 
                src="/logo.png" 
                alt="Logo" 
                width={180} 
                height={60}
-               className="w-[180px] h-auto object-contain object-left" 
+               className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} 
                priority 
              />
            </div>
 
-           {/* Versão Mobile: Pequena */}
+           {/* Versão Mobile */}
            <div className="md:hidden">
              <Image 
                src="/logo.png" 
                alt="Logo" 
                width={40} 
                height={40}
-               className="w-8 h-8 object-contain"
+               className={`w-8 h-8 object-contain ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`}
              />
            </div>
         </div>
@@ -202,9 +217,6 @@ export default function DashboardPage() {
            <Link href="/products" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
            <Link href="/manual-entry" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><FileText size={20} /> <span className="hidden md:block font-medium">Lançamento</span></Link>
            <Link href="/integration" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
-           <Link href="/planning" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-  <Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span>
-</Link>
         </nav>
         <div className="p-4 border-t border-inherit">
            <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}>
@@ -235,18 +247,18 @@ export default function DashboardPage() {
              <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
                 <div className="flex gap-3 px-2 border-r border-inherit pr-4">
                    <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
-                   <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className="text-[10px] text-slate-500">R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
+                   <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textHead}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
                 </div>
                 <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-md">
-                   <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? 'bg-white dark:bg-slate-800 shadow text-indigo-600' : 'text-slate-400'}`}>R$</button>
-                   <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? 'bg-white dark:bg-slate-800 shadow text-indigo-600' : 'text-slate-400'}`}>$</button>
+                   <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-white dark:bg-slate-800 shadow text-indigo-600' : 'text-slate-400') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>R$</button>
+                   <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-white dark:bg-slate-800 shadow text-indigo-600' : 'text-slate-400') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>$</button>
                 </div>
-                <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className="text-slate-400 hover:text-indigo-500">{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+                <button onClick={toggleTheme} className="text-slate-400 hover:text-indigo-500">{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
              </div>
           </div>
         </header>
 
-        {processedData.totals && (
+        {processedData.totals ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
             <div className={`${bgCard} border-t-4 border-t-blue-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
             <div className={`${bgCard} border-t-4 border-t-orange-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Custos Totais</p><p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.cost)}</p></div>
@@ -254,6 +266,10 @@ export default function DashboardPage() {
             <div className={`${bgCard} border-t-4 border-t-indigo-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">ROI</p><p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p></div>
             <div className={`${bgCard} border-t-4 border-t-rose-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Reembolsos</p><p className="text-2xl font-bold text-rose-500">{formatMoney(processedData.totals.refunds)}</p></div>
           </div>
+        ) : (
+           <div className="text-center py-20 bg-slate-900/20 rounded-xl mb-8 border border-dashed border-slate-800">
+              <p className="text-slate-500">Nenhum dado encontrado.</p>
+           </div>
         )}
 
         <div className={`${bgCard} rounded-xl p-6 mb-8 h-80 shadow-sm`}>
@@ -262,7 +278,7 @@ export default function DashboardPage() {
                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
                  <XAxis dataKey="shortDate" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                  <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0' }} formatter={(val:any) => formatMoney(val)} />
+                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val:any) => formatMoney(val)} />
                  <Legend />
                  <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                  <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
