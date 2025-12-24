@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Calendar, Sun, Moon, LayoutGrid, Package, Settings, FileText, 
+  Calendar, Sun, Moon, LayoutGrid, Package, Settings, 
   LogOut, RefreshCw, Target, ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 import { 
@@ -216,8 +216,6 @@ export default function DashboardPage() {
 
   return (
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
-      
-      {/* SIDEBAR */}
       <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
         {/* Logo */}
@@ -244,50 +242,26 @@ export default function DashboardPage() {
            </div>
         </div>
         
-        {/* Menu de Navegação */}
         <nav className="flex-1 p-4 space-y-2">
-           <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
-              <LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span>
-           </Link>
+           <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
            
-           <Link href="/planning" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-              <Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span>
-           </Link>
+           <Link href="/planning" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
            
-           <Link href="/products" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-              <Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span>
-           </Link>
+           <Link href="/products" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
            
-           <Link href="/manual-entry" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-              <FileText size={20} /> <span className="hidden md:block font-medium">Lançamento</span>
-           </Link>
+           {/* Link de Lançamento REMOVIDO */}
            
-           <Link href="/integration" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-              <Settings size={20} /> <span className="hidden md:block font-medium">Integração</span>
-           </Link>
+           <Link href="/integration" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
         </nav>
-
-        {/* Footer Sidebar */}
         <div className="p-4 border-t border-inherit">
-           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}>
-              <LogOut size={20} /> <span className="hidden md:block font-medium">Sair ({user?.email?.split('@')[0]})</span>
-           </button>
+           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair ({user?.email?.split('@')[0]})</span></button>
         </div>
       </aside>
 
-      {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-        
-        {/* Header Superior */}
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-          <div>
-            <h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1>
-            <p className={textMuted}>Acompanhe seus resultados consolidados.</p>
-          </div>
-
+          <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className={textMuted}>Acompanhe seus resultados consolidados.</p></div>
           <div className="flex flex-wrap gap-4 items-center w-full xl:w-auto">
-             
-             {/* Seletor de Data */}
              <div className={`flex items-center p-1 rounded-lg border ${bgCard} relative`}>
                 <div className="flex items-center gap-2 px-3 border-r border-inherit">
                    <Calendar size={16} className="text-indigo-500"/>
@@ -303,38 +277,20 @@ export default function DashboardPage() {
                 </div>
                 {dateRange === 'custom' && (<div className="flex gap-2 px-2"><input type="date" className="bg-transparent text-xs outline-none" onChange={e => setCustomStart(e.target.value)} /><input type="date" className="bg-transparent text-xs outline-none" onChange={e => setCustomEnd(e.target.value)} /></div>)}
              </div>
-
-             {/* Configurações de Dólar e Visualização */}
              <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
                 <div className="flex gap-3 px-2 border-r border-inherit pr-4">
-                   <div>
-                     <span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span>
-                     <span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span>
-                   </div>
-                   <div>
-                     <span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span>
-                     <div className="flex items-center gap-1">
-                        <span className={`text-[10px] ${textMuted}`}>R$</span>
-                        <input type="number" step="0.01" className={`w-12 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} />
-                     </div>
-                   </div>
+                   <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
+                   <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textMuted}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
                 </div>
-
-                {/* Toggle Moeda */}
                 <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
                    <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
                    <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
                 </div>
-
-                {/* Toggle Tema */}
-                <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500`}>
-                   {isDark ? <Sun size={18} /> : <Moon size={18} />}
-                </button>
+                <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
              </div>
           </div>
         </header>
 
-        {/* --- KPI CARDS --- */}
         {processedData.totals ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
             <div className={`${bgCard} border-t-4 border-t-blue-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
@@ -349,14 +305,13 @@ export default function DashboardPage() {
            </div>
         )}
 
-        {/* --- GRÁFICO --- */}
         <div className={`${bgCard} rounded-xl p-6 mb-8 h-80 shadow-sm`}>
            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={processedData.chart}>
                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
                  <XAxis dataKey="shortDate" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                  <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0' }} formatter={(val:any) => formatMoney(val)} />
+                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val:any) => formatMoney(val)} />
                  <Legend />
                  <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                  <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -365,7 +320,6 @@ export default function DashboardPage() {
            </ResponsiveContainer>
         </div>
 
-        {/* --- TABELA --- */}
         <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border border-inherit`}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
