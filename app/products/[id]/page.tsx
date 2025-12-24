@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation'; 
 import { 
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
-  PlayCircle, PauseCircle, RefreshCw, FileText, Save 
+  PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
@@ -54,9 +54,13 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // Datas Seguras (Inicializa vazio e preenche no Client)
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  // Datas
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(1); 
+    return getLocalYYYYMMDD(date);
+  });
+  const [endDate, setEndDate] = useState(() => getLocalYYYYMMDD(new Date()));
 
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
@@ -68,29 +72,38 @@ export default function ProductDetailPage() {
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
-  const [manualData, setManualData] = useState({ date: '', visits: 0, sales: 0, revenue: 0, refunds: 0 });
+  const [manualData, setManualData] = useState({ date: getLocalYYYYMMDD(new Date()), visits: 0, sales: 0, revenue: 0, refunds: 0 });
   const [isSavingManual, setIsSavingManual] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
 
-  useEffect(() => {
-    // Define datas iniciais (CLIENT SIDE)
-    const today = new Date();
-    setEndDate(getLocalYYYYMMDD(today));
-    setManualData(prev => ({ ...prev, date: getLocalYYYYMMDD(today) }));
-    
-    today.setDate(1); // Primeiro dia do mês
-    setStartDate(getLocalYYYYMMDD(today));
+  // --- TEMA ---
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
+  // Inicialização (Tema + Dólar + Live Dollar)
+  useEffect(() => {
+    // Tema
+    const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
+    if (savedTheme) setTheme(savedTheme);
+
+    // Colunas
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
+    
+    // Dólar
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
     
     fetchLiveDollar();
   }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('autometrics_theme', newTheme);
+  };
 
   async function fetchLiveDollar() {
     try {
@@ -150,9 +163,6 @@ export default function ProductDetailPage() {
   };
 
   const processedData = useMemo(() => {
-    // Se datas ainda não carregaram, retorna vazio
-    if (!startDate || !endDate) return { rows: [], stats: { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 }, chart: [] };
-
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
@@ -204,52 +214,91 @@ export default function ProductDetailPage() {
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
   const formatShare = (val: number) => val === 0 ? '< 10%' : `${(val * 100).toFixed(2)}%`;
 
-  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-500 animate-pulse">Carregando dados...</div>;
-  if (!product) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-500">Produto não encontrado.</div>;
+  // Estilos Dinâmicos
+  const isDark = theme === 'dark';
+  const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
+  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
+  const textHead = isDark ? 'text-white' : 'text-slate-900';
+  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
+  const textMuted = 'text-slate-500';
+
+  if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
+  if (!product) return <div className={`min-h-screen ${bgMain} flex items-center justify-center ${textMuted}`}>Produto não encontrado.</div>;
 
   const { rows, stats, chart } = processedData;
 
   return (
-    <div className="min-h-screen bg-black text-slate-200 font-sans p-4 md:p-6 relative">
+    <div className={`min-h-screen font-sans p-4 md:p-6 relative ${bgMain}`}>
+      
+      {/* HEADER */}
       <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
         <div className="flex items-center gap-4">
-          <Link href="/products" className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"><ArrowLeft size={20} /></Link>
+          <Link href="/products" className={`p-2 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+            <ArrowLeft size={20} />
+          </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-white">{product.name}</h1>
-              <button onClick={toggleStatus} className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />} {product.status === 'active' ? 'Ativo' : 'Pausado'}</button>
+              <h1 className={`text-2xl font-bold ${textHead}`}>{product.name}</h1>
+              <button onClick={toggleStatus} className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>
+                {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />} {product.status === 'active' ? 'Ativo' : 'Pausado'}
+              </button>
             </div>
-            <div className="flex items-center gap-3 text-sm text-slate-500 mt-1"><span className="flex items-center gap-1"><ExternalLink size={12}/> {product.platform}</span><span>•</span><span className="font-mono text-xs bg-slate-900 px-1 rounded">{product.google_ads_campaign_name}</span></div>
+            <div className={`flex items-center gap-3 text-sm ${textMuted} mt-1`}><span className="flex items-center gap-1"><ExternalLink size={12}/> {product.platform}</span><span>•</span><span className={`font-mono text-xs px-1 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{product.google_ads_campaign_name}</span></div>
           </div>
         </div>
+
         <div className="flex flex-wrap gap-4 w-full xl:w-auto items-end">
-          <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20"><FileText size={14} /> Lançamento Manual</button>
-          <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800 items-center">
-            <div className="flex items-center gap-2 px-3 border-r border-slate-800"><Calendar size={14} className="text-indigo-400"/><span className="text-xs font-bold text-slate-500 uppercase">Período</span></div>
-            <input type="date" className="bg-transparent text-white text-xs font-mono p-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          
+          <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
+             <FileText size={14} /> Lançamento Manual
+          </button>
+
+          <div className={`flex items-center p-1 rounded-lg border ${bgCard}`}>
+            <div className={`flex items-center gap-2 px-3 border-r ${borderCol}`}>
+               <Calendar size={14} className="text-indigo-400"/>
+               <span className="text-xs font-bold text-slate-500 uppercase">Período</span>
+            </div>
+            <input type="date" className={`bg-transparent text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <span className="text-slate-600">-</span>
-            <input type="date" className="bg-transparent text-white text-xs font-mono p-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input type="date" className={`bg-transparent text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
-          <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
-             <button onClick={() => setViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold ${viewCurrency === 'ORIGINAL' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>USD</button>
-             <button onClick={() => setViewCurrency('BRL')} className={`px-4 py-1.5 rounded text-xs font-bold ${viewCurrency === 'BRL' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}>BRL</button>
+          <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
+             <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
+                <button onClick={() => setViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
+                <button onClick={() => setViewCurrency('BRL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
+             </div>
+             <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
           </div>
         </div>
       </header>
 
+      {/* KPI CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-blue-500"><p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(stats.revenue)}</p></div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-orange-500"><p className="text-slate-500 text-xs font-bold uppercase mb-2">Custo Ads</p><p className="text-2xl font-bold text-orange-500">{formatMoney(stats.cost)}</p></div>
-        <div className={`bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 ${stats.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'}`}><p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p><p className={`text-2xl font-bold ${stats.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(stats.profit)}</p></div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-indigo-500"><p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p><p className="text-2xl font-bold text-indigo-500">{stats.roi.toFixed(1)}%</p></div>
+        <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-blue-500`}>
+           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
+           <p className="text-2xl font-bold text-blue-500">{formatMoney(stats.revenue)}</p>
+        </div>
+        <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-orange-500`}>
+           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Custo Ads</p>
+           <p className="text-2xl font-bold text-orange-500">{formatMoney(stats.cost)}</p>
+        </div>
+        <div className={`${bgCard} p-5 rounded-xl border-t-4 ${stats.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'}`}>
+           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p>
+           <p className={`text-2xl font-bold ${stats.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(stats.profit)}</p>
+        </div>
+        <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-indigo-500`}>
+           <p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p>
+           <p className="text-2xl font-bold text-indigo-500">{stats.roi.toFixed(1)}%</p>
+        </div>
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 h-64">
+      {/* GRÁFICO */}
+      <div className={`${bgCard} rounded-xl p-6 mb-8 h-64`}>
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
-               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+               <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
                <XAxis dataKey="day" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-               <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }} formatter={(val:any) => formatMoney(val)} />
+               <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val:any) => formatMoney(val)} />
                <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
                <Bar dataKey="lucro" name="Lucro" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -257,29 +306,35 @@ export default function ProductDetailPage() {
          </ResponsiveContainer>
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm relative flex flex-col h-[600px]">
-        <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center bg-slate-900/50 gap-4 shrink-0">
-          <div className="flex items-center gap-3"><h3 className="font-semibold text-white">Histórico Detalhado</h3><span className="text-xs text-slate-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">{rows.length} registros</span></div>
-          <button onClick={() => setShowColumnModal(true)} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded transition-colors border border-slate-700"><Columns size={14} /> Personalizar Colunas</button>
+      {/* TABELA */}
+      <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
+        <div className={`p-4 border-b ${borderCol} flex flex-col md:flex-row justify-between items-center gap-4 shrink-0`}>
+          <div className="flex items-center gap-3">
+            <h3 className={`font-semibold ${textHead}`}>Histórico Detalhado</h3>
+            <span className={`text-xs ${textMuted} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} px-2 py-1 rounded border ${borderCol}`}>{rows.length} registros</span>
+          </div>
+          <button onClick={() => setShowColumnModal(true)} className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded transition-colors border ${isDark ? 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700' : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border-slate-300'}`}>
+            <Columns size={14} /> Personalizar Colunas
+          </button>
         </div>
         <div className="overflow-auto custom-scrollbar flex-1">
           <table className="w-full text-sm text-left border-collapse">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-950 font-semibold sticky top-0 z-20 shadow-lg">
-              <tr>{ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => (<th key={col.key} className="px-4 py-4 whitespace-nowrap border-b border-slate-800 text-right bg-slate-950 first:text-left first:sticky first:left-0 first:z-30">{col.label}</th>))}</tr>
+            <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0 z-20 shadow-lg`}>
+              <tr>{ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => (<th key={col.key} className={`px-4 py-4 whitespace-nowrap border-b ${borderCol} text-right ${isDark ? 'bg-slate-950' : 'bg-slate-100'} first:text-left first:sticky first:left-0 first:z-30`}>{col.label}</th>))}</tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
               {rows.map(row => (
-                <tr key={row.id} className="hover:bg-slate-800/50 transition-colors group">
+                <tr key={row.id} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
                   {ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => {
                     const val = row[col.key];
                     let content;
-                    if (col.key === 'date') return <td key={col.key} className="px-4 py-4 font-medium text-white sticky left-0 bg-slate-900 group-hover:bg-slate-800 border-r border-slate-800">{val}</td>
+                    if (col.key === 'date') return <td key={col.key} className={`px-4 py-4 font-medium sticky left-0 border-r ${borderCol} ${isDark ? 'bg-slate-900 group-hover:bg-slate-800 text-white' : 'bg-white group-hover:bg-slate-50 text-slate-900'}`}>{val}</td>
                     if (col.key === 'campaign_status') content = <span className={`flex items-center justify-end gap-1.5 ${val === 'PAUSED' ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {val === 'PAUSED' ? <PauseCircle size={14}/> : <PlayCircle size={14}/>}</span>;
                     else if (col.type === 'link') content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14}/></a> : '-';
-                    else if (col.format === 'currency') content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold') : (col.key === 'revenue' ? 'text-blue-500 font-bold' : (col.key === 'cost' ? 'text-orange-500 font-medium' : 'text-slate-300'))}>{formatMoney(val)}</span>;
+                    else if (col.format === 'currency') content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold') : (col.key === 'revenue' ? 'text-blue-500 font-bold' : (col.key === 'cost' ? 'text-orange-500 font-medium' : 'text-slate-400'))}>{formatMoney(val)}</span>;
                     else if (col.format === 'percentage') content = <span>{formatPercent(val)}</span>;
                     else if (col.format === 'percentage_share') content = <span>{formatShare(val)}</span>;
-                    else content = <span className="text-slate-400">{val}</span>;
+                    else content = <span className={textMuted}>{val}</span>;
                     return <td key={col.key} className="px-4 py-4 whitespace-nowrap text-right">{content}</td>;
                   })}
                 </tr>
@@ -289,28 +344,30 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
+      {/* MODAL LANÇAMENTO MANUAL */}
       {showManualEntry && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold text-white flex items-center gap-2"><FileText size={20} className="text-indigo-500"/> Lançamento Rápido</h2><button onClick={() => setShowManualEntry(false)}><X size={24} className="text-slate-400 hover:text-white" /></button></div>
+           <div className={`${bgCard} rounded-xl w-full max-w-md p-6 shadow-2xl`}>
+              <div className="flex justify-between items-center mb-6"><h2 className={`text-xl font-bold ${textHead} flex items-center gap-2`}><FileText size={20} className="text-indigo-500"/> Lançamento Rápido</h2><button onClick={() => setShowManualEntry(false)}><X size={24} className="text-slate-400 hover:text-white" /></button></div>
               <div className="space-y-4">
-                 <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white" value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
+                 <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="text-xs uppercase text-slate-500 font-bold">Vendas</label><input type="number" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white" placeholder="0" value={manualData.sales} onChange={e => setManualData({...manualData, sales: parseFloat(e.target.value)})} /></div>
-                    <div><label className="text-xs uppercase text-slate-500 font-bold">Visitas</label><input type="number" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white" placeholder="0" value={manualData.visits} onChange={e => setManualData({...manualData, visits: parseFloat(e.target.value)})} /></div>
+                    <div><label className="text-xs uppercase text-slate-500 font-bold">Vendas</label><input type="number" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0" value={manualData.sales} onChange={e => setManualData({...manualData, sales: parseFloat(e.target.value)})} /></div>
+                    <div><label className="text-xs uppercase text-slate-500 font-bold">Visitas</label><input type="number" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0" value={manualData.visits} onChange={e => setManualData({...manualData, visits: parseFloat(e.target.value)})} /></div>
                  </div>
-                 <div><label className="text-xs uppercase text-blue-500 font-bold">Receita (Moeda do Produto)</label><input type="number" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white border-l-4 border-l-blue-500" placeholder="0.00" value={manualData.revenue} onChange={e => setManualData({...manualData, revenue: parseFloat(e.target.value)})} /></div>
-                 <div><label className="text-xs uppercase text-rose-500 font-bold">Reembolsos</label><input type="number" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white border-l-4 border-l-rose-500" placeholder="0.00" value={manualData.refunds} onChange={e => setManualData({...manualData, refunds: parseFloat(e.target.value)})} /></div>
+                 <div><label className="text-xs uppercase text-blue-500 font-bold">Receita ({product.currency})</label><input type="number" className={`w-full border rounded p-2 border-l-4 border-l-blue-500 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0.00" value={manualData.revenue} onChange={e => setManualData({...manualData, revenue: parseFloat(e.target.value)})} /></div>
+                 <div><label className="text-xs uppercase text-rose-500 font-bold">Reembolsos</label><input type="number" className={`w-full border rounded p-2 border-l-4 border-l-rose-500 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0.00" value={manualData.refunds} onChange={e => setManualData({...manualData, refunds: parseFloat(e.target.value)})} /></div>
                  <button onClick={handleSaveManual} disabled={isSavingManual} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-4 flex items-center justify-center gap-2">{isSavingManual ? 'Salvando...' : 'Salvar Dados'} <Save size={16} /></button>
               </div>
            </div>
         </div>
       )}
 
+      {/* MODAL COLUNAS */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-slate-800 flex justify-between items-center"><h2 className="text-xl font-bold text-white flex items-center gap-2"><Columns size={20} className="text-indigo-500"/> Personalizar Colunas</h2><button onClick={() => setShowColumnModal(false)} className="text-slate-400 hover:text-white"><X size={24} /></button></div>
+          <div className={`${bgCard} rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]`}>
+            <div className={`p-6 border-b flex justify-between items-center ${borderCol}`}><h2 className={`text-xl font-bold ${textHead} flex items-center gap-2`}><Columns size={20} className="text-indigo-500"/> Personalizar Colunas</h2><button onClick={() => setShowColumnModal(false)} className="text-slate-400 hover:text-white"><X size={24} /></button></div>
             <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {['Geral', 'Tráfego', 'Custo', 'Funil', 'Financeiro', 'Google Ads'].map(category => (
@@ -320,11 +377,11 @@ export default function ProductDetailPage() {
                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 border-b border-slate-800 pb-2">{category}</h3>
                         <div className="space-y-2">
                           {ALL_COLUMNS.filter(c => c.category === category).map(col => (
-                            <div key={col.key} onClick={() => toggleColumn(col.key)} className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded cursor-pointer group transition-colors">
+                            <div key={col.key} onClick={() => toggleColumn(col.key)} className={`flex items-center gap-3 p-2 rounded cursor-pointer group transition-colors ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}>
                               <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${visibleColumns.includes(col.key) ? 'bg-indigo-600 border-indigo-600' : 'bg-transparent border-slate-600'}`}>
                                 {visibleColumns.includes(col.key) && <ArrowDownRight size={14} className="text-white" />}
                               </div>
-                              <span className={visibleColumns.includes(col.key) ? 'text-white font-medium' : 'text-slate-400'}>{col.label}</span>
+                              <span className={visibleColumns.includes(col.key) ? `${textHead} font-medium` : 'text-slate-400'}>{col.label}</span>
                             </div>
                           ))}
                         </div>
@@ -334,10 +391,11 @@ export default function ProductDetailPage() {
                 ))}
               </div>
             </div>
-            <div className="p-4 border-t border-slate-800 flex justify-end bg-slate-950/50 rounded-b-xl"><button onClick={() => setShowColumnModal(false)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">Confirmar</button></div>
+            <div className={`p-4 border-t flex justify-end rounded-b-xl ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}><button onClick={() => setShowColumnModal(false)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">Confirmar</button></div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

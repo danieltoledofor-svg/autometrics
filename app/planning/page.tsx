@@ -53,7 +53,7 @@ export default function PlanningPage() {
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
-    // Data local correta para o form
+    // Inicializa data do custo com a data local correta
     setNewCost(prev => ({ ...prev, date: getLocalYYYYMMDD(new Date()) }));
 
     fetchLiveDollar();
@@ -111,7 +111,7 @@ export default function PlanningPage() {
     const { data: costData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startOfMonth).lte('date', endOfMonth);
     setExtraCosts(costData || []);
 
-    // 3. Produtos
+    // 3. Produtos (Com MCC e Conta)
     const { data: prodData } = await supabase.from('products').select('id, currency, name, mcc_name, account_name').eq('user_id', userId);
     setProducts(prodData || []);
     
@@ -223,6 +223,8 @@ export default function PlanningPage() {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // --- AÇÕES DE SALVAMENTO E EDIÇÃO ---
+
   const handleSaveGoal = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -231,9 +233,13 @@ export default function PlanningPage() {
       user_id: userId, month_key: currentMonth,
       revenue_target: Number(tempGoal.revenue), profit_target: Number(tempGoal.profit), ad_spend_limit: Number(tempGoal.limit)
     };
-    await supabase.from('financial_goals').upsert(payload, { onConflict: 'user_id, month_key' });
-    setGoal(tempGoal);
-    setIsGoalModalOpen(false);
+    const { error } = await supabase.from('financial_goals').upsert(payload, { onConflict: 'user_id, month_key' });
+    if (error) {
+        alert('Erro ao salvar meta: ' + error.message);
+    } else {
+        setGoal(tempGoal);
+        setIsGoalModalOpen(false);
+    }
   };
 
   const handleAddCost = async () => {
@@ -243,24 +249,33 @@ export default function PlanningPage() {
 
     if (!newCost.description || !newCost.amount) return alert("Preencha descrição e valor.");
     
-    await supabase.from('additional_costs').insert([{ ...newCost, user_id: userId, amount: Number(newCost.amount) }]);
-    setNewCost({ date: getLocalYYYYMMDD(new Date()), description: '', amount: 0, currency: 'BRL' });
-    setIsCostModalOpen(false);
-    fetchData();
+    const { error } = await supabase.from('additional_costs').insert([{ ...newCost, user_id: userId, amount: Number(newCost.amount) }]);
+    
+    if (error) {
+        alert('Erro ao adicionar custo: ' + error.message);
+    } else {
+        setNewCost({ date: getLocalYYYYMMDD(new Date()), description: '', amount: 0, currency: 'BRL' });
+        setIsCostModalOpen(false);
+        fetchData();
+    }
   };
 
   const handleDeleteCost = async (id: string) => {
     if(!confirm("Tem certeza que deseja excluir este custo?")) return;
-    await supabase.from('additional_costs').delete().eq('id', id);
-    fetchData();
+    const { error } = await supabase.from('additional_costs').delete().eq('id', id);
+    if (error) {
+        alert('Erro ao excluir: ' + error.message);
+    } else {
+        fetchData();
+    }
   };
 
-  // ESTILOS
+  // --- ESTILOS ---
   const isDark = theme === 'dark';
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const textMuted = isDark ? 'text-slate-500' : 'text-slate-500';
+  const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
@@ -293,7 +308,7 @@ export default function PlanningPage() {
               <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
            </div>
            
-           <button onClick={() => setEditMode(!editMode)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
+           <button onClick={() => setEditMode(!editMode)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : `${bgCard} ${textMuted}`}`}>
              <Edit2 size={14}/> {editMode ? 'Modo Edição Ativo' : 'Editar Planilha'}
            </button>
            
@@ -303,77 +318,13 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* KPI SUMÁRIO COM METAS VISÍVEIS */}
+      {/* KPI SUMÁRIO */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        
-        {/* Receita */}
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm relative group`}>
-           <div className="flex justify-between items-start">
-             <p className="text-xs font-bold text-slate-500 uppercase">Receita</p>
-             {goal.revenue > 0 && <span className="text-[10px] text-slate-400">Meta: {formatMoney(goal.revenue)}</span>}
-           </div>
-           <p className="text-2xl font-bold text-blue-500 mt-1">{formatMoney(processedData.totals.revenue)}</p>
-           {goal.revenue > 0 && (
-             <div className="mt-3">
-               <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-200'} overflow-hidden`}>
-                 <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min((processedData.totals.revenue / goal.revenue) * 100, 100)}%` }}></div>
-               </div>
-               <p className="text-[10px] text-right text-slate-500 mt-1">{((processedData.totals.revenue / goal.revenue) * 100).toFixed(1)}% atingido</p>
-             </div>
-           )}
-        </div>
-
-        {/* Custos Ads (com Teto) */}
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-orange-500 shadow-sm relative`}>
-           <div className="flex justify-between items-start">
-              <p className="text-xs font-bold text-slate-500 uppercase">Custo Ads</p>
-              {goal.limit > 0 && <span className="text-[10px] text-slate-400">Teto: {formatMoney(goal.limit)}</span>}
-           </div>
-           <p className="text-2xl font-bold text-orange-500 mt-1">{formatMoney(processedData.totals.ads_cost)}</p>
-           {goal.limit > 0 && (
-             <div className="mt-3">
-               <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-200'} overflow-hidden`}>
-                 <div className={`h-full rounded-full ${processedData.totals.ads_cost > goal.limit ? 'bg-rose-500' : 'bg-orange-500'}`} style={{ width: `${Math.min((processedData.totals.ads_cost / goal.limit) * 100, 100)}%` }}></div>
-               </div>
-               <p className={`text-[10px] text-right mt-1 ${processedData.totals.ads_cost > goal.limit ? 'text-rose-400 font-bold' : 'text-slate-500'}`}>
-                 {((processedData.totals.ads_cost / goal.limit) * 100).toFixed(1)}% do orçamento
-               </p>
-             </div>
-           )}
-        </div>
-
-        {/* Outros Custos */}
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-amber-500 shadow-sm`}>
-           <p className="text-xs font-bold text-slate-500 uppercase">Outros Custos</p>
-           <p className="text-2xl font-bold text-amber-500 mt-1">{formatMoney(processedData.totals.extra_cost)}</p>
-           <p className="text-[10px] text-slate-500 mt-2">Despesas operacionais</p>
-        </div>
-
-        {/* Lucro */}
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} shadow-sm`}>
-           <div className="flex justify-between items-start">
-              <p className="text-xs font-bold text-slate-500 uppercase">Lucro Líquido</p>
-              {goal.profit > 0 && <span className="text-[10px] text-slate-400">Meta: {formatMoney(goal.profit)}</span>}
-           </div>
-           <p className={`text-2xl font-bold mt-1 ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-             {formatMoney(processedData.totals.profit)}
-           </p>
-           {goal.profit > 0 && (
-             <div className="mt-3">
-               <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-200'} overflow-hidden`}>
-                 <div className={`h-full rounded-full ${processedData.totals.profit >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(Math.max((processedData.totals.profit / goal.profit) * 100, 0), 100)}%` }}></div>
-               </div>
-               <p className="text-[10px] text-right text-slate-500 mt-1">{((processedData.totals.profit / goal.profit) * 100).toFixed(1)}% atingido</p>
-             </div>
-           )}
-        </div>
-
-        {/* ROI */}
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-indigo-500 shadow-sm`}>
-           <p className="text-xs font-bold text-slate-500 uppercase">ROI</p>
-           <p className="text-2xl font-bold text-indigo-500 mt-1">{processedData.totals.roi.toFixed(1)}%</p>
-           <p className="text-[10px] text-slate-500 mt-2">Retorno sobre investimento</p>
-        </div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Receita</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-orange-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Custo Ads</p><p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</p></div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-amber-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Outros Custos</p><p className="text-2xl font-bold text-amber-500">{formatMoney(processedData.totals.extra_cost)}</p></div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Lucro Líquido</p><p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p></div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-indigo-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">ROI</p><p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p></div>
       </div>
 
       {/* GRÁFICO */}
@@ -391,7 +342,7 @@ export default function PlanningPage() {
          </ResponsiveContainer>
       </div>
 
-      {/* TABELA DE DRE */}
+      {/* TABELA DE DRE (EXPANSÍVEL) */}
       <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
          <div className={`p-4 border-b ${borderCol} flex justify-between items-center`}>
             <h3 className={`font-bold ${textHead}`}>Detalhamento Diário (DRE)</h3>
@@ -429,18 +380,17 @@ export default function PlanningPage() {
                               <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(day.revenue)}</td>
                               <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(day.ads_cost)}</td>
                               
-                              {/* CUSTOS EXTRAS (CORREÇÃO DE VISUALIZAÇÃO) */}
+                              {/* CUSTOS EXTRAS */}
                               <td className="px-6 py-4 text-right relative align-top" onClick={(e) => e.stopPropagation()}>
                                  {day.extra_cost > 0 ? (
                                     <div className="flex flex-col items-end gap-1">
                                        <span className="text-amber-500 font-bold">{formatMoney(day.extra_cost)}</span>
-                                       {/* LISTA DETALHADA SEMPRE VISÍVEL */}
                                        <div className="flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed border-slate-700 pt-1">
                                           {day.details.map((d: any) => (
                                              <div key={d.id} className="flex items-center gap-2 group/item">
                                                 <span className={`text-[10px] ${textMuted} truncate max-w-[100px]`} title={d.desc}>{d.desc}</span>
                                                 <span className={`text-[10px] ${textHead}`}>{formatMoney(d.val)}</span>
-                                                {/* Botão de Excluir (Só aparece se editMode=true) */}
+                                                {/* Botão Excluir (Só com Modo Edição) */}
                                                 {editMode && (
                                                    <button 
                                                      onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id); }} 
