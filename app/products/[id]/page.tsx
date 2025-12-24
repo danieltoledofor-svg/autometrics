@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation'; 
 import { 
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
-  PlayCircle, PauseCircle, RefreshCw // <--- Ícone de Atualizar Dólar
+  PlayCircle, PauseCircle, RefreshCw, FileText, Save // <--- Novos Ícones
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
@@ -17,6 +17,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// (Mantenha a constante ALL_COLUMNS igual estava antes)
 const ALL_COLUMNS = [
   { key: 'date', label: 'Data', category: 'Geral', default: true },
   { key: 'campaign_status', label: 'Status Dia', category: 'Geral', default: true },
@@ -47,7 +48,7 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // Datas
+  // Estados principais
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
@@ -56,33 +57,34 @@ export default function ProductDetailPage() {
     return new Date().toISOString().split('T')[0];
   });
 
-  // Dados
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // UI & Moedas
+  // UI
   const [showColumnModal, setShowColumnModal] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false); // Modal de Lançamento
   const [viewCurrency, setViewCurrency] = useState('BRL');
-  const [liveDollar, setLiveDollar] = useState(6.00); // Custo
-  const [manualDollar, setManualDollar] = useState(5.60); // Receita (Padrão inicial)
+  const [liveDollar, setLiveDollar] = useState(6.00); 
+  const [manualDollar, setManualDollar] = useState(5.60); 
+
+  // Estado do Lançamento Manual (Dentro do Produto)
+  const [manualData, setManualData] = useState({ date: new Date().toISOString().split('T')[0], visits: 0, sales: 0, revenue: 0, refunds: 0 });
+  const [isSavingManual, setIsSavingManual] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
 
-  // 1. Carrega Preferências (Colunas e Dólar Manual Salvo)
+  // Carregamentos
   useEffect(() => {
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
-
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
-
     fetchLiveDollar();
   }, []);
 
-  // 2. Busca Dólar Real
   async function fetchLiveDollar() {
     try {
       const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
@@ -91,40 +93,43 @@ export default function ProductDetailPage() {
     } catch (e) { console.error(e); }
   }
 
-  // 3. Salva Dólar Manual ao alterar
-  const handleManualDollarChange = (val: number) => {
-    setManualDollar(val);
-    localStorage.setItem('autometrics_manual_dollar', val.toString());
+  // Busca Dados (Função recarregável)
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const { data: prodData } = await supabase.from('products').select('*').eq('id', productId).single();
+      if (prodData) setProduct(prodData);
+      const { data: metricsData } = await supabase.from('daily_metrics').select('*').eq('product_id', productId).order('date', { ascending: true });
+      setMetrics(metricsData || []);
+    } catch (error) { console.error(error); } 
+    finally { setLoading(false); }
   };
 
-  const toggleColumn = (key: string) => {
-    setVisibleColumns(prev => {
-      const newColumns = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      localStorage.setItem('autometrics_visible_columns', JSON.stringify(newColumns));
-      return newColumns;
-    });
+  useEffect(() => { if(productId) fetchData(); }, [productId]);
+
+  // Salvar Lançamento Manual
+  const handleSaveManual = async () => {
+    setIsSavingManual(true);
+    try {
+      const payload = {
+        product_id: productId,
+        date: manualData.date,
+        visits: Number(manualData.visits),
+        conversions: Number(manualData.sales),
+        conversion_value: Number(manualData.revenue),
+        refunds: Number(manualData.refunds),
+        updated_at: new Date().toISOString()
+      };
+      // Upsert para não apagar dados do Google Ads
+      const { error } = await supabase.from('daily_metrics').upsert(payload, { onConflict: 'product_id, date' });
+      if(error) throw error;
+      
+      alert('Dados salvos!');
+      setShowManualEntry(false);
+      fetchData(); // Recarrega a tabela
+    } catch (e: any) { alert('Erro: ' + e.message); }
+    finally { setIsSavingManual(false); }
   };
-
-  useEffect(() => {
-    if (!productId) return;
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const { data: prodData } = await supabase.from('products').select('*').eq('id', productId).single();
-        if (prodData) setProduct(prodData);
-
-        const { data: metricsData } = await supabase
-          .from('daily_metrics')
-          .select('*')
-          .eq('product_id', productId)
-          .order('date', { ascending: true });
-
-        setMetrics(metricsData || []);
-      } catch (error) { console.error(error); } 
-      finally { setLoading(false); }
-    }
-    fetchData();
-  }, [productId]);
 
   const toggleStatus = async () => {
     if (!product) return;
@@ -133,15 +138,21 @@ export default function ProductDetailPage() {
     await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
   };
 
-  // --- LÓGICA DE CÁLCULO ATUALIZADA ---
+  const toggleColumn = (key: string) => {
+    setVisibleColumns(prev => {
+      const new = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+      localStorage.setItem('autometrics_visible_columns', JSON.stringify(new));
+      return new;
+    });
+  };
+
+  // --- CÁLCULOS ---
   const processedData = useMemo(() => {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
-    
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
 
     const rows = filteredMetrics.map(row => {
-      // Valores Originais (Banco)
       let cost = Number(row.cost || 0);
       let revenue = Number(row.conversion_value || 0);
       let refunds = Number(row.refunds || 0);
@@ -149,26 +160,13 @@ export default function ProductDetailPage() {
       let budget = Number(row.budget_micros || 0) / 1000000;
       let targetValue = Number(row.target_cpa || 0);
       
-      const rowCurrency = row.currency || 'BRL'; // Moeda original do dado (USD ou BRL)
+      const rowCurrency = row.currency || 'BRL';
       
-      // Se estamos vendo em BRL e o dado é em Dólar:
       if (viewCurrency === 'BRL' && rowCurrency === 'USD') {
-        // Custo -> Usa Dólar Real (API)
-        cost *= liveDollar;
-        cpc *= liveDollar;
-        budget *= liveDollar;
-        targetValue *= liveDollar;
-
-        // Receita -> Usa Dólar Manual (Seguro)
-        revenue *= manualDollar;
-        refunds *= manualDollar;
-      } 
-      // Se estamos vendo em USD e o dado é BRL (caso raro, mas possível)
-      else if (viewCurrency === 'ORIGINAL' && rowCurrency === 'BRL') {
-        cost /= liveDollar;
-        revenue /= manualDollar;
-        refunds /= manualDollar;
-        // ... (divisões análogas)
+        cost *= liveDollar; cpc *= liveDollar; budget *= liveDollar; targetValue *= liveDollar;
+        revenue *= manualDollar; refunds *= manualDollar;
+      } else if (viewCurrency === 'ORIGINAL' && rowCurrency === 'BRL') {
+        cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; 
       }
 
       const profit = revenue - refunds - cost;
@@ -176,12 +174,8 @@ export default function ProductDetailPage() {
       const conversions = Number(row.conversions || 0);
       const cpa = conversions > 0 ? cost / conversions : 0;
 
-      stats.revenue += revenue;
-      stats.cost += cost;
-      stats.profit += profit;
-      stats.conversions += conversions;
-      stats.clicks += Number(row.clicks || 0);
-      stats.visits += Number(row.visits || 0);
+      stats.revenue += revenue; stats.cost += cost; stats.profit += profit;
+      stats.conversions += conversions; stats.clicks += Number(row.clicks || 0); stats.visits += Number(row.visits || 0);
 
       const dateParts = row.date.split('-');
       const shortDate = `${dateParts[2]}/${dateParts[1]}`;
@@ -189,29 +183,17 @@ export default function ProductDetailPage() {
       const parseShare = (val: any) => (!val || val === '< 10%') ? 0 : parseFloat(val);
 
       return {
-        ...row,
-        date: fullDate, shortDate,
-        cost, revenue, refunds, profit, roi, 
-        avg_cpc: cpc, 
-        budget, cpa, target_cpa: targetValue,
-        ctr: Number(row.ctr || 0),
-        
-        account_name: row.account_name || '-', 
-        campaign_status: row.campaign_status || 'ENABLED', 
-        strategy: row.bidding_strategy || '-',
-        final_url: row.final_url,
-        
-        search_impr_share: parseShare(row.search_impression_share),
-        search_top_share: parseShare(row.search_top_impression_share),
-        search_abs_share: parseShare(row.search_abs_top_share),
+        ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
+        ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED', 
+        strategy: row.bidding_strategy || '-', final_url: row.final_url,
+        search_impr_share: parseShare(row.search_impression_share), search_top_share: parseShare(row.search_top_impression_share), search_abs_share: parseShare(row.search_abs_top_share),
       };
     });
 
     stats.roi = stats.cost > 0 ? (stats.profit / stats.cost) * 100 : 0;
     const chartData = rows.map(r => ({ day: r.shortDate, lucro: r.profit, custo: r.cost, receita: r.revenue }));
-
     return { rows: rows.reverse(), chart: chartData, stats };
-  }, [metrics, viewCurrency, startDate, endDate, liveDollar, manualDollar]); // <--- Dependências Atualizadas
+  }, [metrics, viewCurrency, startDate, endDate, liveDollar, manualDollar]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
@@ -225,7 +207,7 @@ export default function ProductDetailPage() {
   return (
     <div className="min-h-screen bg-black text-slate-200 font-sans p-4 md:p-6 relative">
       
-      {/* HEADER & FILTROS */}
+      {/* HEADER */}
       <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
         <div className="flex items-center gap-4">
           <Link href="/products" className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
@@ -234,16 +216,8 @@ export default function ProductDetailPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-white">{product.name}</h1>
-              <button 
-                onClick={toggleStatus}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase transition-all border shadow-sm ${
-                  product.status === 'active' 
-                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' 
-                    : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'
-                }`}
-              >
-                {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
-                {product.status === 'active' ? 'Ativo' : 'Pausado'}
+              <button onClick={toggleStatus} className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>
+                {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />} {product.status === 'active' ? 'Ativo' : 'Pausado'}
               </button>
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
@@ -256,38 +230,19 @@ export default function ProductDetailPage() {
 
         <div className="flex flex-wrap gap-4 w-full xl:w-auto items-end">
           
-          {/* --- NOVO: CONTROLE DE CÂMBIO --- */}
-          <div className="flex bg-slate-900 p-1.5 rounded-lg border border-slate-800 items-center gap-3">
-             {/* Dólar Custo (Real) */}
-             <div className="flex flex-col px-2">
-                <span className="text-[9px] text-amber-500 uppercase font-bold">Custo (API)</span>
-                <span className="text-xs font-mono font-bold text-amber-400">R$ {liveDollar.toFixed(2)}</span>
-             </div>
-             <div className="w-px h-6 bg-slate-700"></div>
-             {/* Dólar Receita (Manual) */}
-             <div className="flex flex-col px-2">
-                <span className="text-[9px] text-emerald-500 uppercase font-bold">Receita (Manual)</span>
-                <div className="flex items-center gap-1">
-                   <span className="text-[10px] text-slate-500">R$</span>
-                   <input 
-                     type="number" 
-                     step="0.01" 
-                     className="w-12 bg-transparent text-xs font-mono font-bold text-white outline-none border-b border-slate-600 focus:border-emerald-500"
-                     value={manualDollar}
-                     onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))}
-                   />
-                </div>
-             </div>
-          </div>
+          {/* BOTÃO LANÇAMENTO MANUAL (NOVO) */}
+          <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
+             <FileText size={14} /> Lançamento Manual
+          </button>
 
           <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800 items-center">
             <div className="flex items-center gap-2 px-3 border-r border-slate-800">
                <Calendar size={14} className="text-indigo-400"/>
                <span className="text-xs font-bold text-slate-500 uppercase">Período</span>
             </div>
-            <input type="date" className="bg-transparent text-white text-xs font-mono p-2 outline-none [&::-webkit-calendar-picker-indicator]:invert cursor-pointer" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <input type="date" className="bg-transparent text-white text-xs font-mono p-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <span className="text-slate-600">-</span>
-            <input type="date" className="bg-transparent text-white text-xs font-mono p-2 outline-none [&::-webkit-calendar-picker-indicator]:invert cursor-pointer" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input type="date" className="bg-transparent text-white text-xs font-mono p-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
              <button onClick={() => setViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold ${viewCurrency === 'ORIGINAL' ? 'bg-slate-800 text-white' : 'text-slate-500'}`}>USD</button>
@@ -296,42 +251,41 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* KPI Cards */}
+      {/* KPI CARDS (CORES ATUALIZADAS) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl">
-           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p>
-           <p className={`text-2xl font-bold ${stats.profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatMoney(stats.profit)}</p>
-        </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl">
-           <p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p>
-           <p className={`text-2xl font-bold ${stats.roi >= 0 ? 'text-indigo-400' : 'text-rose-400'}`}>{stats.roi.toFixed(1)}%</p>
-        </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl">
+        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-blue-500">
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
-           <p className="text-2xl font-bold text-white">{formatMoney(stats.revenue)}</p>
-           <p className="text-xs text-slate-500 mt-1">{stats.conversions} conversões</p>
+           <p className="text-2xl font-bold text-blue-500">{formatMoney(stats.revenue)}</p>
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl">
+        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-orange-500">
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Custo Ads</p>
-           <p className="text-2xl font-bold text-amber-500">{formatMoney(stats.cost)}</p>
+           <p className="text-2xl font-bold text-orange-500">{formatMoney(stats.cost)}</p>
+        </div>
+        <div className={`bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 ${stats.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'}`}>
+           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p>
+           <p className={`text-2xl font-bold ${stats.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(stats.profit)}</p>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-indigo-500">
+           <p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p>
+           <p className="text-2xl font-bold text-indigo-500">{stats.roi.toFixed(1)}%</p>
         </div>
       </div>
 
-      {/* Gráfico */}
+      {/* GRÁFICO (CORES ATUALIZADAS) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 h-64">
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                <XAxis dataKey="day" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }} formatter={(val:any) => formatMoney(val)} />
-               <Bar dataKey="lucro" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={50}>
-                  {chart.map((e, i) => <Cell key={i} fill={e.lucro > 0 ? '#10b981' : '#f43f5e'} />)}
-               </Bar>
+               <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+               <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
+               <Bar dataKey="lucro" name="Lucro" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
             </BarChart>
          </ResponsiveContainer>
       </div>
 
-      {/* Tabela Detalhada */}
+      {/* TABELA */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm relative flex flex-col h-[600px]">
         <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center bg-slate-900/50 gap-4 shrink-0">
           <div className="flex items-center gap-3">
@@ -342,17 +296,10 @@ export default function ProductDetailPage() {
             <Columns size={14} /> Personalizar Colunas
           </button>
         </div>
-
         <div className="overflow-auto custom-scrollbar flex-1">
           <table className="w-full text-sm text-left border-collapse">
             <thead className="text-xs text-slate-500 uppercase bg-slate-950 font-semibold sticky top-0 z-20 shadow-lg">
-              <tr>
-                {ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => (
-                  <th key={col.key} className="px-4 py-4 whitespace-nowrap border-b border-slate-800 text-right bg-slate-950 first:text-left first:sticky first:left-0 first:z-30">
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
+              <tr>{ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => (<th key={col.key} className="px-4 py-4 whitespace-nowrap border-b border-slate-800 text-right bg-slate-950 first:text-left first:sticky first:left-0 first:z-30">{col.label}</th>))}</tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {rows.map(row => (
@@ -360,44 +307,45 @@ export default function ProductDetailPage() {
                   {ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => {
                     const val = row[col.key];
                     let content;
-
                     if (col.key === 'date') return <td key={col.key} className="px-4 py-4 font-medium text-white sticky left-0 bg-slate-900 group-hover:bg-slate-800 border-r border-slate-800">{val}</td>
-                    
-                    if (col.key === 'campaign_status') {
-                        const isPaused = val === 'PAUSED' || val === 'REMOVED';
-                        content = <span className={`flex items-center justify-end gap-1.5 ${isPaused ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {isPaused ? <PauseCircle size={14}/> : <PlayCircle size={14}/>}</span>;
-                    }
-                    else if (col.type === 'link') {
-                        content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14}/></a> : '-';
-                    } 
-                    else if (col.format === 'currency') {
-                      content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold') : 'text-slate-300'}>{formatMoney(val)}</span>;
-                    } 
-                    else if (col.format === 'percentage') {
-                      content = <span className={`px-2 py-1 rounded text-xs border ${val < 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>{formatPercent(val)}</span>;
-                    } 
-                    else if (col.format === 'percentage_share') {
-                      content = <span className="text-slate-400">{formatShare(val)}</span>;
-                    }
-                    else {
-                      content = <span className="text-slate-400">{val !== undefined && val !== null ? val : '-'}</span>;
-                    }
-
+                    if (col.key === 'campaign_status') content = <span className={`flex items-center justify-end gap-1.5 ${val === 'PAUSED' ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {val === 'PAUSED' ? <PauseCircle size={14}/> : <PlayCircle size={14}/>}</span>;
+                    else if (col.type === 'link') content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14}/></a> : '-';
+                    else if (col.format === 'currency') content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold') : (col.key === 'revenue' ? 'text-blue-400 font-bold' : 'text-slate-300')}>{formatMoney(val)}</span>;
+                    else if (col.format === 'percentage') content = <span>{formatPercent(val)}</span>;
+                    else if (col.format === 'percentage_share') content = <span>{formatShare(val)}</span>;
+                    else content = <span className="text-slate-400">{val}</span>;
                     return <td key={col.key} className="px-4 py-4 whitespace-nowrap text-right">{content}</td>;
                   })}
                 </tr>
               ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={visibleColumns.length} className="text-center py-12 text-slate-500">Nenhum dado encontrado para o período.</td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
       </div>
       
-      {/* MODAL */}
+      {/* MODAL LANÇAMENTO MANUAL (NOVO) */}
+      {showManualEntry && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                 <h2 className="text-xl font-bold text-white flex items-center gap-2"><FileText size={20} className="text-indigo-500"/> Lançamento Rápido</h2>
+                 <button onClick={() => setShowManualEntry(false)}><X size={24} className="text-slate-400 hover:text-white" /></button>
+              </div>
+              <div className="space-y-4">
+                 <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white" value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div><label className="text-xs uppercase text-slate-500 font-bold">Vendas</label><input type="number" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white" placeholder="0" value={manualData.sales} onChange={e => setManualData({...manualData, sales: parseFloat(e.target.value)})} /></div>
+                    <div><label className="text-xs uppercase text-slate-500 font-bold">Visitas</label><input type="number" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white" placeholder="0" value={manualData.visits} onChange={e => setManualData({...manualData, visits: parseFloat(e.target.value)})} /></div>
+                 </div>
+                 <div><label className="text-xs uppercase text-blue-500 font-bold">Receita (Moeda do Produto)</label><input type="number" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white border-l-4 border-l-blue-500" placeholder="0.00" value={manualData.revenue} onChange={e => setManualData({...manualData, revenue: parseFloat(e.target.value)})} /></div>
+                 <div><label className="text-xs uppercase text-rose-500 font-bold">Reembolsos</label><input type="number" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white border-l-4 border-l-rose-500" placeholder="0.00" value={manualData.refunds} onChange={e => setManualData({...manualData, refunds: parseFloat(e.target.value)})} /></div>
+                 <button onClick={handleSaveManual} disabled={isSavingManual} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-4 flex items-center justify-center gap-2">{isSavingManual ? 'Salvando...' : 'Salvar Dados'} <Save size={16} /></button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* MODAL COLUNAS (Mantido) */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
