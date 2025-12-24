@@ -29,28 +29,41 @@ export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  
   const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  
   const [dateRange, setDateRange] = useState('this_month'); 
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
   const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
+  // --- PROTEÇÃO DE ROTA E CARREGAMENTO ---
   useEffect(() => {
     async function checkUserAndLoad() {
       const { data: { session } } = await supabase.auth.getSession();
+      
       if (!session) {
         router.push('/'); 
         return;
       }
+
       setUser(session.user); 
-      await Promise.all([fetchInitialData(session.user.id), fetchLiveDollar()]);
+
+      await Promise.all([
+        fetchInitialData(session.user.id), 
+        fetchLiveDollar()
+      ]);
+      
       setLoading(false);
     }
+
     checkUserAndLoad();
+
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
   }, []);
@@ -69,11 +82,20 @@ export default function DashboardPage() {
   }
 
   async function fetchInitialData(userId: string) {
-    const { data: prodData } = await supabase.from('products').select('id, currency').eq('user_id', userId); 
+    const { data: prodData } = await supabase
+      .from('products')
+      .select('id, currency')
+      .eq('user_id', userId); 
+
     setProducts(prodData || []);
+
     if (prodData && prodData.length > 0) {
         const productIds = prodData.map(p => p.id);
-        const { data: metData } = await supabase.from('daily_metrics').select('*').in('product_id', productIds).order('date', { ascending: true });
+        const { data: metData } = await supabase
+          .from('daily_metrics')
+          .select('*')
+          .in('product_id', productIds)
+          .order('date', { ascending: true });
         setMetrics(metData || []);
     } else {
         setMetrics([]);
@@ -87,30 +109,43 @@ export default function DashboardPage() {
 
   const processedData = useMemo(() => {
     if (loading || !metrics.length) return { chart: [], table: [], totals: null };
+
     const now = new Date();
     let start = new Date();
     let end = new Date();
+
     if (dateRange === 'today') { /* ... */ }
     else if (dateRange === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
     else if (dateRange === '7d') { start.setDate(now.getDate() - 7); }
     else if (dateRange === '30d') { start.setDate(now.getDate() - 30); }
     else if (dateRange === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
     else if (dateRange === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
+    
     const startStr = dateRange === 'custom' ? customStart : getLocalYYYYMMDD(start);
     const endStr = dateRange === 'custom' ? customEnd : getLocalYYYYMMDD(end);
+
     const dailyMap = new Map();
+
     metrics.forEach(row => {
       if (row.date < startStr || row.date > endStr) return;
       const product = products.find(p => p.id === row.product_id);
       const isUSD = product?.currency === 'USD';
-      let cost = Number(row.cost || 0); let revenue = Number(row.conversion_value || 0); let refunds = Number(row.refunds || 0);
-      if (viewCurrency === 'BRL') { if (isUSD) { cost *= liveDollar; revenue *= manualDollar; refunds *= manualDollar; } } 
-      else { if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; } }
+      let cost = Number(row.cost || 0);
+      let revenue = Number(row.conversion_value || 0);
+      let refunds = Number(row.refunds || 0);
+
+      if (viewCurrency === 'BRL') {
+        if (isUSD) { cost *= liveDollar; revenue *= manualDollar; refunds *= manualDollar; }
+      } else {
+        if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; }
+      }
       const profit = revenue - cost - refunds;
+
       if (!dailyMap.has(row.date)) dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0 });
       const day = dailyMap.get(row.date);
       day.cost += cost; day.revenue += revenue; day.refunds += refunds; day.profit += profit;
     });
+
     const resultRows = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
     const totals = { cost: 0, revenue: 0, profit: 0, refunds: 0, roi: 0 };
     resultRows.forEach(r => {
@@ -119,6 +154,7 @@ export default function DashboardPage() {
     });
     totals.roi = totals.cost > 0 ? (totals.profit / totals.cost) * 100 : 0;
     const chartData = [...resultRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({ ...r, shortDate: r.date.split('-').slice(1).reverse().join('/') }));
+
     return { chart: chartData, table: resultRows, totals };
   }, [metrics, products, dateRange, customStart, customEnd, liveDollar, manualDollar, viewCurrency, loading]);
 
@@ -134,16 +170,15 @@ export default function DashboardPage() {
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
       <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
-        {/* --- HEADER SIDEBAR (LOGO) --- */}
+        {/* --- LOGO GRANDE NA SIDEBAR --- */}
+        {/* Aumentei a largura para w-52 e ajustei para object-left */}
         <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
-           {/* Mobile: Logo pequena (se tiver ícone apenas, seria ideal, senão usa a mesma) */}
+           <div className="hidden md:block relative w-52 h-10"> 
+             <Image src="/logo.png" alt="Logo" fill className="object-contain object-left" priority />
+           </div>
+           {/* Mobile Icon */}
            <div className="md:hidden relative w-8 h-8">
              <Image src="/logo.png" alt="Logo" fill className="object-contain" />
-           </div>
-
-           {/* Desktop: Logo grande ocupando a área */}
-           <div className="hidden md:block relative w-40 h-10"> 
-             <Image src="/logo.png" alt="Logo" fill className="object-contain object-left" priority />
            </div>
         </div>
         
