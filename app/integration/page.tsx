@@ -51,16 +51,155 @@ export default function IntegrationPage() {
     localStorage.setItem('autometrics_theme', newTheme);
   };
 
-  // ... (handleGenerateScript e copyToClipboard permanecem iguais ao código anterior)
-  // Vou resumir para focar na estrutura de UI e Tema
   const handleGenerateScript = () => {
-      if (!identifierName) return alert("Por favor, digite um nome.");
-      // ... Geração do Script (Mantenha o código gerador anterior)
-      // Para brevidade, não estou colando o template gigante aqui novamente, 
-      // mas no arquivo final ele deve estar presente.
-      // Vou colocar um placeholder funcional:
-      const script = `/** Script AutoMetrics Gerado para ${identifierName} **/ \n const CONFIG = { USER_ID: '${userId}' };`;
-      setGeneratedScript(script);
+    if (!identifierName) return alert("Por favor, digite um nome para identificar esta conta/grupo.");
+
+    const commonFunctions = `
+function processAccount(account) {
+  let currentDate = parseDate(CONFIG.START_DATE);
+  const today = new Date(); 
+  today.setHours(0,0,0,0);
+  currentDate.setHours(0,0,0,0);
+
+  if (currentDate > today) currentDate = today;
+
+  while (currentDate <= today) {
+    const dateString = Utilities.formatDate(currentDate, account.getTimeZone(), "yyyy-MM-dd");
+    try {
+      fetchAndSend(dateString, account);
+    } catch (e) {
+      Logger.log('Erro no dia ' + dateString + ': ' + e.message);
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+}
+
+function fetchAndSend(dateString, account) {
+  const query = \`
+    SELECT
+      campaign.id, campaign.name, campaign.status,
+      metrics.impressions, metrics.clicks, metrics.ctr,
+      metrics.average_cpc, metrics.cost_micros,
+      metrics.search_impression_share, metrics.search_top_impression_share,
+      metrics.search_absolute_top_impression_share,
+      campaign.bidding_strategy_type, campaign_budget.amount_micros,
+      customer.currency_code,
+      campaign.target_cpa.target_cpa_micros,
+      campaign.target_roas.target_roas,
+      campaign.maximize_conversions.target_cpa_micros
+    FROM campaign
+    WHERE segments.date = '\${dateString}'
+    AND metrics.impressions > 0 
+  \`;
+
+  const report = AdsApp.search(query);
+
+  while (report.hasNext()) {
+    const row = report.next();
+    
+    let finalUrl = '';
+    try {
+      const adQuery = "SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE campaign.id = " + row.campaign.id + " LIMIT 1";
+      const adReport = AdsApp.search(adQuery);
+      if(adReport.hasNext()) {
+         const adRow = adReport.next();
+         if(adRow.adGroupAd.ad.finalUrls) finalUrl = adRow.adGroupAd.ad.finalUrls[0];
+      }
+    } catch(e) {}
+
+    let targetValue = 0;
+    if (row.campaign.maximizeConversions && row.campaign.maximizeConversions.targetCpaMicros) {
+        targetValue = row.campaign.maximizeConversions.targetCpaMicros / 1000000;
+    } else if (row.campaign.targetCpa && row.campaign.targetCpa.targetCpaMicros) {
+        targetValue = row.campaign.targetCpa.targetCpaMicros / 1000000;
+    } else if (row.campaign.targetRoas && row.campaign.targetRoas.targetRoas) {
+        targetValue = row.campaign.targetRoas.targetRoas;
+    }
+
+    const payload = {
+      user_id: CONFIG.USER_ID,
+      campaign_name: row.campaign.name,
+      date: dateString,
+      account_name: account.getName(),
+      mcc_name: CONFIG.MCC_NAME, 
+      currency_code: row.customer.currencyCode,
+      metrics: {
+        impressions: row.metrics.impressions,
+        clicks: row.metrics.clicks,
+        ctr: row.metrics.ctr,
+        average_cpc: row.metrics.averageCpc,
+        cost_micros: row.metrics.costMicros,
+        search_impression_share: row.metrics.searchImpressionShare,
+        search_top_impression_share: row.metrics.searchTopImpressionShare,
+        search_abs_top_share: row.metrics.searchAbsoluteTopImpressionShare,
+        bidding_strategy_type: row.campaign.biddingStrategyType,
+        budget_micros: row.campaignBudget.amountMicros,
+        status: row.campaign.status,
+        final_url: finalUrl,
+        target_value: targetValue
+      }
+    };
+    sendToWebhook(payload);
+  }
+}
+
+function sendToWebhook(payload) {
+  const options = { 'method': 'post', 'contentType': 'application/json', 'payload': JSON.stringify(payload), 'muteHttpExceptions': true };
+  try { UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, options); } catch (e) { Logger.log('❌ Erro Webhook: ' + e.message); }
+}
+
+function parseDate(str) {
+  const parts = str.split('-');
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}`;
+
+    const scriptMcc = `/**
+ * Script AutoMetrics - Versão Agência (MCC)
+ * MCC: ${identifierName}
+ */
+
+const CONFIG = {
+  WEBHOOK_URL: 'https://autometrics.vercel.app/api/webhook/google-ads', 
+  USER_ID: '${userId}', 
+  START_DATE: "${startDate}",
+  MCC_NAME: "${identifierName}" 
+};
+
+function main() {
+  Logger.log('🚀 Iniciando AutoMetrics MCC para: ' + CONFIG.MCC_NAME);
+  const accountIterator = AdsManagerApp.accounts().get();
+  while (accountIterator.hasNext()) {
+    const account = accountIterator.next();
+    AdsManagerApp.select(account);
+    processAccount(account);
+  }
+  Logger.log('✅ Finalizado com sucesso.');
+}
+
+${commonFunctions}`;
+
+    const scriptSingle = `/**
+ * Script AutoMetrics - Versão Conta Única
+ * Loja: ${identifierName}
+ */
+
+const CONFIG = {
+  WEBHOOK_URL: 'https://autometrics.vercel.app/api/webhook/google-ads', 
+  USER_ID: '${userId}', 
+  START_DATE: "${startDate}",
+  MCC_NAME: "${identifierName}" 
+};
+
+function main() {
+  Logger.log('🚀 Iniciando AutoMetrics Single para: ' + CONFIG.MCC_NAME);
+  const account = AdsApp.currentAccount();
+  processAccount(account);
+  Logger.log('✅ Finalizado com sucesso.');
+}
+
+${commonFunctions}`;
+
+    setGeneratedScript(accountType === 'mcc' ? scriptMcc : scriptSingle);
   };
 
   const copyToClipboard = () => {
@@ -134,12 +273,29 @@ export default function IntegrationPage() {
               </div>
               <button onClick={handleGenerateScript} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"><Code size={20} /> Gerar Script</button>
             </div>
+            
+            {/* INSTRUÇÕES DETALHADAS */}
             <div className="space-y-6">
                <div className={`${bgCard} rounded-xl p-6 border`}>
-                  <h3 className={`font-bold mb-4 flex items-center gap-2 ${textHead}`}><Zap size={18} className="text-amber-400"/> Instruções</h3>
+                  <h3 className={`font-bold mb-4 flex items-center gap-2 ${textHead}`}><Zap size={18} className="text-amber-400"/> Instalação</h3>
                   <ol className={`space-y-4 text-sm list-decimal pl-4 ${textMuted}`}>
-                     <li>Abra o Google Ads.</li><li>Vá em <strong>Scripts</strong>.</li><li>Crie um novo (+).</li><li>Cole o código.</li><li>Execute.</li>
+                     <li>Abra sua conta do Google Ads.</li>
+                     <li>Vá em <strong>Ferramentas e Configurações</strong> {'>'} <strong>Ações em Massa</strong> {'>'} <strong>Scripts</strong>.</li>
+                     <li>Clique no botão <strong>+</strong> para criar um novo.</li>
+                     <li>Apague qualquer código que estiver lá.</li>
+                     <li>Cole o script gerado.</li>
+                     <li>Clique em <strong>Autorizar</strong> e depois em <strong>Salvar</strong>.</li>
                   </ol>
+               </div>
+               
+               <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl">
+                  <p className="text-xs text-emerald-400 leading-relaxed mb-2">
+                     <strong>Dica Importante:</strong>
+                  </p>
+                  <p className="text-xs text-emerald-500/80 leading-relaxed">
+                     Na lista de scripts, altere a coluna <strong>Frequência</strong> de "Diariamente" para <strong>"A cada hora"</strong> (Hourly). 
+                     Isso garante que seus dados estejam sempre atualizados.
+                  </p>
                </div>
             </div>
           </div>
