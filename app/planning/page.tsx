@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Target, TrendingUp, Calendar as CalIcon, Edit2, Plus, Trash2,
-  Sun, Moon, ChevronDown, ChevronRight, Save, DollarSign, AlertCircle, 
+  Target, TrendingUp, DollarSign, Calendar as CalIcon, 
+  AlertTriangle, CheckCircle, Edit2, ArrowRight, Plus, Trash2,
+  Sun, Moon, RefreshCw, ChevronDown, ChevronRight, Save, 
   Briefcase, Globe, LayoutGrid
 } from 'lucide-react';
 import { 
@@ -38,8 +39,8 @@ export default function PlanningPage() {
   // UI
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false); // Modo de Edição da Tabela
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({}); // Controle de Expansão
+  const [editMode, setEditMode] = useState(false); 
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({}); 
 
   // Moeda & Tema
   const [liveDollar, setLiveDollar] = useState(6.00);
@@ -49,10 +50,13 @@ export default function PlanningPage() {
 
   // Forms Temporários
   const [tempGoal, setTempGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
-  const [newCost, setNewCost] = useState({ date: getLocalYYYYMMDD(new Date()), description: '', amount: 0, currency: 'BRL' });
+  const [newCost, setNewCost] = useState({ date: '', description: '', amount: 0, currency: 'BRL' });
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
+    // Inicializa data do custo com a data local correta
+    setNewCost(prev => ({ ...prev, date: getLocalYYYYMMDD(new Date()) }));
+
     fetchLiveDollar();
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
@@ -100,7 +104,7 @@ export default function PlanningPage() {
 
     // 2. Custos Extras
     const startOfMonth = `${currentMonth}-01`;
-    const endOfMonth = `${currentMonth}-31`;
+    const endOfMonth = `${currentMonth}-31`; // Simplificado
     const { data: costData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startOfMonth).lte('date', endOfMonth);
     setExtraCosts(costData || []);
 
@@ -122,9 +126,8 @@ export default function PlanningPage() {
     setLoading(false);
   }
 
-  // --- LÓGICA DE DADOS (HIERARQUIA: DIA -> MCC -> CONTA) ---
+  // --- LÓGICA DE DADOS ---
   const processedData = useMemo(() => {
-    // Mapa Principal
     const dailyMap: Record<string, any> = {};
 
     // 1. Agrupar Métricas de Ads
@@ -149,7 +152,6 @@ export default function PlanningPage() {
       
       const day = dailyMap[m.date];
       
-      // Totais do Dia
       day.revenue += revenue;
       day.ads_cost += cost;
       day.refunds += refunds;
@@ -169,7 +171,7 @@ export default function PlanningPage() {
       accObj.refunds += refunds;
     });
 
-    // 2. Agrupar Custos Extras (Apenas no nível dia por enquanto)
+    // 2. Agrupar Custos Extras
     extraCosts.forEach(c => {
        if (!dailyMap[c.date]) dailyMap[c.date] = { date: c.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, mccs: {} };
        
@@ -180,7 +182,6 @@ export default function PlanningPage() {
        dailyMap[c.date].extra_cost += amount;
     });
 
-    // Ordenar Dias
     const daysArray = Object.values(dailyMap).sort((a: any, b: any) => b.date.localeCompare(a.date));
 
     // Totais Gerais
@@ -195,7 +196,7 @@ export default function PlanningPage() {
     totals.profit = totals.revenue - totals.total_cost - totals.refunds;
     totals.roi = totals.ads_cost > 0 ? (totals.profit / totals.ads_cost) * 100 : 0;
 
-    // Gráfico (Acumulado Crescente)
+    // Gráfico
     let accRev = 0;
     const chartData = [...daysArray].sort((a: any, b: any) => a.date.localeCompare(b.date)).map((d: any) => {
        accRev += d.revenue;
@@ -210,17 +211,12 @@ export default function PlanningPage() {
     return { daysArray, totals, chartData };
   }, [metrics, extraCosts, products, viewCurrency, liveDollar, manualDollar, goal]);
 
-  // --- AUXILIARES ---
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
 
   const toggleExpand = (id: string) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // --- SALVAMENTO IN-LINE (EDIÇÃO) ---
-  // Nota: Edição direta de MCC/Conta não é trivial pois são agregados.
-  // Permitiremos editar Custos Extras aqui, pois é direto.
-  
   const handleSaveGoal = async () => {
     const userId = localStorage.getItem('autometrics_user_id');
     if (!userId) return;
@@ -248,12 +244,14 @@ export default function PlanningPage() {
     fetchData();
   };
 
-  // Estilos
+  // ESTILOS
   const isDark = theme === 'dark';
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
+  // CORREÇÃO: Definição da variável que faltava
+  const textMuted = 'text-slate-500';
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
@@ -263,11 +261,11 @@ export default function PlanningPage() {
       {/* HEADER */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
         <div>
-           <Link href="/dashboard" className="text-xs text-slate-500 hover:underline mb-2 block">&larr; Voltar ao Dashboard</Link>
+           <Link href="/dashboard" className={`text-xs ${textMuted} hover:underline mb-2 block`}>&larr; Voltar ao Dashboard</Link>
            <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}>
              <Target className="text-indigo-500" /> Planejamento & DRE
            </h1>
-           <p className="text-slate-500 text-sm">Controle detalhado por MCC e Conta.</p>
+           <p className={textMuted}>Controle detalhado por MCC e Conta.</p>
         </div>
 
         <div className="flex flex-wrap gap-4 items-center">
@@ -276,13 +274,13 @@ export default function PlanningPage() {
            <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
               <div className={`flex gap-3 px-2 border-r ${borderCol} pr-4`}>
                  <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
-                 <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className="text-[10px] text-slate-500">R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
+                 <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textMuted}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
               </div>
               <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                 <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : 'text-slate-500'}`}>R$</button>
-                 <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : 'text-slate-500'}`}>$</button>
+                 <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
+                 <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
               </div>
-              <button onClick={toggleTheme} className="text-slate-400 hover:text-indigo-500">{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+              <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
            </div>
            
            <button onClick={() => setEditMode(!editMode)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
@@ -312,14 +310,14 @@ export default function PlanningPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
                 <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v/1000}k`} />
-                <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0' }} formatter={(v:any) => formatMoney(v)} />
-                <Area type="monotone" dataKey="revenue" name="Receita" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorReal)" />
+                <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(v:any) => formatMoney(v)} />
+                <Area type="monotone" dataKey="revenue" name="Receita Acumulada" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorReal)" />
                 <Line type="monotone" dataKey="ideal" name="Meta" stroke="#94a3b8" strokeDasharray="5 5" dot={false} />
              </AreaChart>
          </ResponsiveContainer>
       </div>
 
-      {/* --- TABELA DE DRE (EXPANSÍVEL) --- */}
+      {/* TABELA DE DRE (EXPANSÍVEL) */}
       <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
          <div className={`p-4 border-b ${borderCol} flex justify-between items-center`}>
             <h3 className={`font-bold ${textHead}`}>Detalhamento Diário (DRE)</h3>
@@ -331,7 +329,7 @@ export default function PlanningPage() {
             <table className="w-full text-sm text-left">
                <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
                   <tr>
-                     <th className="px-6 py-4 w-10"></th> {/* Toggle */}
+                     <th className="px-6 py-4 w-10"></th>
                      <th className="px-6 py-4">Data</th>
                      <th className="px-6 py-4 text-right text-blue-600">Receita</th>
                      <th className="px-6 py-4 text-right text-orange-600">Ads Cost</th>
@@ -348,7 +346,6 @@ export default function PlanningPage() {
                      
                      return (
                         <React.Fragment key={day.date}>
-                           {/* LINHA PRINCIPAL (DIA) */}
                            <tr className={`transition-colors cursor-pointer ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} ${isExpanded ? (isDark ? 'bg-slate-900' : 'bg-slate-50') : ''}`} onClick={() => toggleExpand(day.date)}>
                               <td className="px-6 py-4 text-center">
                                  {Object.keys(day.mccs).length > 0 && (isExpanded ? <ChevronDown size={16} className="text-slate-500"/> : <ChevronRight size={16} className="text-slate-500"/>)}
@@ -356,30 +353,22 @@ export default function PlanningPage() {
                               <td className={`px-6 py-4 font-bold ${textHead}`}>{`${dateParts[2]}/${dateParts[1]}`}</td>
                               <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(day.revenue)}</td>
                               <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(day.ads_cost)}</td>
-                              
-                              {/* Custos Extras (Editáveis se Mode=ON) */}
                               <td className="px-6 py-4 text-right text-amber-500 relative group" onClick={(e) => e.stopPropagation()}>
                                  {day.extra_cost > 0 ? (
                                     <>
                                        {formatMoney(day.extra_cost)}
                                        {editMode && (
-                                          <div className="absolute top-1 right-1 flex flex-col gap-1 bg-slate-950 p-1 rounded border border-slate-700 z-10 shadow-lg hidden group-hover:flex">
-                                             {/* Lista para deletar custos individuais */}
-                                             {/* Lógica simplificada: Para editar, use o modal de Add e coloque data retroativa */}
-                                          </div>
+                                          <div className="absolute top-1 right-1 flex flex-col gap-1 bg-slate-950 p-1 rounded border border-slate-700 z-10 shadow-lg hidden group-hover:flex"></div>
                                        )}
                                     </>
                                  ) : '-'}
                               </td>
-
                               <td className="px-6 py-4 text-right text-rose-400">{day.refunds > 0 ? formatMoney(day.refunds) : '-'}</td>
                               <td className={`px-6 py-4 text-right font-bold ${profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(profit)}</td>
                            </tr>
 
-                           {/* LINHAS EXPANDIDAS (DETALHE MCC/CONTA) */}
                            {isExpanded && Object.values(day.mccs).map((mcc: any) => (
                               <React.Fragment key={mcc.name}>
-                                 {/* Nível MCC */}
                                  <tr className={`${isDark ? 'bg-slate-950/50' : 'bg-slate-100/50'}`}>
                                     <td></td>
                                     <td className="px-6 py-2 text-xs font-bold text-indigo-400 pl-10 flex items-center gap-2">
@@ -389,8 +378,6 @@ export default function PlanningPage() {
                                     <td className="px-6 py-2 text-right text-xs text-orange-400/70">{formatMoney(mcc.ads_cost)}</td>
                                     <td colSpan={3}></td>
                                  </tr>
-                                 
-                                 {/* Nível Conta */}
                                  {Object.values(mcc.accounts).map((acc: any) => (
                                     <tr key={acc.name} className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
                                        <td></td>
@@ -416,30 +403,18 @@ export default function PlanningPage() {
       {isCostModalOpen && (
          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className={`${bgCard} rounded-xl w-full max-w-sm p-6 shadow-2xl`}>
-               <h3 className={`text-lg font-bold ${textHead} mb-4`}>Lançar Custo Extra</h3>
+               <h3 className={`text-lg font-bold ${textHead} mb-4`}>Adicionar Custo Extra</h3>
                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs uppercase font-bold text-slate-500">Data do Gasto</label>
-                    <input type="date" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase font-bold text-slate-500">Descrição</label>
-                    <input type="text" placeholder="Ex: Hospedagem, Copywriter..." className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.description} onChange={e => setNewCost({...newCost, description: e.target.value})} />
-                  </div>
+                  <input type="date" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
+                  <input type="text" placeholder="Descrição" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.description} onChange={e => setNewCost({...newCost, description: e.target.value})} />
                   <div className="flex gap-2">
-                     <div className="flex-1">
-                        <label className="text-xs uppercase font-bold text-slate-500">Valor</label>
-                        <input type="number" placeholder="0.00" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.amount} onChange={e => setNewCost({...newCost, amount: parseFloat(e.target.value)})} />
-                     </div>
-                     <div className="w-24">
-                        <label className="text-xs uppercase font-bold text-slate-500">Moeda</label>
-                        <select className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.currency} onChange={e => setNewCost({...newCost, currency: e.target.value})}>
-                           <option value="BRL">BRL</option>
-                           <option value="USD">USD</option>
-                        </select>
-                     </div>
+                     <input type="number" placeholder="Valor" className={`flex-1 p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.amount} onChange={e => setNewCost({...newCost, amount: parseFloat(e.target.value)})} />
+                     <select className={`p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.currency} onChange={e => setNewCost({...newCost, currency: e.target.value})}>
+                        <option value="BRL">BRL</option>
+                        <option value="USD">USD</option>
+                     </select>
                   </div>
-                  <button onClick={handleAddCost} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded mt-2">Salvar Despesa</button>
+                  <button onClick={handleAddCost} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded hover:bg-indigo-700">Adicionar</button>
                   <button onClick={() => setIsCostModalOpen(false)} className={`w-full py-2 ${textMuted} hover:underline`}>Cancelar</button>
                </div>
             </div>
