@@ -4,11 +4,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, ExternalLink, X, ArrowLeft, RefreshCw, 
   Briefcase, Folder, Layers, LayoutGrid, ChevronRight, ChevronDown,
-  Eye, EyeOff, PlayCircle, PauseCircle, AlertTriangle, Globe
+  Eye, EyeOff, PlayCircle, PauseCircle, AlertTriangle, Globe, Trash2
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation'; // Importante para redirecionar se não logado
+import { useRouter } from 'next/navigation';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,21 +33,20 @@ export default function ProductsPage() {
     name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active', account_name: 'Manual', mcc_name: 'Manual' 
   });
   const [saving, setSaving] = useState(false);
-  const [userId, setUserId] = useState(''); // ID Real do Usuário
+  const [userId, setUserId] = useState('');
 
-  // --- MUDANÇA PRINCIPAL: AUTENTICAÇÃO REAL ---
+  // --- INICIALIZAÇÃO ---
   useEffect(() => { 
     async function init() {
-      // Verifica quem está logado
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        router.push('/'); // Chuta para login se não tiver sessão
+        router.push('/');
         return;
       }
 
-      setUserId(session.user.id); // Salva ID real
-      await fetchProducts(session.user.id); // Busca com ID real
+      setUserId(session.user.id);
+      await fetchProducts(session.user.id);
     }
     init();
   }, []);
@@ -55,11 +54,10 @@ export default function ProductsPage() {
   async function fetchProducts(currentUserId: string) {
     setLoading(true);
     
-    // Busca produtos APENAS do usuário logado
     let query = supabase
       .from('products')
       .select('*')
-      .eq('user_id', currentUserId) // <--- Filtro Seguro
+      .eq('user_id', currentUserId)
       .order('created_at', { ascending: false });
 
     const { data } = await query;
@@ -71,7 +69,7 @@ export default function ProductsPage() {
     setLoading(false);
   }
 
-  // --- ESTRUTURA DE DADOS PARA SIDEBAR ---
+  // --- ESTRUTURA SIDEBAR ---
   const structure = useMemo(() => {
     const relevantProducts = showHidden ? products : products.filter(p => !p.is_hidden);
     const tree: Record<string, Set<string>> = {};
@@ -90,7 +88,54 @@ export default function ProductsPage() {
     }));
   }, [products, showHidden]);
 
-  // --- FILTRAGEM ---
+  // --- AÇÕES DE EXCLUSÃO (NOVO) ---
+  
+  const handleDeleteMcc = async (mccName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirmMsg = `⚠️ ATENÇÃO CRÍTICA ⚠️\n\nVocê está prestes a excluir a MCC inteira: "${mccName}".\n\nIsso apagará PERMANENTEMENTE todas as contas, produtos e métricas vinculados a ela.\n\nTem certeza absoluta?`;
+    
+    if (!confirm(confirmMsg)) return;
+
+    // Remove do Banco
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('user_id', userId)
+      .eq('mcc_name', mccName);
+
+    if (error) {
+      alert("Erro ao excluir: " + error.message);
+    } else {
+      // Atualiza interface
+      setProducts(prev => prev.filter(p => p.mcc_name !== mccName));
+      if (selectedMcc === mccName) resetFilters();
+    }
+  };
+
+  const handleDeleteAccount = async (mccName: string, accountName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirmMsg = `Tem certeza que deseja excluir a conta "${accountName}"?\n\nIsso apagará todos os produtos e métricas desta conta.`;
+    
+    if (!confirm(confirmMsg)) return;
+
+    // Remove do Banco (Filtra por MCC e Conta para evitar nomes duplicados em outras MCCs)
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('user_id', userId)
+      .eq('mcc_name', mccName)
+      .eq('account_name', accountName);
+
+    if (error) {
+      alert("Erro ao excluir: " + error.message);
+    } else {
+      // Atualiza interface
+      setProducts(prev => prev.filter(p => !(p.mcc_name === mccName && p.account_name === accountName)));
+      if (selectedAccount === accountName) resetFilters();
+    }
+  };
+
+  // --- OUTRAS AÇÕES ---
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesHidden = showHidden ? true : !p.is_hidden;
@@ -140,26 +185,19 @@ export default function ProductsPage() {
 
   const handleSave = async () => {
     if (!newProduct.name || !newProduct.campaign_name) return alert("Preencha os campos obrigatórios.");
-    
-    // Usa o userId do estado (autenticado)
     setSaving(true);
     const { data, error } = await supabase.from('products').insert([{ ...newProduct, user_id: userId }]).select();
-    
     if (error) alert('Erro: ' + error.message);
     else if (data) { 
         setProducts([data[0], ...products]); 
         setIsModalOpen(false); 
-        // Atualiza a estrutura expandida se for uma nova MCC
         const newMcc = data[0].mcc_name || 'Manual';
         if (!expandedMccs.includes(newMcc)) setExpandedMccs([...expandedMccs, newMcc]);
     }
     setSaving(false);
   };
 
-  // Re-fetch manual
-  const handleReload = () => {
-      if (userId) fetchProducts(userId);
-  };
+  const handleReload = () => { if (userId) fetchProducts(userId); };
 
   return (
     <div className="min-h-screen bg-black text-slate-200 font-sans flex flex-col md:flex-row">
@@ -185,7 +223,6 @@ export default function ProductsPage() {
            {structure.length === 0 && !loading && (
                <div className="text-center py-4 px-2">
                    <p className="text-xs text-slate-600">Nenhuma conta encontrada.</p>
-                   <p className="text-[10px] text-slate-700 mt-1">Verifique a integração.</p>
                </div>
            )}
 
@@ -195,7 +232,8 @@ export default function ProductsPage() {
 
              return (
                <div key={mcc.name} className="mb-2">
-                 <div className="flex items-center gap-1 group">
+                 {/* MCC ROW */}
+                 <div className="flex items-center gap-1 group relative pr-2">
                     <button onClick={() => toggleMccExpand(mcc.name)} className="p-2 text-slate-600 hover:text-white transition-colors">
                        {isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
                     </button>
@@ -204,23 +242,43 @@ export default function ProductsPage() {
                       className={`flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}`}
                     >
                        <Globe size={14} className={isMccActive ? 'text-indigo-400' : 'text-slate-600'}/>
-                       <span className="truncate">{mcc.name}</span>
+                       <span className="truncate w-32">{mcc.name}</span>
+                    </button>
+
+                    {/* BOTÃO EXCLUIR MCC (NOVO) - Só aparece no hover */}
+                    <button 
+                       onClick={(e) => handleDeleteMcc(mcc.name, e)}
+                       className="p-1.5 text-slate-700 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                       title="Excluir MCC e suas contas"
+                    >
+                       <Trash2 size={12}/>
                     </button>
                  </div>
 
+                 {/* CONTAS ROW */}
                  {isExpanded && (
                    <div className="ml-4 pl-3 border-l border-slate-800 mt-1 space-y-1">
                       {mcc.accounts.map(acc => {
                         const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
                         return (
-                          <button 
-                            key={acc}
-                            onClick={() => handleSelectAccount(mcc.name, acc)}
-                            className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900'}`}
-                          >
-                             <Briefcase size={12}/>
-                             <span className="truncate">{acc}</span>
-                          </button>
+                          <div key={acc} className="flex items-center group/acc pr-2">
+                            <button 
+                                onClick={() => handleSelectAccount(mcc.name, acc)}
+                                className={`flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900'}`}
+                            >
+                                <Briefcase size={12}/>
+                                <span className="truncate w-32">{acc}</span>
+                            </button>
+                            
+                            {/* BOTÃO EXCLUIR CONTA (NOVO) */}
+                            <button 
+                                onClick={(e) => handleDeleteAccount(mcc.name, acc, e)}
+                                className="p-1.5 text-slate-700 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1"
+                                title="Excluir Conta"
+                            >
+                                <Trash2 size={12}/>
+                            </button>
+                          </div>
                         );
                       })}
                    </div>
@@ -231,7 +289,7 @@ export default function ProductsPage() {
         </div>
       </aside>
 
-      {/* MAIN */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen relative bg-black">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
