@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Copy, Check, Code, ArrowLeft, Zap, Calendar, 
-  Globe, Store, Building, ChevronRight, AlertCircle 
+  Globe, Store, AlertCircle 
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -13,7 +13,7 @@ export default function IntegrationPage() {
   
   // Estados de Configuração
   const [accountType, setAccountType] = useState<'mcc' | 'single'>('mcc');
-  const [identifierName, setIdentifierName] = useState(''); // Nome da MCC ou da Loja
+  const [identifierName, setIdentifierName] = useState('');
   
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -25,8 +25,6 @@ export default function IntegrationPage() {
       localStorage.setItem('autometrics_user_id', storedId);
     }
     setUserId(storedId);
-    
-    // Data padrão: Início do ano atual
     const firstDay = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
     setStartDate(firstDay);
   }, []);
@@ -34,49 +32,75 @@ export default function IntegrationPage() {
   const handleGenerateScript = () => {
     if (!identifierName) return alert("Por favor, digite um nome para identificar esta conta/grupo.");
 
-    // O campo MCC_NAME no script serve como "Identificador de Agrupamento"
-    // Seja MCC ou Conta Única, usamos ele para criar a pasta na Sidebar.
-    
-    const scriptTemplate = `/**
- * Script AutoMetrics - Gerado Automaticamente
- * Tipo: ${accountType === 'mcc' ? 'Agência (MCC)' : 'Conta Única'}
- * Identificador: ${identifierName}
+    // --- TEMPLATE 1: APENAS PARA MCC (AGÊNCIA) ---
+    const scriptMcc = `/**
+ * Script AutoMetrics - Versão Agência (MCC)
+ * MCC: ${identifierName}
  */
 
 const CONFIG = {
   WEBHOOK_URL: 'https://autometrics.vercel.app/api/webhook/google-ads', 
   USER_ID: '${userId}', 
   START_DATE: "${startDate}",
-  MCC_NAME: "${identifierName}" // Define o nome da pasta na plataforma
+  MCC_NAME: "${identifierName}" 
 };
 
 function main() {
-  Logger.log('🚀 Iniciando AutoMetrics para: ' + CONFIG.MCC_NAME);
+  Logger.log('🚀 Iniciando AutoMetrics MCC para: ' + CONFIG.MCC_NAME);
   
-  // Detecção Automática de Ambiente
-  if (typeof AdsManagerApp !== 'undefined') {
-    // Ambiente MCC
-    const accountIterator = AdsManagerApp.accounts().get();
-    while (accountIterator.hasNext()) {
-      const account = accountIterator.next();
-      AdsManagerApp.select(account);
-      processAccount(account);
-    }
-  } else {
-    // Ambiente Conta Única
-    processAccount(AdsApp.currentAccount());
+  // Itera sobre todas as contas da MCC
+  const accountIterator = AdsManagerApp.accounts().get();
+  
+  while (accountIterator.hasNext()) {
+    const account = accountIterator.next();
+    AdsManagerApp.select(account);
+    processAccount(account);
   }
   
   Logger.log('✅ Finalizado com sucesso.');
 }
 
+${getCommonFunctions()}
+`;
+
+    // --- TEMPLATE 2: APENAS PARA CONTA ÚNICA (SEM MCC) ---
+    const scriptSingle = `/**
+ * Script AutoMetrics - Versão Conta Única
+ * Loja: ${identifierName}
+ */
+
+const CONFIG = {
+  WEBHOOK_URL: 'https://autometrics.vercel.app/api/webhook/google-ads', 
+  USER_ID: '${userId}', 
+  START_DATE: "${startDate}",
+  MCC_NAME: "${identifierName}" // Usado para criar a pasta no painel
+};
+
+function main() {
+  Logger.log('🚀 Iniciando AutoMetrics Single para: ' + CONFIG.MCC_NAME);
+  
+  // Pega apenas a conta atual
+  const account = AdsApp.currentAccount();
+  processAccount(account);
+  
+  Logger.log('✅ Finalizado com sucesso.');
+}
+
+${getCommonFunctions()}
+`;
+
+    // Seleciona o template baseado na escolha do usuário
+    setGeneratedScript(accountType === 'mcc' ? scriptMcc : scriptSingle);
+  };
+
+  // --- FUNÇÕES COMUNS (REUTILIZÁVEIS) ---
+  const getCommonFunctions = () => `
 function processAccount(account) {
   let currentDate = parseDate(CONFIG.START_DATE);
   const today = new Date(); 
   today.setHours(0,0,0,0);
   currentDate.setHours(0,0,0,0);
 
-  // Evita loop infinito se data for futura
   if (currentDate > today) currentDate = today;
 
   while (currentDate <= today) {
@@ -113,7 +137,6 @@ function fetchAndSend(dateString, account) {
   while (report.hasNext()) {
     const row = report.next();
     
-    // Busca URL Final (Tentativa segura)
     let finalUrl = '';
     try {
       const adQuery = "SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE campaign.id = " + row.campaign.id + " LIMIT 1";
@@ -168,10 +191,7 @@ function sendToWebhook(payload) {
 function parseDate(str) {
   const parts = str.split('-');
   return new Date(parts[0], parts[1] - 1, parts[2]);
-}
-`;
-    setGeneratedScript(scriptTemplate);
-  };
+}`;
 
   const copyToClipboard = () => {
     if (!generatedScript) return;
@@ -316,7 +336,7 @@ function parseDate(str) {
                  </button>
                  <div>
                     <h3 className="font-bold text-white text-sm">Seu Script está pronto!</h3>
-                    <p className="text-xs text-emerald-400">Configurado para: {identifierName}</p>
+                    <p className="text-xs text-emerald-400">Tipo: {accountType === 'mcc' ? 'MCC' : 'Conta Única'} | Nome: {identifierName}</p>
                  </div>
               </div>
               <button onClick={copyToClipboard} className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-bold transition-all ${copied ? 'bg-emerald-500 text-white' : 'bg-white text-black hover:bg-slate-200'}`}>
