@@ -17,6 +17,13 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+function getLocalYYYYMMDD(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const ALL_COLUMNS = [
   { key: 'date', label: 'Data', category: 'Geral', default: true },
   { key: 'campaign_status', label: 'Status Dia', category: 'Geral', default: true },
@@ -47,13 +54,9 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-  });
-  const [endDate, setEndDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
+  // Datas Seguras (Inicializa vazio e preenche no Client)
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
@@ -65,7 +68,7 @@ export default function ProductDetailPage() {
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
-  const [manualData, setManualData] = useState({ date: new Date().toISOString().split('T')[0], visits: 0, sales: 0, revenue: 0, refunds: 0 });
+  const [manualData, setManualData] = useState({ date: '', visits: 0, sales: 0, revenue: 0, refunds: 0 });
   const [isSavingManual, setIsSavingManual] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState(
@@ -73,10 +76,19 @@ export default function ProductDetailPage() {
   );
 
   useEffect(() => {
+    // Define datas iniciais (CLIENT SIDE)
+    const today = new Date();
+    setEndDate(getLocalYYYYMMDD(today));
+    setManualData(prev => ({ ...prev, date: getLocalYYYYMMDD(today) }));
+    
+    today.setDate(1); // Primeiro dia do mês
+    setStartDate(getLocalYYYYMMDD(today));
+
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
+    
     fetchLiveDollar();
   }, []);
 
@@ -138,6 +150,9 @@ export default function ProductDetailPage() {
   };
 
   const processedData = useMemo(() => {
+    // Se datas ainda não carregaram, retorna vazio
+    if (!startDate || !endDate) return { rows: [], stats: { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 }, chart: [] };
+
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
@@ -196,39 +211,21 @@ export default function ProductDetailPage() {
 
   return (
     <div className="min-h-screen bg-black text-slate-200 font-sans p-4 md:p-6 relative">
-      
-      {/* HEADER */}
       <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
         <div className="flex items-center gap-4">
-          <Link href="/products" className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
-            <ArrowLeft size={20} />
-          </Link>
+          <Link href="/products" className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"><ArrowLeft size={20} /></Link>
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-white">{product.name}</h1>
-              <button onClick={toggleStatus} className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>
-                {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />} {product.status === 'active' ? 'Ativo' : 'Pausado'}
-              </button>
+              <button onClick={toggleStatus} className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>{product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />} {product.status === 'active' ? 'Ativo' : 'Pausado'}</button>
             </div>
-            <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
-              <span className="flex items-center gap-1"><ExternalLink size={12}/> {product.platform}</span>
-              <span>•</span>
-              <span className="font-mono text-xs bg-slate-900 px-1 rounded">{product.google_ads_campaign_name}</span>
-            </div>
+            <div className="flex items-center gap-3 text-sm text-slate-500 mt-1"><span className="flex items-center gap-1"><ExternalLink size={12}/> {product.platform}</span><span>•</span><span className="font-mono text-xs bg-slate-900 px-1 rounded">{product.google_ads_campaign_name}</span></div>
           </div>
         </div>
-
         <div className="flex flex-wrap gap-4 w-full xl:w-auto items-end">
-          
-          <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
-             <FileText size={14} /> Lançamento Manual
-          </button>
-
+          <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20"><FileText size={14} /> Lançamento Manual</button>
           <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800 items-center">
-            <div className="flex items-center gap-2 px-3 border-r border-slate-800">
-               <Calendar size={14} className="text-indigo-400"/>
-               <span className="text-xs font-bold text-slate-500 uppercase">Período</span>
-            </div>
+            <div className="flex items-center gap-2 px-3 border-r border-slate-800"><Calendar size={14} className="text-indigo-400"/><span className="text-xs font-bold text-slate-500 uppercase">Período</span></div>
             <input type="date" className="bg-transparent text-white text-xs font-mono p-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <span className="text-slate-600">-</span>
             <input type="date" className="bg-transparent text-white text-xs font-mono p-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
@@ -240,27 +237,13 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* KPI CARDS (CORES ATUALIZADAS) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-blue-500">
-           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
-           <p className="text-2xl font-bold text-blue-500">{formatMoney(stats.revenue)}</p>
-        </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-orange-500">
-           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Custo Ads</p>
-           <p className="text-2xl font-bold text-orange-500">{formatMoney(stats.cost)}</p>
-        </div>
-        <div className={`bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 ${stats.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'}`}>
-           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p>
-           <p className={`text-2xl font-bold ${stats.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(stats.profit)}</p>
-        </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-indigo-500">
-           <p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p>
-           <p className="text-2xl font-bold text-indigo-500">{stats.roi.toFixed(1)}%</p>
-        </div>
+        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-blue-500"><p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(stats.revenue)}</p></div>
+        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-orange-500"><p className="text-slate-500 text-xs font-bold uppercase mb-2">Custo Ads</p><p className="text-2xl font-bold text-orange-500">{formatMoney(stats.cost)}</p></div>
+        <div className={`bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 ${stats.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'}`}><p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p><p className={`text-2xl font-bold ${stats.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(stats.profit)}</p></div>
+        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-indigo-500"><p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p><p className="text-2xl font-bold text-indigo-500">{stats.roi.toFixed(1)}%</p></div>
       </div>
 
-      {/* GRÁFICO (CORES ATUALIZADAS) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 h-64">
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
@@ -274,16 +257,10 @@ export default function ProductDetailPage() {
          </ResponsiveContainer>
       </div>
 
-      {/* TABELA */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm relative flex flex-col h-[600px]">
         <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center bg-slate-900/50 gap-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <h3 className="font-semibold text-white">Histórico Detalhado</h3>
-            <span className="text-xs text-slate-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">{rows.length} registros</span>
-          </div>
-          <button onClick={() => setShowColumnModal(true)} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded transition-colors border border-slate-700">
-            <Columns size={14} /> Personalizar Colunas
-          </button>
+          <div className="flex items-center gap-3"><h3 className="font-semibold text-white">Histórico Detalhado</h3><span className="text-xs text-slate-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">{rows.length} registros</span></div>
+          <button onClick={() => setShowColumnModal(true)} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded transition-colors border border-slate-700"><Columns size={14} /> Personalizar Colunas</button>
         </div>
         <div className="overflow-auto custom-scrollbar flex-1">
           <table className="w-full text-sm text-left border-collapse">
@@ -312,14 +289,10 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL LANÇAMENTO MANUAL (NOVO) */}
       {showManualEntry && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6">
-                 <h2 className="text-xl font-bold text-white flex items-center gap-2"><FileText size={20} className="text-indigo-500"/> Lançamento Rápido</h2>
-                 <button onClick={() => setShowManualEntry(false)}><X size={24} className="text-slate-400 hover:text-white" /></button>
-              </div>
+              <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold text-white flex items-center gap-2"><FileText size={20} className="text-indigo-500"/> Lançamento Rápido</h2><button onClick={() => setShowManualEntry(false)}><X size={24} className="text-slate-400 hover:text-white" /></button></div>
               <div className="space-y-4">
                  <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white" value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
                  <div className="grid grid-cols-2 gap-4">
@@ -334,14 +307,10 @@ export default function ProductDetailPage() {
         </div>
       )}
 
-      {/* MODAL COLUNAS */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2"><Columns size={20} className="text-indigo-500"/> Personalizar Colunas</h2>
-              <button onClick={() => setShowColumnModal(false)} className="text-slate-400 hover:text-white"><X size={24} /></button>
-            </div>
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center"><h2 className="text-xl font-bold text-white flex items-center gap-2"><Columns size={20} className="text-indigo-500"/> Personalizar Colunas</h2><button onClick={() => setShowColumnModal(false)} className="text-slate-400 hover:text-white"><X size={24} /></button></div>
             <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {['Geral', 'Tráfego', 'Custo', 'Funil', 'Financeiro', 'Google Ads'].map(category => (
@@ -365,13 +334,10 @@ export default function ProductDetailPage() {
                 ))}
               </div>
             </div>
-            <div className="p-4 border-t border-slate-800 flex justify-end bg-slate-950/50 rounded-b-xl">
-              <button onClick={() => setShowColumnModal(false)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">Confirmar</button>
-            </div>
+            <div className="p-4 border-t border-slate-800 flex justify-end bg-slate-950/50 rounded-b-xl"><button onClick={() => setShowColumnModal(false)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">Confirmar</button></div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
