@@ -11,7 +11,6 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-// Importação de Imagem
 import Image from 'next/image';
 
 const supabase = createClient(
@@ -30,41 +29,28 @@ export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-  
   const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
-  
   const [dateRange, setDateRange] = useState('this_month'); 
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
-
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
   const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // --- PROTEÇÃO DE ROTA E CARREGAMENTO ---
   useEffect(() => {
     async function checkUserAndLoad() {
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session) {
         router.push('/'); 
         return;
       }
-
       setUser(session.user); 
-
-      await Promise.all([
-        fetchInitialData(session.user.id), 
-        fetchLiveDollar()
-      ]);
-      
+      await Promise.all([fetchInitialData(session.user.id), fetchLiveDollar()]);
       setLoading(false);
     }
-
     checkUserAndLoad();
-
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
   }, []);
@@ -83,20 +69,11 @@ export default function DashboardPage() {
   }
 
   async function fetchInitialData(userId: string) {
-    const { data: prodData } = await supabase
-      .from('products')
-      .select('id, currency')
-      .eq('user_id', userId); 
-
+    const { data: prodData } = await supabase.from('products').select('id, currency').eq('user_id', userId); 
     setProducts(prodData || []);
-
     if (prodData && prodData.length > 0) {
         const productIds = prodData.map(p => p.id);
-        const { data: metData } = await supabase
-          .from('daily_metrics')
-          .select('*')
-          .in('product_id', productIds)
-          .order('date', { ascending: true });
+        const { data: metData } = await supabase.from('daily_metrics').select('*').in('product_id', productIds).order('date', { ascending: true });
         setMetrics(metData || []);
     } else {
         setMetrics([]);
@@ -110,43 +87,30 @@ export default function DashboardPage() {
 
   const processedData = useMemo(() => {
     if (loading || !metrics.length) return { chart: [], table: [], totals: null };
-
     const now = new Date();
     let start = new Date();
     let end = new Date();
-
     if (dateRange === 'today') { /* ... */ }
     else if (dateRange === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
     else if (dateRange === '7d') { start.setDate(now.getDate() - 7); }
     else if (dateRange === '30d') { start.setDate(now.getDate() - 30); }
     else if (dateRange === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
     else if (dateRange === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
-    
     const startStr = dateRange === 'custom' ? customStart : getLocalYYYYMMDD(start);
     const endStr = dateRange === 'custom' ? customEnd : getLocalYYYYMMDD(end);
-
     const dailyMap = new Map();
-
     metrics.forEach(row => {
       if (row.date < startStr || row.date > endStr) return;
       const product = products.find(p => p.id === row.product_id);
       const isUSD = product?.currency === 'USD';
-      let cost = Number(row.cost || 0);
-      let revenue = Number(row.conversion_value || 0);
-      let refunds = Number(row.refunds || 0);
-
-      if (viewCurrency === 'BRL') {
-        if (isUSD) { cost *= liveDollar; revenue *= manualDollar; refunds *= manualDollar; }
-      } else {
-        if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; }
-      }
+      let cost = Number(row.cost || 0); let revenue = Number(row.conversion_value || 0); let refunds = Number(row.refunds || 0);
+      if (viewCurrency === 'BRL') { if (isUSD) { cost *= liveDollar; revenue *= manualDollar; refunds *= manualDollar; } } 
+      else { if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; } }
       const profit = revenue - cost - refunds;
-
       if (!dailyMap.has(row.date)) dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0 });
       const day = dailyMap.get(row.date);
       day.cost += cost; day.revenue += revenue; day.refunds += refunds; day.profit += profit;
     });
-
     const resultRows = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
     const totals = { cost: 0, revenue: 0, profit: 0, refunds: 0, roi: 0 };
     resultRows.forEach(r => {
@@ -155,7 +119,6 @@ export default function DashboardPage() {
     });
     totals.roi = totals.cost > 0 ? (totals.profit / totals.cost) * 100 : 0;
     const chartData = [...resultRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({ ...r, shortDate: r.date.split('-').slice(1).reverse().join('/') }));
-
     return { chart: chartData, table: resultRows, totals };
   }, [metrics, products, dateRange, customStart, customEnd, liveDollar, manualDollar, viewCurrency, loading]);
 
@@ -171,17 +134,16 @@ export default function DashboardPage() {
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
       <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
-        {/* --- LOGO NA SIDEBAR --- */}
+        {/* --- HEADER SIDEBAR (LOGO) --- */}
         <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
-           {/* Substituído Quadrado Roxo + Texto pela Logo */}
-           <div className="relative w-full h-8 md:h-10">
-             <Image 
-               src="/logo.png" 
-               alt="Logo" 
-               fill 
-               className="object-contain object-center md:object-left"
-               priority
-             />
+           {/* Mobile: Logo pequena (se tiver ícone apenas, seria ideal, senão usa a mesma) */}
+           <div className="md:hidden relative w-8 h-8">
+             <Image src="/logo.png" alt="Logo" fill className="object-contain" />
+           </div>
+
+           {/* Desktop: Logo grande ocupando a área */}
+           <div className="hidden md:block relative w-40 h-10"> 
+             <Image src="/logo.png" alt="Logo" fill className="object-contain object-left" priority />
            </div>
         </div>
         
@@ -198,7 +160,6 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* ... (O RESTANTE DO CÓDIGO DA PÁGINA PERMANECE EXATAMENTE IGUAL) ... */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto">
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
           <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className="text-slate-500 text-sm">Acompanhe seus resultados consolidados.</p></div>
@@ -232,7 +193,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {processedData.totals ? (
+        {processedData.totals && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
             <div className={`${bgCard} border-t-4 border-t-blue-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
             <div className={`${bgCard} border-t-4 border-t-orange-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Custos Totais</p><p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.cost)}</p></div>
@@ -240,10 +201,6 @@ export default function DashboardPage() {
             <div className={`${bgCard} border-t-4 border-t-indigo-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">ROI</p><p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p></div>
             <div className={`${bgCard} border-t-4 border-t-rose-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Reembolsos</p><p className="text-2xl font-bold text-rose-500">{formatMoney(processedData.totals.refunds)}</p></div>
           </div>
-        ) : (
-           <div className="text-center py-20 bg-slate-900/20 rounded-xl mb-8 border border-dashed border-slate-800">
-              <p className="text-slate-500">Nenhum dado encontrado.</p>
-           </div>
         )}
 
         <div className={`${bgCard} rounded-xl p-6 mb-8 h-80 shadow-sm`}>

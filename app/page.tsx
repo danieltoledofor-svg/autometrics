@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { Mail, ArrowRight, Loader2, AlertCircle, Lock } from 'lucide-react';
-// Importação de Imagem
 import Image from 'next/image';
 
 const supabase = createClient(
@@ -75,19 +74,17 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
         
         <div className="text-center mb-8">
-          {/* --- LOGO NA TELA DE LOGIN --- */}
-          <div className="flex justify-center mb-6">
-             <div className="relative w-32 h-32"> {/* Tamanho da Logo no Login */}
-                <Image 
-                  src="/logo.png" 
-                  alt="AutoMetrics Logo" 
-                  fill
-                  className="object-contain"
-                  priority
-                />
-             </div>
+          {/* --- LOGO AUMENTADA --- */}
+          <div className="relative w-64 h-24 mx-auto mb-4">
+             <Image 
+               src="/logo.png" 
+               alt="AutoMetrics Logo" 
+               fill
+               className="object-contain" // Garante que a imagem caiba inteira sem cortar
+               priority
+             />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">AutoMetrics</h1>
+          
           <p className="text-slate-400 text-sm">Acesse sua central de inteligência.</p>
         </div>
 
