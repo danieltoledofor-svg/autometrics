@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, ExternalLink, X, ArrowLeft, RefreshCw, 
   Briefcase, Folder, Layers, LayoutGrid, ChevronRight, ChevronDown,
-  Eye, EyeOff, PlayCircle, PauseCircle, AlertTriangle, Globe, Trash2
+  Eye, EyeOff, PlayCircle, PauseCircle, AlertTriangle, Globe, Trash2,
+  Sun, Moon // Adicionado ícones de tema
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -35,9 +36,17 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState('');
 
+  // --- TEMA (NOVO) ---
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
   // --- INICIALIZAÇÃO ---
   useEffect(() => { 
     async function init() {
+      // 1. Recupera tema salvo
+      const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
+      if (savedTheme) setTheme(savedTheme);
+
+      // 2. Autenticação
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
@@ -50,6 +59,13 @@ export default function ProductsPage() {
     }
     init();
   }, []);
+
+  // Função de alternar tema e salvar
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('autometrics_theme', newTheme);
+  };
 
   async function fetchProducts(currentUserId: string) {
     setLoading(true);
@@ -215,30 +231,41 @@ export default function ProductsPage() {
 
   const handleReload = () => { if (userId) fetchProducts(userId); };
 
+  // --- VARIÁVEIS DE ESTILO DINÂMICO ---
+  const isDark = theme === 'dark';
+  const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
+  const bgSidebar = isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200';
+  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
+  const textHead = isDark ? 'text-white' : 'text-slate-900';
+  const textMuted = 'text-slate-500';
+  const hoverItem = isDark ? 'hover:bg-slate-900 hover:text-white' : 'hover:bg-slate-100 hover:text-black';
+  const activeItem = isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-black border border-slate-200';
+  const buttonPrimary = isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-600 text-white shadow';
+
   return (
-    <div className="min-h-screen bg-black text-slate-200 font-sans flex flex-col md:flex-row">
+    <div className={`min-h-screen font-sans flex flex-col md:flex-row ${bgMain}`}>
       
       {/* SIDEBAR */}
-      <aside className="w-full md:w-72 bg-slate-950 border-r border-slate-900 flex flex-col h-screen sticky top-0 z-20">
-        <div className="p-6 border-b border-slate-900 flex items-center gap-3">
-           <Link href="/dashboard" className="p-2 bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-white"><ArrowLeft size={18} /></Link>
-           <span className="font-bold text-white tracking-wide">Estrutura</span>
+      <aside className={`w-full md:w-72 border-r flex flex-col h-screen sticky top-0 z-20 ${bgSidebar}`}>
+        <div className={`p-6 border-b flex items-center gap-3 ${isDark ? 'border-slate-900' : 'border-slate-100'}`}>
+           <Link href="/dashboard" className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}><ArrowLeft size={18} /></Link>
+           <span className={`font-bold tracking-wide ${textHead}`}>Estrutura</span>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-1">
-           <button onClick={resetFilters} className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all mb-4 ${!selectedMcc ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-900'}`}>
+           <button onClick={resetFilters} className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all mb-4 ${!selectedMcc ? buttonPrimary : `${textMuted} ${hoverItem}`}`}>
               <LayoutGrid size={18} />
               <span className="font-medium text-sm">Visão Global</span>
            </button>
 
-           <div className="flex justify-between items-center px-2 pb-2 mt-4 border-b border-slate-900 mb-2">
-              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">MCCs e Contas</span>
-              <button onClick={() => setShowHidden(!showHidden)} className="text-slate-600 hover:text-white" title="Ver Ocultos">{showHidden ? <Eye size={12}/> : <EyeOff size={12}/>}</button>
+           <div className={`flex justify-between items-center px-2 pb-2 mt-4 border-b mb-2 ${isDark ? 'border-slate-900' : 'border-slate-200'}`}>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">MCCs e Contas</span>
+              <button onClick={() => setShowHidden(!showHidden)} className="text-slate-500 hover:text-indigo-500" title="Ver Ocultos">{showHidden ? <Eye size={12}/> : <EyeOff size={12}/>}</button>
            </div>
 
            {structure.length === 0 && !loading && (
                <div className="text-center py-4 px-2">
-                   <p className="text-xs text-slate-600">Nenhuma conta encontrada.</p>
+                   <p className="text-xs text-slate-500">Nenhuma conta encontrada.</p>
                </div>
            )}
 
@@ -250,20 +277,20 @@ export default function ProductsPage() {
                <div key={mcc.name} className="mb-2">
                  {/* MCC ROW */}
                  <div className="flex items-center gap-1 group relative pr-2">
-                    <button onClick={() => toggleMccExpand(mcc.name)} className="p-2 text-slate-600 hover:text-white transition-colors">
+                    <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>
                        {isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
                     </button>
                     <button 
                       onClick={() => handleSelectMcc(mcc.name)}
-                      className={`flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}`}
+                      className={`flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? activeItem : `${textMuted} ${hoverItem}`}`}
                     >
-                       <Globe size={14} className={isMccActive ? 'text-indigo-400' : 'text-slate-600'}/>
+                       <Globe size={14} className={isMccActive ? 'text-indigo-400' : 'text-slate-500'}/>
                        <span className="truncate w-32">{mcc.name}</span>
                     </button>
 
                     <button 
                        onClick={(e) => handleDeleteMcc(mcc.name, e)}
-                       className="p-1.5 text-slate-700 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                       className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
                        title="Excluir MCC e suas contas"
                     >
                        <Trash2 size={12}/>
@@ -272,14 +299,14 @@ export default function ProductsPage() {
 
                  {/* CONTAS ROW */}
                  {isExpanded && (
-                   <div className="ml-4 pl-3 border-l border-slate-800 mt-1 space-y-1">
+                   <div className={`ml-4 pl-3 border-l mt-1 space-y-1 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                       {mcc.accounts.map(acc => {
                         const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
                         return (
                           <div key={acc} className="flex items-center group/acc pr-2">
                             <button 
                                 onClick={() => handleSelectAccount(mcc.name, acc)}
-                                className={`flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900'}`}
+                                className={`flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}
                             >
                                 <Briefcase size={12}/>
                                 <span className="truncate w-32">{acc}</span>
@@ -287,7 +314,7 @@ export default function ProductsPage() {
                             
                             <button 
                                 onClick={(e) => handleDeleteAccount(mcc.name, acc, e)}
-                                className="p-1.5 text-slate-700 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1"
+                                className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1"
                                 title="Excluir Conta"
                             >
                                 <Trash2 size={12}/>
@@ -304,35 +331,39 @@ export default function ProductsPage() {
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen relative bg-black">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen relative">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
                {selectedMcc ? (
                  <>
-                   <span className="bg-slate-900 px-2 py-0.5 rounded">{selectedMcc}</span>
-                   {selectedAccount && <><ChevronRight size={12}/> <span className="bg-slate-900 px-2 py-0.5 rounded text-indigo-400">{selectedAccount}</span></>}
+                   <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200 text-slate-600'}`}>{selectedMcc}</span>
+                   {selectedAccount && <><ChevronRight size={12}/> <span className={`px-2 py-0.5 rounded text-indigo-500 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedAccount}</span></>}
                  </>
                ) : (
-                 <span className="bg-slate-900 px-2 py-0.5 rounded">Todas as MCCs</span>
+                 <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200 text-slate-600'}`}>Todas as MCCs</span>
                )}
             </div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <h1 className={`text-2xl font-bold flex items-center gap-2 ${textHead}`}>
               {selectedAccount || selectedMcc || 'Todas as Campanhas'}
             </h1>
           </div>
           
           <div className="flex gap-3">
+            {/* BOTÃO TEMA */}
+            <button onClick={toggleTheme} className={`p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>
+               {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Plus size={18} /> Novo Produto</button>
           </div>
         </div>
 
         <div className="flex gap-4 mb-6">
-           <div className="bg-slate-900/50 border border-slate-900 p-4 rounded-xl flex-1 flex gap-4 items-center">
+           <div className={`p-4 rounded-xl flex-1 flex gap-4 items-center border ${bgCard}`}>
              <Search className="text-slate-500" size={18} />
-             <input type="text" placeholder="Buscar campanha..." className="bg-transparent text-white w-full outline-none placeholder:text-slate-600" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-             <button onClick={handleReload} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
+             <input type="text" placeholder="Buscar campanha..." className={`bg-transparent w-full outline-none placeholder:text-slate-500 ${textHead}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+             <button onClick={handleReload} className={`p-2 rounded-full transition-colors ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
            {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 px-4 rounded-xl flex items-center gap-2 text-amber-500 text-xs font-bold animate-pulse"><AlertTriangle size={16} /> Ver Ocultos</div>}
         </div>
@@ -340,27 +371,29 @@ export default function ProductsPage() {
         {loading && products.length === 0 ? (
           <div className="flex justify-center items-center h-64 text-slate-500">Carregando produtos...</div>
         ) : filteredProducts.length === 0 ? (
-           <div className="flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed border-slate-800 rounded-xl"><Layers size={32} className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada.</p></div>
+           <div className={`flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed rounded-xl ${isDark ? 'border-slate-800' : 'border-slate-300'}`}><Layers size={32} className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada.</p></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
             {filteredProducts.map((product) => (
               <Link key={product.id} href={`/products/${product.id}`} className="block group">
-                <div className={`border rounded-xl p-6 transition-all h-full relative overflow-hidden flex flex-col ${product.is_hidden ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/50 hover:bg-slate-900/80'}`}>
+                <div className={`border rounded-xl p-6 transition-all h-full relative overflow-hidden flex flex-col ${
+                   product.is_hidden 
+                     ? (isDark ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-100 border-slate-300 opacity-60') 
+                     : `${bgCard} hover:border-indigo-500/50`
+                }`}>
                   
                   <div className="absolute top-4 right-4 flex gap-2 z-10">
                      <button onClick={(e) => toggleStatus(product, e)} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'}`} title="Status">
                         {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
                      </button>
                      
-                     {/* BOTÃO DE ARQUIVAR */}
-                     <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-slate-700'}`}>
+                     <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : `${isDark ? 'bg-slate-800 text-slate-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-indigo-600'}`}`}>
                         {product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}
                      </button>
 
-                     {/* BOTÃO DE DELETAR (NOVO) */}
                      <button 
                        onClick={(e) => handleDeleteProduct(product.id, e)}
-                       className="p-1.5 rounded-lg transition-colors bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white"
+                       className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`}
                        title="Excluir Definitivamente"
                      >
                        <Trash2 size={14} />
@@ -373,11 +406,11 @@ export default function ProductsPage() {
                     </div>
                   </div>
                   
-                  <h3 className="text-lg font-bold text-white mb-1 group-hover:text-indigo-400 transition-colors line-clamp-2">{product.name}</h3>
+                  <h3 className={`text-lg font-bold mb-1 transition-colors line-clamp-2 ${textHead} group-hover:text-indigo-500`}>{product.name}</h3>
                   
-                  <div className="mt-auto pt-4 space-y-2 border-t border-slate-800/50">
+                  <div className={`mt-auto pt-4 space-y-2 border-t ${isDark ? 'border-slate-800/50' : 'border-slate-100'}`}>
                      <div className="flex items-center gap-2 text-xs text-slate-500"><Folder size={12}/><span className="truncate max-w-[200px]">{product.account_name || 'Sem Conta'}</span></div>
-                     <div className="flex items-center gap-2 text-xs text-slate-500"><Layers size={12}/><span className="font-mono bg-black/30 px-1.5 py-0.5 rounded truncate max-w-[200px]">{product.google_ads_campaign_name}</span></div>
+                     <div className="flex items-center gap-2 text-xs text-slate-500"><Layers size={12}/><span className={`font-mono px-1.5 py-0.5 rounded truncate max-w-[200px] ${isDark ? 'bg-black/30' : 'bg-slate-100'}`}>{product.google_ads_campaign_name}</span></div>
                   </div>
                 </div>
               </Link>
@@ -387,12 +420,12 @@ export default function ProductsPage() {
 
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold text-white">Novo Produto Manual</h2><button onClick={() => setIsModalOpen(false)}><X size={24} className="text-slate-400 hover:text-white" /></button></div>
+            <div className={`rounded-xl w-full max-w-lg p-6 shadow-2xl border ${bgCard}`}>
+              <div className="flex justify-between items-center mb-6"><h2 className={`text-xl font-bold ${textHead}`}>Novo Produto Manual</h2><button onClick={() => setIsModalOpen(false)}><X size={24} className="text-slate-400 hover:text-indigo-500" /></button></div>
               <div className="space-y-4">
-                <input type="text" className="w-full bg-slate-950 border-slate-800 rounded-lg p-3 text-white" placeholder="Nome do Produto" value={newProduct.name} onChange={e=>setNewProduct({...newProduct, name: e.target.value})} />
-                <input type="text" className="w-full bg-slate-950 border-slate-800 rounded-lg p-3 text-white" placeholder="Campanha Google Ads (Exato)" value={newProduct.campaign_name} onChange={e=>setNewProduct({...newProduct, campaign_name: e.target.value})} />
-                <button onClick={handleSave} className="w-full bg-indigo-600 py-3 rounded-lg text-white font-bold">{saving ? 'Salvando...' : 'Salvar'}</button>
+                <input type="text" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} placeholder="Nome do Produto" value={newProduct.name} onChange={e=>setNewProduct({...newProduct, name: e.target.value})} />
+                <input type="text" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} placeholder="Campanha Google Ads (Exato)" value={newProduct.campaign_name} onChange={e=>setNewProduct({...newProduct, campaign_name: e.target.value})} />
+                <button onClick={handleSave} className="w-full bg-indigo-600 py-3 rounded-lg text-white font-bold hover:bg-indigo-700">{saving ? 'Salvando...' : 'Salvar'}</button>
               </div>
             </div>
           </div>
