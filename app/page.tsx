@@ -80,7 +80,7 @@ export default function LoginPage() {
           <Image 
             src="/logo.png" 
             alt="AutoMetrics Logo" 
-            width={400} 
+            width={250} 
             height={120}
             className="w-[300px] h-auto object-contain mb-4" 
             priority
