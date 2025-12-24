@@ -8,13 +8,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { campaign_name, date, metrics, currency_code, user_id, account_name } = body;
+    const { campaign_name, date, metrics, currency_code, user_id, account_name, mcc_name } = body;
 
     if (!user_id || !campaign_name) {
       return NextResponse.json({ message: 'Dados incompletos.' }, { status: 400 });
     }
 
-    // 1. Busca produto existente
+    // 1. Busca ou Cria Produto
     let { data: product } = await supabase
       .from('products')
       .select('id')
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       .single();
 
     if (!product) {
-      // Cria novo produto COM O NOME DA CONTA
+      // Cria novo
       const { data: newProduct, error: createError } = await supabase
         .from('products')
         .insert([{
@@ -33,7 +33,8 @@ export async function POST(request: Request) {
             platform: 'Google Ads (Auto)',
             currency: currency_code || 'BRL',
             status: 'active',
-            account_name: account_name || 'Conta Desconhecida' // <--- NOVO
+            account_name: account_name || 'Conta Desconhecida',
+            mcc_name: mcc_name || 'Sem MCC' // <--- NOVO
         }])
         .select('id')
         .single();
@@ -41,14 +42,17 @@ export async function POST(request: Request) {
       if (createError) return NextResponse.json({ error: createError.message }, { status: 500 });
       product = newProduct;
     } else {
-      // Se já existe, atualiza o nome da conta caso tenha mudado ou esteja vazio
+      // Atualiza vínculo de Conta e MCC se mudou
       await supabase
         .from('products')
-        .update({ account_name: account_name })
+        .update({ 
+            account_name: account_name,
+            mcc_name: mcc_name || 'Sem MCC' // <--- NOVO
+        })
         .eq('id', product.id);
     }
 
-    // 2. Tratamento de CTR
+    // 2. Tratamento CTR
     let cleanCtr = 0;
     if (metrics.ctr) {
        const ctrString = String(metrics.ctr).replace('%', '');

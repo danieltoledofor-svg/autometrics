@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Code, ArrowLeft, ShieldAlert, Calendar, Clock, Settings, Zap } from 'lucide-react';
+import { Copy, Check, Code, ArrowLeft, Zap, Calendar, Globe } from 'lucide-react';
 import Link from 'next/link';
 
 export default function IntegrationPage() {
   const [userId, setUserId] = useState('');
   const [startDate, setStartDate] = useState('');
+  
+  // --- NOVO CAMPO: NOME DA MCC ---
+  const [mccName, setMccName] = useState(''); 
+  
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -22,20 +26,23 @@ export default function IntegrationPage() {
   }, []);
 
   const handleGenerateScript = () => {
+    if (!mccName) return alert("Por favor, digite um nome para identificar esta MCC.");
+
+    // SCRIPT V4 COM SUPORTE A MCC
     const scriptTemplate = `/**
- * Script AutoMetrics - UNIVERSAL (V2 - COMPLETO)
- * Traz: Conta, CPA Meta, URL Final e Métricas.
+ * Script AutoMetrics V4 (Multi-MCC Support)
+ * MCC: ${mccName}
  */
 
 const CONFIG = {
   WEBHOOK_URL: 'https://autometrics.vercel.app/api/webhook/google-ads', 
   USER_ID: '${userId}', 
-  START_DATE: "${startDate}" // Data Início
+  START_DATE: "${startDate}",
+  MCC_NAME: "${mccName}" // Identificador da MCC
 };
 
 function main() {
-  Logger.log('🚀 Iniciando AutoMetrics V2...');
-  
+  Logger.log('🚀 Iniciando AutoMetrics V4 para: ' + CONFIG.MCC_NAME);
   if (typeof AdsManagerApp !== 'undefined') {
     const accountIterator = AdsManagerApp.accounts().get();
     while (accountIterator.hasNext()) {
@@ -63,21 +70,18 @@ function processAccount(account) {
 }
 
 function fetchAndSend(dateString, account) {
-  // Query Principal
   const query = \`
     SELECT
-      campaign.id, campaign.name,
+      campaign.id, campaign.name, campaign.status,
       metrics.impressions, metrics.clicks, metrics.ctr,
       metrics.average_cpc, metrics.cost_micros,
       metrics.search_impression_share, metrics.search_top_impression_share,
       metrics.search_absolute_top_impression_share,
       campaign.bidding_strategy_type, campaign_budget.amount_micros,
       customer.currency_code,
-      
       campaign.target_cpa.target_cpa_micros,
       campaign.target_roas.target_roas,
       campaign.maximize_conversions.target_cpa_micros
-      
     FROM campaign
     WHERE segments.date = '\${dateString}'
     AND metrics.impressions > 0 
@@ -88,7 +92,7 @@ function fetchAndSend(dateString, account) {
   while (report.hasNext()) {
     const row = report.next();
     
-    // 1. Busca URL Final (Sub-query simples)
+    // Busca URL Final
     let finalUrl = '';
     const adQuery = "SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE campaign.id = " + row.campaign.id + " LIMIT 1";
     const adReport = AdsApp.search(adQuery);
@@ -97,12 +101,11 @@ function fetchAndSend(dateString, account) {
        if(adRow.adGroupAd.ad.finalUrls) finalUrl = adRow.adGroupAd.ad.finalUrls[0];
     }
 
-    // 2. Calcula Meta (CPA ou ROAS)
     let targetValue = 0;
-    if (row.campaign.targetCpa && row.campaign.targetCpa.targetCpaMicros) {
-        targetValue = row.campaign.targetCpa.targetCpaMicros / 1000000;
-    } else if (row.campaign.maximizeConversions && row.campaign.maximizeConversions.targetCpaMicros) {
+    if (row.campaign.maximizeConversions && row.campaign.maximizeConversions.targetCpaMicros) {
         targetValue = row.campaign.maximizeConversions.targetCpaMicros / 1000000;
+    } else if (row.campaign.targetCpa && row.campaign.targetCpa.targetCpaMicros) {
+        targetValue = row.campaign.targetCpa.targetCpaMicros / 1000000;
     } else if (row.campaign.targetRoas && row.campaign.targetRoas.targetRoas) {
         targetValue = row.campaign.targetRoas.targetRoas;
     }
@@ -111,7 +114,8 @@ function fetchAndSend(dateString, account) {
       user_id: CONFIG.USER_ID,
       campaign_name: row.campaign.name,
       date: dateString,
-      account_name: account.getName(), // Nome da Conta
+      account_name: account.getName(),
+      mcc_name: CONFIG.MCC_NAME, // Envia o nome da MCC configurada
       currency_code: row.customer.currencyCode,
       metrics: {
         impressions: row.metrics.impressions,
@@ -124,9 +128,9 @@ function fetchAndSend(dateString, account) {
         search_abs_top_share: row.metrics.searchAbsoluteTopImpressionShare,
         bidding_strategy_type: row.campaign.biddingStrategyType,
         budget_micros: row.campaignBudget.amountMicros,
-        
-        final_url: finalUrl, // URL
-        target_value: targetValue // Meta
+        status: row.campaign.status,
+        final_url: finalUrl,
+        target_value: targetValue
       }
     };
     sendToWebhook(payload);
@@ -135,9 +139,7 @@ function fetchAndSend(dateString, account) {
 
 function sendToWebhook(payload) {
   const options = { 'method': 'post', 'contentType': 'application/json', 'payload': JSON.stringify(payload), 'muteHttpExceptions': true };
-  try {
-    UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, options);
-  } catch (e) { Logger.log('❌ Erro: ' + e.message); }
+  try { UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, options); } catch (e) { Logger.log('❌ Erro: ' + e.message); }
 }
 
 function parseDate(str) {
@@ -164,46 +166,54 @@ function parseDate(str) {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Code className="text-indigo-500" /> Integração Universal V2
+              <Code className="text-indigo-500" /> Integração Multi-MCC
             </h1>
-            <p className="text-slate-500 text-sm">Gere um único script inteligente para Histórico e Tempo Real.</p>
+            <p className="text-slate-500 text-sm">Gere scripts personalizados para cada uma de suas MCCs.</p>
           </div>
         </div>
 
         {!generatedScript ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="max-w-lg mx-auto space-y-8">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-500/20">
-                  <Zap className="text-white" size={32} fill="currentColor" />
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8">
+            <div className="max-w-lg mx-auto space-y-6">
+              
+              {/* Card Intro */}
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+                  <Globe className="text-white" size={32} />
                 </div>
-                <h3 className="text-xl font-bold text-white mb-3">Script Híbrido Automático</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  Busca todas as métricas, incluindo <strong>CPA Meta</strong>, <strong>URL Final</strong> e <strong>Nome da Conta</strong>.
-                </p>
+                <h3 className="text-xl font-bold text-white mb-2">Configurar Nova MCC</h3>
+                <p className="text-slate-400 text-sm">Preencha os dados abaixo para gerar o script correto.</p>
               </div>
 
-              <div className="bg-slate-950 p-6 rounded-xl border border-slate-800">
-                <label className="block text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">
-                  A partir de quando quer os dados?
-                </label>
-                <div className="relative">
-                  <input 
-                    type="date" 
-                    className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all [&::-webkit-calendar-picker-indicator]:invert font-mono text-lg"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
-                  <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={20} />
+              {/* Input MCC Name */}
+              <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-4">
+                <div>
+                   <label className="block text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">Nome da MCC (Para Organização)</label>
+                   <input 
+                     type="text" 
+                     placeholder="Ex: Agência Principal, Cliente X..."
+                     className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-lg outline-none focus:border-indigo-500 transition-colors"
+                     value={mccName}
+                     onChange={(e) => setMccName(e.target.value)}
+                   />
+                </div>
+
+                <div>
+                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Data de Início dos Dados</label>
+                   <div className="relative">
+                     <input 
+                       type="date" 
+                       className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-lg outline-none [&::-webkit-calendar-picker-indicator]:invert"
+                       value={startDate}
+                       onChange={(e) => setStartDate(e.target.value)}
+                     />
+                     <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={20} />
+                   </div>
                 </div>
               </div>
 
-              <button 
-                onClick={handleGenerateScript}
-                className="w-full bg-white hover:bg-slate-200 text-black px-8 py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-95"
-              >
-                <Code size={20} />
-                Gerar Script Definitivo
+              <button onClick={handleGenerateScript} className="w-full bg-white hover:bg-slate-200 text-black px-8 py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-95">
+                <Code size={20} /> Gerar Script V4
               </button>
             </div>
           </div>
@@ -211,29 +221,15 @@ function parseDate(str) {
           <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <button onClick={() => setGeneratedScript(null)} className="text-slate-500 hover:text-white text-xs font-medium flex items-center gap-1">
-                  <ArrowLeft size={14} /> Configurar
-                </button>
-                <span className="text-xs font-mono text-emerald-400">
-                  autometrics-universal-v2.js
-                </span>
+                 <button onClick={() => setGeneratedScript(null)} className="text-slate-500 hover:text-white text-xs font-medium flex items-center gap-1"><ArrowLeft size={14} /> Voltar</button>
+                 <span className="text-xs font-mono text-emerald-400">autometrics-v4-{mccName.toLowerCase().replace(/\s+/g, '-')}.js</span>
               </div>
-              
-              <button 
-                onClick={copyToClipboard}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                  copied ? 'bg-emerald-500 text-white' : 'bg-white text-black hover:bg-slate-200'
-                }`}
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                {copied ? 'Copiado!' : 'Copiar Script'}
+              <button onClick={copyToClipboard} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${copied ? 'bg-emerald-500 text-white' : 'bg-white text-black hover:bg-slate-200'}`}>
+                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copiado!' : 'Copiar'}
               </button>
             </div>
-            
             <div className="p-0 overflow-x-auto">
-              <pre className="font-mono text-xs text-slate-300 leading-relaxed p-6 min-h-[400px]">
-                {generatedScript}
-              </pre>
+              <pre className="font-mono text-xs text-slate-300 leading-relaxed p-6 min-h-[400px]">{generatedScript}</pre>
             </div>
           </div>
         )}
