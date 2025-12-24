@@ -11,6 +11,8 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+// Importação de Imagem
+import Image from 'next/image';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,7 +29,7 @@ function getLocalYYYYMMDD(date: Date) {
 export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null); // Usuário Logado Real
+  const [user, setUser] = useState<any>(null);
   
   const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -44,17 +46,15 @@ export default function DashboardPage() {
   // --- PROTEÇÃO DE ROTA E CARREGAMENTO ---
   useEffect(() => {
     async function checkUserAndLoad() {
-      // 1. Verifica Sessão Real do Supabase
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        router.push('/'); // Manda para login se não estiver logado
+        router.push('/'); 
         return;
       }
 
-      setUser(session.user); // Salva usuário real (com email)
+      setUser(session.user); 
 
-      // 2. Carrega dados usando o ID do usuário logado
       await Promise.all([
         fetchInitialData(session.user.id), 
         fetchLiveDollar()
@@ -82,12 +82,11 @@ export default function DashboardPage() {
     } catch (e) { console.error(e); }
   }
 
-  // Busca dados FILTRADOS pelo ID do usuário autenticado
   async function fetchInitialData(userId: string) {
     const { data: prodData } = await supabase
       .from('products')
       .select('id, currency')
-      .eq('user_id', userId); // Filtro seguro
+      .eq('user_id', userId); 
 
     setProducts(prodData || []);
 
@@ -171,10 +170,21 @@ export default function DashboardPage() {
   return (
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
       <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+        
+        {/* --- LOGO NA SIDEBAR --- */}
         <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
-           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white">A</div>
-           <span className={`ml-3 font-bold text-lg hidden md:block ${textHead}`}>AutoMetrics</span>
+           {/* Substituído Quadrado Roxo + Texto pela Logo */}
+           <div className="relative w-full h-8 md:h-10">
+             <Image 
+               src="/logo.png" 
+               alt="Logo" 
+               fill 
+               className="object-contain object-center md:object-left"
+               priority
+             />
+           </div>
         </div>
+        
         <nav className="flex-1 p-4 space-y-2">
            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
            <Link href="/products" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
@@ -188,6 +198,7 @@ export default function DashboardPage() {
         </div>
       </aside>
 
+      {/* ... (O RESTANTE DO CÓDIGO DA PÁGINA PERMANECE EXATAMENTE IGUAL) ... */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto">
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
           <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className="text-slate-500 text-sm">Acompanhe seus resultados consolidados.</p></div>
