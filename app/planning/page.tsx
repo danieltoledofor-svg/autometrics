@@ -2,9 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Target, TrendingUp, DollarSign, Calendar as CalIcon, 
-  AlertTriangle, CheckCircle, Edit2, ArrowRight, Plus, Trash2,
-  Sun, Moon, RefreshCw, ChevronDown, ChevronRight, Save, 
+  Target, TrendingUp, Calendar as CalIcon, Edit2, Plus, Trash2,
+  Sun, Moon, ChevronDown, ChevronRight, Save, DollarSign, AlertCircle, 
   Briefcase, Globe, LayoutGrid
 } from 'lucide-react';
 import { 
@@ -39,7 +38,7 @@ export default function PlanningPage() {
   // UI
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false); 
+  const [editMode, setEditMode] = useState(false); // Modo de Edição
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({}); 
 
   // Moeda & Tema
@@ -54,7 +53,7 @@ export default function PlanningPage() {
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
-    // Inicializa data do custo com a data local correta
+    // Data local correta para o form
     setNewCost(prev => ({ ...prev, date: getLocalYYYYMMDD(new Date()) }));
 
     fetchLiveDollar();
@@ -90,8 +89,9 @@ export default function PlanningPage() {
 
   async function fetchData() {
     setLoading(true);
-    const userId = localStorage.getItem('autometrics_user_id');
-    if (!userId) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const userId = session.user.id;
 
     // 1. Metas
     const { data: goalData } = await supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonth).single();
@@ -104,11 +104,14 @@ export default function PlanningPage() {
 
     // 2. Custos Extras
     const startOfMonth = `${currentMonth}-01`;
-    const endOfMonth = `${currentMonth}-31`; // Simplificado
+    // Pega o último dia do mês corretamente
+    const lastDay = new Date(parseInt(currentMonth.split('-')[0]), parseInt(currentMonth.split('-')[1]), 0).getDate();
+    const endOfMonth = `${currentMonth}-${lastDay}`;
+    
     const { data: costData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startOfMonth).lte('date', endOfMonth);
     setExtraCosts(costData || []);
 
-    // 3. Produtos (Com MCC e Conta)
+    // 3. Produtos
     const { data: prodData } = await supabase.from('products').select('id, currency, name, mcc_name, account_name').eq('user_id', userId);
     setProducts(prodData || []);
     
@@ -148,7 +151,7 @@ export default function PlanningPage() {
         if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; }
       }
 
-      if (!dailyMap[m.date]) dailyMap[m.date] = { date: m.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, mccs: {} };
+      if (!dailyMap[m.date]) dailyMap[m.date] = { date: m.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, details: [], mccs: {} };
       
       const day = dailyMap[m.date];
       
@@ -173,13 +176,16 @@ export default function PlanningPage() {
 
     // 2. Agrupar Custos Extras
     extraCosts.forEach(c => {
-       if (!dailyMap[c.date]) dailyMap[c.date] = { date: c.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, mccs: {} };
+       if (!dailyMap[c.date]) dailyMap[c.date] = { date: c.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, details: [], mccs: {} };
        
        let amount = Number(c.amount);
        if (viewCurrency === 'BRL' && c.currency === 'USD') amount *= liveDollar;
        else if (viewCurrency === 'USD' && c.currency === 'BRL') amount /= liveDollar;
 
-       dailyMap[c.date].extra_cost += amount;
+       const day = dailyMap[c.date];
+       day.extra_cost += amount;
+       // Adiciona detalhe para exibição
+       day.details.push({ id: c.id, desc: c.description, val: amount });
     });
 
     const daysArray = Object.values(dailyMap).sort((a: any, b: any) => b.date.localeCompare(a.date));
@@ -218,8 +224,9 @@ export default function PlanningPage() {
   };
 
   const handleSaveGoal = async () => {
-    const userId = localStorage.getItem('autometrics_user_id');
-    if (!userId) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const userId = session.user.id;
     const payload = {
       user_id: userId, month_key: currentMonth,
       revenue_target: Number(tempGoal.revenue), profit_target: Number(tempGoal.profit), ad_spend_limit: Number(tempGoal.limit)
@@ -230,8 +237,12 @@ export default function PlanningPage() {
   };
 
   const handleAddCost = async () => {
-    const userId = localStorage.getItem('autometrics_user_id');
-    if (!newCost.description || !newCost.amount) return alert("Preencha dados.");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const userId = session.user.id;
+
+    if (!newCost.description || !newCost.amount) return alert("Preencha descrição e valor.");
+    
     await supabase.from('additional_costs').insert([{ ...newCost, user_id: userId, amount: Number(newCost.amount) }]);
     setNewCost({ date: getLocalYYYYMMDD(new Date()), description: '', amount: 0, currency: 'BRL' });
     setIsCostModalOpen(false);
@@ -239,7 +250,7 @@ export default function PlanningPage() {
   };
 
   const handleDeleteCost = async (id: string) => {
-    if(!confirm("Apagar custo?")) return;
+    if(!confirm("Tem certeza que deseja excluir este custo?")) return;
     await supabase.from('additional_costs').delete().eq('id', id);
     fetchData();
   };
@@ -249,9 +260,8 @@ export default function PlanningPage() {
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
+  const textMuted = isDark ? 'text-slate-500' : 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
-  // CORREÇÃO: Definição da variável que faltava
-  const textMuted = 'text-slate-500';
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
@@ -317,7 +327,7 @@ export default function PlanningPage() {
          </ResponsiveContainer>
       </div>
 
-      {/* TABELA DE DRE (EXPANSÍVEL) */}
+      {/* TABELA DE DRE */}
       <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
          <div className={`p-4 border-b ${borderCol} flex justify-between items-center`}>
             <h3 className={`font-bold ${textHead}`}>Detalhamento Diário (DRE)</h3>
@@ -346,6 +356,7 @@ export default function PlanningPage() {
                      
                      return (
                         <React.Fragment key={day.date}>
+                           {/* LINHA PRINCIPAL (DIA) */}
                            <tr className={`transition-colors cursor-pointer ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} ${isExpanded ? (isDark ? 'bg-slate-900' : 'bg-slate-50') : ''}`} onClick={() => toggleExpand(day.date)}>
                               <td className="px-6 py-4 text-center">
                                  {Object.keys(day.mccs).length > 0 && (isExpanded ? <ChevronDown size={16} className="text-slate-500"/> : <ChevronRight size={16} className="text-slate-500"/>)}
@@ -353,20 +364,40 @@ export default function PlanningPage() {
                               <td className={`px-6 py-4 font-bold ${textHead}`}>{`${dateParts[2]}/${dateParts[1]}`}</td>
                               <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(day.revenue)}</td>
                               <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(day.ads_cost)}</td>
-                              <td className="px-6 py-4 text-right text-amber-500 relative group" onClick={(e) => e.stopPropagation()}>
+                              
+                              {/* CUSTOS EXTRAS (CORREÇÃO DE VISUALIZAÇÃO) */}
+                              <td className="px-6 py-4 text-right relative align-top" onClick={(e) => e.stopPropagation()}>
                                  {day.extra_cost > 0 ? (
-                                    <>
-                                       {formatMoney(day.extra_cost)}
-                                       {editMode && (
-                                          <div className="absolute top-1 right-1 flex flex-col gap-1 bg-slate-950 p-1 rounded border border-slate-700 z-10 shadow-lg hidden group-hover:flex"></div>
-                                       )}
-                                    </>
-                                 ) : '-'}
+                                    <div className="flex flex-col items-end gap-1">
+                                       <span className="text-amber-500 font-bold">{formatMoney(day.extra_cost)}</span>
+                                       {/* LISTA DETALHADA SEMPRE VISÍVEL */}
+                                       <div className="flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed border-slate-700 pt-1">
+                                          {day.details.map((d: any) => (
+                                             <div key={d.id} className="flex items-center gap-2 group/item">
+                                                <span className={`text-[10px] ${textMuted} truncate max-w-[100px]`} title={d.desc}>{d.desc}</span>
+                                                <span className={`text-[10px] ${textHead}`}>{formatMoney(d.val)}</span>
+                                                {/* Botão de Excluir (Só aparece se editMode=true) */}
+                                                {editMode && (
+                                                   <button 
+                                                     onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id); }} 
+                                                     className="text-rose-500 hover:text-rose-400 p-1 bg-rose-500/10 rounded"
+                                                     title="Excluir Custo"
+                                                   >
+                                                      <Trash2 size={10} />
+                                                   </button>
+                                                )}
+                                             </div>
+                                          ))}
+                                       </div>
+                                    </div>
+                                 ) : <span className="text-slate-600">-</span>}
                               </td>
+
                               <td className="px-6 py-4 text-right text-rose-400">{day.refunds > 0 ? formatMoney(day.refunds) : '-'}</td>
                               <td className={`px-6 py-4 text-right font-bold ${profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(profit)}</td>
                            </tr>
 
+                           {/* LINHAS EXPANDIDAS (DETALHE MCC/CONTA) */}
                            {isExpanded && Object.values(day.mccs).map((mcc: any) => (
                               <React.Fragment key={mcc.name}>
                                  <tr className={`${isDark ? 'bg-slate-950/50' : 'bg-slate-100/50'}`}>
@@ -395,6 +426,17 @@ export default function PlanningPage() {
                      );
                   })}
                </tbody>
+               <tfoot className={`text-xs uppercase font-bold border-t-2 ${isDark ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-100 border-slate-300 text-black'}`}>
+                  <tr>
+                     <td className="px-6 py-4">TOTAIS</td>
+                     <td className="px-6 py-4"></td>
+                     <td className="px-6 py-4 text-right text-blue-500">{formatMoney(processedData.totals.revenue)}</td>
+                     <td className="px-6 py-4 text-right text-orange-500">{formatMoney(processedData.totals.ads_cost)}</td>
+                     <td className="px-6 py-4 text-right text-amber-500">{formatMoney(processedData.totals.extra_cost)}</td>
+                     <td className="px-6 py-4 text-right text-rose-400">{formatMoney(processedData.totals.refunds)}</td>
+                     <td className={`px-6 py-4 text-right ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</td>
+                  </tr>
+               </tfoot>
             </table>
          </div>
       </div>
@@ -403,18 +445,30 @@ export default function PlanningPage() {
       {isCostModalOpen && (
          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className={`${bgCard} rounded-xl w-full max-w-sm p-6 shadow-2xl`}>
-               <h3 className={`text-lg font-bold ${textHead} mb-4`}>Adicionar Custo Extra</h3>
+               <h3 className={`text-lg font-bold ${textHead} mb-4`}>Lançar Custo Extra</h3>
                <div className="space-y-3">
-                  <input type="date" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
-                  <input type="text" placeholder="Descrição" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.description} onChange={e => setNewCost({...newCost, description: e.target.value})} />
-                  <div className="flex gap-2">
-                     <input type="number" placeholder="Valor" className={`flex-1 p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.amount} onChange={e => setNewCost({...newCost, amount: parseFloat(e.target.value)})} />
-                     <select className={`p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.currency} onChange={e => setNewCost({...newCost, currency: e.target.value})}>
-                        <option value="BRL">BRL</option>
-                        <option value="USD">USD</option>
-                     </select>
+                  <div>
+                    <label className="text-xs uppercase font-bold text-slate-500">Data do Gasto</label>
+                    <input type="date" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol} [&::-webkit-calendar-picker-indicator]:invert`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
                   </div>
-                  <button onClick={handleAddCost} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded hover:bg-indigo-700">Adicionar</button>
+                  <div>
+                    <label className="text-xs uppercase font-bold text-slate-500">Descrição</label>
+                    <input type="text" placeholder="Ex: Hospedagem, Copywriter..." className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.description} onChange={e => setNewCost({...newCost, description: e.target.value})} />
+                  </div>
+                  <div className="flex gap-2">
+                     <div className="flex-1">
+                        <label className="text-xs uppercase font-bold text-slate-500">Valor</label>
+                        <input type="number" placeholder="0.00" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.amount} onChange={e => setNewCost({...newCost, amount: parseFloat(e.target.value)})} />
+                     </div>
+                     <div className="w-24">
+                        <label className="text-xs uppercase font-bold text-slate-500">Moeda</label>
+                        <select className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.currency} onChange={e => setNewCost({...newCost, currency: e.target.value})}>
+                           <option value="BRL">BRL</option>
+                           <option value="USD">USD</option>
+                        </select>
+                     </div>
+                  </div>
+                  <button onClick={handleAddCost} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded mt-2">Salvar Despesa</button>
                   <button onClick={() => setIsCostModalOpen(false)} className={`w-full py-2 ${textMuted} hover:underline`}>Cancelar</button>
                </div>
             </div>
