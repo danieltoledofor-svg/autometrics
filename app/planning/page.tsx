@@ -303,13 +303,77 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* KPI SUMÁRIO */}
+      {/* KPI SUMÁRIO COM METAS VISÍVEIS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Receita</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-orange-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Custo Ads</p><p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</p></div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-amber-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Outros Custos</p><p className="text-2xl font-bold text-amber-500">{formatMoney(processedData.totals.extra_cost)}</p></div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Lucro Líquido</p><p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p></div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-indigo-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">ROI</p><p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p></div>
+        
+        {/* Receita */}
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm relative group`}>
+           <div className="flex justify-between items-start">
+             <p className="text-xs font-bold text-slate-500 uppercase">Receita</p>
+             {goal.revenue > 0 && <span className="text-[10px] text-slate-400">Meta: {formatMoney(goal.revenue)}</span>}
+           </div>
+           <p className="text-2xl font-bold text-blue-500 mt-1">{formatMoney(processedData.totals.revenue)}</p>
+           {goal.revenue > 0 && (
+             <div className="mt-3">
+               <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-200'} overflow-hidden`}>
+                 <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min((processedData.totals.revenue / goal.revenue) * 100, 100)}%` }}></div>
+               </div>
+               <p className="text-[10px] text-right text-slate-500 mt-1">{((processedData.totals.revenue / goal.revenue) * 100).toFixed(1)}% atingido</p>
+             </div>
+           )}
+        </div>
+
+        {/* Custos Ads (com Teto) */}
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-orange-500 shadow-sm relative`}>
+           <div className="flex justify-between items-start">
+              <p className="text-xs font-bold text-slate-500 uppercase">Custo Ads</p>
+              {goal.limit > 0 && <span className="text-[10px] text-slate-400">Teto: {formatMoney(goal.limit)}</span>}
+           </div>
+           <p className="text-2xl font-bold text-orange-500 mt-1">{formatMoney(processedData.totals.ads_cost)}</p>
+           {goal.limit > 0 && (
+             <div className="mt-3">
+               <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-200'} overflow-hidden`}>
+                 <div className={`h-full rounded-full ${processedData.totals.ads_cost > goal.limit ? 'bg-rose-500' : 'bg-orange-500'}`} style={{ width: `${Math.min((processedData.totals.ads_cost / goal.limit) * 100, 100)}%` }}></div>
+               </div>
+               <p className={`text-[10px] text-right mt-1 ${processedData.totals.ads_cost > goal.limit ? 'text-rose-400 font-bold' : 'text-slate-500'}`}>
+                 {((processedData.totals.ads_cost / goal.limit) * 100).toFixed(1)}% do orçamento
+               </p>
+             </div>
+           )}
+        </div>
+
+        {/* Outros Custos */}
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-amber-500 shadow-sm`}>
+           <p className="text-xs font-bold text-slate-500 uppercase">Outros Custos</p>
+           <p className="text-2xl font-bold text-amber-500 mt-1">{formatMoney(processedData.totals.extra_cost)}</p>
+           <p className="text-[10px] text-slate-500 mt-2">Despesas operacionais</p>
+        </div>
+
+        {/* Lucro */}
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} shadow-sm`}>
+           <div className="flex justify-between items-start">
+              <p className="text-xs font-bold text-slate-500 uppercase">Lucro Líquido</p>
+              {goal.profit > 0 && <span className="text-[10px] text-slate-400">Meta: {formatMoney(goal.profit)}</span>}
+           </div>
+           <p className={`text-2xl font-bold mt-1 ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+             {formatMoney(processedData.totals.profit)}
+           </p>
+           {goal.profit > 0 && (
+             <div className="mt-3">
+               <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-slate-800' : 'bg-slate-200'} overflow-hidden`}>
+                 <div className={`h-full rounded-full ${processedData.totals.profit >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(Math.max((processedData.totals.profit / goal.profit) * 100, 0), 100)}%` }}></div>
+               </div>
+               <p className="text-[10px] text-right text-slate-500 mt-1">{((processedData.totals.profit / goal.profit) * 100).toFixed(1)}% atingido</p>
+             </div>
+           )}
+        </div>
+
+        {/* ROI */}
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-indigo-500 shadow-sm`}>
+           <p className="text-xs font-bold text-slate-500 uppercase">ROI</p>
+           <p className="text-2xl font-bold text-indigo-500 mt-1">{processedData.totals.roi.toFixed(1)}%</p>
+           <p className="text-[10px] text-slate-500 mt-2">Retorno sobre investimento</p>
+        </div>
       </div>
 
       {/* GRÁFICO */}
