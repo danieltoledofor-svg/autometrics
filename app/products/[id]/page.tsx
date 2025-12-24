@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation'; 
 import { 
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
-  PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon
+  PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon, ShoppingCart
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
@@ -72,7 +72,16 @@ export default function ProductDetailPage() {
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
-  const [manualData, setManualData] = useState({ date: getLocalYYYYMMDD(new Date()), visits: 0, sales: 0, revenue: 0, refunds: 0 });
+  // Estado do Lançamento Manual (Inclui Checkouts agora)
+  const [manualData, setManualData] = useState({ 
+    date: getLocalYYYYMMDD(new Date()), 
+    visits: 0, 
+    checkouts: 0, // Novo Campo
+    sales: 0, 
+    revenue: 0, 
+    refunds: 0,
+    currency: 'BRL' 
+  });
   const [isSavingManual, setIsSavingManual] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState(
@@ -117,7 +126,11 @@ export default function ProductDetailPage() {
     setLoading(true);
     try {
       const { data: prodData } = await supabase.from('products').select('*').eq('id', productId).single();
-      if (prodData) setProduct(prodData);
+      if (prodData) {
+         setProduct(prodData);
+         // Ao abrir, define a moeda do manual como a do produto por padrão
+         setManualData(prev => ({...prev, currency: prodData.currency || 'BRL'}));
+      }
       const { data: metricsData } = await supabase.from('daily_metrics').select('*').eq('product_id', productId).order('date', { ascending: true });
       setMetrics(metricsData || []);
     } catch (error) { console.error(error); } 
@@ -126,6 +139,45 @@ export default function ProductDetailPage() {
 
   useEffect(() => { if(productId) fetchData(); }, [productId]);
 
+  // --- BUSCA DADOS EXISTENTES QUANDO A DATA MUDA NO MODAL (PARA EDIÇÃO) ---
+  useEffect(() => {
+    if (showManualEntry && manualData.date && productId) {
+        const fetchDayData = async () => {
+            const { data } = await supabase
+                .from('daily_metrics')
+                .select('visits, checkouts, conversions, conversion_value, refunds, currency')
+                .eq('product_id', productId)
+                .eq('date', manualData.date)
+                .single();
+            
+            if (data) {
+                // Se existe dado, preenche para edição
+                setManualData(prev => ({
+                    ...prev,
+                    visits: data.visits || 0,
+                    checkouts: data.checkouts || 0,
+                    sales: data.conversions || 0,
+                    revenue: data.conversion_value || 0,
+                    refunds: data.refunds || 0,
+                    currency: data.currency || prev.currency
+                }));
+            } else {
+                 // Se não existe, zera os valores para novo lançamento
+                 setManualData(prev => ({
+                    ...prev,
+                    visits: 0,
+                    checkouts: 0,
+                    sales: 0,
+                    revenue: 0,
+                    refunds: 0
+                 }));
+            }
+        };
+        fetchDayData();
+    }
+  }, [manualData.date, showManualEntry, productId]);
+
+
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
@@ -133,16 +185,20 @@ export default function ProductDetailPage() {
         product_id: productId,
         date: manualData.date,
         visits: Number(manualData.visits),
+        checkouts: Number(manualData.checkouts), // Campo Checkout
         conversions: Number(manualData.sales),
         conversion_value: Number(manualData.revenue),
         refunds: Number(manualData.refunds),
+        currency: manualData.currency, 
         updated_at: new Date().toISOString()
       };
+      
       const { error } = await supabase.from('daily_metrics').upsert(payload, { onConflict: 'product_id, date' });
       if(error) throw error;
-      alert('Dados salvos!');
+      
+      alert('Dados salvos com sucesso!');
       setShowManualEntry(false);
-      fetchData();
+      fetchData(); 
     } catch (e: any) { alert('Erro: ' + e.message); }
     finally { setIsSavingManual(false); }
   };
@@ -214,13 +270,13 @@ export default function ProductDetailPage() {
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
   const formatShare = (val: number) => val === 0 ? '< 10%' : `${(val * 100).toFixed(2)}%`;
 
-  // Estilos Dinâmicos
+  // Estilos
   const isDark = theme === 'dark';
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
   const textMuted = 'text-slate-500';
+  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
   if (!product) return <div className={`min-h-screen ${bgMain} flex items-center justify-center ${textMuted}`}>Produto não encontrado.</div>;
@@ -250,7 +306,7 @@ export default function ProductDetailPage() {
         <div className="flex flex-wrap gap-4 w-full xl:w-auto items-end">
           
           <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
-             <FileText size={14} /> Lançamento Manual
+             <FileText size={14} /> Lançamento Rápido
           </button>
 
           <div className={`flex items-center p-1 rounded-lg border ${bgCard}`}>
@@ -258,9 +314,9 @@ export default function ProductDetailPage() {
                <Calendar size={14} className="text-indigo-400"/>
                <span className="text-xs font-bold text-slate-500 uppercase">Período</span>
             </div>
-            <input type="date" className={`bg-transparent text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <input type="date" className={`bg-transparent text-white text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <span className="text-slate-600">-</span>
-            <input type="date" className={`bg-transparent text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input type="date" className={`bg-transparent text-white text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
              <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
@@ -272,7 +328,7 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* KPI CARDS */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-blue-500`}>
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
@@ -344,19 +400,36 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL LANÇAMENTO MANUAL */}
+      {/* MODAL LANÇAMENTO MANUAL (ATUALIZADO) */}
       {showManualEntry && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className={`${bgCard} rounded-xl w-full max-w-md p-6 shadow-2xl`}>
               <div className="flex justify-between items-center mb-6"><h2 className={`text-xl font-bold ${textHead} flex items-center gap-2`}><FileText size={20} className="text-indigo-500"/> Lançamento Rápido</h2><button onClick={() => setShowManualEntry(false)}><X size={24} className="text-slate-400 hover:text-white" /></button></div>
               <div className="space-y-4">
-                 <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div><label className="text-xs uppercase text-slate-500 font-bold">Vendas</label><input type="number" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0" value={manualData.sales} onChange={e => setManualData({...manualData, sales: parseFloat(e.target.value)})} /></div>
-                    <div><label className="text-xs uppercase text-slate-500 font-bold">Visitas</label><input type="number" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0" value={manualData.visits} onChange={e => setManualData({...manualData, visits: parseFloat(e.target.value)})} /></div>
+                 <div className="flex gap-4">
+                    <div className="flex-1"><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
+                    <div className="w-24">
+                        <label className="text-xs uppercase text-slate-500 font-bold">Moeda</label>
+                        <select className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.currency} onChange={e => setManualData({...manualData, currency: e.target.value})}>
+                           <option value="BRL">BRL</option>
+                           <option value="USD">USD</option>
+                           <option value="EUR">EUR</option>
+                        </select>
+                    </div>
                  </div>
-                 <div><label className="text-xs uppercase text-blue-500 font-bold">Receita ({product.currency})</label><input type="number" className={`w-full border rounded p-2 border-l-4 border-l-blue-500 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0.00" value={manualData.revenue} onChange={e => setManualData({...manualData, revenue: parseFloat(e.target.value)})} /></div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div><label className="text-xs uppercase text-slate-500 font-bold flex items-center gap-1"><ExternalLink size={12}/> Visitas</label><input type="number" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0" value={manualData.visits} onChange={e => setManualData({...manualData, visits: parseFloat(e.target.value)})} /></div>
+                    <div><label className="text-xs uppercase text-slate-500 font-bold flex items-center gap-1"><ShoppingCart size={12}/> Checkouts</label><input type="number" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0" value={manualData.checkouts} onChange={e => setManualData({...manualData, checkouts: parseFloat(e.target.value)})} /></div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div><label className="text-xs uppercase text-blue-500 font-bold">Vendas</label><input type="number" className={`w-full border rounded p-2 border-l-4 border-l-blue-500 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0" value={manualData.sales} onChange={e => setManualData({...manualData, sales: parseFloat(e.target.value)})} /></div>
+                    <div><label className="text-xs uppercase text-blue-500 font-bold">Receita Total</label><input type="number" className={`w-full border rounded p-2 border-l-4 border-l-blue-500 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0.00" value={manualData.revenue} onChange={e => setManualData({...manualData, revenue: parseFloat(e.target.value)})} /></div>
+                 </div>
+
                  <div><label className="text-xs uppercase text-rose-500 font-bold">Reembolsos</label><input type="number" className={`w-full border rounded p-2 border-l-4 border-l-rose-500 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} placeholder="0.00" value={manualData.refunds} onChange={e => setManualData({...manualData, refunds: parseFloat(e.target.value)})} /></div>
+                 
                  <button onClick={handleSaveManual} disabled={isSavingManual} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-4 flex items-center justify-center gap-2">{isSavingManual ? 'Salvando...' : 'Salvar Dados'} <Save size={16} /></button>
               </div>
            </div>
