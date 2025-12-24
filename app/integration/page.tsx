@@ -1,15 +1,19 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Code, ArrowLeft, Zap, Calendar, Globe } from 'lucide-react';
+import { 
+  Copy, Check, Code, ArrowLeft, Zap, Calendar, 
+  Globe, Store, Building, ChevronRight, AlertCircle 
+} from 'lucide-react';
 import Link from 'next/link';
 
 export default function IntegrationPage() {
   const [userId, setUserId] = useState('');
   const [startDate, setStartDate] = useState('');
   
-  // --- NOVO CAMPO: NOME DA MCC ---
-  const [mccName, setMccName] = useState(''); 
+  // Estados de Configuração
+  const [accountType, setAccountType] = useState<'mcc' | 'single'>('mcc');
+  const [identifierName, setIdentifierName] = useState(''); // Nome da MCC ou da Loja
   
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -21,29 +25,37 @@ export default function IntegrationPage() {
       localStorage.setItem('autometrics_user_id', storedId);
     }
     setUserId(storedId);
-    const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    
+    // Data padrão: Início do ano atual
+    const firstDay = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
     setStartDate(firstDay);
   }, []);
 
   const handleGenerateScript = () => {
-    if (!mccName) return alert("Por favor, digite um nome para identificar esta MCC.");
+    if (!identifierName) return alert("Por favor, digite um nome para identificar esta conta/grupo.");
 
-    // SCRIPT V4 COM SUPORTE A MCC
+    // O campo MCC_NAME no script serve como "Identificador de Agrupamento"
+    // Seja MCC ou Conta Única, usamos ele para criar a pasta na Sidebar.
+    
     const scriptTemplate = `/**
- * Script AutoMetrics V4 (Multi-MCC Support)
- * MCC: ${mccName}
+ * Script AutoMetrics - Gerado Automaticamente
+ * Tipo: ${accountType === 'mcc' ? 'Agência (MCC)' : 'Conta Única'}
+ * Identificador: ${identifierName}
  */
 
 const CONFIG = {
   WEBHOOK_URL: 'https://autometrics.vercel.app/api/webhook/google-ads', 
   USER_ID: '${userId}', 
   START_DATE: "${startDate}",
-  MCC_NAME: "${mccName}" // Identificador da MCC
+  MCC_NAME: "${identifierName}" // Define o nome da pasta na plataforma
 };
 
 function main() {
-  Logger.log('🚀 Iniciando AutoMetrics V4 para: ' + CONFIG.MCC_NAME);
+  Logger.log('🚀 Iniciando AutoMetrics para: ' + CONFIG.MCC_NAME);
+  
+  // Detecção Automática de Ambiente
   if (typeof AdsManagerApp !== 'undefined') {
+    // Ambiente MCC
     const accountIterator = AdsManagerApp.accounts().get();
     while (accountIterator.hasNext()) {
       const account = accountIterator.next();
@@ -51,9 +63,11 @@ function main() {
       processAccount(account);
     }
   } else {
+    // Ambiente Conta Única
     processAccount(AdsApp.currentAccount());
   }
-  Logger.log('✅ Finalizado.');
+  
+  Logger.log('✅ Finalizado com sucesso.');
 }
 
 function processAccount(account) {
@@ -62,9 +76,16 @@ function processAccount(account) {
   today.setHours(0,0,0,0);
   currentDate.setHours(0,0,0,0);
 
+  // Evita loop infinito se data for futura
+  if (currentDate > today) currentDate = today;
+
   while (currentDate <= today) {
     const dateString = Utilities.formatDate(currentDate, account.getTimeZone(), "yyyy-MM-dd");
-    fetchAndSend(dateString, account);
+    try {
+      fetchAndSend(dateString, account);
+    } catch (e) {
+      Logger.log('Erro no dia ' + dateString + ': ' + e.message);
+    }
     currentDate.setDate(currentDate.getDate() + 1);
   }
 }
@@ -92,14 +113,16 @@ function fetchAndSend(dateString, account) {
   while (report.hasNext()) {
     const row = report.next();
     
-    // Busca URL Final
+    // Busca URL Final (Tentativa segura)
     let finalUrl = '';
-    const adQuery = "SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE campaign.id = " + row.campaign.id + " LIMIT 1";
-    const adReport = AdsApp.search(adQuery);
-    if(adReport.hasNext()) {
-       const adRow = adReport.next();
-       if(adRow.adGroupAd.ad.finalUrls) finalUrl = adRow.adGroupAd.ad.finalUrls[0];
-    }
+    try {
+      const adQuery = "SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE campaign.id = " + row.campaign.id + " LIMIT 1";
+      const adReport = AdsApp.search(adQuery);
+      if(adReport.hasNext()) {
+         const adRow = adReport.next();
+         if(adRow.adGroupAd.ad.finalUrls) finalUrl = adRow.adGroupAd.ad.finalUrls[0];
+      }
+    } catch(e) {}
 
     let targetValue = 0;
     if (row.campaign.maximizeConversions && row.campaign.maximizeConversions.targetCpaMicros) {
@@ -115,7 +138,7 @@ function fetchAndSend(dateString, account) {
       campaign_name: row.campaign.name,
       date: dateString,
       account_name: account.getName(),
-      mcc_name: CONFIG.MCC_NAME, // Envia o nome da MCC configurada
+      mcc_name: CONFIG.MCC_NAME, 
       currency_code: row.customer.currencyCode,
       metrics: {
         impressions: row.metrics.impressions,
@@ -139,7 +162,7 @@ function fetchAndSend(dateString, account) {
 
 function sendToWebhook(payload) {
   const options = { 'method': 'post', 'contentType': 'application/json', 'payload': JSON.stringify(payload), 'muteHttpExceptions': true };
-  try { UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, options); } catch (e) { Logger.log('❌ Erro: ' + e.message); }
+  try { UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, options); } catch (e) { Logger.log('❌ Erro Webhook: ' + e.message); }
 }
 
 function parseDate(str) {
@@ -160,76 +183,151 @@ function parseDate(str) {
   return (
     <div className="min-h-screen bg-black text-slate-200 font-sans p-4 md:p-8 flex justify-center">
       <div className="w-full max-w-4xl">
+        
+        {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Link href="/dashboard" className="p-2 bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors">
             <ArrowLeft size={20} />
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Code className="text-indigo-500" /> Integração Multi-MCC
+              <Code className="text-indigo-500" /> Nova Integração
             </h1>
-            <p className="text-slate-500 text-sm">Gere scripts personalizados para cada uma de suas MCCs.</p>
+            <p className="text-slate-500 text-sm">Configure o script para conectar suas contas do Google Ads.</p>
           </div>
         </div>
 
         {!generatedScript ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8">
-            <div className="max-w-lg mx-auto space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Coluna da Esquerda: Configuração */}
+            <div className="lg:col-span-2 space-y-6">
               
-              {/* Card Intro */}
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
-                  <Globe className="text-white" size={32} />
+              {/* Passo 1: Tipo de Conta */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <span className="bg-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span> 
+                  Tipo de Conta Google
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => setAccountType('mcc')}
+                    className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden group ${accountType === 'mcc' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-950 hover:border-slate-700'}`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <Globe className={accountType === 'mcc' ? 'text-indigo-400' : 'text-slate-500'} size={24} />
+                      {accountType === 'mcc' && <Check size={16} className="text-indigo-500" />}
+                    </div>
+                    <p className="font-bold text-white">Agência / MCC</p>
+                    <p className="text-xs text-slate-500 mt-1">Tenho várias sub-contas dentro de uma central.</p>
+                  </button>
+
+                  <button 
+                    onClick={() => setAccountType('single')}
+                    className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden group ${accountType === 'single' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-950 hover:border-slate-700'}`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <Store className={accountType === 'single' ? 'text-indigo-400' : 'text-slate-500'} size={24} />
+                      {accountType === 'single' && <Check size={16} className="text-indigo-500" />}
+                    </div>
+                    <p className="font-bold text-white">Conta Única</p>
+                    <p className="text-xs text-slate-500 mt-1">É apenas uma conta de anúncios isolada.</p>
+                  </button>
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">Configurar Nova MCC</h3>
-                <p className="text-slate-400 text-sm">Preencha os dados abaixo para gerar o script correto.</p>
               </div>
 
-              {/* Input MCC Name */}
-              <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-4">
-                <div>
-                   <label className="block text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">Nome da MCC (Para Organização)</label>
-                   <input 
-                     type="text" 
-                     placeholder="Ex: Agência Principal, Cliente X..."
-                     className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-lg outline-none focus:border-indigo-500 transition-colors"
-                     value={mccName}
-                     onChange={(e) => setMccName(e.target.value)}
-                   />
-                </div>
+              {/* Passo 2: Detalhes */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <span className="bg-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span> 
+                  Identificação
+                </h3>
 
-                <div>
-                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Data de Início dos Dados</label>
-                   <div className="relative">
+                <div className="space-y-4">
+                  <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-2">
+                        {accountType === 'mcc' ? 'Nome da Agência / MCC' : 'Nome da Loja / Empresa'}
+                     </label>
+                     <input 
+                       type="text" 
+                       placeholder={accountType === 'mcc' ? "Ex: Agência Rocket" : "Ex: Minha Loja Oficial"}
+                       className="w-full bg-slate-950 border border-slate-700 text-white p-4 rounded-lg outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-600"
+                       value={identifierName}
+                       onChange={(e) => setIdentifierName(e.target.value)}
+                     />
+                     <p className="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
+                        <AlertCircle size={10}/> Esse nome será usado para criar a pasta na sua dashboard.
+                     </p>
+                  </div>
+
+                  <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-2">Data Inicial dos Dados</label>
                      <input 
                        type="date" 
-                       className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-lg outline-none [&::-webkit-calendar-picker-indicator]:invert"
+                       className="w-full bg-slate-950 border border-slate-700 text-white p-4 rounded-lg outline-none [&::-webkit-calendar-picker-indicator]:invert"
                        value={startDate}
                        onChange={(e) => setStartDate(e.target.value)}
                      />
-                     <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={20} />
-                   </div>
+                  </div>
                 </div>
               </div>
 
-              <button onClick={handleGenerateScript} className="w-full bg-white hover:bg-slate-200 text-black px-8 py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-95">
-                <Code size={20} /> Gerar Script V4
+              <button 
+                onClick={handleGenerateScript} 
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"
+              >
+                <Code size={20} /> Gerar Script Personalizado
               </button>
+
             </div>
+
+            {/* Coluna da Direita: Instruções */}
+            <div className="space-y-6">
+               <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Zap size={18} className="text-amber-400"/> Como Instalar</h3>
+                  <ol className="space-y-4 text-sm text-slate-400 list-decimal pl-4">
+                     <li>Abra sua conta do Google Ads.</li>
+                     <li>
+                        Vá em <strong>Ferramentas e Configurações</strong> {'>'} <strong>Ações em Massa</strong> {'>'} <strong>Scripts</strong>.
+                     </li>
+                     <li>Clique no botão <strong>+</strong> para criar um novo.</li>
+                     <li>Apague qualquer código que estiver lá.</li>
+                     <li>Cole o script que vamos gerar aqui.</li>
+                     <li>Clique em <strong>Autorizar</strong> e depois em <strong>Executar</strong>.</li>
+                  </ol>
+               </div>
+               
+               <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl">
+                  <p className="text-xs text-emerald-400 leading-relaxed">
+                     <strong>Dica Pro:</strong> Configure a frequência do script para rodar <strong>"Diariamente"</strong> às 04:00 da manhã. Assim seus dados estarão sempre atualizados quando você acordar.
+                  </p>
+               </div>
+            </div>
+
           </div>
         ) : (
+          // TELA DE SCRIPT GERADO
           <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                 <button onClick={() => setGeneratedScript(null)} className="text-slate-500 hover:text-white text-xs font-medium flex items-center gap-1"><ArrowLeft size={14} /> Voltar</button>
-                 <span className="text-xs font-mono text-emerald-400">autometrics-v4-{mccName.toLowerCase().replace(/\s+/g, '-')}.js</span>
+            <div className="bg-slate-950 px-6 py-4 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="flex items-center gap-4">
+                 <button onClick={() => setGeneratedScript(null)} className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors text-white">
+                    <ArrowLeft size={18} />
+                 </button>
+                 <div>
+                    <h3 className="font-bold text-white text-sm">Seu Script está pronto!</h3>
+                    <p className="text-xs text-emerald-400">Configurado para: {identifierName}</p>
+                 </div>
               </div>
-              <button onClick={copyToClipboard} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${copied ? 'bg-emerald-500 text-white' : 'bg-white text-black hover:bg-slate-200'}`}>
-                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copiado!' : 'Copiar'}
+              <button onClick={copyToClipboard} className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-bold transition-all ${copied ? 'bg-emerald-500 text-white' : 'bg-white text-black hover:bg-slate-200'}`}>
+                {copied ? <Check size={18} /> : <Copy size={18} />} {copied ? 'Copiado!' : 'Copiar Código'}
               </button>
             </div>
-            <div className="p-0 overflow-x-auto">
-              <pre className="font-mono text-xs text-slate-300 leading-relaxed p-6 min-h-[400px]">{generatedScript}</pre>
+            
+            <div className="p-0 overflow-x-auto bg-[#0d1117]">
+              <pre className="font-mono text-xs text-slate-300 leading-relaxed p-6 min-h-[400px]">
+                {generatedScript}
+              </pre>
             </div>
           </div>
         )}
