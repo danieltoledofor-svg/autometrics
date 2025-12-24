@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation'; 
 import { 
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
-  PlayCircle, PauseCircle, RefreshCw, FileText, Save // <--- Novos Ícones
+  PlayCircle, PauseCircle, RefreshCw, FileText, Save 
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
@@ -17,7 +17,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// (Mantenha a constante ALL_COLUMNS igual estava antes)
 const ALL_COLUMNS = [
   { key: 'date', label: 'Data', category: 'Geral', default: true },
   { key: 'campaign_status', label: 'Status Dia', category: 'Geral', default: true },
@@ -63,12 +62,12 @@ export default function ProductDetailPage() {
   
   // UI
   const [showColumnModal, setShowColumnModal] = useState(false);
-  const [showManualEntry, setShowManualEntry] = useState(false); // Modal de Lançamento
+  const [showManualEntry, setShowManualEntry] = useState(false);
   const [viewCurrency, setViewCurrency] = useState('BRL');
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
-  // Estado do Lançamento Manual (Dentro do Produto)
+  // Estado do Lançamento Manual
   const [manualData, setManualData] = useState({ date: new Date().toISOString().split('T')[0], visits: 0, sales: 0, revenue: 0, refunds: 0 });
   const [isSavingManual, setIsSavingManual] = useState(false);
 
@@ -93,7 +92,6 @@ export default function ProductDetailPage() {
     } catch (e) { console.error(e); }
   }
 
-  // Busca Dados (Função recarregável)
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -107,7 +105,6 @@ export default function ProductDetailPage() {
 
   useEffect(() => { if(productId) fetchData(); }, [productId]);
 
-  // Salvar Lançamento Manual
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
@@ -120,13 +117,12 @@ export default function ProductDetailPage() {
         refunds: Number(manualData.refunds),
         updated_at: new Date().toISOString()
       };
-      // Upsert para não apagar dados do Google Ads
       const { error } = await supabase.from('daily_metrics').upsert(payload, { onConflict: 'product_id, date' });
       if(error) throw error;
       
       alert('Dados salvos!');
       setShowManualEntry(false);
-      fetchData(); // Recarrega a tabela
+      fetchData();
     } catch (e: any) { alert('Erro: ' + e.message); }
     finally { setIsSavingManual(false); }
   };
@@ -138,11 +134,13 @@ export default function ProductDetailPage() {
     await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
   };
 
+  // --- CORREÇÃO DA VARIÁVEL 'new' AQUI EMBAIXO ---
   const toggleColumn = (key: string) => {
     setVisibleColumns(prev => {
-      const new = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      localStorage.setItem('autometrics_visible_columns', JSON.stringify(new));
-      return new;
+      // Renomeado de "new" para "updatedColumns"
+      const updatedColumns = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+      localStorage.setItem('autometrics_visible_columns', JSON.stringify(updatedColumns));
+      return updatedColumns;
     });
   };
 
@@ -230,7 +228,6 @@ export default function ProductDetailPage() {
 
         <div className="flex flex-wrap gap-4 w-full xl:w-auto items-end">
           
-          {/* BOTÃO LANÇAMENTO MANUAL (NOVO) */}
           <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
              <FileText size={14} /> Lançamento Manual
           </button>
@@ -251,7 +248,7 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* KPI CARDS (CORES ATUALIZADAS) */}
+      {/* KPI CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl border-t-4 border-t-blue-500">
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
@@ -271,7 +268,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* GRÁFICO (CORES ATUALIZADAS) */}
+      {/* GRÁFICO */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 h-64">
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
@@ -323,7 +320,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL LANÇAMENTO MANUAL (NOVO) */}
+      {/* MODAL LANÇAMENTO MANUAL */}
       {showManualEntry && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl">
@@ -345,7 +342,7 @@ export default function ProductDetailPage() {
         </div>
       )}
 
-      {/* MODAL COLUNAS (Mantido) */}
+      {/* MODAL COLUNAS */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
