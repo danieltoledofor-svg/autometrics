@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation'; // Importante para redirecionar se não logado
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,36 +16,55 @@ const supabase = createClient(
 );
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Filtros de Navegação
-  const [selectedMcc, setSelectedMcc] = useState<string | null>(null); // Null = Todas
-  const [selectedAccount, setSelectedAccount] = useState<string | null>(null); // Null = Todas da MCC
+  const [selectedMcc, setSelectedMcc] = useState<string | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   
-  // Estado de UI
   const [expandedMccs, setExpandedMccs] = useState<string[]>([]);
   const [showHidden, setShowHidden] = useState(false);
   
-  // Modal Novo Produto
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newProduct, setNewProduct] = useState({ 
     name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active', account_name: 'Manual', mcc_name: 'Manual' 
   });
   const [saving, setSaving] = useState(false);
+  const [userId, setUserId] = useState(''); // ID Real do Usuário
 
-  useEffect(() => { fetchProducts(); }, []);
+  // --- MUDANÇA PRINCIPAL: AUTENTICAÇÃO REAL ---
+  useEffect(() => { 
+    async function init() {
+      // Verifica quem está logado
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        router.push('/'); // Chuta para login se não tiver sessão
+        return;
+      }
 
-  async function fetchProducts() {
+      setUserId(session.user.id); // Salva ID real
+      await fetchProducts(session.user.id); // Busca com ID real
+    }
+    init();
+  }, []);
+
+  async function fetchProducts(currentUserId: string) {
     setLoading(true);
-    const currentUserId = localStorage.getItem('autometrics_user_id');
-    let query = supabase.from('products').select('*').order('created_at', { ascending: false });
-    if (currentUserId) query = query.eq('user_id', currentUserId);
+    
+    // Busca produtos APENAS do usuário logado
+    let query = supabase
+      .from('products')
+      .select('*')
+      .eq('user_id', currentUserId) // <--- Filtro Seguro
+      .order('created_at', { ascending: false });
+
     const { data } = await query;
     if (data) {
        setProducts(data);
-       // Expande todas as MCCs por padrão para facilitar
        const allMccs = Array.from(new Set(data.map((p: any) => p.mcc_name || 'Sem MCC'))) as string[];
        setExpandedMccs(allMccs);
     }
@@ -64,40 +84,34 @@ export default function ProductsPage() {
       tree[mcc].add(acc);
     });
 
-    // Converte para array ordenado
     return Object.keys(tree).sort().map(mcc => ({
       name: mcc,
       accounts: Array.from(tree[mcc]).sort()
     }));
   }, [products, showHidden]);
 
-  // --- FILTRAGEM PRINCIPAL ---
+  // --- FILTRAGEM ---
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesHidden = showHidden ? true : !p.is_hidden;
     
-    // Lógica Hierárquica
     let matchesContext = true;
-    
     if (selectedAccount) {
-       // Se tem conta selecionada, tem que bater conta E mcc (para garantir unicidade se tiver contas com mesmo nome em mccs diferentes)
        matchesContext = (p.account_name || 'Sem Conta') === selectedAccount && (selectedMcc ? (p.mcc_name || 'Outras') === selectedMcc : true);
     } else if (selectedMcc) {
-       // Se só tem MCC selecionada, mostra tudo da MCC
        matchesContext = (p.mcc_name || 'Outras') === selectedMcc;
     }
 
     return matchesSearch && matchesContext && matchesHidden;
   });
 
-  // --- AÇÕES ---
   const toggleMccExpand = (mccName: string) => {
     setExpandedMccs(prev => prev.includes(mccName) ? prev.filter(m => m !== mccName) : [...prev, mccName]);
   };
 
   const handleSelectMcc = (mccName: string) => {
     setSelectedMcc(mccName);
-    setSelectedAccount(null); // Reseta conta ao mudar MCC
+    setSelectedAccount(null);
   };
 
   const handleSelectAccount = (mccName: string, accName: string) => {
@@ -110,7 +124,6 @@ export default function ProductsPage() {
     setSelectedAccount(null);
   };
 
-  // Funções de Ação (Status/Hide) - Mantidas do anterior
   const toggleStatus = async (product: any, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     const newStatus = product.status === 'active' ? 'paused' : 'active';
@@ -127,19 +140,31 @@ export default function ProductsPage() {
 
   const handleSave = async () => {
     if (!newProduct.name || !newProduct.campaign_name) return alert("Preencha os campos obrigatórios.");
-    let currentUserId = localStorage.getItem('autometrics_user_id');
-    if (!currentUserId) { currentUserId = crypto.randomUUID(); localStorage.setItem('autometrics_user_id', currentUserId); }
+    
+    // Usa o userId do estado (autenticado)
     setSaving(true);
-    const { data, error } = await supabase.from('products').insert([{ ...newProduct, user_id: currentUserId }]).select();
+    const { data, error } = await supabase.from('products').insert([{ ...newProduct, user_id: userId }]).select();
+    
     if (error) alert('Erro: ' + error.message);
-    else if (data) { setProducts([data[0], ...products]); setIsModalOpen(false); }
+    else if (data) { 
+        setProducts([data[0], ...products]); 
+        setIsModalOpen(false); 
+        // Atualiza a estrutura expandida se for uma nova MCC
+        const newMcc = data[0].mcc_name || 'Manual';
+        if (!expandedMccs.includes(newMcc)) setExpandedMccs([...expandedMccs, newMcc]);
+    }
     setSaving(false);
+  };
+
+  // Re-fetch manual
+  const handleReload = () => {
+      if (userId) fetchProducts(userId);
   };
 
   return (
     <div className="min-h-screen bg-black text-slate-200 font-sans flex flex-col md:flex-row">
       
-      {/* --- SIDEBAR DE NAVEGAÇÃO --- */}
+      {/* SIDEBAR */}
       <aside className="w-full md:w-72 bg-slate-950 border-r border-slate-900 flex flex-col h-screen sticky top-0 z-20">
         <div className="p-6 border-b border-slate-900 flex items-center gap-3">
            <Link href="/dashboard" className="p-2 bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-white"><ArrowLeft size={18} /></Link>
@@ -147,7 +172,6 @@ export default function ProductsPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-1">
-           {/* Botão Geral */}
            <button onClick={resetFilters} className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 transition-all mb-4 ${!selectedMcc ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-900'}`}>
               <LayoutGrid size={18} />
               <span className="font-medium text-sm">Visão Global</span>
@@ -158,14 +182,19 @@ export default function ProductsPage() {
               <button onClick={() => setShowHidden(!showHidden)} className="text-slate-600 hover:text-white" title="Ver Ocultos">{showHidden ? <Eye size={12}/> : <EyeOff size={12}/>}</button>
            </div>
 
-           {/* Lista Hierárquica */}
+           {structure.length === 0 && !loading && (
+               <div className="text-center py-4 px-2">
+                   <p className="text-xs text-slate-600">Nenhuma conta encontrada.</p>
+                   <p className="text-[10px] text-slate-700 mt-1">Verifique a integração.</p>
+               </div>
+           )}
+
            {structure.map(mcc => {
              const isMccActive = selectedMcc === mcc.name && !selectedAccount;
              const isExpanded = expandedMccs.includes(mcc.name);
 
              return (
                <div key={mcc.name} className="mb-2">
-                 {/* MCC Header */}
                  <div className="flex items-center gap-1 group">
                     <button onClick={() => toggleMccExpand(mcc.name)} className="p-2 text-slate-600 hover:text-white transition-colors">
                        {isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
@@ -179,7 +208,6 @@ export default function ProductsPage() {
                     </button>
                  </div>
 
-                 {/* Contas da MCC */}
                  {isExpanded && (
                    <div className="ml-4 pl-3 border-l border-slate-800 mt-1 space-y-1">
                       {mcc.accounts.map(acc => {
@@ -203,10 +231,9 @@ export default function ProductsPage() {
         </div>
       </aside>
 
-      {/* --- ÁREA PRINCIPAL --- */}
+      {/* MAIN */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen relative bg-black">
         
-        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
@@ -229,19 +256,17 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {/* Busca */}
         <div className="flex gap-4 mb-6">
            <div className="bg-slate-900/50 border border-slate-900 p-4 rounded-xl flex-1 flex gap-4 items-center">
              <Search className="text-slate-500" size={18} />
              <input type="text" placeholder="Buscar campanha..." className="bg-transparent text-white w-full outline-none placeholder:text-slate-600" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-             <button onClick={() => fetchProducts()} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
+             <button onClick={handleReload} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
            {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 px-4 rounded-xl flex items-center gap-2 text-amber-500 text-xs font-bold animate-pulse"><AlertTriangle size={16} /> Ver Ocultos</div>}
         </div>
 
-        {/* Grid de Cards */}
         {loading && products.length === 0 ? (
-          <div className="flex justify-center items-center h-64 text-slate-500">Carregando...</div>
+          <div className="flex justify-center items-center h-64 text-slate-500">Carregando produtos...</div>
         ) : filteredProducts.length === 0 ? (
            <div className="flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed border-slate-800 rounded-xl"><Layers size={32} className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada.</p></div>
         ) : (
