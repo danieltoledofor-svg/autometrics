@@ -5,10 +5,11 @@ import { useParams } from 'next/navigation';
 import { 
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon, ShoppingCart, 
-  Video, MousePointer, ChevronDown
+  Video, MousePointer
 } from 'lucide-react';
+// CORREÇÃO: Adicionado YAxis e Legend nos imports
 import { 
-  BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -70,10 +71,13 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // --- DATAS E FILTROS ---
-  const [dateRange, setDateRange] = useState('this_month');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  // Datas
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(1); 
+    return getLocalYYYYMMDD(date);
+  });
+  const [endDate, setEndDate] = useState(() => getLocalYYYYMMDD(new Date()));
 
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
@@ -85,6 +89,7 @@ export default function ProductDetailPage() {
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
+  // Estado do Lançamento Manual (Inclui campos de VSL)
   const [manualData, setManualData] = useState({ 
     date: getLocalYYYYMMDD(new Date()), 
     visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0, currency: 'BRL' 
@@ -97,9 +102,8 @@ export default function ProductDetailPage() {
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // --- INICIALIZAÇÃO ---
+  // Inicialização
   useEffect(() => {
-    // 1. Tema e Moeda
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
     if (savedTheme) setTheme(savedTheme);
 
@@ -110,10 +114,6 @@ export default function ProductDetailPage() {
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
     
     fetchLiveDollar();
-
-    // 2. Data Inicial (Novo Padrão)
-    setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
-    handlePresetChange('this_month'); // Define as datas iniciais
   }, []);
 
   const toggleTheme = () => {
@@ -146,7 +146,7 @@ export default function ProductDetailPage() {
 
   useEffect(() => { if(productId) fetchData(); }, [productId]);
 
-  // Carrega dados existentes para edição
+  // Carrega dados para edição no modal
   useEffect(() => {
     if (showManualEntry && manualData.date && productId) {
         const fetchDayData = async () => {
@@ -154,7 +154,8 @@ export default function ProductDetailPage() {
             if (data) {
                 setManualData(prev => ({
                     ...prev,
-                    visits: data.visits || 0, checkouts: data.checkouts || 0, vsl_clicks: data.vsl_clicks || 0, vsl_checkouts: data.vsl_checkouts || 0,
+                    visits: data.visits || 0, checkouts: data.checkouts || 0, 
+                    vsl_clicks: data.vsl_clicks || 0, vsl_checkouts: data.vsl_checkouts || 0,
                     sales: data.conversions || 0, revenue: data.conversion_value || 0, refunds: data.refunds || 0, currency: data.currency || prev.currency
                 }));
             } else {
@@ -167,11 +168,9 @@ export default function ProductDetailPage() {
     }
   }, [manualData.date, showManualEntry, productId]);
 
-
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
-      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
         product_id: productId, date: manualData.date,
         visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
@@ -208,32 +207,7 @@ export default function ProductDetailPage() {
     });
   };
 
-  // --- LÓGICA DE DATAS UNIFICADA ---
-  const handlePresetChange = (preset: string) => {
-    setDateRange(preset);
-    const now = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    if (preset === 'today') { /* hoje */ }
-    else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
-    else if (preset === '7d') { start.setDate(now.getDate() - 7); }
-    else if (preset === '30d') { start.setDate(now.getDate() - 30); }
-    else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
-    else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
-    else if (preset === 'custom') return;
-
-    setStartDate(getLocalYYYYMMDD(start));
-    setEndDate(getLocalYYYYMMDD(end));
-  };
-
-  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
-    if (type === 'start') setStartDate(value); else setEndDate(value);
-    setDateRange('custom');
-  };
-
   const processedData = useMemo(() => {
-    // Filtro usando startDate e endDate
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
@@ -279,11 +253,9 @@ export default function ProductDetailPage() {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED', 
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
-        // Parcelas recuperadas
         search_impr_share: parseShare(row.search_impression_share), 
         search_top_share: parseShare(row.search_top_impression_share), 
         search_abs_share: parseShare(row.search_abs_top_share),
-        // Funil
         visits, checkouts, vsl_clicks: vslClicks, vsl_checkouts: vslCheckouts, fuga_pagina: fugaPagina, fuga_bridge: fugaBridge, fuga_vsl: fugaVsl
       };
     });
@@ -333,45 +305,15 @@ export default function ProductDetailPage() {
           <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
              <FileText size={14} /> Lançamento Rápido
           </button>
-          
-          {/* SELETOR DE DATA PADRONIZADO (DESIGN MELHORADO) */}
-          <div className={`flex items-center p-1 rounded-xl border ${bgCard} shadow-sm h-10`}>
-                <div className="flex items-center gap-2 px-3 border-r border-inherit h-full">
-                   <Calendar size={18} className="text-indigo-500"/>
-                   <div className="relative">
-                       <select 
-                          className={`bg-transparent text-xs font-bold outline-none cursor-pointer ${textHead} appearance-none pr-6 w-full`}
-                          value={dateRange}
-                          onChange={(e) => handlePresetChange(e.target.value)}
-                       >
-                          <option value="today" className="bg-slate-900">Hoje</option>
-                          <option value="yesterday" className="bg-slate-900">Ontem</option>
-                          <option value="7d" className="bg-slate-900">7 Dias</option>
-                          <option value="30d" className="bg-slate-900">30 Dias</option>
-                          <option value="this_month" className="bg-slate-900">Este Mês</option>
-                          <option value="last_month" className="bg-slate-900">Mês Passado</option>
-                          <option value="custom" className="bg-slate-900">Personalizado</option>
-                       </select>
-                       <ChevronDown size={14} className={`absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none ${textMuted}`} />
-                   </div>
-                </div>
-                <div className="flex items-center gap-2 px-3 h-full">
-                   <input 
-                     type="date" 
-                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                     value={startDate}
-                     onChange={(e) => handleCustomDateChange('start', e.target.value)}
-                   />
-                   <span className="text-slate-500 text-[10px] uppercase font-bold">Até</span>
-                   <input 
-                     type="date" 
-                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                     value={endDate}
-                     onChange={(e) => handleCustomDateChange('end', e.target.value)}
-                   />
-                </div>
+          <div className={`flex items-center p-1 rounded-lg border ${bgCard}`}>
+            <div className={`flex items-center gap-2 px-3 border-r ${borderCol}`}>
+               <Calendar size={14} className="text-indigo-400"/>
+               <span className="text-xs font-bold text-slate-500 uppercase">Período</span>
+            </div>
+            <input type="date" className={`bg-transparent text-white text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <span className="text-slate-600">-</span>
+            <input type="date" className={`bg-transparent text-white text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
-
           <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
              <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
                 <button onClick={() => setViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
