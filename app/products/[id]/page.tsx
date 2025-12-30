@@ -5,10 +5,10 @@ import { useParams } from 'next/navigation';
 import { 
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon, ShoppingCart, 
-  Video, MousePointer
+  Video, MousePointer, ChevronDown
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
+  BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -171,6 +171,7 @@ export default function ProductDetailPage() {
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
+      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
         product_id: productId, date: manualData.date,
         visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
@@ -207,7 +208,7 @@ export default function ProductDetailPage() {
     });
   };
 
-  // --- LÓGICA DE DATAS ---
+  // --- LÓGICA DE DATAS UNIFICADA ---
   const handlePresetChange = (preset: string) => {
     setDateRange(preset);
     const now = new Date();
@@ -278,9 +279,11 @@ export default function ProductDetailPage() {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED', 
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
+        // Parcelas recuperadas
         search_impr_share: parseShare(row.search_impression_share), 
         search_top_share: parseShare(row.search_top_impression_share), 
         search_abs_share: parseShare(row.search_abs_top_share),
+        // Funil
         visits, checkouts, vsl_clicks: vslClicks, vsl_checkouts: vslCheckouts, fuga_pagina: fugaPagina, fuga_bridge: fugaBridge, fuga_vsl: fugaVsl
       };
     });
@@ -331,32 +334,35 @@ export default function ProductDetailPage() {
              <FileText size={14} /> Lançamento Rápido
           </button>
           
-          {/* SELETOR DE DATA PADRONIZADO */}
-          <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                <div className="flex items-center gap-2 px-2 border-r border-inherit">
+          {/* SELETOR DE DATA PADRONIZADO (DESIGN MELHORADO) */}
+          <div className={`flex items-center p-1 rounded-xl border ${bgCard} shadow-sm h-10`}>
+                <div className="flex items-center gap-2 px-3 border-r border-inherit h-full">
                    <Calendar size={18} className="text-indigo-500"/>
-                   <select 
-                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
-                      value={dateRange}
-                      onChange={(e) => handlePresetChange(e.target.value)}
-                   >
-                      <option value="today">Hoje</option>
-                      <option value="yesterday">Ontem</option>
-                      <option value="7d">7 Dias</option>
-                      <option value="30d">30 Dias</option>
-                      <option value="this_month">Este Mês</option>
-                      <option value="last_month">Mês Passado</option>
-                      <option value="custom">Personalizado</option>
-                   </select>
+                   <div className="relative">
+                       <select 
+                          className={`bg-transparent text-xs font-bold outline-none cursor-pointer ${textHead} appearance-none pr-6 w-full`}
+                          value={dateRange}
+                          onChange={(e) => handlePresetChange(e.target.value)}
+                       >
+                          <option value="today" className="bg-slate-900">Hoje</option>
+                          <option value="yesterday" className="bg-slate-900">Ontem</option>
+                          <option value="7d" className="bg-slate-900">7 Dias</option>
+                          <option value="30d" className="bg-slate-900">30 Dias</option>
+                          <option value="this_month" className="bg-slate-900">Este Mês</option>
+                          <option value="last_month" className="bg-slate-900">Mês Passado</option>
+                          <option value="custom" className="bg-slate-900">Personalizado</option>
+                       </select>
+                       <ChevronDown size={14} className={`absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none ${textMuted}`} />
+                   </div>
                 </div>
-                <div className="flex items-center gap-2 px-2">
+                <div className="flex items-center gap-2 px-3 h-full">
                    <input 
                      type="date" 
                      className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                      value={startDate}
                      onChange={(e) => handleCustomDateChange('start', e.target.value)}
                    />
-                   <span className="text-slate-500 text-xs">até</span>
+                   <span className="text-slate-500 text-[10px] uppercase font-bold">Até</span>
                    <input 
                      type="date" 
                      className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
