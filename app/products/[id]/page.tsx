@@ -57,7 +57,7 @@ const ALL_COLUMNS = [
   { key: 'profit', label: 'Lucro (R$)', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'roi', label: 'ROI (%)', category: 'Financeiro', default: true, format: 'percentage' },
   
-  // GOOGLE ADS AVANÇADO (RECUPERADAS)
+  // GOOGLE ADS AVANÇADO
   { key: 'strategy', label: 'Estratégia', category: 'Google Ads', default: true },
   { key: 'target_cpa', label: 'Meta (CPA/ROAS)', category: 'Google Ads', default: true, format: 'currency' },
   { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false, format: 'percentage_share' },
@@ -70,12 +70,10 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setDate(1); 
-    return getLocalYYYYMMDD(date);
-  });
-  const [endDate, setEndDate] = useState(() => getLocalYYYYMMDD(new Date()));
+  // --- NOVO PADRÃO DE DATAS ---
+  const [dateRange, setDateRange] = useState('this_month');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
@@ -89,34 +87,30 @@ export default function ProductDetailPage() {
 
   const [manualData, setManualData] = useState({ 
     date: getLocalYYYYMMDD(new Date()), 
-    visits: 0, 
-    checkouts: 0, 
-    vsl_clicks: 0, 
-    vsl_checkouts: 0, 
-    sales: 0, 
-    revenue: 0, 
-    refunds: 0,
-    currency: 'BRL' 
+    visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0, currency: 'BRL' 
   });
   const [isSavingManual, setIsSavingManual] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
-
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
+  // --- INICIALIZAÇÃO ---
   useEffect(() => {
+    // 1. Tema e Moeda
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
     if (savedTheme) setTheme(savedTheme);
-
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
-    
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
     
     fetchLiveDollar();
+
+    // 2. Data Inicial (Novo Padrão)
+    setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
+    handlePresetChange('this_month');
   }, []);
 
   const toggleTheme = () => {
@@ -153,24 +147,12 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (showManualEntry && manualData.date && productId) {
         const fetchDayData = async () => {
-            const { data } = await supabase
-                .from('daily_metrics')
-                .select('visits, checkouts, vsl_clicks, vsl_checkouts, conversions, conversion_value, refunds, currency')
-                .eq('product_id', productId)
-                .eq('date', manualData.date)
-                .single();
-            
+            const { data } = await supabase.from('daily_metrics').select('visits, checkouts, vsl_clicks, vsl_checkouts, conversions, conversion_value, refunds, currency').eq('product_id', productId).eq('date', manualData.date).single();
             if (data) {
                 setManualData(prev => ({
                     ...prev,
-                    visits: data.visits || 0,
-                    checkouts: data.checkouts || 0,
-                    vsl_clicks: data.vsl_clicks || 0,
-                    vsl_checkouts: data.vsl_checkouts || 0,
-                    sales: data.conversions || 0,
-                    revenue: data.conversion_value || 0,
-                    refunds: data.refunds || 0,
-                    currency: data.currency || prev.currency
+                    visits: data.visits || 0, checkouts: data.checkouts || 0, vsl_clicks: data.vsl_clicks || 0, vsl_checkouts: data.vsl_checkouts || 0,
+                    sales: data.conversions || 0, revenue: data.conversion_value || 0, refunds: data.refunds || 0, currency: data.currency || prev.currency
                 }));
             } else {
                  setManualData(prev => ({
@@ -182,20 +164,15 @@ export default function ProductDetailPage() {
     }
   }, [manualData.date, showManualEntry, productId]);
 
-
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
-      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
-        product_id: productId,
-        date: manualData.date,
-        visits: Number(manualData.visits),
-        checkouts: Number(manualData.checkouts),
-        vsl_clicks: Number(manualData.vsl_clicks),
-        vsl_checkouts: Number(manualData.vsl_checkouts),
-        conversions: Number(manualData.sales),
-        conversion_value: Number(manualData.revenue), // AQUI ESTÁ A CORREÇÃO
+        product_id: productId, date: manualData.date,
+        visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
+        vsl_clicks: Number(manualData.vsl_clicks), vsl_checkouts: Number(manualData.vsl_checkouts),
+        conversions: Number(manualData.sales), 
+        conversion_value: Number(manualData.revenue), 
         refunds: Number(manualData.refunds),
         currency: manualData.currency, 
         updated_at: new Date().toISOString()
@@ -206,7 +183,7 @@ export default function ProductDetailPage() {
       
       alert('Dados salvos com sucesso!');
       setShowManualEntry(false);
-      fetchData(); // Atualiza a tabela imediatamente
+      fetchData(); 
     } catch (e: any) { alert('Erro: ' + e.message); }
     finally { setIsSavingManual(false); }
   };
@@ -226,18 +203,39 @@ export default function ProductDetailPage() {
     });
   };
 
+  // --- LÓGICA DE DATAS UNIFICADA ---
+  const handlePresetChange = (preset: string) => {
+    setDateRange(preset);
+    const now = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (preset === 'today') { /* hoje */ }
+    else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
+    else if (preset === '7d') { start.setDate(now.getDate() - 7); }
+    else if (preset === '30d') { start.setDate(now.getDate() - 30); }
+    else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+    else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
+    else if (preset === 'custom') return;
+
+    setStartDate(getLocalYYYYMMDD(start));
+    setEndDate(getLocalYYYYMMDD(end));
+  };
+
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') setStartDate(value); else setEndDate(value);
+    setDateRange('custom');
+  };
+
   const processedData = useMemo(() => {
+    // Filtro usando startDate e endDate do estado
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
 
     const rows = filteredMetrics.map(row => {
-      let cost = Number(row.cost || 0);
-      let revenue = Number(row.conversion_value || 0);
-      let refunds = Number(row.refunds || 0);
-      let cpc = Number(row.avg_cpc || 0);
-      let budget = Number(row.budget_micros || 0) / 1000000;
-      let targetValue = Number(row.target_cpa || 0);
+      let cost = Number(row.cost || 0); let revenue = Number(row.conversion_value || 0); let refunds = Number(row.refunds || 0); let cpc = Number(row.avg_cpc || 0);
+      let budget = Number(row.budget_micros || 0) / 1000000; let targetValue = Number(row.target_cpa || 0);
       
       const rowCurrency = row.currency || 'BRL';
       
@@ -332,15 +330,43 @@ export default function ProductDetailPage() {
           <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
              <FileText size={14} /> Lançamento Rápido
           </button>
-          <div className={`flex items-center p-1 rounded-lg border ${bgCard}`}>
-            <div className={`flex items-center gap-2 px-3 border-r ${borderCol}`}>
-               <Calendar size={14} className="text-indigo-400"/>
-               <span className="text-xs font-bold text-slate-500 uppercase">Período</span>
-            </div>
-            <input type="date" className={`bg-transparent text-white text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <span className="text-slate-600">-</span>
-            <input type="date" className={`bg-transparent text-white text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          
+          {/* SELETOR DE DATA UNIFICADO (NOVO) */}
+          <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
+                <div className="flex items-center gap-2 px-2 border-r border-inherit">
+                   <Calendar size={18} className="text-indigo-500"/>
+                   <select 
+                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
+                      value={dateRange}
+                      onChange={(e) => handlePresetChange(e.target.value)}
+                   >
+                      <option value="today">Hoje</option>
+                      <option value="yesterday">Ontem</option>
+                      <option value="7d">7 Dias</option>
+                      <option value="30d">30 Dias</option>
+                      <option value="this_month">Este Mês</option>
+                      <option value="last_month">Mês Passado</option>
+                      <option value="custom">Personalizado</option>
+                   </select>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                   <input 
+                     type="date" 
+                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                     value={startDate}
+                     onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                   />
+                   <span className="text-slate-500 text-xs">até</span>
+                   <input 
+                     type="date" 
+                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                     value={endDate}
+                     onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                   />
+                </div>
           </div>
+          {/* ------------------------------------- */}
+
           <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
              <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
                 <button onClick={() => setViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
@@ -370,7 +396,7 @@ export default function ProductDetailPage() {
            <p className="text-2xl font-bold text-indigo-500">{stats.roi.toFixed(1)}%</p>
         </div>
         <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-cyan-500`}>
-           <p className="text-slate-500 text-xs font-bold uppercase mb-2">Custo/Conv (CPA)</p>
+           <p className="text-slate-500 text-xs font-bold uppercase mb-2">CPA (Custo/Conv)</p>
            <p className="text-2xl font-bold text-cyan-500">{formatMoney(globalCpa)}</p>
         </div>
       </div>
@@ -380,7 +406,9 @@ export default function ProductDetailPage() {
             <BarChart data={chart}>
                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
                <XAxis dataKey="day" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+               <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val:any) => formatMoney(val)} />
+               <Legend />
                <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
                <Bar dataKey="lucro" name="Lucro" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -428,6 +456,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
+      {/* MODAL LANÇAMENTO MANUAL */}
       {showManualEntry && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className={`${bgCard} rounded-xl w-full max-w-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]`}>

@@ -36,10 +36,10 @@ export default function DashboardPage() {
   const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   
-  // Filtros
+  // --- NOVOS ESTADOS DE DATA (PADRONIZADO) ---
   const [dateRange, setDateRange] = useState('this_month'); 
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Configurações Globais (Moeda e Tema)
   const [liveDollar, setLiveDollar] = useState(6.00); 
@@ -65,7 +65,10 @@ export default function DashboardPage() {
       }
       setUser(session.user); 
 
-      // 3. Carrega Dados
+      // 3. Inicializa Datas (Este Mês)
+      handlePresetChange('this_month');
+
+      // 4. Carrega Dados
       await Promise.all([
         fetchInitialData(session.user.id), 
         fetchLiveDollar()
@@ -96,7 +99,6 @@ export default function DashboardPage() {
   }
 
   async function fetchInitialData(userId: string) {
-    // Busca produtos do usuário
     const { data: prodData } = await supabase
       .from('products')
       .select('id, currency')
@@ -104,7 +106,6 @@ export default function DashboardPage() {
 
     setProducts(prodData || []);
 
-    // Se tiver produtos, busca as métricas deles
     if (prodData && prodData.length > 0) {
         const productIds = prodData.map(p => p.id);
         const { data: metData } = await supabase
@@ -123,30 +124,39 @@ export default function DashboardPage() {
     localStorage.setItem('autometrics_manual_dollar', val.toString());
   };
 
-  // --- PROCESSAMENTO DE DADOS ---
-  const processedData = useMemo(() => {
-    if (loading || !metrics.length) return { chart: [], table: [], totals: null };
-
+  // --- LÓGICA INTELIGENTE DE DATAS ---
+  const handlePresetChange = (preset: string) => {
+    setDateRange(preset);
     const now = new Date();
     let start = new Date();
     let end = new Date();
 
-    // Lógica de Datas
-    if (dateRange === 'today') { /* hoje */ }
-    else if (dateRange === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
-    else if (dateRange === '7d') { start.setDate(now.getDate() - 7); }
-    else if (dateRange === '30d') { start.setDate(now.getDate() - 30); }
-    else if (dateRange === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
-    else if (dateRange === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
+    if (preset === 'today') { /* start/end = now */ }
+    else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
+    else if (preset === '7d') { start.setDate(now.getDate() - 7); }
+    else if (preset === '30d') { start.setDate(now.getDate() - 30); }
+    else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+    else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
     
-    // Datas Formatadas YYYY-MM-DD
-    const startStr = dateRange === 'custom' ? customStart : getLocalYYYYMMDD(start);
-    const endStr = dateRange === 'custom' ? customEnd : getLocalYYYYMMDD(end);
+    setStartDate(getLocalYYYYMMDD(start));
+    setEndDate(getLocalYYYYMMDD(end));
+  };
+
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') setStartDate(value);
+    else setEndDate(value);
+    setDateRange('custom'); // Muda o dropdown para "Personalizado" automaticamente
+  };
+
+  // --- PROCESSAMENTO DE DADOS ---
+  const processedData = useMemo(() => {
+    if (loading || !metrics.length) return { chart: [], table: [], totals: null };
 
     const dailyMap = new Map();
 
     metrics.forEach(row => {
-      if (row.date < startStr || row.date > endStr) return;
+      // Filtra usando as datas do estado (startDate / endDate)
+      if (row.date < startDate || row.date > endDate) return;
 
       const product = products.find(p => p.id === row.product_id);
       const isUSD = product?.currency === 'USD';
@@ -158,8 +168,8 @@ export default function DashboardPage() {
       // Conversão de Moeda
       if (viewCurrency === 'BRL') {
         if (isUSD) {
-          cost *= liveDollar;      // Custo: Dólar do Dia
-          revenue *= manualDollar; // Receita: Dólar Manual
+          cost *= liveDollar;      
+          revenue *= manualDollar; 
           refunds *= manualDollar;
         }
       } else {
@@ -201,7 +211,7 @@ export default function DashboardPage() {
     }));
 
     return { chart: chartData, table: resultRows, totals };
-  }, [metrics, products, dateRange, customStart, customEnd, liveDollar, manualDollar, viewCurrency, loading]);
+  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, viewCurrency, loading]);
 
   // --- ESTILOS DINÂMICOS ---
   const isDark = theme === 'dark';
@@ -221,7 +231,6 @@ export default function DashboardPage() {
         {/* Logo */}
         <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
            <div className="hidden md:block relative"> 
-             {/* Logo com Sombra no modo Claro para garantir visibilidade */}
              <Image 
                src="/logo.png" 
                alt="Logo" 
@@ -249,8 +258,6 @@ export default function DashboardPage() {
            
            <Link href="/products" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
            
-           {/* Link de Lançamento REMOVIDO */}
-           
            <Link href="/integration" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
         </nav>
         <div className="p-4 border-t border-inherit">
@@ -262,31 +269,56 @@ export default function DashboardPage() {
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
           <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className={textMuted}>Acompanhe seus resultados consolidados.</p></div>
           <div className="flex flex-wrap gap-4 items-center w-full xl:w-auto">
-             <div className={`flex items-center p-1 rounded-lg border ${bgCard} relative`}>
-                <div className="flex items-center gap-2 px-3 border-r border-inherit">
-                   <Calendar size={16} className="text-indigo-500"/>
-                   <select className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead}`} value={dateRange} onChange={(e) => setDateRange(e.target.value)}>
+             
+             {/* --- NOVO COMPONENTE DE DATA UNIFICADO --- */}
+             <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
+                {/* Ícone e Dropdown */}
+                <div className="flex items-center gap-2 px-2 border-r border-inherit">
+                   <Calendar size={18} className="text-indigo-500"/>
+                   <select 
+                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
+                      value={dateRange}
+                      onChange={(e) => handlePresetChange(e.target.value)}
+                   >
                       <option value="today">Hoje</option>
                       <option value="yesterday">Ontem</option>
-                      <option value="7d">Últimos 7 dias</option>
-                      <option value="30d">Últimos 30 dias</option>
+                      <option value="7d">7 Dias</option>
+                      <option value="30d">30 Dias</option>
                       <option value="this_month">Este Mês</option>
                       <option value="last_month">Mês Passado</option>
                       <option value="custom">Personalizado</option>
                    </select>
                 </div>
-                {dateRange === 'custom' && (<div className="flex gap-2 px-2"><input type="date" className="bg-transparent text-xs outline-none" onChange={e => setCustomStart(e.target.value)} /><input type="date" className="bg-transparent text-xs outline-none" onChange={e => setCustomEnd(e.target.value)} /></div>)}
+                
+                {/* Inputs de Data (Sempre visíveis para ajuste rápido) */}
+                <div className="flex items-center gap-2 px-2">
+                   <input 
+                     type="date" 
+                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                     value={startDate}
+                     onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                   />
+                   <span className="text-slate-500 text-xs">até</span>
+                   <input 
+                     type="date" 
+                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                     value={endDate}
+                     onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                   />
+                </div>
              </div>
+             {/* ----------------------------------------- */}
+
              <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
                 <div className="flex gap-3 px-2 border-r border-inherit pr-4">
                    <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
-                   <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textMuted}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
+                   <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textHead}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
                 </div>
                 <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
                    <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
                    <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
                 </div>
-                <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+                <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
              </div>
           </div>
         </header>

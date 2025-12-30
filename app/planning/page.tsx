@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Target, TrendingUp, Calendar as CalIcon, Edit2, Plus, Trash2,
   Sun, Moon, ChevronDown, ChevronRight, Save, DollarSign, AlertCircle, 
-  Briefcase, Globe, LayoutGrid
+  Briefcase, Globe, LayoutGrid, LogOut, Package, FileText, Settings, ArrowLeft,
+  Calendar
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line 
@@ -27,18 +28,24 @@ function getLocalYYYYMMDD(date: Date) {
 
 export default function PlanningPage() {
   const [loading, setLoading] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [user, setUser] = useState<any>(null);
   
-  // Dados Brutos
+  // Dados
   const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [extraCosts, setExtraCosts] = useState<any[]>([]);
   const [goal, setGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
 
+  // --- NOVO PADRÃO DE DATAS ---
+  const [dateRange, setDateRange] = useState('this_month'); 
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  // -----------------------------
+
   // UI
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false); // Modo de Edição
+  const [editMode, setEditMode] = useState(false); 
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({}); 
 
   // Moeda & Tema
@@ -47,31 +54,46 @@ export default function PlanningPage() {
   const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // Forms Temporários
   const [tempGoal, setTempGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
   const [newCost, setNewCost] = useState({ date: '', description: '', amount: 0, currency: 'BRL' });
 
-  // --- INICIALIZAÇÃO ---
+  // INICIALIZAÇÃO
   useEffect(() => {
-    // Inicializa data do custo com a data local correta
-    setNewCost(prev => ({ ...prev, date: getLocalYYYYMMDD(new Date()) }));
+    async function init() {
+      // 1. Auth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      setUser(session.user);
 
-    fetchLiveDollar();
-    const savedDollar = localStorage.getItem('autometrics_manual_dollar');
-    if (savedDollar) setManualDollar(parseFloat(savedDollar));
-    
-    const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
-    if (savedTheme) setTheme(savedTheme);
+      // 2. Data local e Presets
+      setNewCost(prev => ({ ...prev, date: getLocalYYYYMMDD(new Date()) }));
+      handlePresetChange('this_month'); // Começa com "Este Mês"
+
+      // 3. Preferências
+      const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
+      if (savedTheme) setTheme(savedTheme);
+      const savedDollar = localStorage.getItem('autometrics_manual_dollar');
+      if (savedDollar) setManualDollar(parseFloat(savedDollar));
+
+      fetchLiveDollar();
+    }
+    init();
   }, []);
 
+  // Recarrega dados quando as datas mudam
   useEffect(() => {
-    fetchData();
-  }, [currentMonth]);
+    if (user?.id && startDate && endDate) fetchData(user.id);
+  }, [startDate, endDate, user]);
 
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('autometrics_theme', newTheme);
+  };
+
+  const handleManualDollarChange = (val: number) => {
+    setManualDollar(val);
+    localStorage.setItem('autometrics_manual_dollar', val.toString());
   };
 
   async function fetchLiveDollar() {
@@ -82,19 +104,36 @@ export default function PlanningPage() {
     } catch(e) {}
   }
 
-  const handleManualDollarChange = (val: number) => {
-    setManualDollar(val);
-    localStorage.setItem('autometrics_manual_dollar', val.toString());
+  // --- LÓGICA DE DATAS UNIFICADA ---
+  const handlePresetChange = (preset: string) => {
+    setDateRange(preset);
+    const now = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (preset === 'today') { /* hoje */ }
+    else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
+    else if (preset === '7d') { start.setDate(now.getDate() - 7); }
+    else if (preset === '30d') { start.setDate(now.getDate() - 30); }
+    else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+    else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
+    else if (preset === 'custom') return;
+
+    setStartDate(getLocalYYYYMMDD(start));
+    setEndDate(getLocalYYYYMMDD(end));
   };
 
-  async function fetchData() {
-    setLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-    const userId = session.user.id;
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') setStartDate(value); else setEndDate(value);
+    setDateRange('custom');
+  };
 
-    // 1. Metas
-    const { data: goalData } = await supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonth).single();
+  async function fetchData(userId: string) {
+    setLoading(true);
+    
+    // Metas: Busca pela chave do mês de INÍCIO
+    const currentMonthKey = startDate.slice(0, 7);
+    const { data: goalData } = await supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonthKey).single();
     if (goalData) {
       setGoal({ revenue: goalData.revenue_target, profit: goalData.profit_target, limit: goalData.ad_spend_limit });
       setTempGoal({ revenue: goalData.revenue_target, profit: goalData.profit_target, limit: goalData.ad_spend_limit });
@@ -102,175 +141,111 @@ export default function PlanningPage() {
       setGoal({ revenue: 0, profit: 0, limit: 0 });
     }
 
-    // 2. Custos Extras
-    const startOfMonth = `${currentMonth}-01`;
-    // Pega o último dia do mês corretamente
-    const lastDay = new Date(parseInt(currentMonth.split('-')[0]), parseInt(currentMonth.split('-')[1]), 0).getDate();
-    const endOfMonth = `${currentMonth}-${lastDay}`;
-    
-    const { data: costData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startOfMonth).lte('date', endOfMonth);
+    const { data: costData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate);
     setExtraCosts(costData || []);
 
-    // 3. Produtos (Com MCC e Conta)
     const { data: prodData } = await supabase.from('products').select('id, currency, name, mcc_name, account_name').eq('user_id', userId);
     setProducts(prodData || []);
     
-    // 4. Métricas
     if (prodData && prodData.length > 0) {
-      const { data: metData } = await supabase
-        .from('daily_metrics')
-        .select('*')
-        .in('product_id', prodData.map(p => p.id))
-        .gte('date', startOfMonth)
-        .lte('date', endOfMonth)
-        .order('date', { ascending: true });
+      const { data: metData } = await supabase.from('daily_metrics').select('*').in('product_id', prodData.map(p => p.id)).gte('date', startDate).lte('date', endDate).order('date', { ascending: true });
       setMetrics(metData || []);
     }
     setLoading(false);
   }
 
-  // --- LÓGICA DE DADOS ---
   const processedData = useMemo(() => {
+    // A filtragem já acontece no Fetch, mas garantimos aqui também
+    const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
+    
     const dailyMap: Record<string, any> = {};
-
-    // 1. Agrupar Métricas de Ads
-    metrics.forEach(m => {
+    
+    // 1. Ads
+    filteredMetrics.forEach(m => {
       const prod = products.find(p => p.id === m.product_id);
       const isUSD = prod?.currency === 'USD';
       const mcc = prod?.mcc_name || 'Sem MCC';
       const account = prod?.account_name || 'Sem Conta';
       
-      let cost = Number(m.cost || 0);
-      let revenue = Number(m.conversion_value || 0);
-      let refunds = Number(m.refunds || 0);
-
-      // Conversão
-      if (viewCurrency === 'BRL') {
-        if (isUSD) { cost *= liveDollar; revenue *= manualDollar; refunds *= manualDollar; }
-      } else {
-        if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; }
-      }
+      let cost = Number(m.cost || 0); let revenue = Number(m.conversion_value || 0); let refunds = Number(m.refunds || 0);
+      if (viewCurrency === 'BRL') { if (isUSD) { cost *= liveDollar; revenue *= manualDollar; refunds *= manualDollar; } } 
+      else { if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; } }
 
       if (!dailyMap[m.date]) dailyMap[m.date] = { date: m.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, details: [], mccs: {} };
-      
       const day = dailyMap[m.date];
-      
-      day.revenue += revenue;
-      day.ads_cost += cost;
-      day.refunds += refunds;
+      day.revenue += revenue; day.ads_cost += cost; day.refunds += refunds;
 
-      // Nível MCC
       if (!day.mccs[mcc]) day.mccs[mcc] = { name: mcc, revenue: 0, ads_cost: 0, refunds: 0, accounts: {} };
-      const mccObj = day.mccs[mcc];
-      mccObj.revenue += revenue;
-      mccObj.ads_cost += cost;
-      mccObj.refunds += refunds;
+      const mccObj = day.mccs[mcc]; mccObj.revenue += revenue; mccObj.ads_cost += cost; mccObj.refunds += refunds;
 
-      // Nível Conta
       if (!mccObj.accounts[account]) mccObj.accounts[account] = { name: account, revenue: 0, ads_cost: 0, refunds: 0 };
-      const accObj = mccObj.accounts[account];
-      accObj.revenue += revenue;
-      accObj.ads_cost += cost;
-      accObj.refunds += refunds;
+      const accObj = mccObj.accounts[account]; accObj.revenue += revenue; accObj.ads_cost += cost; accObj.refunds += refunds;
     });
 
-    // 2. Agrupar Custos Extras
+    // 2. Extras
     extraCosts.forEach(c => {
+       // Filtra extras pela data também (embora o fetch já filtre)
+       if (c.date < startDate || c.date > endDate) return;
        if (!dailyMap[c.date]) dailyMap[c.date] = { date: c.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, details: [], mccs: {} };
        
        let amount = Number(c.amount);
        if (viewCurrency === 'BRL' && c.currency === 'USD') amount *= liveDollar;
        else if (viewCurrency === 'USD' && c.currency === 'BRL') amount /= liveDollar;
-
-       const day = dailyMap[c.date];
-       day.extra_cost += amount;
-       // Adiciona detalhe para exibição
+       const day = dailyMap[c.date]; day.extra_cost += amount;
        day.details.push({ id: c.id, desc: c.description, val: amount });
     });
 
     const daysArray = Object.values(dailyMap).sort((a: any, b: any) => b.date.localeCompare(a.date));
-
-    // Totais Gerais
     const totals = { revenue: 0, ads_cost: 0, extra_cost: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
-    daysArray.forEach((d: any) => {
-       totals.revenue += d.revenue;
-       totals.ads_cost += d.ads_cost;
-       totals.extra_cost += d.extra_cost;
-       totals.refunds += d.refunds;
-    });
+    daysArray.forEach((d: any) => { totals.revenue += d.revenue; totals.ads_cost += d.ads_cost; totals.extra_cost += d.extra_cost; totals.refunds += d.refunds; });
     totals.total_cost = totals.ads_cost + totals.extra_cost;
     totals.profit = totals.revenue - totals.total_cost - totals.refunds;
     totals.roi = totals.ads_cost > 0 ? (totals.profit / totals.ads_cost) * 100 : 0;
+    
+    // Projeções
+    const today = new Date();
+    const currentMonthKey = startDate.slice(0, 7);
+    const isCurrentMonth = currentMonthKey === getLocalYYYYMMDD(today).slice(0, 7);
+    const daysInMonth = new Date(parseInt(currentMonthKey.split('-')[0]), parseInt(currentMonthKey.split('-')[1]), 0).getDate();
+    const daysPassed = isCurrentMonth ? Math.max(today.getDate(), 1) : daysInMonth;
+    const projectedRevenue = isCurrentMonth ? (totals.revenue / daysPassed) * daysInMonth : totals.revenue;
+    const revenueProgress = goal.revenue > 0 ? (totals.revenue / goal.revenue) * 100 : 0;
 
-    // Gráfico
     let accRev = 0;
     const chartData = [...daysArray].sort((a: any, b: any) => a.date.localeCompare(b.date)).map((d: any) => {
        accRev += d.revenue;
-       const daysInMonth = new Date(parseInt(currentMonth.split('-')[0]), parseInt(currentMonth.split('-')[1]), 0).getDate();
-       return {
-         date: d.date.split('-')[2],
-         revenue: accRev,
-         ideal: (goal.revenue / daysInMonth) * parseInt(d.date.split('-')[2])
-       };
+       return { date: d.date.split('-')[2], revenue: accRev, ideal: (goal.revenue / daysInMonth) * parseInt(d.date.split('-')[2]) };
     });
 
-    return { daysArray, totals, chartData };
-  }, [metrics, extraCosts, products, viewCurrency, liveDollar, manualDollar, goal]);
+    return { daysArray, totals, chartData, projectedRevenue, revenueProgress };
+  }, [metrics, extraCosts, products, viewCurrency, liveDollar, manualDollar, goal, startDate, endDate]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
-
-  const toggleExpand = (id: string) => {
-    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  // --- AÇÕES DE SALVAMENTO E EDIÇÃO ---
+  const toggleExpand = (id: string) => { setExpandedRows(prev => ({ ...prev, [id]: !prev[id] })); };
 
   const handleSaveGoal = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-    const userId = session.user.id;
-    const payload = {
-      user_id: userId, month_key: currentMonth,
-      revenue_target: Number(tempGoal.revenue), profit_target: Number(tempGoal.profit), ad_spend_limit: Number(tempGoal.limit)
-    };
-    const { error } = await supabase.from('financial_goals').upsert(payload, { onConflict: 'user_id, month_key' });
-    if (error) {
-        alert('Erro ao salvar meta: ' + error.message);
-    } else {
-        setGoal(tempGoal);
-        setIsGoalModalOpen(false);
-    }
+    const userId = user?.id;
+    if (!userId) return;
+    const currentMonthKey = startDate.slice(0, 7);
+    const payload = { user_id: userId, month_key: currentMonthKey, revenue_target: Number(tempGoal.revenue), profit_target: Number(tempGoal.profit), ad_spend_limit: Number(tempGoal.limit) };
+    await supabase.from('financial_goals').upsert(payload, { onConflict: 'user_id, month_key' });
+    setGoal(tempGoal); setIsGoalModalOpen(false);
   };
-
   const handleAddCost = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-    const userId = session.user.id;
-
+    const userId = user?.id;
+    if (!userId) return;
     if (!newCost.description || !newCost.amount) return alert("Preencha descrição e valor.");
-    
-    const { error } = await supabase.from('additional_costs').insert([{ ...newCost, user_id: userId, amount: Number(newCost.amount) }]);
-    
-    if (error) {
-        alert('Erro ao adicionar custo: ' + error.message);
-    } else {
-        setNewCost({ date: getLocalYYYYMMDD(new Date()), description: '', amount: 0, currency: 'BRL' });
-        setIsCostModalOpen(false);
-        fetchData();
-    }
+    await supabase.from('additional_costs').insert([{ ...newCost, user_id: userId, amount: Number(newCost.amount) }]);
+    setNewCost({ date: getLocalYYYYMMDD(new Date()), description: '', amount: 0, currency: 'BRL' });
+    setIsCostModalOpen(false);
+    fetchData(userId);
   };
-
   const handleDeleteCost = async (id: string) => {
-    if(!confirm("Tem certeza que deseja excluir este custo?")) return;
-    const { error } = await supabase.from('additional_costs').delete().eq('id', id);
-    if (error) {
-        alert('Erro ao excluir: ' + error.message);
-    } else {
-        fetchData();
-    }
+    if(!confirm("Tem certeza?")) return;
+    await supabase.from('additional_costs').delete().eq('id', id);
+    if (user?.id) fetchData(user.id);
   };
 
-  // --- ESTILOS ---
   const isDark = theme === 'dark';
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
@@ -282,20 +257,29 @@ export default function PlanningPage() {
 
   return (
     <div className={`min-h-screen font-sans p-4 md:p-8 ${bgMain}`}>
-      
-      {/* HEADER */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
         <div>
            <Link href="/dashboard" className={`text-xs ${textMuted} hover:underline mb-2 block`}>&larr; Voltar ao Dashboard</Link>
-           <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}>
-             <Target className="text-indigo-500" /> Planejamento & DRE
-           </h1>
-           <p className={textMuted}>Controle detalhado por MCC e Conta.</p>
+           <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}><Target className="text-indigo-500" /> Planejamento & DRE</h1>
         </div>
 
         <div className="flex flex-wrap gap-4 items-center">
-           <input type="month" className={`bg-transparent font-bold outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={currentMonth} onChange={(e) => setCurrentMonth(e.target.value)} />
-
+           
+           {/* SELETOR DE DATA UNIFICADO */}
+           <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
+                <div className="flex items-center gap-2 px-2 border-r border-inherit">
+                   <Calendar size={18} className="text-indigo-500"/>
+                   <select className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`} value={dateRange} onChange={(e) => handlePresetChange(e.target.value)}>
+                      <option value="today">Hoje</option><option value="yesterday">Ontem</option><option value="7d">7 Dias</option><option value="30d">30 Dias</option><option value="this_month">Este Mês</option><option value="last_month">Mês Passado</option><option value="custom">Personalizado</option>
+                   </select>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                   <input type="date" className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => handleCustomDateChange('start', e.target.value)} />
+                   <span className="text-slate-500 text-xs">até</span>
+                   <input type="date" className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => handleCustomDateChange('end', e.target.value)} />
+                </div>
+           </div>
+           
            <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
               <div className={`flex gap-3 px-2 border-r ${borderCol} pr-4`}>
                  <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
@@ -305,19 +289,14 @@ export default function PlanningPage() {
                  <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
                  <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
               </div>
-              <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+              <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
            </div>
-           
-           <button onClick={() => setEditMode(!editMode)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : `${bgCard} ${textMuted}`}`}>
-             <Edit2 size={14}/> {editMode ? 'Modo Edição Ativo' : 'Editar Planilha'}
-           </button>
-           
-           <button onClick={() => setIsGoalModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-lg">
-             <Target size={14}/> Metas
-           </button>
+           <button onClick={() => setEditMode(!editMode)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : `${bgCard} ${textMuted}`}`}><Edit2 size={14}/> {editMode ? 'Modo Edição Ativo' : 'Editar Planilha'}</button>
+           <button onClick={() => setIsGoalModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-lg"><Target size={14}/> Metas</button>
         </div>
       </div>
 
+      {/* ... (Resto do conteúdo da página mantido igual: KPIs, Gráfico, Tabela, Modais) ... */}
       {/* KPI SUMÁRIO */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Receita</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
