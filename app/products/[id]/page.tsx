@@ -7,7 +7,6 @@ import {
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon, ShoppingCart, 
   Video, MousePointer
 } from 'lucide-react';
-// CORREÇÃO: Adicionado YAxis e Legend nos imports
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
 } from 'recharts';
@@ -71,13 +70,10 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // Datas
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setDate(1); 
-    return getLocalYYYYMMDD(date);
-  });
-  const [endDate, setEndDate] = useState(() => getLocalYYYYMMDD(new Date()));
+  // --- DATAS E FILTROS ---
+  const [dateRange, setDateRange] = useState('this_month');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
@@ -89,7 +85,6 @@ export default function ProductDetailPage() {
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
-  // Estado do Lançamento Manual (Inclui campos de VSL)
   const [manualData, setManualData] = useState({ 
     date: getLocalYYYYMMDD(new Date()), 
     visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0, currency: 'BRL' 
@@ -102,8 +97,9 @@ export default function ProductDetailPage() {
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // Inicialização
+  // --- INICIALIZAÇÃO ---
   useEffect(() => {
+    // 1. Tema e Moeda
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
     if (savedTheme) setTheme(savedTheme);
 
@@ -114,6 +110,10 @@ export default function ProductDetailPage() {
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
     
     fetchLiveDollar();
+
+    // 2. Data Inicial (Novo Padrão)
+    setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
+    handlePresetChange('this_month'); // Define as datas iniciais
   }, []);
 
   const toggleTheme = () => {
@@ -146,7 +146,7 @@ export default function ProductDetailPage() {
 
   useEffect(() => { if(productId) fetchData(); }, [productId]);
 
-  // Carrega dados para edição no modal
+  // Carrega dados existentes para edição
   useEffect(() => {
     if (showManualEntry && manualData.date && productId) {
         const fetchDayData = async () => {
@@ -154,8 +154,7 @@ export default function ProductDetailPage() {
             if (data) {
                 setManualData(prev => ({
                     ...prev,
-                    visits: data.visits || 0, checkouts: data.checkouts || 0, 
-                    vsl_clicks: data.vsl_clicks || 0, vsl_checkouts: data.vsl_checkouts || 0,
+                    visits: data.visits || 0, checkouts: data.checkouts || 0, vsl_clicks: data.vsl_clicks || 0, vsl_checkouts: data.vsl_checkouts || 0,
                     sales: data.conversions || 0, revenue: data.conversion_value || 0, refunds: data.refunds || 0, currency: data.currency || prev.currency
                 }));
             } else {
@@ -167,6 +166,7 @@ export default function ProductDetailPage() {
         fetchDayData();
     }
   }, [manualData.date, showManualEntry, productId]);
+
 
   const handleSaveManual = async () => {
     setIsSavingManual(true);
@@ -207,7 +207,32 @@ export default function ProductDetailPage() {
     });
   };
 
+  // --- LÓGICA DE DATAS ---
+  const handlePresetChange = (preset: string) => {
+    setDateRange(preset);
+    const now = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (preset === 'today') { /* hoje */ }
+    else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
+    else if (preset === '7d') { start.setDate(now.getDate() - 7); }
+    else if (preset === '30d') { start.setDate(now.getDate() - 30); }
+    else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+    else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
+    else if (preset === 'custom') return;
+
+    setStartDate(getLocalYYYYMMDD(start));
+    setEndDate(getLocalYYYYMMDD(end));
+  };
+
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') setStartDate(value); else setEndDate(value);
+    setDateRange('custom');
+  };
+
   const processedData = useMemo(() => {
+    // Filtro usando startDate e endDate
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
@@ -305,15 +330,42 @@ export default function ProductDetailPage() {
           <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
              <FileText size={14} /> Lançamento Rápido
           </button>
-          <div className={`flex items-center p-1 rounded-lg border ${bgCard}`}>
-            <div className={`flex items-center gap-2 px-3 border-r ${borderCol}`}>
-               <Calendar size={14} className="text-indigo-400"/>
-               <span className="text-xs font-bold text-slate-500 uppercase">Período</span>
-            </div>
-            <input type="date" className={`bg-transparent text-white text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <span className="text-slate-600">-</span>
-            <input type="date" className={`bg-transparent text-white text-xs font-mono p-2 outline-none ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          
+          {/* SELETOR DE DATA PADRONIZADO */}
+          <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
+                <div className="flex items-center gap-2 px-2 border-r border-inherit">
+                   <Calendar size={18} className="text-indigo-500"/>
+                   <select 
+                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
+                      value={dateRange}
+                      onChange={(e) => handlePresetChange(e.target.value)}
+                   >
+                      <option value="today">Hoje</option>
+                      <option value="yesterday">Ontem</option>
+                      <option value="7d">7 Dias</option>
+                      <option value="30d">30 Dias</option>
+                      <option value="this_month">Este Mês</option>
+                      <option value="last_month">Mês Passado</option>
+                      <option value="custom">Personalizado</option>
+                   </select>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                   <input 
+                     type="date" 
+                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                     value={startDate}
+                     onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                   />
+                   <span className="text-slate-500 text-xs">até</span>
+                   <input 
+                     type="date" 
+                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                     value={endDate}
+                     onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                   />
+                </div>
           </div>
+
           <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
              <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
                 <button onClick={() => setViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
