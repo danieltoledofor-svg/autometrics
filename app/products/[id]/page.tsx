@@ -8,7 +8,7 @@ import {
   Video, MousePointer
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -70,7 +70,7 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // --- DATAS E FILTROS (CORRIGIDO: ADICIONADO dateRange) ---
+  // --- DATAS E FILTROS ---
   const [dateRange, setDateRange] = useState('this_month');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -167,6 +167,7 @@ export default function ProductDetailPage() {
     }
   }, [manualData.date, showManualEntry, productId]);
 
+
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
@@ -206,7 +207,7 @@ export default function ProductDetailPage() {
     });
   };
 
-  // --- LÓGICA DE DATAS (CORREÇÃO) ---
+  // --- LÓGICA DE DATAS ---
   const handlePresetChange = (preset: string) => {
     setDateRange(preset);
     const now = new Date();
