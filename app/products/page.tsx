@@ -5,7 +5,7 @@ import {
   Plus, Search, ExternalLink, X, ArrowLeft, RefreshCw, 
   Briefcase, Folder, Layers, LayoutGrid, ChevronRight, ChevronDown,
   Eye, EyeOff, PlayCircle, PauseCircle, AlertTriangle, Globe, Trash2,
-  Sun, Moon, Filter, CheckCircle2, XCircle // Ícones novos
+  Sun, Moon, Filter, CheckCircle2, XCircle, Target, LogOut // <--- ADICIONADO Target e LogOut AQUI
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -28,7 +28,7 @@ export default function ProductsPage() {
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   
   // Filtros de Visualização
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'paused'>('ALL'); // NOVO: Filtro de Status
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'paused'>('ALL'); 
   const [showHidden, setShowHidden] = useState(false);
   
   const [expandedMccs, setExpandedMccs] = useState<string[]>([]);
@@ -48,7 +48,7 @@ export default function ProductsPage() {
       const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
       if (savedTheme) setTheme(savedTheme);
 
-      // Carrega Filtro de Status Salvo (NOVO)
+      // Carrega Filtro de Status Salvo
       const savedStatus = localStorage.getItem('autometrics_products_status_filter');
       if (savedStatus === 'active' || savedStatus === 'paused' || savedStatus === 'ALL') {
         setStatusFilter(savedStatus);
@@ -73,7 +73,7 @@ export default function ProductsPage() {
     localStorage.setItem('autometrics_theme', newTheme);
   };
 
-  // Função para mudar filtro e salvar (NOVO)
+  // Função para mudar filtro e salvar
   const changeStatusFilter = (newStatus: 'ALL' | 'active' | 'paused') => {
     setStatusFilter(newStatus);
     localStorage.setItem('autometrics_products_status_filter', newStatus);
@@ -104,8 +104,6 @@ export default function ProductsPage() {
 
   // --- ESTRUTURA SIDEBAR ---
   const structure = useMemo(() => {
-    // A Sidebar deve mostrar a estrutura baseada nos produtos que NÃO estão ocultos (arquivados)
-    // O filtro de status (ativo/pausado) afeta a grid principal, mas decidimos manter a estrutura visível na sidebar
     const relevantProducts = showHidden ? products : products.filter(p => !p.is_hidden);
     const tree: Record<string, Set<string>> = {};
 
@@ -151,12 +149,10 @@ export default function ProductsPage() {
     if (!error) setProducts(prev => prev.filter(p => p.id !== productId));
   };
 
-  // --- FILTRAGEM PRINCIPAL (ATUALIZADA) ---
+  // --- FILTRAGEM PRINCIPAL ---
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesHidden = showHidden ? true : !p.is_hidden;
-    
-    // Filtro de Status (NOVO)
     const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
     
     let matchesContext = true;
@@ -177,7 +173,6 @@ export default function ProductsPage() {
   const toggleStatus = async (product: any, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     const newStatus = product.status === 'active' ? 'paused' : 'active';
-    // Otimista
     setProducts(products.map(p => p.id === product.id ? { ...p, status: newStatus } : p));
     await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
   };
@@ -213,6 +208,8 @@ export default function ProductsPage() {
   const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
   const hoverItem = isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100';
+  const activeItem = isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-black border border-slate-200';
+  const buttonPrimary = isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-600 text-white shadow';
 
   return (
     <div className={`min-h-screen font-sans flex flex-col md:flex-row ${bgMain}`}>
@@ -269,7 +266,7 @@ export default function ProductsPage() {
                         const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
                         return (
                           <div key={acc} className="flex items-center group/acc pr-2">
-                            <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
+                            <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
                                 <Briefcase size={12}/> <span className="truncate w-28">{acc}</span>
                             </button>
                             <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1"><Trash2 size={12}/></button>
