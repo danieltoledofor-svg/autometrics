@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { 
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon, 
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon, ShoppingCart, 
-  Video, MousePointer, Percent
+  Video, MousePointer
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
@@ -40,11 +40,11 @@ const ALL_COLUMNS = [
 
   // FUNIL (MANUAL)
   { key: 'visits', label: 'Visitas Pág.', category: 'Funil', default: true },
-  { key: 'vsl_clicks', label: 'Cliques VSL', category: 'Funil', default: false }, // NOVO
-  { key: 'vsl_checkouts', label: 'Checkout VSL', category: 'Funil', default: false }, // NOVO
+  { key: 'vsl_clicks', label: 'Cliques VSL', category: 'Funil', default: false },
+  { key: 'vsl_checkouts', label: 'Checkout VSL', category: 'Funil', default: false },
   { key: 'checkouts', label: 'Checkout Geral', category: 'Funil', default: true },
 
-  // FUGAS (CÁLCULOS) - NOVOS
+  // FUGAS (CÁLCULOS)
   { key: 'fuga_pagina', label: 'Fuga Página (%)', category: 'Métricas de Fuga', default: true, format: 'percentage_red' },
   { key: 'fuga_bridge', label: 'Fuga Bridge (%)', category: 'Métricas de Fuga', default: false, format: 'percentage_red' },
   { key: 'fuga_vsl', label: 'Fuga VSL (%)', category: 'Métricas de Fuga', default: false, format: 'percentage_red' },
@@ -57,10 +57,12 @@ const ALL_COLUMNS = [
   { key: 'profit', label: 'Lucro (R$)', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'roi', label: 'ROI (%)', category: 'Financeiro', default: true, format: 'percentage' },
   
-  // GOOGLE ADS AVANÇADO
+  // GOOGLE ADS AVANÇADO (RECUPERADAS)
   { key: 'strategy', label: 'Estratégia', category: 'Google Ads', default: true },
   { key: 'target_cpa', label: 'Meta (CPA/ROAS)', category: 'Google Ads', default: true, format: 'currency' },
   { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false, format: 'percentage_share' },
+  { key: 'search_top_share', label: 'Parc. Topo', category: 'Google Ads', default: false, format: 'percentage_share' },
+  { key: 'search_abs_share', label: 'Parc. Absoluta', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'final_url', label: 'Página Anúncio', category: 'Google Ads', default: false, type: 'link' },
 ];
 
@@ -68,7 +70,6 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // Datas
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     date.setDate(1); 
@@ -86,13 +87,12 @@ export default function ProductDetailPage() {
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
-  // Estado do Lançamento Manual (Atualizado com novos campos de VSL)
   const [manualData, setManualData] = useState({ 
     date: getLocalYYYYMMDD(new Date()), 
     visits: 0, 
     checkouts: 0, 
-    vsl_clicks: 0, // NOVO
-    vsl_checkouts: 0, // NOVO
+    vsl_clicks: 0, 
+    vsl_checkouts: 0, 
     sales: 0, 
     revenue: 0, 
     refunds: 0,
@@ -104,7 +104,6 @@ export default function ProductDetailPage() {
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
 
-  // --- TEMA ---
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   useEffect(() => {
@@ -150,7 +149,7 @@ export default function ProductDetailPage() {
 
   useEffect(() => { if(productId) fetchData(); }, [productId]);
 
-  // Busca dados para edição no modal
+  // Carrega dados existentes para edição
   useEffect(() => {
     if (showManualEntry && manualData.date && productId) {
         const fetchDayData = async () => {
@@ -187,16 +186,16 @@ export default function ProductDetailPage() {
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
+      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
         product_id: productId,
         date: manualData.date,
         visits: Number(manualData.visits),
         checkouts: Number(manualData.checkouts),
-        // NOVOS CAMPOS SALVOS NO BANCO
         vsl_clicks: Number(manualData.vsl_clicks),
         vsl_checkouts: Number(manualData.vsl_checkouts),
         conversions: Number(manualData.sales),
-        conversion_value: Number(manualData.revenue),
+        conversion_value: Number(manualData.revenue), // AQUI ESTÁ A CORREÇÃO
         refunds: Number(manualData.refunds),
         currency: manualData.currency, 
         updated_at: new Date().toISOString()
@@ -207,7 +206,7 @@ export default function ProductDetailPage() {
       
       alert('Dados salvos com sucesso!');
       setShowManualEntry(false);
-      fetchData(); 
+      fetchData(); // Atualiza a tabela imediatamente
     } catch (e: any) { alert('Erro: ' + e.message); }
     finally { setIsSavingManual(false); }
   };
@@ -240,14 +239,6 @@ export default function ProductDetailPage() {
       let budget = Number(row.budget_micros || 0) / 1000000;
       let targetValue = Number(row.target_cpa || 0);
       
-      // Métricas Manuais
-      const visits = Number(row.visits || 0);
-      const checkouts = Number(row.checkouts || 0);
-      const vslClicks = Number(row.vsl_clicks || 0);
-      const vslCheckouts = Number(row.vsl_checkouts || 0);
-      const clicks = Number(row.clicks || 0); // Cliques no anúncio
-
-      // Conversão Moeda
       const rowCurrency = row.currency || 'BRL';
       
       if (viewCurrency === 'BRL' && rowCurrency === 'USD') {
@@ -262,17 +253,16 @@ export default function ProductDetailPage() {
       const conversions = Number(row.conversions || 0);
       const cpa = conversions > 0 ? cost / conversions : 0;
 
-      // CÁLCULO DE FUGAS (DROP-OFF RATES)
-      // Fuga da Página: Relação de cliques no anuncio pela quantidade de idas ao checkout
-      const fugaPagina = clicks > 0 ? (1 - (checkouts / clicks)) * 100 : 0;
+      // Métricas de Funil & Fuga
+      const visits = Number(row.visits || 0);
+      const checkouts = Number(row.checkouts || 0);
+      const vslClicks = Number(row.vsl_clicks || 0);
+      const vslCheckouts = Number(row.vsl_checkouts || 0);
+      const clicks = Number(row.clicks || 0);
       
-      // Fuga da Bridge Page: Relação de cliques no anuncio pela quantidade de idas a VSL
+      const fugaPagina = clicks > 0 ? (1 - (checkouts / clicks)) * 100 : 0;
       const fugaBridge = clicks > 0 ? (1 - (vslClicks / clicks)) * 100 : 0;
-
-      // Fuga da VSL: Relação de cliques na VSL pela quantidade de idas ao checkout do produtor
-      // Nota: Aqui assumimos que 'vsl_checkouts' é o checkout do produtor vindo da VSL
       const fugaVsl = vslClicks > 0 ? (1 - (vslCheckouts / vslClicks)) * 100 : 0;
-
 
       stats.revenue += revenue; stats.cost += cost; stats.profit += profit;
       stats.conversions += conversions; stats.clicks += clicks; stats.visits += visits;
@@ -286,9 +276,11 @@ export default function ProductDetailPage() {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED', 
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
-        search_impr_share: parseShare(row.search_impression_share),
-        
-        // Passando novos valores para a tabela
+        // Parcelas recuperadas
+        search_impr_share: parseShare(row.search_impression_share), 
+        search_top_share: parseShare(row.search_top_impression_share), 
+        search_abs_share: parseShare(row.search_abs_top_share),
+        // Funil
         visits, checkouts, vsl_clicks: vslClicks, vsl_checkouts: vslCheckouts,
         fuga_pagina: fugaPagina, fuga_bridge: fugaBridge, fuga_vsl: fugaVsl
       };
@@ -315,7 +307,6 @@ export default function ProductDetailPage() {
 
   const { rows, stats, chart } = processedData;
 
-  // Cálculo do CPA Médio Global
   const globalCpa = stats.conversions > 0 ? stats.cost / stats.conversions : 0;
 
   return (
@@ -360,7 +351,7 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* KPI Cards Atualizados */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
         <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-blue-500`}>
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
@@ -378,7 +369,6 @@ export default function ProductDetailPage() {
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p>
            <p className="text-2xl font-bold text-indigo-500">{stats.roi.toFixed(1)}%</p>
         </div>
-        {/* NOVO CARD CPA */}
         <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-cyan-500`}>
            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Custo/Conv (CPA)</p>
            <p className="text-2xl font-bold text-cyan-500">{formatMoney(globalCpa)}</p>
@@ -426,7 +416,7 @@ export default function ProductDetailPage() {
                     else if (col.format === 'currency') content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold') : (col.key === 'revenue' ? 'text-blue-500 font-bold' : (col.key === 'cost' ? 'text-orange-500 font-medium' : 'text-slate-400'))}>{formatMoney(val)}</span>;
                     else if (col.format === 'percentage') content = <span>{formatPercent(val)}</span>;
                     else if (col.format === 'percentage_share') content = <span>{formatShare(val)}</span>;
-                    else if (col.format === 'percentage_red') content = <span className={`${val > 50 ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>{formatPercent(val)}</span>; // Destaca fugas altas
+                    else if (col.format === 'percentage_red') content = <span className={`${val > 50 ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>{formatPercent(val)}</span>;
                     else content = <span className={textMuted}>{val}</span>;
                     
                     return <td key={col.key} className="px-4 py-4 whitespace-nowrap text-right">{content}</td>;
@@ -438,7 +428,6 @@ export default function ProductDetailPage() {
         </div>
       </div>
       
-      {/* MODAL LANÇAMENTO MANUAL (ATUALIZADO) */}
       {showManualEntry && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className={`${bgCard} rounded-xl w-full max-w-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]`}>
@@ -448,8 +437,6 @@ export default function ProductDetailPage() {
               </div>
               
               <div className="space-y-6">
-                 
-                 {/* Bloco 1: Data e Moeda */}
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
                     <div>
@@ -462,7 +449,6 @@ export default function ProductDetailPage() {
                     </div>
                  </div>
 
-                 {/* Bloco 2: Funil de Cliques (Novos Campos) */}
                  <div className={`p-4 rounded-lg border ${isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                     <h3 className="text-xs font-bold text-indigo-400 uppercase mb-3 flex items-center gap-2"><MousePointer size={14}/> Tráfego & VSL</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -473,7 +459,6 @@ export default function ProductDetailPage() {
                     </div>
                  </div>
 
-                 {/* Bloco 3: Financeiro */}
                  <div className={`p-4 rounded-lg border ${isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                     <h3 className="text-xs font-bold text-emerald-400 uppercase mb-3 flex items-center gap-2"><ShoppingCart size={14}/> Vendas & Receita</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -489,7 +474,6 @@ export default function ProductDetailPage() {
         </div>
       )}
 
-      {/* MODAL COLUNAS */}
       {showColumnModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className={`${bgCard} rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]`}>
