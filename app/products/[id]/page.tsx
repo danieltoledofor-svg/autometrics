@@ -8,7 +8,7 @@ import {
   Video, MousePointer
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -57,7 +57,7 @@ const ALL_COLUMNS = [
   { key: 'profit', label: 'Lucro (R$)', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'roi', label: 'ROI (%)', category: 'Financeiro', default: true, format: 'percentage' },
   
-  // GOOGLE ADS AVANÇADO
+  // GOOGLE ADS AVANÇADO (RECUPERADAS)
   { key: 'strategy', label: 'Estratégia', category: 'Google Ads', default: true },
   { key: 'target_cpa', label: 'Meta (CPA/ROAS)', category: 'Google Ads', default: true, format: 'currency' },
   { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false, format: 'percentage_share' },
@@ -70,10 +70,12 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // --- NOVO PADRÃO DE DATAS ---
-  const [dateRange, setDateRange] = useState('this_month');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(1); 
+    return getLocalYYYYMMDD(date);
+  });
+  const [endDate, setEndDate] = useState(() => getLocalYYYYMMDD(new Date()));
 
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
@@ -94,23 +96,20 @@ export default function ProductDetailPage() {
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
+
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // --- INICIALIZAÇÃO ---
   useEffect(() => {
-    // 1. Tema e Moeda
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
     if (savedTheme) setTheme(savedTheme);
+
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
+    
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
     
     fetchLiveDollar();
-
-    // 2. Data Inicial (Novo Padrão)
-    setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
-    handlePresetChange('this_month');
   }, []);
 
   const toggleTheme = () => {
@@ -164,15 +163,20 @@ export default function ProductDetailPage() {
     }
   }, [manualData.date, showManualEntry, productId]);
 
+
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
+      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
-        product_id: productId, date: manualData.date,
-        visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
-        vsl_clicks: Number(manualData.vsl_clicks), vsl_checkouts: Number(manualData.vsl_checkouts),
-        conversions: Number(manualData.sales), 
-        conversion_value: Number(manualData.revenue), 
+        product_id: productId,
+        date: manualData.date,
+        visits: Number(manualData.visits),
+        checkouts: Number(manualData.checkouts),
+        vsl_clicks: Number(manualData.vsl_clicks),
+        vsl_checkouts: Number(manualData.vsl_checkouts),
+        conversions: Number(manualData.sales),
+        conversion_value: Number(manualData.revenue), // AQUI ESTÁ A CORREÇÃO
         refunds: Number(manualData.refunds),
         currency: manualData.currency, 
         updated_at: new Date().toISOString()
@@ -183,7 +187,7 @@ export default function ProductDetailPage() {
       
       alert('Dados salvos com sucesso!');
       setShowManualEntry(false);
-      fetchData(); 
+      fetchData(); // Atualiza a tabela imediatamente
     } catch (e: any) { alert('Erro: ' + e.message); }
     finally { setIsSavingManual(false); }
   };
@@ -203,32 +207,7 @@ export default function ProductDetailPage() {
     });
   };
 
-  // --- LÓGICA DE DATAS UNIFICADA ---
-  const handlePresetChange = (preset: string) => {
-    setDateRange(preset);
-    const now = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    if (preset === 'today') { /* hoje */ }
-    else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
-    else if (preset === '7d') { start.setDate(now.getDate() - 7); }
-    else if (preset === '30d') { start.setDate(now.getDate() - 30); }
-    else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
-    else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
-    else if (preset === 'custom') return;
-
-    setStartDate(getLocalYYYYMMDD(start));
-    setEndDate(getLocalYYYYMMDD(end));
-  };
-
-  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
-    if (type === 'start') setStartDate(value); else setEndDate(value);
-    setDateRange('custom');
-  };
-
   const processedData = useMemo(() => {
-    // Filtro usando startDate e endDate do estado
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
