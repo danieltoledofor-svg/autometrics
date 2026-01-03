@@ -57,13 +57,13 @@ const ALL_COLUMNS = [
   { key: 'profit', label: 'Lucro (R$)', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'roi', label: 'ROI (%)', category: 'Financeiro', default: true, format: 'percentage' },
   
-  // GOOGLE ADS AVANÇADO (RECUPERADAS)
+  // GOOGLE ADS AVANÇADO
   { key: 'strategy', label: 'Estratégia', category: 'Google Ads', default: true },
-  { key: 'target_cpa', label: 'Meta (CPA)', category: 'Google Ads', default: true, format: 'currency' },
+  { key: 'target_cpa', label: 'Meta (CPA/ROAS)', category: 'Google Ads', default: true, format: 'currency' },
   { key: 'search_impr_share', label: 'Parc. Impr.', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'search_top_share', label: 'Parc. Topo', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'search_abs_share', label: 'Parc. Absoluta', category: 'Google Ads', default: false, format: 'percentage_share' },
-  { key: 'final_url', label: 'URL Final', category: 'Google Ads', default: false, type: 'link' },
+  { key: 'final_url', label: 'Página Anúncio', category: 'Google Ads', default: false, type: 'link' },
 ];
 
 export default function ProductDetailPage() {
@@ -71,13 +71,9 @@ export default function ProductDetailPage() {
   const productId = typeof params?.id === 'string' ? params.id : '';
 
   // --- ESTADOS DE DATA ---
-  const [dateRange, setDateRange] = useState('this_month'); // Adicionado
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setDate(1); 
-    return getLocalYYYYMMDD(date);
-  });
-  const [endDate, setEndDate] = useState(() => getLocalYYYYMMDD(new Date()));
+  const [dateRange, setDateRange] = useState('this_month');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
@@ -85,7 +81,7 @@ export default function ProductDetailPage() {
   
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
-  const [viewCurrency, setViewCurrency] = useState('BRL');
+  const [viewCurrency, setViewCurrency] = useState('BRL'); // Inicializa como string, mas será atualizado no useEffect
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
@@ -103,26 +99,39 @@ export default function ProductDetailPage() {
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
-    // 1. Tema e Moeda
+    // 1. Tema
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
     if (savedTheme) setTheme(savedTheme);
 
+    // 2. Colunas
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
     
+    // 3. Dólar Manual
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
+
+    // 4. Moeda de Visualização (NOVO: Persistência da Moeda)
+    const savedViewCurrency = localStorage.getItem('autometrics_view_currency');
+    if (savedViewCurrency) setViewCurrency(savedViewCurrency);
     
     fetchLiveDollar();
 
-    // 2. Data Inicial
+    // 5. Data Inicial
     setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
+    handlePresetChange('this_month');
   }, []);
 
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('autometrics_theme', newTheme);
+  };
+
+  // Função para salvar a escolha da moeda
+  const toggleViewCurrency = (currency: string) => {
+    setViewCurrency(currency);
+    localStorage.setItem('autometrics_view_currency', currency);
   };
 
   async function fetchLiveDollar() {
@@ -157,14 +166,8 @@ export default function ProductDetailPage() {
             if (data) {
                 setManualData(prev => ({
                     ...prev,
-                    visits: data.visits || 0, 
-                    checkouts: data.checkouts || 0, 
-                    vsl_clicks: data.vsl_clicks || 0, 
-                    vsl_checkouts: data.vsl_checkouts || 0,
-                    sales: data.conversions || 0, 
-                    revenue: data.conversion_value || 0, 
-                    refunds: data.refunds || 0, 
-                    currency: data.currency || prev.currency
+                    visits: data.visits || 0, checkouts: data.checkouts || 0, vsl_clicks: data.vsl_clicks || 0, vsl_checkouts: data.vsl_checkouts || 0,
+                    sales: data.conversions || 0, revenue: data.conversion_value || 0, refunds: data.refunds || 0, currency: data.currency || prev.currency
                 }));
             } else {
                  setManualData(prev => ({
@@ -216,7 +219,25 @@ export default function ProductDetailPage() {
     });
   };
 
-  // --- Lógica de Mudança de Data ---
+  // --- LÓGICA DE DATAS ---
+  const handlePresetChange = (preset: string) => {
+    setDateRange(preset);
+    const now = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (preset === 'today') { /* hoje */ }
+    else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
+    else if (preset === '7d') { start.setDate(now.getDate() - 7); }
+    else if (preset === '30d') { start.setDate(now.getDate() - 30); }
+    else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+    else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
+    else if (preset === 'custom') return;
+
+    setStartDate(getLocalYYYYMMDD(start));
+    setEndDate(getLocalYYYYMMDD(end));
+  };
+
   const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
     if (type === 'start') setStartDate(value); else setEndDate(value);
     setDateRange('custom');
@@ -328,23 +349,7 @@ export default function ProductDetailPage() {
                    <select 
                       className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
                       value={dateRange}
-                      onChange={(e) => {
-                          const preset = e.target.value;
-                          setDateRange(preset);
-                          const now = new Date();
-                          let start = new Date();
-                          let end = new Date();
-                          if (preset === 'today') { /* hoje */ }
-                          else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
-                          else if (preset === '7d') { start.setDate(now.getDate() - 7); }
-                          else if (preset === '30d') { start.setDate(now.getDate() - 30); }
-                          else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
-                          else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
-                          else if (preset === 'custom') return;
-                          
-                          setStartDate(getLocalYYYYMMDD(start));
-                          setEndDate(getLocalYYYYMMDD(end));
-                      }}
+                      onChange={(e) => handlePresetChange(e.target.value)}
                    >
                       <option value="today">Hoje</option>
                       <option value="yesterday">Ontem</option>
@@ -374,8 +379,9 @@ export default function ProductDetailPage() {
 
           <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
              <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                <button onClick={() => setViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
-                <button onClick={() => setViewCurrency('BRL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
+                {/* BOTÕES DE MOEDA COM PERSISTÊNCIA */}
+                <button onClick={() => toggleViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
+                <button onClick={() => toggleViewCurrency('BRL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
              </div>
              <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
           </div>
