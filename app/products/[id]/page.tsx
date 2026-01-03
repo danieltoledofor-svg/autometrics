@@ -113,7 +113,7 @@ export default function ProductDetailPage() {
 
     // 2. Data Inicial (Novo Padrão)
     setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
-    handlePresetChange('this_month'); // Define as datas iniciais
+    handlePresetChange('this_month');
   }, []);
 
   const toggleTheme = () => {
@@ -475,7 +475,7 @@ export default function ProductDetailPage() {
               
               <div className="space-y-6">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
+                    <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'} [&::-webkit-calendar-picker-indicator]:invert`} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
                     <div>
                         <label className="text-xs uppercase text-slate-500 font-bold">Moeda</label>
                         <select className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.currency} onChange={e => setManualData({...manualData, currency: e.target.value})}>
