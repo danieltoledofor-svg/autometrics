@@ -258,8 +258,8 @@ export default function ProductsPage() {
                <div key={mcc.name} className="mb-2">
                  <div className="flex items-center gap-1 group relative pr-2">
                     <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
-                    <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
-                       <Globe size={14} className={isMccActive ? 'text-white' : 'text-slate-500'}/>
+                    <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? activeItem : `${textMuted} ${hoverItem}`}`}>
+                       <Globe size={14} className={isMccActive ? 'text-indigo-400' : 'text-slate-500'}/>
                        <span className="truncate w-28">{mcc.name}</span>
                     </button>
                     <button onClick={(e) => handleDeleteMcc(mcc.name, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
@@ -373,6 +373,7 @@ export default function ProductsPage() {
             </div>
           </div>
         )}
+
       </main>
     </div>
   );
