@@ -99,6 +99,7 @@ export default function DashboardPage() {
   }
 
   async function fetchInitialData(userId: string) {
+    // Busca produtos do usuário
     const { data: prodData } = await supabase
       .from('products')
       .select('id, currency')
@@ -106,6 +107,7 @@ export default function DashboardPage() {
 
     setProducts(prodData || []);
 
+    // Se tiver produtos, busca as métricas deles
     if (prodData && prodData.length > 0) {
         const productIds = prodData.map(p => p.id);
         const { data: metData } = await supabase
@@ -220,8 +222,7 @@ export default function DashboardPage() {
   const textHead = isDark ? 'text-white' : 'text-slate-900';
   const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
-
-  // --- FUNÇÃO AUXILIAR RESTAURADA ---
+  
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
@@ -233,6 +234,7 @@ export default function DashboardPage() {
         {/* Logo */}
         <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
            <div className="hidden md:block relative"> 
+             {/* Logo com Sombra no modo Claro para garantir visibilidade */}
              <Image 
                src="/logo.png" 
                alt="Logo" 
@@ -253,42 +255,57 @@ export default function DashboardPage() {
            </div>
         </div>
         
-        {/* CORREÇÃO AQUI: ADICIONADO w-full PARA TODOS OS LINKS */}
-        <nav className="flex-1 p-4 space-y-2">
-           <Link href="/dashboard" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
+        <nav className="flex-1 px-2 py-4 space-y-2">
+           {/* --- CORREÇÃO AQUI: ADICIONADO w-full --- */}
+           <Link href="/dashboard" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
+             <LayoutGrid size={20} /> 
+             <span className="hidden md:block font-medium">Dashboard</span>
+           </Link>
            
-           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
+           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+             <Target size={20} /> 
+             <span className="hidden md:block font-medium">Planejamento</span>
+           </Link>
            
-           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
+           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+             <Package size={20} /> 
+             <span className="hidden md:block font-medium">Meus Produtos</span>
+           </Link>
            
-           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
+           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+             <Settings size={20} /> 
+             <span className="hidden md:block font-medium">Integração</span>
+           </Link>
         </nav>
+
         <div className="p-4 border-t border-inherit">
-           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair ({user?.email?.split('@')[0]})</span></button>
+           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair</span></button>
         </div>
       </aside>
 
       <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+        {/* Header e Filtros */}
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
           <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className={textMuted}>Acompanhe seus resultados consolidados.</p></div>
           <div className="flex flex-wrap gap-4 items-center w-full xl:w-auto">
              
-             {/* --- NOVO COMPONENTE DE DATA UNIFICADO --- */}
+             {/* SELETOR DE DATA UNIFICADO */}
              <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
                 <div className="flex items-center gap-2 px-2 border-r border-inherit">
+                   {/* Ícone: Branco no escuro, Indigo no claro */}
                    <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
                    <select 
                       className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
                       value={dateRange}
                       onChange={(e) => handlePresetChange(e.target.value)}
                    >
-                      <option value="today">Hoje</option>
-                      <option value="yesterday">Ontem</option>
-                      <option value="7d">7 Dias</option>
-                      <option value="30d">30 Dias</option>
-                      <option value="this_month">Este Mês</option>
-                      <option value="last_month">Mês Passado</option>
-                      <option value="custom">Personalizado</option>
+                      <option value="today" className="bg-slate-900">Hoje</option>
+                      <option value="yesterday" className="bg-slate-900">Ontem</option>
+                      <option value="7d" className="bg-slate-900">7 Dias</option>
+                      <option value="30d" className="bg-slate-900">30 Dias</option>
+                      <option value="this_month" className="bg-slate-900">Este Mês</option>
+                      <option value="last_month" className="bg-slate-900">Mês Passado</option>
+                      <option value="custom" className="bg-slate-900">Personalizado</option>
                    </select>
                 </div>
                 <div className="flex items-center gap-2 px-2">
@@ -307,7 +324,6 @@ export default function DashboardPage() {
                    />
                 </div>
              </div>
-             {/* ----------------------------------------- */}
 
              <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
                 <div className="flex gap-3 px-2 border-r border-inherit pr-4">
@@ -354,7 +370,13 @@ export default function DashboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse">
               <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
-                <tr><th className="px-6 py-4">Data</th><th className="px-6 py-4 text-right text-blue-600">Receita</th><th className="px-6 py-4 text-right text-orange-600">Custo</th><th className="px-6 py-4 text-right text-emerald-600">Lucro</th><th className="px-6 py-4 text-right">ROI</th></tr>
+                <tr>
+                  <th className="px-6 py-4">Data</th>
+                  <th className="px-6 py-4 text-right text-blue-600">Receita</th>
+                  <th className="px-6 py-4 text-right text-orange-600">Custo</th>
+                  <th className="px-6 py-4 text-right text-emerald-600">Lucro</th>
+                  <th className="px-6 py-4 text-right">ROI</th>
+                </tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
                 {processedData.table.map((row: any) => {
