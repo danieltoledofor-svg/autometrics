@@ -216,13 +216,14 @@ export default function ProductsPage() {
       
       {/* SIDEBAR */}
       <aside className={`w-full md:w-72 border-r flex flex-col h-screen sticky top-0 z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
+        {/* CORREÇÃO AQUI: Adicionado overflow-hidden para impedir que a logo cubra o botão abaixo */}
+        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden">
            <div className="hidden md:block relative"><Image src="/logo.png" alt="Logo" width={180} height={60} className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} priority /></div>
            <div className="md:hidden"><Image src="/logo.png" alt="Logo" width={40} height={40} className={`w-8 h-8 object-contain ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`}/></div>
         </div>
         
         <nav className="flex-1 px-2 py-4 space-y-2">
-           {/* CORREÇÃO AQUI: ADICIONADO w-full PARA TODOS OS LINKS DA SIDEBAR */}
+           {/* CORREÇÃO AQUI: Garantindo w-full para todos os links */}
            <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
            
            <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
@@ -258,8 +259,8 @@ export default function ProductsPage() {
                <div key={mcc.name} className="mb-2">
                  <div className="flex items-center gap-1 group relative pr-2">
                     <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
-                    <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? activeItem : `${textMuted} ${hoverItem}`}`}>
-                       <Globe size={14} className={isMccActive ? 'text-indigo-400' : 'text-slate-500'}/>
+                    <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
+                       <Globe size={14} className={isMccActive ? 'text-white' : 'text-slate-500'}/>
                        <span className="truncate w-28">{mcc.name}</span>
                     </button>
                     <button onClick={(e) => handleDeleteMcc(mcc.name, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
@@ -339,8 +340,12 @@ export default function ProductsPage() {
                 }`}>
                   
                   <div className="absolute top-4 right-4 flex gap-2 z-10">
-                     <button onClick={(e) => toggleStatus(product, e)} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'}`} title="Alternar Status">{product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}</button>
-                     <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : `${isDark ? 'bg-slate-800 text-slate-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-indigo-600'}`}`} title={product.is_hidden ? "Restaurar" : "Arquivar"}>{product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+                     <button onClick={(e) => toggleStatus(product, e)} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'}`} title="Alternar Status">
+                        {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
+                     </button>
+                     <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : `${isDark ? 'bg-slate-800 text-slate-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-indigo-600'}`}`} title={product.is_hidden ? "Restaurar" : "Arquivar"}>
+                        {product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+                     </button>
                      <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`} title="Excluir"><Trash2 size={14} /></button>
                   </div>
 
