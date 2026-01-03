@@ -81,7 +81,7 @@ export default function ProductDetailPage() {
   
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
-  const [viewCurrency, setViewCurrency] = useState('BRL'); // Inicializa como string, mas será atualizado no useEffect
+  const [viewCurrency, setViewCurrency] = useState('BRL');
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
@@ -99,25 +99,19 @@ export default function ProductDetailPage() {
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
-    // 1. Tema
+    // 1. Tema e Moeda
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
     if (savedTheme) setTheme(savedTheme);
 
-    // 2. Colunas
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) {}
     
-    // 3. Dólar Manual
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
-
-    // 4. Moeda de Visualização (NOVO: Persistência da Moeda)
-    const savedViewCurrency = localStorage.getItem('autometrics_view_currency');
-    if (savedViewCurrency) setViewCurrency(savedViewCurrency);
     
     fetchLiveDollar();
 
-    // 5. Data Inicial
+    // 2. Data Inicial (Novo Padrão)
     setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
     handlePresetChange('this_month');
   }, []);
@@ -183,6 +177,7 @@ export default function ProductDetailPage() {
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
+      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
         product_id: productId, date: manualData.date,
         visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
