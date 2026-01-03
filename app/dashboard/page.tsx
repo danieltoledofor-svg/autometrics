@@ -231,8 +231,8 @@ export default function DashboardPage() {
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
       <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
-        {/* Logo */}
-        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
+        {/* Logo - ADICIONADO overflow-hidden PARA EVITAR QUE A LOGO CUBRA O BOTÃO */}
+        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden">
            <div className="hidden md:block relative"> 
              {/* Logo com Sombra no modo Claro para garantir visibilidade */}
              <Image 
@@ -256,30 +256,19 @@ export default function DashboardPage() {
         </div>
         
         <nav className="flex-1 px-2 py-4 space-y-2">
-           {/* --- CORREÇÃO AQUI: ADICIONADO w-full --- */}
            <Link href="/dashboard" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
              <LayoutGrid size={20} /> 
              <span className="hidden md:block font-medium">Dashboard</span>
            </Link>
            
-           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-             <Target size={20} /> 
-             <span className="hidden md:block font-medium">Planejamento</span>
-           </Link>
+           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
            
-           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-             <Package size={20} /> 
-             <span className="hidden md:block font-medium">Meus Produtos</span>
-           </Link>
+           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
            
-           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-             <Settings size={20} /> 
-             <span className="hidden md:block font-medium">Integração</span>
-           </Link>
+           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
         </nav>
-
         <div className="p-4 border-t border-inherit">
-           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair</span></button>
+           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair ({user?.email?.split('@')[0]})</span></button>
         </div>
       </aside>
 
@@ -299,13 +288,13 @@ export default function DashboardPage() {
                       value={dateRange}
                       onChange={(e) => handlePresetChange(e.target.value)}
                    >
-                      <option value="today" className="bg-slate-900">Hoje</option>
-                      <option value="yesterday" className="bg-slate-900">Ontem</option>
-                      <option value="7d" className="bg-slate-900">7 Dias</option>
-                      <option value="30d" className="bg-slate-900">30 Dias</option>
-                      <option value="this_month" className="bg-slate-900">Este Mês</option>
-                      <option value="last_month" className="bg-slate-900">Mês Passado</option>
-                      <option value="custom" className="bg-slate-900">Personalizado</option>
+                      <option value="today">Hoje</option>
+                      <option value="yesterday">Ontem</option>
+                      <option value="7d">7 Dias</option>
+                      <option value="30d">30 Dias</option>
+                      <option value="this_month">Este Mês</option>
+                      <option value="last_month">Mês Passado</option>
+                      <option value="custom">Personalizado</option>
                    </select>
                 </div>
                 <div className="flex items-center gap-2 px-2">
@@ -370,13 +359,7 @@ export default function DashboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse">
               <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
-                <tr>
-                  <th className="px-6 py-4">Data</th>
-                  <th className="px-6 py-4 text-right text-blue-600">Receita</th>
-                  <th className="px-6 py-4 text-right text-orange-600">Custo</th>
-                  <th className="px-6 py-4 text-right text-emerald-600">Lucro</th>
-                  <th className="px-6 py-4 text-right">ROI</th>
-                </tr>
+                <tr><th className="px-6 py-4">Data</th><th className="px-6 py-4 text-right text-blue-600">Receita</th><th className="px-6 py-4 text-right text-orange-600">Custo</th><th className="px-6 py-4 text-right text-emerald-600">Lucro</th><th className="px-6 py-4 text-right">ROI</th></tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
                 {processedData.table.map((row: any) => {
