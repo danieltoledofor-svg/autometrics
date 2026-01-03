@@ -222,27 +222,14 @@ export default function ProductsPage() {
         </div>
         
         <nav className="flex-1 px-2 py-4 space-y-2">
-           {/* CORREÇÃO AQUI: Dashboard agora Inativo (Layout Normal) mas com w-full */}
-           <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-             <LayoutGrid size={20} /> 
-             <span className="hidden md:block font-medium">Dashboard</span>
-           </Link>
+           {/* CORREÇÃO AQUI: ADICIONADO w-full PARA TODOS OS LINKS DA SIDEBAR */}
+           <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
            
-           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-             <Target size={20} /> 
-             <span className="hidden md:block font-medium">Planejamento</span>
-           </Link>
+           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
            
-           {/* CORREÇÃO AQUI: Produtos agora Ativo (Roxo) e com w-full */}
-           <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
-             <Package size={20} /> 
-             <span className="hidden md:block font-medium">Meus Produtos</span>
-           </Link>
+           <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><Briefcase size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
            
-           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-             <Settings size={20} /> 
-             <span className="hidden md:block font-medium">Integração</span>
-           </Link>
+           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
         </nav>
         
         {/* Filtros da Sidebar */}
@@ -271,8 +258,8 @@ export default function ProductsPage() {
                <div key={mcc.name} className="mb-2">
                  <div className="flex items-center gap-1 group relative pr-2">
                     <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
-                    <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? activeItem : `${textMuted} ${hoverItem}`}`}>
-                       <Globe size={14} className={isMccActive ? 'text-indigo-400' : 'text-slate-500'}/>
+                    <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
+                       <Globe size={14} className={isMccActive ? 'text-white' : 'text-slate-500'}/>
                        <span className="truncate w-28">{mcc.name}</span>
                     </button>
                     <button onClick={(e) => handleDeleteMcc(mcc.name, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
@@ -332,6 +319,7 @@ export default function ProductsPage() {
 
              <button onClick={handleReload} className={`p-2 rounded-lg transition-colors mr-1 ${hoverItem}`} title="Recarregar"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
+           
            {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 px-4 rounded-xl flex items-center gap-2 text-amber-500 text-xs font-bold animate-pulse whitespace-nowrap"><AlertTriangle size={16} /> Exibindo Ocultos</div>}
         </div>
 
@@ -344,16 +332,24 @@ export default function ProductsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
             {filteredProducts.map((product) => (
               <Link key={product.id} href={`/products/${product.id}`} className="block group">
-                <div className={`border rounded-xl p-6 transition-all h-full relative overflow-hidden flex flex-col ${product.is_hidden ? (isDark ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-100 border-slate-300 opacity-60') : `${bgCard} hover:border-indigo-500/50`}`}>
+                <div className={`border rounded-xl p-6 transition-all h-full relative overflow-hidden flex flex-col ${
+                   product.is_hidden 
+                     ? (isDark ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-100 border-slate-300 opacity-60') 
+                     : `${bgCard} hover:border-indigo-500/50`
+                }`}>
+                  
                   <div className="absolute top-4 right-4 flex gap-2 z-10">
                      <button onClick={(e) => toggleStatus(product, e)} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'}`} title="Alternar Status">{product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}</button>
                      <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : `${isDark ? 'bg-slate-800 text-slate-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-indigo-600'}`}`} title={product.is_hidden ? "Restaurar" : "Arquivar"}>{product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
                      <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`} title="Excluir"><Trash2 size={14} /></button>
                   </div>
+
                   <div className="flex justify-between items-start mb-4 pr-32">
                     <div className={`p-3 rounded-xl flex items-center justify-center w-12 h-12 ${product.currency === 'USD' ? 'bg-indigo-500/10 text-indigo-500' : product.currency === 'EUR' ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500'}`}>{product.currency === 'USD' ? '$' : product.currency === 'EUR' ? '€' : 'R$'}</div>
                   </div>
+                  
                   <h3 className={`text-lg font-bold mb-1 transition-colors line-clamp-2 ${textHead} group-hover:text-indigo-500`}>{product.name}</h3>
+                  
                   <div className={`mt-auto pt-4 space-y-2 border-t ${isDark ? 'border-slate-800/50' : 'border-slate-100'}`}>
                      <div className="flex items-center gap-2 text-xs text-slate-500"><Folder size={12}/><span className="truncate max-w-[200px]">{product.account_name || 'Sem Conta'}</span></div>
                      <div className="flex items-center gap-2 text-xs text-slate-500"><Layers size={12}/><span className={`font-mono px-1.5 py-0.5 rounded truncate max-w-[200px] ${isDark ? 'bg-black/30' : 'bg-slate-100'}`}>{product.google_ads_campaign_name}</span></div>
