@@ -221,6 +221,9 @@ export default function DashboardPage() {
   const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
 
+  // --- FUNÇÃO AUXILIAR RESTAURADA ---
+  const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
+
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
   return (
@@ -257,8 +260,6 @@ export default function DashboardPage() {
            <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
            
            <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
-           
-           {/* Link de Lançamento REMOVIDO para limpar */}
            
            <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
         </nav>
@@ -306,6 +307,7 @@ export default function DashboardPage() {
                    />
                 </div>
              </div>
+             {/* ----------------------------------------- */}
 
              <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
                 <div className="flex gap-3 px-2 border-r border-inherit pr-4">
