@@ -108,6 +108,10 @@ export default function ProductDetailPage() {
     
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
+
+    // Carrega a moeda salva
+    const savedCurrency = localStorage.getItem('autometrics_view_currency');
+    if (savedCurrency) setViewCurrency(savedCurrency);
     
     fetchLiveDollar();
 
@@ -122,7 +126,7 @@ export default function ProductDetailPage() {
     localStorage.setItem('autometrics_theme', newTheme);
   };
 
-  // Função para salvar a escolha da moeda
+  // Função para salvar a escolha da moeda (CORRIGIDA)
   const toggleViewCurrency = (currency: string) => {
     setViewCurrency(currency);
     localStorage.setItem('autometrics_view_currency', currency);
@@ -177,7 +181,6 @@ export default function ProductDetailPage() {
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
-      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
         product_id: productId, date: manualData.date,
         visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
@@ -284,9 +287,11 @@ export default function ProductDetailPage() {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED', 
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
+        // Parcelas
         search_impr_share: parseShare(row.search_impression_share), 
         search_top_share: parseShare(row.search_top_impression_share), 
         search_abs_share: parseShare(row.search_abs_top_share),
+        // Funil
         visits, checkouts, vsl_clicks: vslClicks, vsl_checkouts: vslCheckouts, fuga_pagina: fugaPagina, fuga_bridge: fugaBridge, fuga_vsl: fugaVsl
       };
     });
@@ -340,7 +345,8 @@ export default function ProductDetailPage() {
           {/* SELETOR DE DATA PADRONIZADO */}
           <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
                 <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   <Calendar size={18} className="text-indigo-500"/>
+                   {/* CONTRASTE CORRIGIDO: Usa condicional para cor do ícone */}
+                   <Calendar size={18} className={isDark ? "text-indigo-400" : "text-indigo-600"}/>
                    <select 
                       className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
                       value={dateRange}
@@ -374,7 +380,7 @@ export default function ProductDetailPage() {
 
           <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
              <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                {/* BOTÕES DE MOEDA COM PERSISTÊNCIA */}
+                {/* BOTÕES DE MOEDA COM PERSISTÊNCIA CORRIGIDA (usa toggleViewCurrency) */}
                 <button onClick={() => toggleViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
                 <button onClick={() => toggleViewCurrency('BRL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
              </div>
