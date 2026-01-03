@@ -109,6 +109,9 @@ export default function ProductDetailPage() {
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
     
+    const savedViewCurrency = localStorage.getItem('autometrics_view_currency');
+    if (savedViewCurrency) setViewCurrency(savedViewCurrency);
+
     fetchLiveDollar();
 
     // 2. Data Inicial (Novo Padrão)
@@ -122,7 +125,6 @@ export default function ProductDetailPage() {
     localStorage.setItem('autometrics_theme', newTheme);
   };
 
-  // Função para salvar a escolha da moeda (CORRIGIDA)
   const toggleViewCurrency = (currency: string) => {
     setViewCurrency(currency);
     localStorage.setItem('autometrics_view_currency', currency);
@@ -152,7 +154,6 @@ export default function ProductDetailPage() {
 
   useEffect(() => { if(productId) fetchData(); }, [productId]);
 
-  // Carrega dados existentes para edição
   useEffect(() => {
     if (showManualEntry && manualData.date && productId) {
         const fetchDayData = async () => {
@@ -177,7 +178,6 @@ export default function ProductDetailPage() {
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
-      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
         product_id: productId, date: manualData.date,
         visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
@@ -214,7 +214,6 @@ export default function ProductDetailPage() {
     });
   };
 
-  // --- LÓGICA DE DATAS ---
   const handlePresetChange = (preset: string) => {
     setDateRange(preset);
     const now = new Date();
@@ -261,7 +260,6 @@ export default function ProductDetailPage() {
       const conversions = Number(row.conversions || 0);
       const cpa = conversions > 0 ? cost / conversions : 0;
 
-      // Métricas de Funil & Fuga
       const visits = Number(row.visits || 0);
       const checkouts = Number(row.checkouts || 0);
       const vslClicks = Number(row.vsl_clicks || 0);
@@ -284,11 +282,9 @@ export default function ProductDetailPage() {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED', 
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
-        // Parcelas
         search_impr_share: parseShare(row.search_impression_share), 
         search_top_share: parseShare(row.search_top_impression_share), 
         search_abs_share: parseShare(row.search_abs_top_share),
-        // Funil
         visits, checkouts, vsl_clicks: vslClicks, vsl_checkouts: vslCheckouts, fuga_pagina: fugaPagina, fuga_bridge: fugaBridge, fuga_vsl: fugaVsl
       };
     });
@@ -377,7 +373,6 @@ export default function ProductDetailPage() {
 
           <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
              <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                {/* BOTÕES DE MOEDA COM PERSISTÊNCIA CORRIGIDA */}
                 <button onClick={() => toggleViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
                 <button onClick={() => toggleViewCurrency('BRL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
              </div>
@@ -475,7 +470,7 @@ export default function ProductDetailPage() {
               
               <div className="space-y-6">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'} [&::-webkit-calendar-picker-indicator]:invert`} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
+                    <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-200 text-black'} `} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
                     <div>
                         <label className="text-xs uppercase text-slate-500 font-bold">Moeda</label>
                         <select className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.currency} onChange={e => setManualData({...manualData, currency: e.target.value})}>
