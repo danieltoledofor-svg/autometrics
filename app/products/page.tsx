@@ -2,79 +2,67 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Calendar, Sun, Moon, LayoutGrid, Package, Settings, 
-  LogOut, RefreshCw, Target, ArrowUpRight, ArrowDownRight
+  Plus, Search, ExternalLink, X, ArrowLeft, RefreshCw, 
+  Briefcase, Folder, Layers, LayoutGrid, ChevronRight, ChevronDown,
+  Eye, EyeOff, PlayCircle, PauseCircle, AlertTriangle, Globe, Trash2,
+  Sun, Moon, Filter, CheckCircle2, XCircle, Target, LogOut, Package, FileText, Settings
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
-} from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
-// Configuração Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Função para garantir data no fuso local (evita erros de UTC)
-function getLocalYYYYMMDD(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-export default function DashboardPage() {
+export default function ProductsPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  
-  // Dados
-  const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   
-  // --- NOVOS ESTADOS DE DATA (PADRONIZADO) ---
-  const [dateRange, setDateRange] = useState('this_month'); 
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-
-  // Configurações Globais (Moeda e Tema)
-  const [liveDollar, setLiveDollar] = useState(6.00); 
-  const [manualDollar, setManualDollar] = useState(5.60); 
-  const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL');
+  // Filtros de Navegação
+  const [selectedMcc, setSelectedMcc] = useState<string | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  
+  // Filtros de Visualização
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'paused'>('ALL'); 
+  const [showHidden, setShowHidden] = useState(false);
+  
+  const [expandedMccs, setExpandedMccs] = useState<string[]>([]);
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newProduct, setNewProduct] = useState({ 
+    name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active', account_name: 'Manual', mcc_name: 'Manual' 
+  });
+  const [saving, setSaving] = useState(false);
+  const [userId, setUserId] = useState('');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  // --- INICIALIZAÇÃO E AUTENTICAÇÃO ---
-  useEffect(() => {
+  // --- INICIALIZAÇÃO ---
+  useEffect(() => { 
     async function init() {
-      // 1. Recupera Preferências Salvas
+      // Carrega Tema
       const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
       if (savedTheme) setTheme(savedTheme);
 
-      const savedDollar = localStorage.getItem('autometrics_manual_dollar');
-      if (savedDollar) setManualDollar(parseFloat(savedDollar));
+      // Carrega Filtro de Status Salvo
+      const savedStatus = localStorage.getItem('autometrics_products_status_filter');
+      if (savedStatus === 'active' || savedStatus === 'paused' || savedStatus === 'ALL') {
+        setStatusFilter(savedStatus);
+      }
 
-      // 2. Verifica Login
       const { data: { session } } = await supabase.auth.getSession();
+      
       if (!session) {
-        router.push('/'); 
+        router.push('/');
         return;
       }
-      setUser(session.user); 
 
-      // 3. Inicializa Datas (Este Mês)
-      handlePresetChange('this_month');
-
-      // 4. Carrega Dados
-      await Promise.all([
-        fetchInitialData(session.user.id), 
-        fetchLiveDollar()
-      ]);
-      
-      setLoading(false);
+      setUserId(session.user.id);
+      await fetchProducts(session.user.id);
     }
     init();
   }, []);
@@ -85,299 +73,310 @@ export default function DashboardPage() {
     localStorage.setItem('autometrics_theme', newTheme);
   };
 
+  // Função para mudar filtro e salvar
+  const changeStatusFilter = (newStatus: 'ALL' | 'active' | 'paused') => {
+    setStatusFilter(newStatus);
+    localStorage.setItem('autometrics_products_status_filter', newStatus);
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/');
   };
 
-  async function fetchLiveDollar() {
-    try {
-      const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
-      const data = await res.json();
-      if (data.USDBRL) setLiveDollar(parseFloat(data.USDBRL.bid));
-    } catch (e) { console.error(e); }
-  }
-
-  async function fetchInitialData(userId: string) {
-    const { data: prodData } = await supabase
+  async function fetchProducts(currentUserId: string) {
+    setLoading(true);
+    
+    let query = supabase
       .from('products')
-      .select('id, currency')
-      .eq('user_id', userId); 
+      .select('*')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: false });
 
-    setProducts(prodData || []);
-
-    if (prodData && prodData.length > 0) {
-        const productIds = prodData.map(p => p.id);
-        const { data: metData } = await supabase
-          .from('daily_metrics')
-          .select('*')
-          .in('product_id', productIds)
-          .order('date', { ascending: true });
-        setMetrics(metData || []);
-    } else {
-        setMetrics([]);
+    const { data } = await query;
+    if (data) {
+       setProducts(data);
+       const allMccs = Array.from(new Set(data.map((p: any) => p.mcc_name || 'Sem MCC'))) as string[];
+       setExpandedMccs(allMccs);
     }
+    setLoading(false);
   }
 
-  const handleManualDollarChange = (val: number) => {
-    setManualDollar(val);
-    localStorage.setItem('autometrics_manual_dollar', val.toString());
-  };
+  // --- ESTRUTURA SIDEBAR ---
+  const structure = useMemo(() => {
+    const relevantProducts = showHidden ? products : products.filter(p => !p.is_hidden);
+    const tree: Record<string, Set<string>> = {};
 
-  // --- LÓGICA INTELIGENTE DE DATAS ---
-  const handlePresetChange = (preset: string) => {
-    setDateRange(preset);
-    const now = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    if (preset === 'today') { /* start/end = now */ }
-    else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
-    else if (preset === '7d') { start.setDate(now.getDate() - 7); }
-    else if (preset === '30d') { start.setDate(now.getDate() - 30); }
-    else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
-    else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
-    
-    setStartDate(getLocalYYYYMMDD(start));
-    setEndDate(getLocalYYYYMMDD(end));
-  };
-
-  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
-    if (type === 'start') setStartDate(value);
-    else setEndDate(value);
-    setDateRange('custom'); // Muda o dropdown para "Personalizado" automaticamente
-  };
-
-  // --- PROCESSAMENTO DE DADOS ---
-  const processedData = useMemo(() => {
-    if (loading || !metrics.length) return { chart: [], table: [], totals: null };
-
-    const dailyMap = new Map();
-
-    metrics.forEach(row => {
-      // Filtra usando as datas do estado (startDate / endDate)
-      if (row.date < startDate || row.date > endDate) return;
-
-      const product = products.find(p => p.id === row.product_id);
-      const isUSD = product?.currency === 'USD';
-
-      let cost = Number(row.cost || 0);
-      let revenue = Number(row.conversion_value || 0);
-      let refunds = Number(row.refunds || 0);
-
-      // Conversão de Moeda
-      if (viewCurrency === 'BRL') {
-        if (isUSD) {
-          cost *= liveDollar;      
-          revenue *= manualDollar; 
-          refunds *= manualDollar;
-        }
-      } else {
-        if (!isUSD) {
-          cost /= liveDollar;
-          revenue /= manualDollar;
-          refunds /= manualDollar;
-        }
-      }
-
-      const profit = revenue - cost - refunds;
-
-      // Agrupamento por Dia
-      if (!dailyMap.has(row.date)) dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0 });
-      const day = dailyMap.get(row.date);
+    relevantProducts.forEach(p => {
+      const mcc = p.mcc_name || 'Outras';
+      const acc = p.account_name || 'Sem Conta';
       
-      day.cost += cost;
-      day.revenue += revenue;
-      day.refunds += refunds;
-      day.profit += profit;
+      if (!tree[mcc]) tree[mcc] = new Set();
+      tree[mcc].add(acc);
     });
 
-    const resultRows = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
-    
-    // Totais Gerais
-    const totals = { cost: 0, revenue: 0, profit: 0, refunds: 0, roi: 0 };
-    resultRows.forEach(r => {
-      totals.cost += r.cost;
-      totals.revenue += r.revenue;
-      totals.profit += r.profit;
-      totals.refunds += r.refunds;
-      r.roi = r.cost > 0 ? (r.profit / r.cost) * 100 : 0;
-    });
-    totals.roi = totals.cost > 0 ? (totals.profit / totals.cost) * 100 : 0;
-
-    // Dados para Gráfico (Ordem Cronológica)
-    const chartData = [...resultRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({
-      ...r, shortDate: r.date.split('-').slice(1).reverse().join('/')
+    return Object.keys(tree).sort().map(mcc => ({
+      name: mcc,
+      accounts: Array.from(tree[mcc]).sort()
     }));
+  }, [products, showHidden]);
 
-    return { chart: chartData, table: resultRows, totals };
-  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, viewCurrency, loading]);
+  // --- AÇÕES DE EXCLUSÃO ---
+  const handleDeleteMcc = async (mccName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Excluir MCC "${mccName}" e todas suas contas?`)) return;
+    const { error } = await supabase.from('products').delete().eq('user_id', userId).eq('mcc_name', mccName);
+    if (!error) {
+      setProducts(prev => prev.filter(p => p.mcc_name !== mccName));
+      if (selectedMcc === mccName) resetFilters();
+    }
+  };
 
-  // --- ESTILOS DINÂMICOS ---
+  const handleDeleteAccount = async (mccName: string, accountName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Excluir conta "${accountName}"?`)) return;
+    const { error } = await supabase.from('products').delete().eq('user_id', userId).eq('mcc_name', mccName).eq('account_name', accountName);
+    if (!error) {
+      setProducts(prev => prev.filter(p => !(p.mcc_name === mccName && p.account_name === accountName)));
+      if (selectedAccount === accountName) resetFilters();
+    }
+  };
+
+  const handleDeleteProduct = async (productId: string, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!confirm("Excluir produto permanentemente?")) return;
+    const { error } = await supabase.from('products').delete().eq('user_id', userId).eq('id', productId);
+    if (!error) setProducts(prev => prev.filter(p => p.id !== productId));
+  };
+
+  // --- FILTRAGEM PRINCIPAL ---
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesHidden = showHidden ? true : !p.is_hidden;
+    const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
+    
+    let matchesContext = true;
+    if (selectedAccount) {
+       matchesContext = (p.account_name || 'Sem Conta') === selectedAccount && (selectedMcc ? (p.mcc_name || 'Outras') === selectedMcc : true);
+    } else if (selectedMcc) {
+       matchesContext = (p.mcc_name || 'Outras') === selectedMcc;
+    }
+
+    return matchesSearch && matchesContext && matchesHidden && matchesStatus;
+  });
+
+  const toggleMccExpand = (mccName: string) => { setExpandedMccs(prev => prev.includes(mccName) ? prev.filter(m => m !== mccName) : [...prev, mccName]); };
+  const handleSelectMcc = (mccName: string) => { setSelectedMcc(mccName); setSelectedAccount(null); };
+  const handleSelectAccount = (mccName: string, accName: string) => { setSelectedMcc(mccName); setSelectedAccount(accName); };
+  const resetFilters = () => { setSelectedMcc(null); setSelectedAccount(null); };
+
+  const toggleStatus = async (product: any, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const newStatus = product.status === 'active' ? 'paused' : 'active';
+    setProducts(products.map(p => p.id === product.id ? { ...p, status: newStatus } : p));
+    await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
+  };
+
+  const toggleProductVisibility = async (product: any, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const newHidden = !product.is_hidden;
+    setProducts(products.map(p => p.id === product.id ? { ...p, is_hidden: newHidden } : p));
+    await supabase.from('products').update({ is_hidden: newHidden }).eq('id', product.id);
+  };
+
+  const handleSave = async () => {
+    if (!newProduct.name || !newProduct.campaign_name) return alert("Preencha campos.");
+    setSaving(true);
+    const { data, error } = await supabase.from('products').insert([{ ...newProduct, user_id: userId }]).select();
+    if (error) alert('Erro: ' + error.message);
+    else if (data) { 
+        setProducts([data[0], ...products]); 
+        setIsModalOpen(false); 
+        const newMcc = data[0].mcc_name || 'Manual';
+        if (!expandedMccs.includes(newMcc)) setExpandedMccs([...expandedMccs, newMcc]);
+    }
+    setSaving(false);
+  };
+
+  const handleReload = () => { if (userId) fetchProducts(userId); };
+
+  // Estilos
   const isDark = theme === 'dark';
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
   const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
-  
-  // Função que faltava
-  const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
-
-  if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
+  const hoverItem = isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100';
+  const activeItem = isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-black border border-slate-200';
+  const buttonPrimary = isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-600 text-white shadow';
 
   return (
-    <div className={`min-h-screen font-sans flex ${bgMain}`}>
-      <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        
-        {/* Logo */}
-        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden">
-           <div className="hidden md:block relative"> 
-             {/* Logo com Sombra no modo Claro para garantir visibilidade */}
-             <Image 
-               src="/logo.png" 
-               alt="Logo" 
-               width={180} 
-               height={60} 
-               className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} 
-               priority 
-             />
-           </div>
-           <div className="md:hidden">
-             <Image 
-                src="/logo.png" 
-                alt="Logo" 
-                width={40} 
-                height={40} 
-                className={`w-8 h-8 object-contain ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`}
-             />
-           </div>
+    <div className={`min-h-screen font-sans flex flex-col md:flex-row ${bgMain}`}>
+      
+      {/* SIDEBAR */}
+      <aside className={`w-full md:w-72 border-r flex flex-col h-screen sticky top-0 z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit">
+           <div className="hidden md:block relative"><Image src="/logo.png" alt="Logo" width={180} height={60} className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} priority /></div>
+           <div className="md:hidden"><Image src="/logo.png" alt="Logo" width={40} height={40} className={`w-8 h-8 object-contain ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`}/></div>
         </div>
         
         <nav className="flex-1 px-2 py-4 space-y-2">
-           <Link href="/dashboard" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
+           {/* CORREÇÃO AQUI: Dashboard agora Inativo (Layout Normal) mas com w-full */}
+           <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
              <LayoutGrid size={20} /> 
              <span className="hidden md:block font-medium">Dashboard</span>
            </Link>
            
-           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
+           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+             <Target size={20} /> 
+             <span className="hidden md:block font-medium">Planejamento</span>
+           </Link>
            
-           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
+           {/* CORREÇÃO AQUI: Produtos agora Ativo (Roxo) e com w-full */}
+           <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
+             <Package size={20} /> 
+             <span className="hidden md:block font-medium">Meus Produtos</span>
+           </Link>
            
-           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
+           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+             <Settings size={20} /> 
+             <span className="hidden md:block font-medium">Integração</span>
+           </Link>
         </nav>
+        
+        {/* Filtros da Sidebar */}
+        <div className="px-4 pb-2 mt-auto">
+          <div className={`p-3 rounded-lg border mb-2 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Estrutura de Contas</p>
+            <div className="flex justify-between items-center">
+              <button onClick={() => setShowHidden(!showHidden)} className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${showHidden ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'text-slate-500 border-transparent hover:bg-slate-800'}`}>
+                {showHidden ? <Eye size={10} /> : <EyeOff size={10} />}
+                {showHidden ? 'Ver Ativos' : 'Ver Ocultos'}
+              </button>
+              <button onClick={resetFilters} className="text-[10px] text-indigo-400 hover:underline">Limpar</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4 space-y-1 max-h-[40vh]">
+           {structure.length === 0 && !loading && (
+               <div className="text-center py-4 px-2"><p className="text-xs text-slate-500">Nenhuma conta encontrada.</p></div>
+           )}
+
+           {structure.map(mcc => {
+             const isMccActive = selectedMcc === mcc.name && !selectedAccount;
+             const isExpanded = expandedMccs.includes(mcc.name);
+             return (
+               <div key={mcc.name} className="mb-2">
+                 <div className="flex items-center gap-1 group relative pr-2">
+                    <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
+                    <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? activeItem : `${textMuted} ${hoverItem}`}`}>
+                       <Globe size={14} className={isMccActive ? 'text-indigo-400' : 'text-slate-500'}/>
+                       <span className="truncate w-28">{mcc.name}</span>
+                    </button>
+                    <button onClick={(e) => handleDeleteMcc(mcc.name, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
+                 </div>
+                 {isExpanded && (
+                   <div className={`ml-4 pl-3 border-l mt-1 space-y-1 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                      {mcc.accounts.map(acc => {
+                        const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
+                        return (
+                          <div key={acc} className="flex items-center group/acc pr-2">
+                            <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
+                                <Briefcase size={12}/> <span className="truncate w-28">{acc}</span>
+                            </button>
+                            <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1"><Trash2 size={12}/></button>
+                          </div>
+                        );
+                      })}
+                   </div>
+                 )}
+               </div>
+             )
+           })}
+        </div>
+        
         <div className="p-4 border-t border-inherit">
-           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair ({user?.email?.split('@')[0]})</span></button>
+           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair</span></button>
         </div>
       </aside>
 
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-        {/* Header e Filtros */}
-        <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-          <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className={textMuted}>Acompanhe seus resultados consolidados.</p></div>
-          <div className="flex flex-wrap gap-4 items-center w-full xl:w-auto">
+      {/* MAIN CONTENT */}
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen relative">
+        
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div>
+            <div className={`flex items-center gap-2 text-xs ${textMuted} mb-1`}>{selectedMcc ? (<><span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedMcc}</span>{selectedAccount && <><ChevronRight size={12}/> <span className={`px-2 py-0.5 rounded text-indigo-500 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedAccount}</span></>}</>) : (<span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>Todas as MCCs</span>)}</div>
+            <h1 className={`text-2xl font-bold flex items-center gap-2 ${textHead}`}>{selectedAccount || selectedMcc || 'Gerenciador de Campanhas'}</h1>
+          </div>
+          
+          <div className="flex gap-3">
+             <button onClick={toggleTheme} className={`p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+             <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Plus size={18} /> Novo Produto</button>
+          </div>
+        </div>
+
+        {/* BARRA DE FERRAMENTAS E FILTROS */}
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+           <div className={`p-1.5 rounded-xl flex-1 flex gap-4 items-center border ${bgCard}`}>
+             <div className="pl-3 text-slate-500"><Search size={18} /></div>
+             <input type="text" placeholder="Buscar campanha..." className={`bg-transparent w-full outline-none placeholder:text-slate-600 ${textHead}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
              
-             {/* SELETOR DE DATA UNIFICADO */}
-             <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   {/* Ícone: Branco no escuro, Indigo no claro */}
-                   <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
-                   <select 
-                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
-                      value={dateRange}
-                      onChange={(e) => handlePresetChange(e.target.value)}
-                   >
-                      <option value="today">Hoje</option>
-                      <option value="yesterday">Ontem</option>
-                      <option value="7d">7 Dias</option>
-                      <option value="30d">30 Dias</option>
-                      <option value="this_month">Este Mês</option>
-                      <option value="last_month">Mês Passado</option>
-                      <option value="custom">Personalizado</option>
-                   </select>
-                </div>
-                <div className="flex items-center gap-2 px-2">
-                   <input 
-                     type="date" 
-                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                     value={startDate}
-                     onChange={(e) => handleCustomDateChange('start', e.target.value)}
-                   />
-                   <span className="text-slate-500 text-xs">até</span>
-                   <input 
-                     type="date" 
-                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                     value={endDate}
-                     onChange={(e) => handleCustomDateChange('end', e.target.value)}
-                   />
-                </div>
+             {/* Filtro de Status */}
+             <div className={`flex items-center gap-1 px-2 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                <button onClick={() => changeStatusFilter('ALL')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'ALL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`}>Todos</button>
+                <button onClick={() => changeStatusFilter('active')} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-500' : 'text-slate-500 hover:text-emerald-500'}`}><PlayCircle size={12} /> Ativos</button>
+                <button onClick={() => changeStatusFilter('paused')} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'paused' ? 'bg-rose-500/20 text-rose-500' : 'text-slate-500 hover:text-rose-500'}`}><PauseCircle size={12} /> Pausados</button>
              </div>
 
-             <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
-                <div className="flex gap-3 px-2 border-r border-inherit pr-4">
-                   <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
-                   <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textHead}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
-                </div>
-                <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                   <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
-                   <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
-                </div>
-                <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
-             </div>
-          </div>
-        </header>
+             <button onClick={handleReload} className={`p-2 rounded-lg transition-colors mr-1 ${hoverItem}`} title="Recarregar"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
+           </div>
+           {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 px-4 rounded-xl flex items-center gap-2 text-amber-500 text-xs font-bold animate-pulse whitespace-nowrap"><AlertTriangle size={16} /> Exibindo Ocultos</div>}
+        </div>
 
-        {processedData.totals ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
-            <div className={`${bgCard} border-t-4 border-t-blue-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
-            <div className={`${bgCard} border-t-4 border-t-orange-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Custos Totais</p><p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.cost)}</p></div>
-            <div className={`${bgCard} border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Lucro Líquido</p><p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p></div>
-            <div className={`${bgCard} border-t-4 border-t-indigo-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">ROI</p><p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p></div>
-            <div className={`${bgCard} border-t-4 border-t-rose-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Reembolsos</p><p className="text-2xl font-bold text-rose-500">{formatMoney(processedData.totals.refunds)}</p></div>
-          </div>
+        {/* GRID DE PRODUTOS */}
+        {loading && products.length === 0 ? (
+          <div className="flex justify-center items-center h-64 text-slate-500">Carregando produtos...</div>
+        ) : filteredProducts.length === 0 ? (
+           <div className={`flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed rounded-xl ${isDark ? 'border-slate-800' : 'border-slate-300'}`}><Layers size={32} className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada com os filtros atuais.</p></div>
         ) : (
-           <div className="text-center py-20 bg-slate-900/20 rounded-xl mb-8 border border-dashed border-slate-800"><p className="text-slate-500">Nenhum dado encontrado.</p></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
+            {filteredProducts.map((product) => (
+              <Link key={product.id} href={`/products/${product.id}`} className="block group">
+                <div className={`border rounded-xl p-6 transition-all h-full relative overflow-hidden flex flex-col ${product.is_hidden ? (isDark ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-100 border-slate-300 opacity-60') : `${bgCard} hover:border-indigo-500/50`}`}>
+                  <div className="absolute top-4 right-4 flex gap-2 z-10">
+                     <button onClick={(e) => toggleStatus(product, e)} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'}`} title="Alternar Status">{product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}</button>
+                     <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : `${isDark ? 'bg-slate-800 text-slate-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-indigo-600'}`}`} title={product.is_hidden ? "Restaurar" : "Arquivar"}>{product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+                     <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`} title="Excluir"><Trash2 size={14} /></button>
+                  </div>
+                  <div className="flex justify-between items-start mb-4 pr-32">
+                    <div className={`p-3 rounded-xl flex items-center justify-center w-12 h-12 ${product.currency === 'USD' ? 'bg-indigo-500/10 text-indigo-500' : product.currency === 'EUR' ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500'}`}>{product.currency === 'USD' ? '$' : product.currency === 'EUR' ? '€' : 'R$'}</div>
+                  </div>
+                  <h3 className={`text-lg font-bold mb-1 transition-colors line-clamp-2 ${textHead} group-hover:text-indigo-500`}>{product.name}</h3>
+                  <div className={`mt-auto pt-4 space-y-2 border-t ${isDark ? 'border-slate-800/50' : 'border-slate-100'}`}>
+                     <div className="flex items-center gap-2 text-xs text-slate-500"><Folder size={12}/><span className="truncate max-w-[200px]">{product.account_name || 'Sem Conta'}</span></div>
+                     <div className="flex items-center gap-2 text-xs text-slate-500"><Layers size={12}/><span className={`font-mono px-1.5 py-0.5 rounded truncate max-w-[200px] ${isDark ? 'bg-black/30' : 'bg-slate-100'}`}>{product.google_ads_campaign_name}</span></div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
 
-        <div className={`${bgCard} rounded-xl p-6 mb-8 h-80 shadow-sm`}>
-           <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={processedData.chart}>
-                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
-                 <XAxis dataKey="shortDate" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                 <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val:any) => formatMoney(val)} />
-                 <Legend />
-                 <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                 <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                 <Bar dataKey="profit" name="Lucro" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              </BarChart>
-           </ResponsiveContainer>
-        </div>
-
-        <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border border-inherit`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left border-collapse">
-              <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
-                <tr><th className="px-6 py-4">Data</th><th className="px-6 py-4 text-right text-blue-600">Receita</th><th className="px-6 py-4 text-right text-orange-600">Custo</th><th className="px-6 py-4 text-right text-emerald-600">Lucro</th><th className="px-6 py-4 text-right">ROI</th></tr>
-              </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                {processedData.table.map((row: any) => {
-                  const dateParts = row.date.split('-');
-                  const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-                  return (
-                    <tr key={row.date} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                      <td className={`px-6 py-4 font-bold ${textHead}`}>{formattedDate}</td>
-                      <td className="px-6 py-4 text-right font-bold text-blue-500 bg-blue-500/5">{formatMoney(row.revenue)}</td>
-                      <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(row.cost)}</td>
-                      <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
-                      <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{row.roi.toFixed(0)}%</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+        {/* Modal Novo Produto */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className={`rounded-xl w-full max-w-lg p-6 shadow-2xl border ${bgCard}`}>
+              <div className="flex justify-between items-center mb-6"><h2 className={`text-xl font-bold ${textHead}`}>Novo Produto Manual</h2><button onClick={() => setIsModalOpen(false)}><X size={24} className="text-slate-400 hover:text-indigo-500" /></button></div>
+              <div className="space-y-4">
+                <input type="text" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} placeholder="Nome do Produto" value={newProduct.name} onChange={e=>setNewProduct({...newProduct, name: e.target.value})} />
+                <input type="text" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} placeholder="Campanha Google Ads (Exato)" value={newProduct.campaign_name} onChange={e=>setNewProduct({...newProduct, campaign_name: e.target.value})} />
+                <button onClick={handleSave} className="w-full bg-indigo-600 py-3 rounded-lg text-white font-bold hover:bg-indigo-700">{saving ? 'Salvando...' : 'Salvar'}</button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
