@@ -108,16 +108,12 @@ export default function ProductDetailPage() {
     
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
-
-    // Carrega a moeda salva
-    const savedCurrency = localStorage.getItem('autometrics_view_currency');
-    if (savedCurrency) setViewCurrency(savedCurrency);
     
     fetchLiveDollar();
 
     // 2. Data Inicial (Novo Padrão)
     setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
-    handlePresetChange('this_month');
+    handlePresetChange('this_month'); // Define as datas iniciais
   }, []);
 
   const toggleTheme = () => {
@@ -181,6 +177,7 @@ export default function ProductDetailPage() {
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
+      // Payload corrigido: 'revenue' do form -> 'conversion_value' do banco
       const payload = {
         product_id: productId, date: manualData.date,
         visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
@@ -345,8 +342,8 @@ export default function ProductDetailPage() {
           {/* SELETOR DE DATA PADRONIZADO */}
           <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
                 <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   {/* CONTRASTE CORRIGIDO: Usa condicional para cor do ícone */}
-                   <Calendar size={18} className={isDark ? "text-indigo-400" : "text-indigo-600"}/>
+                   {/* CONTRASTE CORRIGIDO: O ícone fica branco no escuro */}
+                   <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
                    <select 
                       className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
                       value={dateRange}
