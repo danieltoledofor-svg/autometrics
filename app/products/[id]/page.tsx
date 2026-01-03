@@ -41,21 +41,21 @@ const ALL_COLUMNS = [
   // FUNIL (MANUAL)
   { key: 'visits', label: 'Visitas Pág.', category: 'Funil', default: true },
   { key: 'vsl_clicks', label: 'Cliques VSL', category: 'Funil', default: false },
-  { key: 'vsl_checkouts', label: 'Check. VSL', category: 'Funil', default: false },
-  { key: 'checkouts', label: 'Check. Geral', category: 'Funil', default: true },
+  { key: 'vsl_checkouts', label: 'Checkout VSL', category: 'Funil', default: false },
+  { key: 'checkouts', label: 'Checkout Geral', category: 'Funil', default: true },
 
   // FUGAS (CÁLCULOS)
-  { key: 'fuga_pagina', label: 'Fuga Pág.', category: 'Métricas de Fuga', default: true, format: 'percentage_red' },
-  { key: 'fuga_bridge', label: 'Fuga Bridge', category: 'Métricas de Fuga', default: false, format: 'percentage_red' },
-  { key: 'fuga_vsl', label: 'Fuga VSL', category: 'Métricas de Fuga', default: false, format: 'percentage_red' },
+  { key: 'fuga_pagina', label: 'Fuga Página (%)', category: 'Métricas de Fuga', default: true, format: 'percentage_red' },
+  { key: 'fuga_bridge', label: 'Fuga Bridge (%)', category: 'Métricas de Fuga', default: false, format: 'percentage_red' },
+  { key: 'fuga_vsl', label: 'Fuga VSL (%)', category: 'Métricas de Fuga', default: false, format: 'percentage_red' },
 
   // FINANCEIRO
   { key: 'conversions', label: 'Conversões', category: 'Financeiro', default: true },
   { key: 'revenue', label: 'Receita Total', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'refunds', label: 'Reembolso', category: 'Financeiro', default: true, format: 'currency' },
-  { key: 'cpa', label: 'CPA', category: 'Financeiro', default: true, format: 'currency' },
-  { key: 'profit', label: 'Lucro', category: 'Financeiro', default: true, format: 'currency' },
-  { key: 'roi', label: 'ROI', category: 'Financeiro', default: true, format: 'percentage' },
+  { key: 'cpa', label: 'CPA (Custo/Conv)', category: 'Financeiro', default: true, format: 'currency' },
+  { key: 'profit', label: 'Lucro (R$)', category: 'Financeiro', default: true, format: 'currency' },
+  { key: 'roi', label: 'ROI (%)', category: 'Financeiro', default: true, format: 'percentage' },
   
   // GOOGLE ADS AVANÇADO (RECUPERADAS)
   { key: 'strategy', label: 'Estratégia', category: 'Google Ads', default: true },
@@ -70,7 +70,8 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
-  // Datas
+  // --- ESTADOS DE DATA ---
+  const [dateRange, setDateRange] = useState('this_month'); // Adicionado
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     date.setDate(1); 
@@ -94,7 +95,6 @@ export default function ProductDetailPage() {
   });
   const [isSavingManual, setIsSavingManual] = useState(false);
 
-  // Inicializa com colunas padrão
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
   );
@@ -103,7 +103,7 @@ export default function ProductDetailPage() {
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
-    // 1. Recupera Preferências
+    // 1. Tema e Moeda
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
     if (savedTheme) setTheme(savedTheme);
 
@@ -139,7 +139,6 @@ export default function ProductDetailPage() {
       const { data: prodData } = await supabase.from('products').select('*').eq('id', productId).single();
       if (prodData) {
          setProduct(prodData);
-         // Se o produto tiver moeda definida, usa ela como padrão para o lançamento
          setManualData(prev => ({...prev, currency: prodData.currency || 'BRL'}));
       }
       const { data: metricsData } = await supabase.from('daily_metrics').select('*').eq('product_id', productId).order('date', { ascending: true });
@@ -150,7 +149,7 @@ export default function ProductDetailPage() {
 
   useEffect(() => { if(productId) fetchData(); }, [productId]);
 
-  // Carrega dados para edição no modal quando a data muda
+  // Carrega dados existentes para edição
   useEffect(() => {
     if (showManualEntry && manualData.date && productId) {
         const fetchDayData = async () => {
@@ -168,7 +167,6 @@ export default function ProductDetailPage() {
                     currency: data.currency || prev.currency
                 }));
             } else {
-                 // Reseta se não houver dados para a data
                  setManualData(prev => ({
                     ...prev, visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0
                  }));
@@ -182,16 +180,12 @@ export default function ProductDetailPage() {
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
-      // Mapeamento correto: revenue -> conversion_value
       const payload = {
-        product_id: productId, 
-        date: manualData.date,
-        visits: Number(manualData.visits), 
-        checkouts: Number(manualData.checkouts), 
-        vsl_clicks: Number(manualData.vsl_clicks), 
-        vsl_checkouts: Number(manualData.vsl_checkouts),
+        product_id: productId, date: manualData.date,
+        visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
+        vsl_clicks: Number(manualData.vsl_clicks), vsl_checkouts: Number(manualData.vsl_checkouts),
         conversions: Number(manualData.sales), 
-        conversion_value: Number(manualData.revenue), // GRAVANDO RECEITA
+        conversion_value: Number(manualData.revenue), 
         refunds: Number(manualData.refunds),
         currency: manualData.currency, 
         updated_at: new Date().toISOString()
@@ -202,7 +196,7 @@ export default function ProductDetailPage() {
       
       alert('Dados salvos com sucesso!');
       setShowManualEntry(false);
-      fetchData(); // Recarrega a tabela imediatamente
+      fetchData(); 
     } catch (e: any) { alert('Erro: ' + e.message); }
     finally { setIsSavingManual(false); }
   };
@@ -222,18 +216,20 @@ export default function ProductDetailPage() {
     });
   };
 
+  // --- Lógica de Mudança de Data ---
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') setStartDate(value); else setEndDate(value);
+    setDateRange('custom');
+  };
+
   const processedData = useMemo(() => {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
 
     const rows = filteredMetrics.map(row => {
-      let cost = Number(row.cost || 0); 
-      let revenue = Number(row.conversion_value || 0); 
-      let refunds = Number(row.refunds || 0); 
-      let cpc = Number(row.avg_cpc || 0);
-      let budget = Number(row.budget_micros || 0) / 1000000; 
-      let targetValue = Number(row.target_cpa || 0);
+      let cost = Number(row.cost || 0); let revenue = Number(row.conversion_value || 0); let refunds = Number(row.refunds || 0); let cpc = Number(row.avg_cpc || 0);
+      let budget = Number(row.budget_micros || 0) / 1000000; let targetValue = Number(row.target_cpa || 0);
       
       const rowCurrency = row.currency || 'BRL';
       
@@ -272,11 +268,9 @@ export default function ProductDetailPage() {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED', 
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
-        // Parcelas
         search_impr_share: parseShare(row.search_impression_share), 
         search_top_share: parseShare(row.search_top_impression_share), 
         search_abs_share: parseShare(row.search_abs_top_share),
-        // Funil
         visits, checkouts, vsl_clicks: vslClicks, vsl_checkouts: vslCheckouts, fuga_pagina: fugaPagina, fuga_bridge: fugaBridge, fuga_vsl: fugaVsl
       };
     });
@@ -340,7 +334,8 @@ export default function ProductDetailPage() {
                           const now = new Date();
                           let start = new Date();
                           let end = new Date();
-                          if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
+                          if (preset === 'today') { /* hoje */ }
+                          else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
                           else if (preset === '7d') { start.setDate(now.getDate() - 7); }
                           else if (preset === '30d') { start.setDate(now.getDate() - 30); }
                           else if (preset === 'this_month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
@@ -365,14 +360,14 @@ export default function ProductDetailPage() {
                      type="date" 
                      className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                      value={startDate}
-                     onChange={(e) => { setStartDate(e.target.value); setDateRange('custom'); }}
+                     onChange={(e) => handleCustomDateChange('start', e.target.value)}
                    />
                    <span className="text-slate-500 text-xs">até</span>
                    <input 
                      type="date" 
                      className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                      value={endDate}
-                     onChange={(e) => { setEndDate(e.target.value); setDateRange('custom'); }}
+                     onChange={(e) => handleCustomDateChange('end', e.target.value)}
                    />
                 </div>
           </div>
