@@ -342,8 +342,8 @@ export default function ProductDetailPage() {
           {/* SELETOR DE DATA PADRONIZADO */}
           <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
                 <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   {/* CONTRASTE CORRIGIDO: O ícone fica branco no escuro */}
-                   <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
+                   {/* Ícone: Branco no escuro, Cinza Escuro no claro */}
+                   <Calendar size={18} className={isDark ? "text-white" : "text-slate-600"}/>
                    <select 
                       className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
                       value={dateRange}
@@ -377,7 +377,7 @@ export default function ProductDetailPage() {
 
           <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
              <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                {/* BOTÕES DE MOEDA COM PERSISTÊNCIA CORRIGIDA (usa toggleViewCurrency) */}
+                {/* BOTÕES DE MOEDA COM PERSISTÊNCIA CORRIGIDA */}
                 <button onClick={() => toggleViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
                 <button onClick={() => toggleViewCurrency('BRL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
              </div>
