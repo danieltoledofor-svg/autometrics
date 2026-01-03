@@ -131,7 +131,7 @@ export default function DashboardPage() {
     let start = new Date();
     let end = new Date();
 
-    if (preset === 'today') { /* start/end = now */ }
+    if (preset === 'today') { /* hoje */ }
     else if (preset === 'yesterday') { start.setDate(now.getDate() - 1); end.setDate(now.getDate() - 1); }
     else if (preset === '7d') { start.setDate(now.getDate() - 7); }
     else if (preset === '30d') { start.setDate(now.getDate() - 30); }
@@ -219,8 +219,7 @@ export default function DashboardPage() {
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
   const textMuted = 'text-slate-500';
-  
-  const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
+  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
@@ -251,14 +250,17 @@ export default function DashboardPage() {
            </div>
         </div>
         
+        {/* CORREÇÃO AQUI: ADICIONADO w-full PARA TODOS OS LINKS */}
         <nav className="flex-1 p-4 space-y-2">
-           <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
+           <Link href="/dashboard" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
            
-           <Link href="/planning" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
+           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
            
-           <Link href="/products" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
+           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Package size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
            
-           <Link href="/integration" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
+           {/* Link de Lançamento REMOVIDO para limpar */}
+           
+           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
         </nav>
         <div className="p-4 border-t border-inherit">
            <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair ({user?.email?.split('@')[0]})</span></button>
@@ -272,9 +274,8 @@ export default function DashboardPage() {
              
              {/* --- NOVO COMPONENTE DE DATA UNIFICADO --- */}
              <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                {/* Ícone e Dropdown */}
                 <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   <Calendar size={18} className="text-indigo-500"/>
+                   <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
                    <select 
                       className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
                       value={dateRange}
@@ -289,8 +290,6 @@ export default function DashboardPage() {
                       <option value="custom">Personalizado</option>
                    </select>
                 </div>
-                
-                {/* Inputs de Data (Sempre visíveis para ajuste rápido) */}
                 <div className="flex items-center gap-2 px-2">
                    <input 
                      type="date" 
@@ -307,7 +306,6 @@ export default function DashboardPage() {
                    />
                 </div>
              </div>
-             {/* ----------------------------------------- */}
 
              <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
                 <div className="flex gap-3 px-2 border-r border-inherit pr-4">
@@ -332,17 +330,15 @@ export default function DashboardPage() {
             <div className={`${bgCard} border-t-4 border-t-rose-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Reembolsos</p><p className="text-2xl font-bold text-rose-500">{formatMoney(processedData.totals.refunds)}</p></div>
           </div>
         ) : (
-           <div className="text-center py-20 bg-slate-900/20 rounded-xl mb-8 border border-dashed border-slate-800">
-              <p className="text-slate-500">Nenhum dado encontrado.</p>
-           </div>
+           <div className="text-center py-20 bg-slate-900/20 rounded-xl mb-8 border border-dashed border-slate-800"><p className="text-slate-500">Nenhum dado encontrado.</p></div>
         )}
 
         <div className={`${bgCard} rounded-xl p-6 mb-8 h-80 shadow-sm`}>
            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={processedData.chart}>
                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
-                 <XAxis dataKey="shortDate" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                 <XAxis dataKey="shortDate" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                 <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                  <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val:any) => formatMoney(val)} />
                  <Legend />
                  <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -354,15 +350,9 @@ export default function DashboardPage() {
 
         <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border border-inherit`}>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-sm text-left border-collapse">
               <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
-                <tr>
-                  <th className="px-6 py-4">Data</th>
-                  <th className="px-6 py-4 text-right text-blue-600">Receita</th>
-                  <th className="px-6 py-4 text-right text-orange-600">Custo</th>
-                  <th className="px-6 py-4 text-right text-emerald-600">Lucro</th>
-                  <th className="px-6 py-4 text-right">ROI</th>
-                </tr>
+                <tr><th className="px-6 py-4">Data</th><th className="px-6 py-4 text-right text-blue-600">Receita</th><th className="px-6 py-4 text-right text-orange-600">Custo</th><th className="px-6 py-4 text-right text-emerald-600">Lucro</th><th className="px-6 py-4 text-right">ROI</th></tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
                 {processedData.table.map((row: any) => {
