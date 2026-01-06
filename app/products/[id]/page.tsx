@@ -85,6 +85,7 @@ export default function ProductDetailPage() {
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
 
+  // Estado do Lançamento Manual
   const [manualData, setManualData] = useState({ 
     date: getLocalYYYYMMDD(new Date()), 
     visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0, currency: 'BRL' 
@@ -114,7 +115,7 @@ export default function ProductDetailPage() {
 
     fetchLiveDollar();
 
-    // 2. Data Inicial (Novo Padrão)
+    // 2. Data Inicial
     setManualData(prev => ({...prev, date: getLocalYYYYMMDD(new Date())}));
     handlePresetChange('this_month');
   }, []);
@@ -144,6 +145,7 @@ export default function ProductDetailPage() {
       const { data: prodData } = await supabase.from('products').select('*').eq('id', productId).single();
       if (prodData) {
          setProduct(prodData);
+         // Se o produto já tem moeda, sugerimos ela no modal, mas o usuário pode mudar
          setManualData(prev => ({...prev, currency: prodData.currency || 'BRL'}));
       }
       const { data: metricsData } = await supabase.from('daily_metrics').select('*').eq('product_id', productId).order('date', { ascending: true });
@@ -154,38 +156,66 @@ export default function ProductDetailPage() {
 
   useEffect(() => { if(productId) fetchData(); }, [productId]);
 
+  // Carrega dados existentes para edição
   useEffect(() => {
     if (showManualEntry && manualData.date && productId) {
         const fetchDayData = async () => {
             const { data } = await supabase.from('daily_metrics').select('visits, checkouts, vsl_clicks, vsl_checkouts, conversions, conversion_value, refunds, currency').eq('product_id', productId).eq('date', manualData.date).single();
             if (data) {
+                // Se já existe dado no banco, carregamos. 
+                // A moeda do modal é inicializada com a moeda que está no banco para aquele dia.
+                // Mas a lógica de salvamento vai converter tudo para a moeda do PRODUTO.
+                
+                // NOTA: Se o valor no banco já está convertido, ao abrir aqui ele aparecerá convertido.
+                // Para simplificar, assumimos que o usuário sabe a moeda da conta ou ajusta no select.
                 setManualData(prev => ({
                     ...prev,
                     visits: data.visits || 0, checkouts: data.checkouts || 0, vsl_clicks: data.vsl_clicks || 0, vsl_checkouts: data.vsl_checkouts || 0,
-                    sales: data.conversions || 0, revenue: data.conversion_value || 0, refunds: data.refunds || 0, currency: data.currency || prev.currency
+                    sales: data.conversions || 0, revenue: data.conversion_value || 0, refunds: data.refunds || 0, 
+                    currency: product?.currency || 'BRL' // Mostramos na moeda da conta para evitar confusão de "dupla conversão"
                 }));
             } else {
-                 setManualData(prev => ({
-                    ...prev, visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0
-                 }));
+                 setManualData(prev => ({ ...prev, visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0 }));
             }
         };
         fetchDayData();
     }
-  }, [manualData.date, showManualEntry, productId]);
+  }, [manualData.date, showManualEntry, productId, product]);
 
 
   const handleSaveManual = async () => {
     setIsSavingManual(true);
     try {
+      // 1. Identificar moeda da conta (Google Ads) - Esta é a "Verdade"
+      const accountCurrency = product?.currency || 'BRL';
+      const inputCurrency = manualData.currency;
+      
+      let finalRevenue = Number(manualData.revenue);
+      let finalRefunds = Number(manualData.refunds);
+
+      // 2. Converter se a moeda do lançamento for diferente da moeda da conta
+      // Assim, o banco sempre guarda na moeda da conta, evitando que o custo (que também está na moeda da conta) fique com escala errada.
+      if (inputCurrency !== accountCurrency) {
+          if (accountCurrency === 'BRL' && inputCurrency === 'USD') {
+              // Conta é Real, Lançou em Dólar -> Converte para Real
+              finalRevenue = finalRevenue * manualDollar;
+              finalRefunds = finalRefunds * manualDollar;
+          } else if (accountCurrency === 'USD' && inputCurrency === 'BRL') {
+              // Conta é Dólar, Lançou em Real -> Converte para Dólar
+              finalRevenue = finalRevenue / manualDollar;
+              finalRefunds = finalRefunds / manualDollar;
+          }
+          // (Adicionar lógica EUR se necessário, por enquanto assume paridade ou ignora)
+      }
+
       const payload = {
         product_id: productId, date: manualData.date,
         visits: Number(manualData.visits), checkouts: Number(manualData.checkouts), 
         vsl_clicks: Number(manualData.vsl_clicks), vsl_checkouts: Number(manualData.vsl_checkouts),
         conversions: Number(manualData.sales), 
-        conversion_value: Number(manualData.revenue), 
-        refunds: Number(manualData.refunds),
-        currency: manualData.currency, 
+        conversion_value: finalRevenue, // Salva o valor já convertido para a moeda da conta
+        refunds: finalRefunds,          // Salva o valor já convertido
+        currency: accountCurrency,      // Força a moeda do registro ser a mesma da conta
         updated_at: new Date().toISOString()
       };
       
@@ -214,6 +244,7 @@ export default function ProductDetailPage() {
     });
   };
 
+  // --- LÓGICA DE DATAS ---
   const handlePresetChange = (preset: string) => {
     setDateRange(preset);
     const now = new Date();
@@ -260,6 +291,7 @@ export default function ProductDetailPage() {
       const conversions = Number(row.conversions || 0);
       const cpa = conversions > 0 ? cost / conversions : 0;
 
+      // Métricas de Funil & Fuga
       const visits = Number(row.visits || 0);
       const checkouts = Number(row.checkouts || 0);
       const vslClicks = Number(row.vsl_clicks || 0);
@@ -282,9 +314,11 @@ export default function ProductDetailPage() {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED', 
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
+        // Parcelas
         search_impr_share: parseShare(row.search_impression_share), 
         search_top_share: parseShare(row.search_top_impression_share), 
         search_abs_share: parseShare(row.search_abs_top_share),
+        // Funil
         visits, checkouts, vsl_clicks: vslClicks, vsl_checkouts: vslCheckouts, fuga_pagina: fugaPagina, fuga_bridge: fugaBridge, fuga_vsl: fugaVsl
       };
     });
@@ -338,8 +372,7 @@ export default function ProductDetailPage() {
           {/* SELETOR DE DATA PADRONIZADO */}
           <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
                 <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   {/* Ícone: Branco no escuro, Cinza Escuro no claro */}
-                   <Calendar size={18} className={isDark ? "text-white" : "text-slate-600"}/>
+                   <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
                    <select 
                       className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
                       value={dateRange}
@@ -470,7 +503,7 @@ export default function ProductDetailPage() {
               
               <div className="space-y-6">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-200 text-black'} `} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
+                    <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'} [&::-webkit-calendar-picker-indicator]:invert`} value={manualData.date} onChange={e => setManualData({...manualData, date: e.target.value})} /></div>
                     <div>
                         <label className="text-xs uppercase text-slate-500 font-bold">Moeda</label>
                         <select className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.currency} onChange={e => setManualData({...manualData, currency: e.target.value})}>
