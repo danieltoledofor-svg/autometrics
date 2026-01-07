@@ -35,9 +35,9 @@ const ALL_COLUMNS = [
   { key: 'impressions', label: 'Impressões', category: 'Tráfego', default: true },
   { key: 'clicks', label: 'Cliques Anúncio', category: 'Tráfego', default: true },
   { key: 'ctr', label: 'CTR', category: 'Tráfego', default: true, format: 'percentage' },
-  { key: 'cost', label: 'Custo Ads', category: 'Custo', default: true, format: 'currency' },
   { key: 'avg_cpc', label: 'CPC Médio', category: 'Custo', default: true, format: 'currency' }, 
-  { key: 'budget', label: 'Orçamento Diário', category: 'Custo', default: true, format: 'currency' }, // COLUNA INCLUÍDA AQUI
+  { key: 'cost', label: 'Custo Ads', category: 'Custo', default: true, format: 'currency' },
+  { key: 'budget', label: 'Orçamento Diário', category: 'Custo', default: true, format: 'currency' }, // COLUNA GARANTIDA AQUI
 
   // FUNIL (MANUAL)
   { key: 'visits', label: 'Visitas Pág.', category: 'Funil', default: true },
@@ -367,7 +367,7 @@ export default function ProductDetailPage() {
           {/* SELETOR DE DATA PADRONIZADO */}
           <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
                 <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   {/* Ícone: Branco no escuro, Cinza Escuro no claro */}
+                   {/* CONTRASTE CORRIGIDO: O ícone fica branco no escuro */}
                    <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
                    <select 
                       className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
