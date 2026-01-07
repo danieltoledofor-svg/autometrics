@@ -35,9 +35,11 @@ const ALL_COLUMNS = [
   { key: 'impressions', label: 'Impressões', category: 'Tráfego', default: true },
   { key: 'clicks', label: 'Cliques Anúncio', category: 'Tráfego', default: true },
   { key: 'ctr', label: 'CTR', category: 'Tráfego', default: true, format: 'percentage' },
+  
+  // CUSTO (Onde está o Orçamento)
   { key: 'avg_cpc', label: 'CPC Médio', category: 'Custo', default: true, format: 'currency' }, 
   { key: 'cost', label: 'Custo Ads', category: 'Custo', default: true, format: 'currency' },
-  { key: 'budget', label: 'Orçamento Diário', category: 'Custo', default: true, format: 'currency' }, // COLUNA GARANTIDA AQUI
+  { key: 'budget', label: 'Orçamento Diário', category: 'Custo', default: true, format: 'currency' },
 
   // FUNIL (MANUAL)
   { key: 'visits', label: 'Visitas Pág.', category: 'Funil', default: true },
@@ -541,7 +543,7 @@ export default function ProductDetailPage() {
             <div className={`p-6 border-b flex justify-between items-center ${borderCol}`}><h2 className={`text-xl font-bold ${textHead} flex items-center gap-2`}><Columns size={20} className="text-indigo-500"/> Personalizar Colunas</h2><button onClick={() => setShowColumnModal(false)} className="text-slate-400 hover:text-white"><X size={24} /></button></div>
             <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {['Geral', 'Tráfego', 'Métricas de Fuga', 'Funil', 'Financeiro', 'Google Ads'].map(category => (
+                {['Geral', 'Tráfego', 'Custo', 'Métricas de Fuga', 'Funil', 'Financeiro', 'Google Ads'].map(category => (
                   <div key={category}>
                     {ALL_COLUMNS.some(c => c.category === category) && (
                       <>
