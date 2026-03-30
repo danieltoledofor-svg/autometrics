@@ -187,7 +187,7 @@ function fetchAndSend(dateString, account) {
     let history = [];
 
     if (isRecent) {
-      // 1. Termos de Pesquisa (top 10 por impressoes)
+      // 1. Termos de Pesquisa (top 10 por impressoes) — deduplicado por termo
       try {
       const stQuery = \`
         SELECT
@@ -198,20 +198,24 @@ function fetchAndSend(dateString, account) {
           AND campaign.id = \${row.campaign.id}
           AND metrics.impressions > 0
         ORDER BY metrics.impressions DESC
-        LIMIT 10
+        LIMIT 20
       \`;
+      const stMap = {}; // deduplicar termos de múltiplos ad groups
       const stReport = AdsApp.search(stQuery);
       while(stReport.hasNext()){
         const stRow = stReport.next();
-        searchTerms.push({
-          t: stRow.searchTermView.searchTerm,
-          i: stRow.metrics.impressions,
-          cl: stRow.metrics.clicks,
-          c: stRow.metrics.costMicros,
-          cv: stRow.metrics.conversions
-        });
+        const term = stRow.searchTermView.searchTerm;
+        if (!stMap[term]) stMap[term] = { t: term, i: 0, cl: 0, c: 0, cv: 0 };
+        stMap[term].i += stRow.metrics.impressions;
+        stMap[term].cl += stRow.metrics.clicks;
+        stMap[term].c += stRow.metrics.costMicros;
+        stMap[term].cv += Math.round(stRow.metrics.conversions || 0);
       }
-    } catch(e) {}
+      // Pega os top 10 por impressão após deduplicar
+      searchTerms = Object.values(stMap)
+        .sort((a, b) => b.i - a.i)
+        .slice(0, 10);
+    } catch(e) { Logger.log('ST error: ' + e.message); }
 
     // 2. Públicos: Idade, Gênero e Renda Familiar
     const audienceMap = {}; // Para deduplicar (múltiplos ad groups podem ter o mesmo segmento)
@@ -282,23 +286,27 @@ function fetchAndSend(dateString, account) {
 
     audiences = Object.values(audienceMap);
 
-    // 4. Localizações (Estados/Regiões - top 5)
+    // 4. Localizações — tenta geographic_view (onde o usuário estava fisicamente)
     try {
       const locQuery = \`
-        SELECT user_location_view.country_criterion_id, metrics.impressions, metrics.clicks, metrics.cost_micros
-        FROM user_location_view
-        WHERE segments.date = '\${dateString}' AND campaign.id = \${row.campaign.id} AND metrics.impressions > 0
-        LIMIT 5
+        SELECT geographic_view.country_criterion_id, geographic_view.location_type,
+               metrics.impressions, metrics.clicks, metrics.cost_micros
+        FROM geographic_view
+        WHERE segments.date = '\${dateString}' AND campaign.id = \${row.campaign.id}
+        LIMIT 10
       \`;
       const locReport = AdsApp.search(locQuery);
       while(locReport.hasNext()){
         const lRow = locReport.next();
-        locations.push({
-          tp: 'Country', n: 'Geo:' + lRow.userLocationView.countryCriterionId,
-          i: lRow.metrics.impressions, cl: lRow.metrics.clicks, c: lRow.metrics.costMicros
-        });
+        if (lRow.metrics.impressions > 0) {
+          locations.push({
+            tp: lRow.geographicView.locationType || 'Country',
+            n: 'Geo:' + lRow.geographicView.countryCriterionId,
+            i: lRow.metrics.impressions, cl: lRow.metrics.clicks, c: lRow.metrics.costMicros
+          });
+        }
       }
-    } catch(e) {}
+    } catch(e) { Logger.log('Loc error: ' + e.message); }
     } // Fim do if (isRecent)
 
     const payload = {
