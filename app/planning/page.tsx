@@ -32,8 +32,10 @@ export default function PlanningPage() {
   
   // Dados
   const [metrics, setMetrics] = useState<any[]>([]);
+  const [prevMetrics, setPrevMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [extraCosts, setExtraCosts] = useState<any[]>([]);
+  const [prevExtraCosts, setPrevExtraCosts] = useState<any[]>([]);
   const [goal, setGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
 
   // --- NOVO PADRÃO DE DATAS ---
@@ -43,6 +45,7 @@ export default function PlanningPage() {
   // -----------------------------
 
   // UI
+  const [selectedMcc, setSelectedMcc] = useState<string>('all');
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false); 
@@ -51,7 +54,10 @@ export default function PlanningPage() {
   // Moeda & Tema
   const [liveDollar, setLiveDollar] = useState(6.00);
   const [manualDollar, setManualDollar] = useState(5.60);
-  const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL');
+  const [liveEuro, setLiveEuro] = useState(6.50);
+  const [manualEuro, setManualEuro] = useState(6.00);
+  const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD' | 'EUR'>('BRL');
+  const [rateConfig, setRateConfig] = useState<'USD' | 'EUR'>('USD');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   const [tempGoal, setTempGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
@@ -74,8 +80,10 @@ export default function PlanningPage() {
       if (savedTheme) setTheme(savedTheme);
       const savedDollar = localStorage.getItem('autometrics_manual_dollar');
       if (savedDollar) setManualDollar(parseFloat(savedDollar));
+      const savedEuro = localStorage.getItem('autometrics_manual_euro');
+      if (savedEuro) setManualEuro(parseFloat(savedEuro));
 
-      fetchLiveDollar();
+      fetchLiveRates();
     }
     init();
   }, []);
@@ -96,11 +104,17 @@ export default function PlanningPage() {
     localStorage.setItem('autometrics_manual_dollar', val.toString());
   };
 
-  async function fetchLiveDollar() {
+  const handleManualEuroChange = (val: number) => {
+    setManualEuro(val);
+    localStorage.setItem('autometrics_manual_euro', val.toString());
+  };
+
+  async function fetchLiveRates() {
     try {
-      const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+      const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL');
       const data = await res.json();
       if (data.USDBRL) setLiveDollar(parseFloat(data.USDBRL.bid));
+      if (data.EURBRL) setLiveEuro(parseFloat(data.EURBRL.bid));
     } catch(e) {}
   }
 
@@ -147,29 +161,69 @@ export default function PlanningPage() {
     const { data: prodData } = await supabase.from('products').select('id, currency, name, mcc_name, account_name').eq('user_id', userId);
     setProducts(prodData || []);
     
+    // Cálculo do período anterior para Comparativo Progressivo
+    const sDate = new Date(startDate + "T00:00:00");
+    const eDate = new Date(endDate + "T23:59:59");
+    const diffTime = Math.abs(eDate.getTime() - sDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    const pEndDate = new Date(sDate.getTime() - (1000 * 60 * 60 * 24)); // Um dia antes do start
+    const pStartDate = new Date(pEndDate.getTime() - (diffDays * 1000 * 60 * 60 * 24));
+    
+    const prevStartStr = getLocalYYYYMMDD(pStartDate);
+    const prevEndStr = getLocalYYYYMMDD(pEndDate);
+
+    const { data: prevCostData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', prevStartStr).lte('date', prevEndStr);
+    setPrevExtraCosts(prevCostData || []);
+
     if (prodData && prodData.length > 0) {
       const { data: metData } = await supabase.from('daily_metrics').select('*').in('product_id', prodData.map(p => p.id)).gte('date', startDate).lte('date', endDate).order('date', { ascending: true });
       setMetrics(metData || []);
+
+      const { data: pMetData } = await supabase.from('daily_metrics').select('*').in('product_id', prodData.map(p => p.id)).gte('date', prevStartStr).lte('date', prevEndStr);
+      setPrevMetrics(pMetData || []);
     }
     setLoading(false);
   }
+
+  // --- MCCs DISPONÍVEIS ---
+  const availableMccs = useMemo(() => {
+    const mccs = new Set<string>();
+    products.forEach(p => {
+      if (p.mcc_name) mccs.add(p.mcc_name);
+    });
+    return Array.from(mccs).sort();
+  }, [products]);
 
   const processedData = useMemo(() => {
     // A filtragem já acontece no Fetch, mas garantimos aqui também
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     
     const dailyMap: Record<string, any> = {};
+    const campaignMap: Record<string, {name: string, revenue: number, cost: number, refunds: number}> = {};
     
     // 1. Ads
     filteredMetrics.forEach(m => {
       const prod = products.find(p => p.id === m.product_id);
+      
+      // Filtra por MCC
+      if (selectedMcc !== 'all' && prod?.mcc_name !== selectedMcc) {
+        return;
+      }
+      
       const isUSD = prod?.currency === 'USD';
+      const isEUR = prod?.currency === 'EUR';
       const mcc = prod?.mcc_name || 'Sem MCC';
       const account = prod?.account_name || 'Sem Conta';
       
       let cost = Number(m.cost || 0); let revenue = Number(m.conversion_value || 0); let refunds = Number(m.refunds || 0);
-      if (viewCurrency === 'BRL') { if (isUSD) { cost *= liveDollar; revenue *= manualDollar; refunds *= manualDollar; } } 
-      else { if (!isUSD) { cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; } }
+      let costInBRL = cost; let revenueInBRL = revenue; let refundsInBRL = refunds;
+      if (isUSD) { costInBRL *= liveDollar; revenueInBRL *= manualDollar; refundsInBRL *= manualDollar; }
+      else if (isEUR) { costInBRL *= liveEuro; revenueInBRL *= manualEuro; refundsInBRL *= manualEuro; }
+
+      if (viewCurrency === 'BRL') { cost = costInBRL; revenue = revenueInBRL; refunds = refundsInBRL; }
+      else if (viewCurrency === 'USD') { cost = costInBRL / liveDollar; revenue = revenueInBRL / manualDollar; refunds = refundsInBRL / manualDollar; }
+      else if (viewCurrency === 'EUR') { cost = costInBRL / liveEuro; revenue = revenueInBRL / manualEuro; refunds = refundsInBRL / manualEuro; }
 
       if (!dailyMap[m.date]) dailyMap[m.date] = { date: m.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, details: [], mccs: {} };
       const day = dailyMap[m.date];
@@ -179,7 +233,15 @@ export default function PlanningPage() {
       const mccObj = day.mccs[mcc]; mccObj.revenue += revenue; mccObj.ads_cost += cost; mccObj.refunds += refunds;
 
       if (!mccObj.accounts[account]) mccObj.accounts[account] = { name: account, revenue: 0, ads_cost: 0, refunds: 0 };
+      if (!mccObj.accounts[account]) mccObj.accounts[account] = { name: account, revenue: 0, ads_cost: 0, refunds: 0 };
       const accObj = mccObj.accounts[account]; accObj.revenue += revenue; accObj.ads_cost += cost; accObj.refunds += refunds;
+
+      // Map para o Widget de Top Campanhas
+      const campaignName = prod?.name || 'Venda Externa';
+      if (!campaignMap[campaignName]) campaignMap[campaignName] = { name: campaignName, revenue: 0, cost: 0, refunds: 0 };
+      campaignMap[campaignName].revenue += revenue;
+      campaignMap[campaignName].cost += cost;
+      campaignMap[campaignName].refunds += refunds;
     });
 
     // 2. Extras
@@ -189,8 +251,13 @@ export default function PlanningPage() {
        if (!dailyMap[c.date]) dailyMap[c.date] = { date: c.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, details: [], mccs: {} };
        
        let amount = Number(c.amount);
-       if (viewCurrency === 'BRL' && c.currency === 'USD') amount *= liveDollar;
-       else if (viewCurrency === 'USD' && c.currency === 'BRL') amount /= liveDollar;
+       let amountInBRL = amount;
+       if (c.currency === 'USD') amountInBRL *= liveDollar;
+       else if (c.currency === 'EUR') amountInBRL *= liveEuro;
+
+       if (viewCurrency === 'BRL') amount = amountInBRL;
+       else if (viewCurrency === 'USD') amount = amountInBRL / liveDollar;
+       else if (viewCurrency === 'EUR') amount = amountInBRL / liveEuro;
        const day = dailyMap[c.date]; day.extra_cost += amount;
        day.details.push({ id: c.id, desc: c.description, val: amount });
     });
@@ -202,6 +269,51 @@ export default function PlanningPage() {
     totals.profit = totals.revenue - totals.total_cost - totals.refunds;
     totals.roi = totals.ads_cost > 0 ? (totals.profit / totals.ads_cost) * 100 : 0;
     
+    // --- Cálculo do Período Anterior ---
+    const prevTotals = { revenue: 0, ads_cost: 0, extra_cost: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
+    prevMetrics.forEach(m => {
+      const prod = products.find(p => p.id === m.product_id);
+      
+      // Filtra por MCC
+      if (selectedMcc !== 'all' && prod?.mcc_name !== selectedMcc) {
+        return;
+      }
+
+      const isUSD = prod?.currency === 'USD';
+      const isEUR = prod?.currency === 'EUR';
+      let cost = Number(m.cost || 0); let revenue = Number(m.conversion_value || 0); let refunds = Number(m.refunds || 0);
+      let costInBRL = cost; let revenueInBRL = revenue; let refundsInBRL = refunds;
+      if (isUSD) { costInBRL *= liveDollar; revenueInBRL *= manualDollar; refundsInBRL *= manualDollar; }
+      else if (isEUR) { costInBRL *= liveEuro; revenueInBRL *= manualEuro; refundsInBRL *= manualEuro; }
+
+      if (viewCurrency === 'BRL') { cost = costInBRL; revenue = revenueInBRL; refunds = refundsInBRL; }
+      else if (viewCurrency === 'USD') { cost = costInBRL / liveDollar; revenue = revenueInBRL / manualDollar; refunds = refundsInBRL / manualDollar; }
+      else if (viewCurrency === 'EUR') { cost = costInBRL / liveEuro; revenue = revenueInBRL / manualEuro; refunds = refundsInBRL / manualEuro; }
+      prevTotals.revenue += revenue; prevTotals.ads_cost += cost; prevTotals.refunds += refunds;
+    });
+    prevExtraCosts.forEach(c => {
+       let amount = Number(c.amount);
+       let amountInBRL = amount;
+       if (c.currency === 'USD') amountInBRL *= liveDollar;
+       else if (c.currency === 'EUR') amountInBRL *= liveEuro;
+
+       if (viewCurrency === 'BRL') amount = amountInBRL;
+       else if (viewCurrency === 'USD') amount = amountInBRL / liveDollar;
+       else if (viewCurrency === 'EUR') amount = amountInBRL / liveEuro;
+       prevTotals.extra_cost += amount;
+    });
+    prevTotals.total_cost = prevTotals.ads_cost + prevTotals.extra_cost;
+    prevTotals.profit = prevTotals.revenue - prevTotals.total_cost - prevTotals.refunds;
+    prevTotals.roi = prevTotals.ads_cost > 0 ? (prevTotals.profit / prevTotals.ads_cost) * 100 : 0;
+
+    const variations = {
+      revenue: prevTotals.revenue > 0 ? ((totals.revenue - prevTotals.revenue) / prevTotals.revenue) * 100 : 0,
+      ads_cost: prevTotals.ads_cost > 0 ? ((totals.ads_cost - prevTotals.ads_cost) / prevTotals.ads_cost) * 100 : 0,
+      profit: prevTotals.profit !== 0 ? ((totals.profit - prevTotals.profit) / Math.abs(prevTotals.profit)) * 100 : 0,
+      roi: totals.roi - prevTotals.roi // Pontos percentuais absolutos
+    };
+    // -----------------------------------
+
     // Projeções
     const today = new Date();
     const currentMonthKey = startDate.slice(0, 7);
@@ -217,10 +329,30 @@ export default function PlanningPage() {
        return { date: d.date.split('-')[2], revenue: accRev, ideal: (goal.revenue / daysInMonth) * parseInt(d.date.split('-')[2]) };
     });
 
-    return { daysArray, totals, chartData, projectedRevenue, revenueProgress };
-  }, [metrics, extraCosts, products, viewCurrency, liveDollar, manualDollar, goal, startDate, endDate]);
+    // Cálculos Estratégicos (Break-even e Top Campanhas)
+    const breakEvenROAS = totals.ads_cost > 0 ? ((totals.ads_cost + totals.extra_cost) / totals.ads_cost) * 100 : 0;
+    
+    const campaignsArray = Object.values(campaignMap).map(c => {
+       const profit = c.revenue - c.cost - c.refunds;
+       const roi = c.cost > 0 ? (profit / c.cost) * 100 : 0;
+       return { ...c, profit, roi };
+    }).sort((a, b) => b.profit - a.profit);
+    
+    const activeCampaigns = campaignsArray.filter(c => c.cost > 0 || c.revenue > 0);
+    const topCampaigns = activeCampaigns.slice(0, 3).map(c => ({
+       ...c, 
+       profitShare: totals.profit > 0 && c.profit > 0 ? (c.profit / totals.profit) * 100 : 0,
+       spendShare: totals.ads_cost > 0 ? (c.cost / totals.ads_cost) * 100 : 0
+    }));
+    const bottomCampaigns = activeCampaigns.length > 3 ? activeCampaigns.slice(-3).reverse().map(c => ({
+       ...c, 
+       spendShare: totals.ads_cost > 0 ? (c.cost / totals.ads_cost) * 100 : 0
+    })) : [];
 
-  const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
+    return { daysArray, totals, variations, chartData, projectedRevenue, revenueProgress, breakEvenROAS, topCampaigns, bottomCampaigns, isCurrentMonth, daysPassed, daysInMonth };
+  }, [metrics, prevMetrics, extraCosts, prevExtraCosts, products, viewCurrency, liveDollar, manualDollar, liveEuro, manualEuro, goal, startDate, endDate, selectedMcc]);
+
+  const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : viewCurrency === 'EUR' ? 'de-DE' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
   const toggleExpand = (id: string) => { setExpandedRows(prev => ({ ...prev, [id]: !prev[id] })); };
 
   const handleSaveGoal = async () => {
@@ -265,29 +397,65 @@ export default function PlanningPage() {
 
         <div className="flex flex-wrap gap-4 items-center">
            
-           {/* SELETOR DE DATA UNIFICADO */}
-           <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   <Calendar size={18} className="text-indigo-500"/>
-                   <select className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`} value={dateRange} onChange={(e) => handlePresetChange(e.target.value)}>
-                      <option value="today">Hoje</option><option value="yesterday">Ontem</option><option value="7d">7 Dias</option><option value="30d">30 Dias</option><option value="this_month">Este Mês</option><option value="last_month">Mês Passado</option><option value="custom">Personalizado</option>
-                   </select>
-                </div>
-                <div className="flex items-center gap-2 px-2">
-                   <input type="date" className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => handleCustomDateChange('start', e.target.value)} />
-                   <span className="text-slate-500 text-xs">até</span>
-                   <input type="date" className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => handleCustomDateChange('end', e.target.value)} />
-                </div>
+           {/* SELETOR DE MCC E DATA */}
+           <div className="flex flex-wrap gap-4">
+               {availableMccs.length > 0 && (
+               <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
+                  <div className="flex items-center gap-2 px-2">
+                     <Target size={18} className="text-indigo-500"/>
+                     <select 
+                        className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-32`}
+                        value={selectedMcc}
+                        onChange={(e) => setSelectedMcc(e.target.value)}
+                     >
+                        <option value="all">Todas as MCCs</option>
+                        {availableMccs.map(mcc => (
+                           <option key={mcc} value={mcc}>{mcc}</option>
+                        ))}
+                     </select>
+                  </div>
+               </div>
+               )}
+
+               {/* SELETOR DE DATA UNIFICADO */}
+               <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
+                    <div className="flex items-center gap-2 px-2 border-r border-inherit">
+                       <Calendar size={18} className="text-indigo-500"/>
+                       <select className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`} value={dateRange} onChange={(e) => handlePresetChange(e.target.value)}>
+                          <option value="today">Hoje</option><option value="yesterday">Ontem</option><option value="7d">7 Dias</option><option value="30d">30 Dias</option><option value="this_month">Este Mês</option><option value="last_month">Mês Passado</option><option value="custom">Personalizado</option>
+                       </select>
+                    </div>
+                    <div className="flex items-center gap-2 px-2">
+                       <input type="date" className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => handleCustomDateChange('start', e.target.value)} />
+                       <span className="text-slate-500 text-xs">até</span>
+                       <input type="date" className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => handleCustomDateChange('end', e.target.value)} />
+                    </div>
+               </div>
            </div>
            
-           <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
-              <div className={`flex gap-3 px-2 border-r ${borderCol} pr-4`}>
-                 <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
-                 <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textMuted}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
+           <div className={`flex items-center p-1.5 rounded-lg border gap-4 flex-wrap xl:flex-nowrap ${bgCard}`}>
+              <div className={`flex items-center gap-3 px-2 border-r ${borderCol} pr-4`}>
+                 <div>
+                    <span className="text-[9px] text-orange-500 uppercase font-bold block">{rateConfig === 'USD' ? 'Dólar Agora' : 'Euro Agora'}</span>
+                    <span className="text-xs font-mono font-bold text-orange-400">R$ {(rateConfig === 'USD' ? liveDollar : liveEuro).toFixed(2)}</span>
+                 </div>
+                 <div>
+                    <span className="text-[9px] text-blue-500 uppercase font-bold block">{rateConfig === 'USD' ? 'Meu Dólar' : 'Meu Euro'}</span>
+                    <div className="flex items-center gap-1">
+                       <span className={`text-[10px] ${textMuted}`}>R$</span>
+                       <input 
+                          type="number" step="0.01" 
+                          className={`w-12 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
+                          value={rateConfig === 'USD' ? manualDollar : manualEuro} 
+                          onChange={(e) => rateConfig === 'USD' ? handleManualDollarChange(parseFloat(e.target.value)) : handleManualEuroChange(parseFloat(e.target.value))} 
+                       />
+                    </div>
+                 </div>
               </div>
               <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                 <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
-                 <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
+                 <button onClick={() => setViewCurrency('BRL')} className={`px-2 py-1 rounded text-xs font-bold ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
+                 <button onClick={() => { setViewCurrency('USD'); setRateConfig('USD'); }} className={`px-2 py-1 rounded text-xs font-bold ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
+                 <button onClick={() => { setViewCurrency('EUR'); setRateConfig('EUR'); }} className={`px-2 py-1 rounded text-xs font-bold ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
               </div>
               <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
            </div>
@@ -299,11 +467,143 @@ export default function PlanningPage() {
       {/* ... (Resto do conteúdo da página mantido igual: KPIs, Gráfico, Tabela, Modais) ... */}
       {/* KPI SUMÁRIO */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Receita</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-orange-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Custo Ads</p><p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</p></div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-amber-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Outros Custos</p><p className="text-2xl font-bold text-amber-500">{formatMoney(processedData.totals.extra_cost)}</p></div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">Lucro Líquido</p><p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p></div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-indigo-500 shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase">ROI</p><p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p></div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm`}>
+           <p className="text-xs font-bold text-slate-500 uppercase">Receita</p>
+           <p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p>
+           {processedData.variations.revenue !== 0 && (
+             <p className={`text-[10px] font-bold mt-1 ${processedData.variations.revenue > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+               {processedData.variations.revenue > 0 ? '+' : ''}{processedData.variations.revenue.toFixed(1)}% <span className="text-slate-400 font-normal">vs pe. anterior</span>
+             </p>
+           )}
+        </div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-orange-500 shadow-sm`}>
+           <p className="text-xs font-bold text-slate-500 uppercase">Custo Ads</p>
+           <p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</p>
+           {processedData.variations.ads_cost !== 0 && (
+             <p className={`text-[10px] font-bold mt-1 ${processedData.variations.ads_cost < 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+               {processedData.variations.ads_cost > 0 ? '+' : ''}{processedData.variations.ads_cost.toFixed(1)}% <span className="text-slate-400 font-normal">vs pe. anterior</span>
+             </p>
+           )}
+        </div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-amber-500 shadow-sm`}>
+           <p className="text-xs font-bold text-slate-500 uppercase">Outros Custos</p>
+           <p className="text-2xl font-bold text-amber-500">{formatMoney(processedData.totals.extra_cost)}</p>
+        </div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} shadow-sm`}>
+           <p className="text-xs font-bold text-slate-500 uppercase">Lucro Líquido</p>
+           <p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p>
+           {processedData.variations.profit !== 0 && (
+             <p className={`text-[10px] font-bold mt-1 ${processedData.variations.profit > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+               {processedData.variations.profit > 0 ? '+' : ''}{processedData.variations.profit.toFixed(1)}% <span className="text-slate-400 font-normal">vs pe. anterior</span>
+             </p>
+           )}
+        </div>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-indigo-500 shadow-sm`}>
+           <p className="text-xs font-bold text-slate-500 uppercase">ROI</p>
+           <p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p>
+           {processedData.variations.roi !== 0 && (
+             <p className={`text-[10px] font-bold mt-1 ${processedData.variations.roi > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+               {processedData.variations.roi > 0 ? '+' : ''}{processedData.variations.roi.toFixed(1)}pp <span className="text-slate-400 font-normal">vs pe. anterior</span>
+             </p>
+           )}
+        </div>
+      </div>
+
+      {/* PAINEL DE INSIGHTS ESTRATÉGICOS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+         {/* Widget 1: Previsão de Fechamento (Pacing) */}
+         <div className={`${bgCard} p-5 rounded-xl border ${borderCol} flex flex-col justify-between shadow-sm`}>
+            <div>
+               <div className="flex justify-between items-start mb-2">
+                  <h3 className={`text-sm font-bold ${textHead} flex items-center gap-2`}><TrendingUp size={16} className="text-blue-500" /> Previsão de Fechamento</h3>
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${processedData.isCurrentMonth ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
+                     {processedData.isCurrentMonth ? 'Ritmo Atual' : 'Mês Fechado'}
+                  </span>
+               </div>
+               <p className={`text-xs ${textMuted} mb-4`}>Projeção baseada na média diária de {formatMoney(processedData.totals.revenue / Math.max(1, processedData.daysPassed))}/dia</p>
+            </div>
+            
+            <div>
+               <div className="flex justify-between items-end mb-1">
+                  <div>
+                     <span className="text-[10px] font-bold text-slate-400 uppercase">Projeção Final</span>
+                     <p className={`text-xl font-bold ${processedData.projectedRevenue >= goal.revenue && goal.revenue > 0 ? 'text-emerald-500' : textHead}`}>{formatMoney(processedData.projectedRevenue)}</p>
+                  </div>
+                  <div className="text-right">
+                     <span className="text-[10px] font-bold text-slate-400 uppercase">Sua Meta</span>
+                     <p className={`text-sm font-bold ${textMuted}`}>{formatMoney(goal.revenue)}</p>
+                  </div>
+               </div>
+               {goal.revenue > 0 && (
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 mt-2">
+                     <div className={`h-2 rounded-full ${processedData.projectedRevenue >= goal.revenue ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min((processedData.projectedRevenue / goal.revenue) * 100, 100)}%` }}></div>
+                  </div>
+               )}
+            </div>
+         </div>
+
+         {/* Widget 2: Break-even Analysis */}
+         <div className={`${bgCard} p-5 rounded-xl border ${borderCol} flex flex-col justify-between shadow-sm`}>
+            <div>
+               <div className="flex items-center gap-2 mb-2">
+                  <Target size={16} className="text-orange-500" />
+                  <h3 className={`text-sm font-bold ${textHead}`}>Ponto de Equilíbrio (Break-even)</h3>
+               </div>
+               <p className={`text-xs ${textMuted} mb-4`}>Para atingir um lucro de R$ 0,00 e pagar todos os {formatMoney(processedData.totals.extra_cost)} em Custos Extras da sua operação.</p>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
+               <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">ROAS Mínimo Necessário</span>
+                  <p className="text-2xl font-bold text-orange-500">{processedData.breakEvenROAS.toFixed(1)}%</p>
+               </div>
+               <div className="text-right">
+                   <span className="text-[10px] font-bold text-slate-400 uppercase block">ROAS Atual</span>
+                   <p className={`text-lg font-bold ${processedData.totals.roi >= processedData.breakEvenROAS - 100 ? 'text-emerald-500' : 'text-rose-500'}`}>{processedData.totals.roi.toFixed(1)}%</p>
+               </div>
+            </div>
+         </div>
+
+         {/* Widget 3: Curva ABC de Campanhas */}
+         <div className={`${bgCard} p-5 rounded-xl border ${borderCol} flex flex-col shadow-sm`}>
+            <div className="flex items-center gap-2 mb-4">
+               <DollarSign size={16} className="text-emerald-500" />
+               <h3 className={`text-sm font-bold ${textHead}`}>Top Campanhas (Lucratividade)</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+               {processedData.topCampaigns.length === 0 ? (
+                  <p className={`text-xs ${textMuted} text-center py-4`}>Sem dados suficientes</p>
+               ) : (
+                  processedData.topCampaigns.map((camp: any, idx: number) => (
+                     <div key={idx} className="flex justify-between items-center text-xs">
+                        <div className="truncate pr-2">
+                           <span className="font-bold text-slate-400 mr-2">{idx + 1}.</span>
+                           <span className={`font-medium ${textHead}`}>{camp.name === 'Desconhecida' ? 'Venda Externa' : camp.name}</span>
+                           <span className="block text-[9px] text-slate-400 mt-0.5 ml-5">Traz <span className="text-emerald-500 font-bold">{camp.profitShare.toFixed(1)}%</span> do lucro gastando <span className="text-orange-400 font-bold">{camp.spendShare.toFixed(1)}%</span></span>
+                        </div>
+                        <span className={`font-bold whitespace-nowrap self-start ${camp.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                           {formatMoney(camp.profit)}
+                        </span>
+                     </div>
+                  ))
+               )}
+               {processedData.bottomCampaigns.length > 0 && (
+                   <>
+                     <div className="border-t border-dashed border-slate-200 dark:border-slate-800 my-2 pt-2"></div>
+                     <span className="text-[10px] font-bold text-rose-500 uppercase block mb-2">Piores Resultados</span>
+                     {processedData.bottomCampaigns.map((camp: any, idx: number) => (
+                         <div key={`bot-${idx}`} className="flex justify-between items-center text-xs opacity-80">
+                            <div className="truncate pr-2">
+                               <span className={`font-medium ${textHead}`}>{camp.name === 'Desconhecida' ? 'Venda Externa' : camp.name}</span>
+                            </div>
+                            <span className="font-bold whitespace-nowrap text-rose-500">
+                               {formatMoney(camp.profit)}
+                            </span>
+                         </div>
+                      ))}
+                   </>
+               )}
+            </div>
+         </div>
       </div>
 
       {/* GRÁFICO */}
@@ -458,6 +758,7 @@ export default function PlanningPage() {
                         <select className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.currency} onChange={e => setNewCost({...newCost, currency: e.target.value})}>
                            <option value="BRL">BRL</option>
                            <option value="USD">USD</option>
+                           <option value="EUR">EUR</option>
                         </select>
                      </div>
                   </div>

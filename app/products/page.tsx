@@ -2,10 +2,41 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Plus, Search, ExternalLink, X, ArrowLeft, RefreshCw, 
-  Briefcase, Folder, Layers, LayoutGrid, ChevronRight, ChevronDown,
-  Eye, EyeOff, PlayCircle, PauseCircle, AlertTriangle, Globe, Trash2,
-  Sun, Moon, Filter, CheckCircle2, XCircle, Target, LogOut, Package, FileText, Settings
+  Building2, 
+  ExternalLink, 
+  MoreVertical, 
+  Trash2, 
+  PlayCircle, 
+  PauseCircle, 
+  RefreshCw, 
+  Plus, 
+  X,
+  Search,
+  Filter,
+  DollarSign,
+  TrendingUp,
+  Activity,
+  Calendar,
+  Layers,
+  Globe,
+  Briefcase,
+  LayoutGrid,
+  Target,
+  Settings,
+  LogOut,
+  Folder,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+  Square,
+  CheckSquare,
+  Copy,
+  Check,
+  List,
+  Sun,
+  Moon,
+  Hash,
+  ChevronRight, ChevronDown, ArrowLeft, Package, FileText, CheckCircle2, XCircle
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -16,6 +47,13 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+function getLocalYYYYMMDD(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -40,6 +78,12 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState('');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  // Novos Estados (Enhancements)
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [copiedPostback, setCopiedPostback] = useState<string | null>(null);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => { 
@@ -93,11 +137,42 @@ export default function ProductsPage() {
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false });
 
-    const { data } = await query;
-    if (data) {
-       setProducts(data);
-       const allMccs = Array.from(new Set(data.map((p: any) => p.mcc_name || 'Sem MCC'))) as string[];
+    const { data: prodData } = await query;
+    if (prodData && prodData.length > 0) {
+       // Buscar métricas dos últimos 7 dias para o "Mini-Dashboard" (Métricas Vitais)
+       const sevenDaysAgo = new Date();
+       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+       const startDateStr = getLocalYYYYMMDD(sevenDaysAgo);
+
+       const { data: metricsData } = await supabase
+         .from('daily_metrics')
+         .select('product_id, cost, conversion_value')
+         .in('product_id', prodData.map((p: any) => p.id))
+         .gte('date', startDateStr);
+       
+       const metricsMap: Record<string, {cost: number, revenue: number, roi: number}> = {};
+       prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, roi: 0 });
+       
+       if (metricsData) {
+         metricsData.forEach(m => {
+            const c = Number(m.cost || 0);
+            const r = Number(m.conversion_value || 0);
+            metricsMap[m.product_id].cost += c;
+            metricsMap[m.product_id].revenue += r;
+         });
+       }
+
+       const finalProducts = prodData.map((p: any) => {
+          const m = metricsMap[p.id];
+          if (m.cost > 0) m.roi = ((m.revenue - m.cost) / m.cost) * 100;
+          return { ...p, metrics7d: m };
+       });
+
+       setProducts(finalProducts);
+       const allMccs = Array.from(new Set(finalProducts.map((p: any) => p.mcc_name || 'Sem MCC'))) as string[];
        setExpandedMccs(allMccs);
+    } else {
+       setProducts([]);
     }
     setLoading(false);
   }
@@ -139,6 +214,30 @@ export default function ProductsPage() {
     if (!error) {
       setProducts(prev => prev.filter(p => !(p.mcc_name === mccName && p.account_name === accountName)));
       if (selectedAccount === accountName) resetFilters();
+      setSelectedProducts(prev => prev.filter(id => !products.find(p => p.id === id && p.account_name === accountName)));
+    }
+  };
+
+  const toggleAccountFromSidebar = async (mccName: string, accountName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    const isTargetAccount = (p: any) => (p.mcc_name || 'Outras') === mccName && (p.account_name || 'Sem Conta') === accountName;
+    const accProducts = products.filter(isTargetAccount);
+    
+    if (accProducts.length === 0) return;
+    
+    const isFullyHidden = accProducts.every(p => p.is_hidden);
+    const newHidden = !isFullyHidden;
+    
+    if (!confirm(newHidden ? `Ocultar todos os produtos da conta "${accountName}"?` : `Restaurar todos os produtos ocultos da conta "${accountName}"?`)) return;
+
+    setProducts(prev => prev.map(p => 
+      isTargetAccount(p) ? { ...p, is_hidden: newHidden } : p
+    ));
+
+    const ids = accProducts.map(p => p.id);
+    if (ids.length > 0) {
+       await supabase.from('products').update({ is_hidden: newHidden }).in('id', ids);
     }
   };
 
@@ -146,7 +245,68 @@ export default function ProductsPage() {
     e.preventDefault(); e.stopPropagation();
     if (!confirm("Excluir produto permanentemente?")) return;
     const { error } = await supabase.from('products').delete().eq('user_id', userId).eq('id', productId);
-    if (!error) setProducts(prev => prev.filter(p => p.id !== productId));
+    if (!error) {
+       setProducts(prev => prev.filter(p => p.id !== productId));
+       setSelectedProducts(prev => prev.filter(id => id !== productId));
+    }
+  };
+
+  // --- AÇÕES EM MASSA (BULK) & POSTBACK ---
+  const toggleSelectProduct = (productId: string, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setSelectedProducts(prev => prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]);
+  };
+
+  const handleSelectAll = (filteredIds: string[]) => {
+    const allSelected = filteredIds.every(id => selectedProducts.includes(id));
+    if (allSelected) {
+       setSelectedProducts(prev => prev.filter(id => !filteredIds.includes(id)));
+    } else {
+       setSelectedProducts(prev => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
+
+  const handleBulkAction = async (action: 'active' | 'paused' | 'delete' | 'hide' | 'unhide') => {
+    if (selectedProducts.length === 0) return;
+    const count = selectedProducts.length;
+    let confirmMsg = '';
+    if (action === 'delete') confirmMsg = `Excluir PERMANENTEMENTE ${count} campanhas?`;
+    else if (action === 'active') confirmMsg = `Ativar ${count} campanhas?`;
+    else if (action === 'paused') confirmMsg = `Pausar ${count} campanhas?`;
+    else if (action === 'hide') confirmMsg = `Ocultar ${count} campanhas?`;
+    else if (action === 'unhide') confirmMsg = `Desocultar ${count} campanhas?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setBulkActionLoading(true);
+    let error = null;
+
+    if (action === 'delete') {
+       const res = await supabase.from('products').delete().eq('user_id', userId).in('id', selectedProducts);
+       error = res.error;
+       if (!error) setProducts(prev => prev.filter(p => !selectedProducts.includes(p.id)));
+    } else if (action === 'hide' || action === 'unhide') {
+       const isHidden = action === 'hide';
+       const res = await supabase.from('products').update({ is_hidden: isHidden }).in('id', selectedProducts);
+       error = res.error;
+       if (!error) setProducts(prev => prev.map(p => selectedProducts.includes(p.id) ? { ...p, is_hidden: isHidden } : p));
+    } else {
+       const res = await supabase.from('products').update({ status: action }).in('id', selectedProducts);
+       error = res.error;
+       if (!error) setProducts(prev => prev.map(p => selectedProducts.includes(p.id) ? { ...p, status: action } : p));
+    }
+
+    setBulkActionLoading(false);
+    if (!error) setSelectedProducts([]);
+    else alert("Erro na ação em massa: " + error.message);
+  };
+
+  const copyPostback = (productId: string, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const url = `${window.location.origin}/api/postback/${userId}?event=sale&amount={amount}&cy={currency}&orderid={transaction_id}&campaign_id={utm_id}`;
+    navigator.clipboard.writeText(url);
+    setCopiedPostback(productId);
+    setTimeout(() => setCopiedPostback(null), 2000);
   };
 
   // --- FILTRAGEM PRINCIPAL ---
@@ -199,6 +359,34 @@ export default function ProductsPage() {
   };
 
   const handleReload = () => { if (userId) fetchProducts(userId); };
+
+  // --- GRUPOS DE PRODUTOS ---
+  const groupedProducts = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    filteredProducts.forEach(p => {
+      const key = `${p.mcc_name || 'Sem MCC'} • ${p.account_name || 'Sem Conta'}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    });
+    // Sort keys alphabetically
+    return Object.entries(groups).sort((a,b) => a[0].localeCompare(b[0]));
+  }, [filteredProducts]);
+
+  const renderPlatformBadge = (product: any) => {
+     const p = (product.platform || '').toLowerCase();
+     if (p.includes('clickbank')) return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#1b2649] text-white font-black text-[9px] shrink-0 shadow-inner">CB</div>;
+     if (p.includes('cartpanda')) return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#2D03FC] text-white font-black text-[9px] shrink-0 shadow-inner">CP</div>;
+     if (p.includes('maxweb'))    return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#F8A826] text-white font-black text-[9px] shrink-0 shadow-inner">MW</div>;
+     if (p.includes('digistore')) return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#003970] text-white font-black text-[9px] shrink-0 shadow-inner">DS</div>;
+     if (p.includes('gurumedia')) return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#4caf50] text-white font-black text-[9px] shrink-0 shadow-inner">GM</div>;
+     
+     // Fallback text badge for Currency
+     const curText = product.currency === 'USD' ? 'USD' : product.currency === 'EUR' ? 'EUR' : 'BRL';
+     const curColor = product.currency === 'USD' ? 'bg-indigo-500/10 text-indigo-500' : product.currency === 'EUR' ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500';
+     return <div className={`px-2 py-1 rounded flex items-center justify-center w-10 shrink-0 ${curColor}`}><span className="font-bold text-[9px]">{curText}</span></div>;
+  };
+
+  const formatMoney = (val: number, currency = 'BRL') => new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(val);
 
   // Estilos
   const isDark = theme === 'dark';
@@ -269,12 +457,18 @@ export default function ProductsPage() {
                    <div className={`ml-4 pl-3 border-l mt-1 space-y-1 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                       {mcc.accounts.map(acc => {
                         const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
+                        const accProds = products.filter(p => (p.mcc_name || 'Outras') === mcc.name && (p.account_name || 'Sem Conta') === acc);
+                        const isHidden = accProds.length > 0 && accProds.every(p => p.is_hidden);
+
                         return (
                           <div key={acc} className="flex items-center group/acc pr-2">
                             <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
-                                <Briefcase size={12}/> <span className="truncate w-28">{acc}</span>
+                                <Briefcase size={12}/> <span className={`truncate w-28 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
                             </button>
-                            <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1"><Trash2 size={12}/></button>
+                            <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1 ${isHidden ? 'text-amber-500 hover:text-amber-400' : 'text-slate-500 hover:text-slate-400'}`} title={isHidden ? "Restaurar Conta" : "Ocultar Conta"}>
+                               {isHidden ? <Eye size={12}/> : <EyeOff size={12}/>}
+                            </button>
+                            <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-0.5" title="Excluir"><Trash2 size={12}/></button>
                           </div>
                         );
                       })}
@@ -318,50 +512,147 @@ export default function ProductsPage() {
                 <button onClick={() => changeStatusFilter('paused')} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'paused' ? 'bg-rose-500/20 text-rose-500' : 'text-slate-500 hover:text-rose-500'}`}><PauseCircle size={12} /> Pausados</button>
              </div>
 
+             <div className={`flex items-center gap-1 px-2 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Grid View"><LayoutGrid size={16}/></button>
+                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'table' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Table View"><List size={16}/></button>
+             </div>
+
              <button onClick={handleReload} className={`p-2 rounded-lg transition-colors mr-1 ${hoverItem}`} title="Recarregar"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
            
            {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 px-4 rounded-xl flex items-center gap-2 text-amber-500 text-xs font-bold animate-pulse whitespace-nowrap"><AlertTriangle size={16} /> Exibindo Ocultos</div>}
         </div>
 
-        {/* GRID DE PRODUTOS */}
+        {/* GRID OU TABELA DE PRODUTOS */}
         {loading && products.length === 0 ? (
           <div className="flex justify-center items-center h-64 text-slate-500">Carregando produtos...</div>
         ) : filteredProducts.length === 0 ? (
            <div className={`flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed rounded-xl ${isDark ? 'border-slate-800' : 'border-slate-300'}`}><Layers size={32} className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada com os filtros atuais.</p></div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
-            {filteredProducts.map((product) => (
-              <Link key={product.id} href={`/products/${product.id}`} className="block group">
-                <div className={`border rounded-xl p-6 transition-all h-full relative overflow-hidden flex flex-col ${
-                   product.is_hidden 
-                     ? (isDark ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-100 border-slate-300 opacity-60') 
-                     : `${bgCard} hover:border-indigo-500/50`
-                }`}>
-                  
-                  <div className="absolute top-4 right-4 flex gap-2 z-10">
-                     <button onClick={(e) => toggleStatus(product, e)} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'}`} title="Alternar Status">
-                        {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
-                     </button>
-                     <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-emerald-500/20 text-emerald-500' : `${isDark ? 'bg-slate-800 text-slate-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-indigo-600'}`}`} title={product.is_hidden ? "Restaurar" : "Arquivar"}>
-                        {product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}
-                     </button>
-                     <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`} title="Excluir"><Trash2 size={14} /></button>
-                  </div>
+          <div className="space-y-8 pb-32">
+             {groupedProducts.map(([groupName, groupProds]) => (
+                <div key={groupName} className="space-y-4">
+                   <h2 className={`text-sm font-bold flex items-center gap-2 ${textMuted} uppercase tracking-wider pl-2 border-l-2 ${isDark?'border-slate-800':'border-slate-300'}`}><Folder size={16}/> {groupName} <span className="text-xs bg-slate-500/10 px-2 py-0.5 rounded-full">{groupProds.length}</span></h2>
+                   
+                   {viewMode === 'grid' ? (
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                       {groupProds.map(product => {
+                         const isSelected = selectedProducts.includes(product.id);
+                         const m7d = product.metrics7d || {cost:0, revenue:0, roi:0};
+                         return (
+                           <div key={product.id} className={`border rounded-xl transition-all relative overflow-hidden flex flex-col ${product.is_hidden ? (isDark ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-100 border-slate-300 opacity-60') : `${bgCard} hover:border-indigo-500/50`} ${isSelected ? 'ring-2 ring-indigo-500 border-transparent shadow-lg shadow-indigo-500/10' : ''}`}>
+                             <div className="p-5 flex-1 cursor-pointer" onClick={() => router.push(`/products/${product.id}`)}>
+                               <div className="absolute top-4 right-4 flex gap-1 z-10" onClick={e=>e.stopPropagation()}>
+                                  <button onClick={(e) => toggleStatus(product, e)} className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold transition-colors border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20'}`} title="Alternar Status">
+                                     {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
+                                  </button>
+                                  <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'bg-emerald-500 text-white' : (isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black')}`} title="Copiar Postback">{copiedPostback === product.id ? <Check size={14}/> : <Copy size={14}/>}</button>
+                                  <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-amber-500/20 text-amber-500' : (isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black')}`} title={product.is_hidden ? "Restaurar" : "Arquivar"}>{product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+                                  <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`} title="Excluir"><Trash2 size={14} /></button>
+                               </div>
 
-                  <div className="flex justify-between items-start mb-4 pr-32">
-                    <div className={`p-3 rounded-xl flex items-center justify-center w-12 h-12 ${product.currency === 'USD' ? 'bg-indigo-500/10 text-indigo-500' : product.currency === 'EUR' ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500'}`}>{product.currency === 'USD' ? '$' : product.currency === 'EUR' ? '€' : 'R$'}</div>
-                  </div>
-                  
-                  <h3 className={`text-lg font-bold mb-1 transition-colors line-clamp-2 ${textHead} group-hover:text-indigo-500`}>{product.name}</h3>
-                  
-                  <div className={`mt-auto pt-4 space-y-2 border-t ${isDark ? 'border-slate-800/50' : 'border-slate-100'}`}>
-                     <div className="flex items-center gap-2 text-xs text-slate-500"><Folder size={12}/><span className="truncate max-w-[200px]">{product.account_name || 'Sem Conta'}</span></div>
-                     <div className="flex items-center gap-2 text-xs text-slate-500"><Layers size={12}/><span className={`font-mono px-1.5 py-0.5 rounded truncate max-w-[200px] ${isDark ? 'bg-black/30' : 'bg-slate-100'}`}>{product.google_ads_campaign_name}</span></div>
-                  </div>
+                               <div className="flex items-center gap-2 mb-3 pr-28">
+                                 <button onClick={(e)=>toggleSelectProduct(product.id, e)} className={`${isSelected ? 'text-indigo-500' : 'text-slate-300 hover:text-slate-400'}`}>{isSelected ? <CheckSquare size={16}/> : <Square size={16}/>}</button>
+                                 {renderPlatformBadge(product)}
+                               </div>
+                               
+                               <h3 className={`text-sm font-bold mb-1 transition-colors line-clamp-2 ${textHead} group-hover:text-indigo-500`}>{product.name}</h3>
+                               <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono"><Hash size={10}/><span className="truncate max-w-[200px]">{product.campaign_id}</span></div>
+                             </div>
+
+                             {/* Métricas 7D Footer Compacto */}
+                             <div className={`px-4 py-3 border-t flex flex-col gap-2 ${isDark ? 'border-slate-800/50 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
+                               <div className="flex justify-between items-center text-xs">
+                                  <span className="text-slate-500 font-medium tracking-wide">Receita</span>
+                                  <span className={`font-mono font-medium ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.revenue, product.currency)}</span>
+                               </div>
+                               <div className="flex justify-between items-center text-xs">
+                                  <span className="text-slate-500 font-medium tracking-wide">Custo</span>
+                                  <span className={`font-mono font-medium ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.cost, product.currency)}</span>
+                               </div>
+                               <div className="flex justify-between items-center mt-1 pt-2 border-t border-dashed border-slate-300/20">
+                                  <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark?'text-white':'text-black'}`}>Lucro (7D)</span>
+                                  <span className={`font-mono font-bold text-sm ${(m7d.revenue - m7d.cost) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney((m7d.revenue - m7d.cost), product.currency)}</span>
+                               </div>
+                             </div>
+                           </div>
+                         );
+                       })}
+                     </div>
+                   ) : (
+                     <div className={`border rounded-xl flex overflow-hidden overflow-x-auto ${bgCard}`}>
+                       <table className="w-full text-left border-collapse min-w-[800px] whitespace-nowrap">
+                         <thead>
+                           <tr className={`text-xs uppercase tracking-wider ${isDark ? 'bg-slate-900/50 text-slate-500' : 'bg-slate-50 text-slate-500'} border-b ${borderCol}`}>
+                             <th className="p-3 w-10 text-center"><button onClick={() => handleSelectAll(groupProds.map(p=>p.id))} className="text-slate-400 hover:text-indigo-500">{groupProds.length > 0 && groupProds.every(p => selectedProducts.includes(p.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}</button></th>
+                             <th className="p-3 w-12 text-center">Plat.</th>
+                             <th className="p-3">Campanha</th>
+                             <th className="p-3">7D Receita</th>
+                             <th className="p-3">7D Custo</th>
+                             <th className="p-3">7D Lucro</th>
+                             <th className="p-3 text-right">Ações</th>
+                           </tr>
+                         </thead>
+                         <tbody className="divide-y divide-inherit">
+                           {groupProds.map(product => {
+                             const isSelected = selectedProducts.includes(product.id);
+                             const m7d = product.metrics7d || {cost:0, revenue:0, roi:0};
+                             return (
+                               <tr key={product.id} className={`transition-colors cursor-pointer ${isSelected ? (isDark?'bg-indigo-500/10':'bg-indigo-50') : hoverItem}`} onClick={() => router.push(`/products/${product.id}`)}>
+                                 <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={(e)=>toggleSelectProduct(product.id, e)} className={`${isSelected ? 'text-indigo-500' : 'text-slate-300 hover:text-slate-400'}`}>{isSelected ? <CheckSquare size={16}/> : <Square size={16}/>}</button></td>
+                                 <td className="p-3 py-2 flex justify-center">{renderPlatformBadge(product)}</td>
+                                 <td className="p-3">
+                                   <div className="flex items-center gap-2">
+                                     {product.status === 'active' ? <PlayCircle size={14} className="text-emerald-500 shrink-0"/> : <PauseCircle size={14} className="text-rose-500 shrink-0"/>}
+                                     <span className={`font-bold text-sm ${textHead} truncate max-w-[280px]`} title={product.name}>{product.name}</span>
+                                     {product.is_hidden && <EyeOff size={12} className="text-amber-500 shrink-0"/>}
+                                   </div>
+                                   <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono mt-0.5 truncate max-w-[280px]" title={product.campaign_id}>
+                                      <Hash size={10} /> {product.campaign_id}
+                                   </div>
+                                 </td>
+                                 <td className={`p-3 font-mono text-xs ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.revenue, product.currency)}</td>
+                                 <td className={`p-3 font-mono text-xs ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.cost, product.currency)}</td>
+                                 <td className="p-3"><span className={`font-mono text-xs font-bold ${(m7d.revenue - m7d.cost) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(m7d.revenue - m7d.cost, product.currency)}</span></td>
+                                 <td className="p-3 text-right" onClick={e=>e.stopPropagation()}>
+                                   <div className="flex justify-end gap-1">
+                                      <button onClick={(e) => toggleStatus(product, e)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200'}`} title="Pausar/Ativar">{product.status === 'active' ? <PauseCircle size={14} /> : <PlayCircle size={14} />}</button>
+                                      <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'text-emerald-500 bg-emerald-500/10' : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200')}`} title="Copiar Postback">{copiedPostback === product.id ? <Check size={14}/> : <Copy size={14}/>}</button>
+                                      <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors hover:text-rose-500 ${isDark ? 'text-slate-400 hover:bg-rose-500/20' : 'text-slate-500 hover:bg-rose-100'}`} title="Excluir"><Trash2 size={14} /></button>
+                                   </div>
+                                 </td>
+                               </tr>
+                             )
+                           })}
+                         </tbody>
+                       </table>
+                     </div>
+                   )}
                 </div>
-              </Link>
-            ))}
+             ))}
+          </div>
+        )}
+
+        {/* BULK ACTION BAR */}
+        {selectedProducts.length > 0 && (
+          <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 border px-6 flex items-center gap-6 z-50 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300 ${isDark ? 'bg-slate-900 border-slate-700 text-white shadow-indigo-500/10' : 'bg-white border-slate-300 text-slate-900 shadow-slate-300'}`}>
+            <div className="flex items-center gap-3 py-4">
+               <div className="bg-indigo-600 text-white w-8 h-8 rounded-full flex justify-center items-center font-bold text-sm shadow-inner">{selectedProducts.length}</div>
+               <span className="font-medium text-sm">Selecionados</span>
+            </div>
+            
+            <div className={`w-px h-8 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
+
+            <div className="flex items-center gap-2 py-4">
+               <button onClick={()=>handleBulkAction('active')} disabled={bulkActionLoading} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg transition-colors ${isDark ? 'hover:bg-emerald-500/20 hover:text-emerald-400' : 'hover:bg-emerald-100 hover:text-emerald-600'}`}><PlayCircle size={14}/> Ativar</button>
+               <button onClick={()=>handleBulkAction('paused')} disabled={bulkActionLoading} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg transition-colors ${isDark ? 'hover:bg-amber-500/20 hover:text-amber-400' : 'hover:bg-amber-100 hover:text-amber-600'}`}><PauseCircle size={14}/> Pausar</button>
+               <button onClick={()=>handleBulkAction('hide')} disabled={bulkActionLoading} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg transition-colors ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}><EyeOff size={14}/> Ocultar</button>
+               <button onClick={()=>handleBulkAction('delete')} disabled={bulkActionLoading} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg transition-colors ${isDark ? 'hover:bg-rose-500/20 hover:text-rose-400' : 'hover:bg-rose-100 hover:text-rose-600'}`}><Trash2 size={14}/> Excluir</button>
+            </div>
+            
+            <div className={`w-px h-8 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
+            
+            <button onClick={()=>setSelectedProducts([])} className={`p-4 transition-colors border-l ${isDark ? 'text-slate-400 hover:text-white border-slate-800' : 'text-slate-500 hover:text-black border-slate-200'}`} title="Cancelar"><X size={18}/></button>
           </div>
         )}
 

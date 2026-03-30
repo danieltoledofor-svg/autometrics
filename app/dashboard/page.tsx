@@ -40,11 +40,18 @@ export default function DashboardPage() {
   const [dateRange, setDateRange] = useState('this_month'); 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  
+  // Filtro de MCC
+  const [selectedMcc, setSelectedMcc] = useState<string>('all');
 
   // Configurações Globais (Moeda e Tema)
   const [liveDollar, setLiveDollar] = useState(6.00); 
   const [manualDollar, setManualDollar] = useState(5.60); 
-  const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD'>('BRL');
+  const [liveEuro, setLiveEuro] = useState(6.50); 
+  const [manualEuro, setManualEuro] = useState(6.00); 
+  const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD' | 'EUR'>('BRL');
+  const [rateConfig, setRateConfig] = useState<'USD' | 'EUR'>('USD');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // --- INICIALIZAÇÃO E AUTENTICAÇÃO ---
@@ -56,6 +63,9 @@ export default function DashboardPage() {
 
       const savedDollar = localStorage.getItem('autometrics_manual_dollar');
       if (savedDollar) setManualDollar(parseFloat(savedDollar));
+
+      const savedEuro = localStorage.getItem('autometrics_manual_euro');
+      if (savedEuro) setManualEuro(parseFloat(savedEuro));
 
       // 2. Verifica Login
       const { data: { session } } = await supabase.auth.getSession();
@@ -71,7 +81,7 @@ export default function DashboardPage() {
       // 4. Carrega Dados
       await Promise.all([
         fetchInitialData(session.user.id), 
-        fetchLiveDollar()
+        fetchLiveRates()
       ]);
       
       setLoading(false);
@@ -90,19 +100,19 @@ export default function DashboardPage() {
     router.push('/');
   };
 
-  async function fetchLiveDollar() {
+  async function fetchLiveRates() {
     try {
-      const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+      const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL');
       const data = await res.json();
       if (data.USDBRL) setLiveDollar(parseFloat(data.USDBRL.bid));
+      if (data.EURBRL) setLiveEuro(parseFloat(data.EURBRL.bid));
     } catch (e) { console.error(e); }
   }
 
   async function fetchInitialData(userId: string) {
-    // Busca produtos do usuário
     const { data: prodData } = await supabase
       .from('products')
-      .select('id, currency')
+      .select('id, currency, name, google_ads_campaign_name, account_name, mcc_name')
       .eq('user_id', userId); 
 
     setProducts(prodData || []);
@@ -124,6 +134,11 @@ export default function DashboardPage() {
   const handleManualDollarChange = (val: number) => {
     setManualDollar(val);
     localStorage.setItem('autometrics_manual_dollar', val.toString());
+  };
+
+  const handleManualEuroChange = (val: number) => {
+    setManualEuro(val);
+    localStorage.setItem('autometrics_manual_euro', val.toString());
   };
 
   // --- LÓGICA INTELIGENTE DE DATAS ---
@@ -150,6 +165,15 @@ export default function DashboardPage() {
     setDateRange('custom'); // Muda o dropdown para "Personalizado" automaticamente
   };
 
+  // --- MCCs DISPONÍVEIS ---
+  const availableMccs = useMemo(() => {
+    const mccs = new Set<string>();
+    products.forEach(p => {
+      if (p.mcc_name) mccs.add(p.mcc_name);
+    });
+    return Array.from(mccs).sort();
+  }, [products]);
+
   // --- PROCESSAMENTO DE DADOS ---
   const processedData = useMemo(() => {
     if (loading || !metrics.length) return { chart: [], table: [], totals: null };
@@ -161,37 +185,78 @@ export default function DashboardPage() {
       if (row.date < startDate || row.date > endDate) return;
 
       const product = products.find(p => p.id === row.product_id);
+      
+      // Filtra por MCC
+      if (selectedMcc !== 'all' && product?.mcc_name !== selectedMcc) {
+        return;
+      }
+      
       const isUSD = product?.currency === 'USD';
+      const isEUR = product?.currency === 'EUR';
+      
+      const accountName = row.account_name || product?.account_name || product?.mcc_name || 'Desconhecida';
+      const campaignName = product?.name || 'Venda Externa';
 
       let cost = Number(row.cost || 0);
       let revenue = Number(row.conversion_value || 0);
       let refunds = Number(row.refunds || 0);
 
-      // Conversão de Moeda
+      // Conversão de Moeda (Primeiro para BRL Base)
+      let costInBRL = cost;
+      let revenueInBRL = revenue;
+      let refundsInBRL = refunds;
+      
+      if (isUSD) {
+         costInBRL *= liveDollar;
+         revenueInBRL *= manualDollar;
+         refundsInBRL *= manualDollar;
+      } else if (isEUR) {
+         costInBRL *= liveEuro;
+         revenueInBRL *= manualEuro;
+         refundsInBRL *= manualEuro;
+      }
+
+      // Converte para a Moeda de Visualização
       if (viewCurrency === 'BRL') {
-        if (isUSD) {
-          cost *= liveDollar;      
-          revenue *= manualDollar; 
-          refunds *= manualDollar;
-        }
-      } else {
-        if (!isUSD) {
-          cost /= liveDollar;
-          revenue /= manualDollar;
-          refunds /= manualDollar;
-        }
+         cost = costInBRL;
+         revenue = revenueInBRL;
+         refunds = refundsInBRL;
+      } else if (viewCurrency === 'USD') {
+         cost = costInBRL / liveDollar;
+         revenue = revenueInBRL / manualDollar;
+         refunds = refundsInBRL / manualDollar;
+      } else if (viewCurrency === 'EUR') {
+         cost = costInBRL / liveEuro;
+         revenue = revenueInBRL / manualEuro;
+         refunds = refundsInBRL / manualEuro;
       }
 
       const profit = revenue - cost - refunds;
 
-      // Agrupamento por Dia
-      if (!dailyMap.has(row.date)) dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0 });
+      // 1. Agrupamento por Dia
+      if (!dailyMap.has(row.date)) {
+         dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0, accounts: {} });
+      }
       const day = dailyMap.get(row.date);
       
       day.cost += cost;
       day.revenue += revenue;
       day.refunds += refunds;
       day.profit += profit;
+
+      // 2. Sub-Agrupamento por Conta
+      if (!day.accounts[accountName]) {
+         day.accounts[accountName] = { name: accountName, cost: 0, revenue: 0, profit: 0, refunds: 0, campaigns: {} };
+      }
+      const acc = day.accounts[accountName];
+      acc.cost += cost; acc.revenue += revenue; acc.profit += profit; acc.refunds += refunds;
+
+      // 3. Sub-Agrupamento por Campanha
+      if (!acc.campaigns[campaignName]) {
+         acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0 };
+      }
+      const cmp = acc.campaigns[campaignName];
+      cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds;
     });
 
     const resultRows = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
@@ -213,7 +278,7 @@ export default function DashboardPage() {
     }));
 
     return { chart: chartData, table: resultRows, totals };
-  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, viewCurrency, loading]);
+  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, liveEuro, manualEuro, viewCurrency, loading, selectedMcc]);
 
   // --- ESTILOS DINÂMICOS ---
   const isDark = theme === 'dark';
@@ -223,7 +288,8 @@ export default function DashboardPage() {
   const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
   
-  const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
+  const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : viewCurrency === 'EUR' ? 'de-DE' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
+  const toggleExpand = (id: string) => { setExpandedRows(prev => ({ ...prev, [id]: !prev[id] })); };
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
@@ -278,50 +344,87 @@ export default function DashboardPage() {
           <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className={textMuted}>Acompanhe seus resultados consolidados.</p></div>
           <div className="flex flex-wrap gap-4 items-center w-full xl:w-auto">
              
-             {/* SELETOR DE DATA UNIFICADO */}
-             <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                   {/* Ícone: Branco no escuro, Indigo no claro */}
-                   <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
-                   <select 
-                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
-                      value={dateRange}
-                      onChange={(e) => handlePresetChange(e.target.value)}
-                   >
-                      <option value="today">Hoje</option>
-                      <option value="yesterday">Ontem</option>
-                      <option value="7d">7 Dias</option>
-                      <option value="30d">30 Dias</option>
-                      <option value="this_month">Este Mês</option>
-                      <option value="last_month">Mês Passado</option>
-                      <option value="custom">Personalizado</option>
-                   </select>
-                </div>
-                <div className="flex items-center gap-2 px-2">
-                   <input 
-                     type="date" 
-                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                     value={startDate}
-                     onChange={(e) => handleCustomDateChange('start', e.target.value)}
-                   />
-                   <span className="text-slate-500 text-xs">até</span>
-                   <input 
-                     type="date" 
-                     className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                     value={endDate}
-                     onChange={(e) => handleCustomDateChange('end', e.target.value)}
-                   />
-                </div>
+             {/* SELETOR DE MCC E DATA */}
+             <div className="flex flex-wrap gap-4">
+                 {availableMccs.length > 0 && (
+                 <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
+                    <div className="flex items-center gap-2 px-2">
+                       <Target size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
+                       <select 
+                          className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-32`}
+                          value={selectedMcc}
+                          onChange={(e) => setSelectedMcc(e.target.value)}
+                       >
+                          <option value="all">Todas as MCCs</option>
+                          {availableMccs.map(mcc => (
+                             <option key={mcc} value={mcc}>{mcc}</option>
+                          ))}
+                       </select>
+                    </div>
+                 </div>
+                 )}
+
+                 {/* SELETOR DE DATA UNIFICADO */}
+                 <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
+                    <div className="flex items-center gap-2 px-2 border-r border-inherit">
+                       {/* Ícone: Branco no escuro, Indigo no claro */}
+                       <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
+                       <select 
+                          className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
+                          value={dateRange}
+                          onChange={(e) => handlePresetChange(e.target.value)}
+                       >
+                          <option value="today">Hoje</option>
+                          <option value="yesterday">Ontem</option>
+                          <option value="7d">7 Dias</option>
+                          <option value="30d">30 Dias</option>
+                          <option value="this_month">Este Mês</option>
+                          <option value="last_month">Mês Passado</option>
+                          <option value="custom">Personalizado</option>
+                       </select>
+                    </div>
+                    <div className="flex items-center gap-2 px-2">
+                       <input 
+                         type="date" 
+                         className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                         value={startDate}
+                         onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                       />
+                       <span className="text-slate-500 text-xs">até</span>
+                       <input 
+                         type="date" 
+                         className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                         value={endDate}
+                         onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                       />
+                    </div>
+                 </div>
              </div>
 
-             <div className={`flex items-center p-1.5 rounded-lg border gap-4 ${bgCard}`}>
-                <div className="flex gap-3 px-2 border-r border-inherit pr-4">
-                   <div><span className="text-[9px] text-orange-500 uppercase font-bold block">Custo (API)</span><span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2)}</span></div>
-                   <div><span className="text-[9px] text-blue-500 uppercase font-bold block">Receita (Manual)</span><div className="flex items-center gap-1"><span className={`text-[10px] ${textHead}`}>R$</span><input type="number" step="0.01" className={`w-10 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} value={manualDollar} onChange={(e) => handleManualDollarChange(parseFloat(e.target.value))} /></div></div>
+             <div className={`flex items-center p-1.5 rounded-lg border gap-4 flex-wrap xl:flex-nowrap ${bgCard}`}>
+                <div className="flex items-center gap-3 px-2 border-r border-inherit pr-4">
+                   <div>
+                      <span className="text-[9px] text-orange-500 uppercase font-bold block">{rateConfig === 'USD' ? 'Dólar Agora' : 'Euro Agora'}</span>
+                      <span className="text-xs font-mono font-bold text-orange-400">R$ {(rateConfig === 'USD' ? liveDollar : liveEuro).toFixed(2)}</span>
+                   </div>
+                   <div>
+                      <span className="text-[9px] text-blue-500 uppercase font-bold block">{rateConfig === 'USD' ? 'Meu Dólar' : 'Meu Euro'}</span>
+                      <div className="flex items-center gap-1">
+                         <span className={`text-[10px] ${textHead}`}>R$</span>
+                         <input 
+                            type="number" step="0.01" 
+                            className={`w-12 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
+                            value={rateConfig === 'USD' ? manualDollar : manualEuro} 
+                            onChange={(e) => rateConfig === 'USD' ? handleManualDollarChange(parseFloat(e.target.value)) : handleManualEuroChange(parseFloat(e.target.value))} 
+                         />
+                      </div>
+                   </div>
                 </div>
+                
                 <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                   <button onClick={() => setViewCurrency('BRL')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
-                   <button onClick={() => setViewCurrency('USD')} className={`px-3 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
+                   <button onClick={() => setViewCurrency('BRL')} className={`px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
+                   <button onClick={() => { setViewCurrency('USD'); setRateConfig('USD'); }} className={`px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
+                   <button onClick={() => { setViewCurrency('EUR'); setRateConfig('EUR'); }} className={`px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
                 </div>
                 <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
              </div>
@@ -359,20 +462,61 @@ export default function DashboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse">
               <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
-                <tr><th className="px-6 py-4">Data</th><th className="px-6 py-4 text-right text-blue-600">Receita</th><th className="px-6 py-4 text-right text-orange-600">Custo</th><th className="px-6 py-4 text-right text-emerald-600">Lucro</th><th className="px-6 py-4 text-right">ROI</th></tr>
+                <tr>
+                   <th className="px-6 py-4 w-10"></th>
+                   <th className="px-6 py-4">Data</th>
+                   <th className="px-6 py-4 text-right text-blue-600">Receita</th>
+                   <th className="px-6 py-4 text-right text-orange-600">Custo</th>
+                   <th className="px-6 py-4 text-right text-emerald-600">Lucro</th>
+                   <th className="px-6 py-4 text-right">ROI</th>
+                </tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
                 {processedData.table.map((row: any) => {
                   const dateParts = row.date.split('-');
                   const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+                  const isExpanded = expandedRows[row.date];
+
                   return (
-                    <tr key={row.date} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                      <td className={`px-6 py-4 font-bold ${textHead}`}>{formattedDate}</td>
-                      <td className="px-6 py-4 text-right font-bold text-blue-500 bg-blue-500/5">{formatMoney(row.revenue)}</td>
-                      <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(row.cost)}</td>
-                      <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
-                      <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{row.roi.toFixed(0)}%</td>
-                    </tr>
+                    <React.Fragment key={row.date}>
+                       <tr onClick={() => toggleExpand(row.date)} className={`transition-colors cursor-pointer ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} ${isExpanded ? (isDark ? 'bg-slate-900' : 'bg-slate-50') : ''}`}>
+                         <td className="px-6 py-4 text-center">
+                            {Object.keys(row.accounts).length > 0 && (
+                               isExpanded ? <ArrowDownRight size={16} className="text-slate-500"/> : <ArrowUpRight size={16} className="text-slate-500"/>
+                            )}
+                         </td>
+                         <td className={`px-6 py-4 font-bold ${textHead}`}>{formattedDate}</td>
+                         <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(row.revenue)}</td>
+                         <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(row.cost)}</td>
+                         <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
+                         <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{row.roi.toFixed(0)}%</td>
+                       </tr>
+
+                       {isExpanded && Object.values(row.accounts).map((acc: any) => (
+                          <React.Fragment key={acc.name}>
+                             <tr className={`${isDark ? 'bg-slate-950/50' : 'bg-slate-100/50'}`}>
+                                <td></td>
+                                <td className="px-6 py-2 text-xs font-bold text-indigo-400 pl-10 flex items-center gap-2">
+                                   <Settings size={12}/> Conta: {acc.name}
+                                </td>
+                                <td className="px-6 py-2 text-right text-xs text-blue-400/70">{formatMoney(acc.revenue)}</td>
+                                <td className="px-6 py-2 text-right text-xs text-orange-400/70">{formatMoney(acc.cost)}</td>
+                                <td colSpan={2}></td>
+                             </tr>
+                             {Object.values(acc.campaigns).map((cmp: any) => (
+                                <tr key={cmp.name} className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
+                                   <td></td>
+                                   <td className="px-6 py-1 text-[10px] text-slate-500 pl-16 flex items-center gap-2 border-l-2 border-slate-800 ml-10">
+                                      <Package size={10}/> {cmp.name}
+                                   </td>
+                                   <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.revenue)}</td>
+                                   <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.cost)}</td>
+                                   <td colSpan={2}></td>
+                                </tr>
+                             ))}
+                          </React.Fragment>
+                       ))}
+                    </React.Fragment>
                   )
                 })}
               </tbody>

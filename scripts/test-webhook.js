@@ -26,7 +26,19 @@ async function testWebhook() {
         body: JSON.stringify(payload),
       });
   
-      const result = await response.json();
+      console.log(`📡 Status da Resposta: ${response.status} ${response.statusText}`);
+  
+      // Tenta ler como texto primeiro para evitar o erro de JSON
+      const text = await response.text();
+      
+      let result;
+      try {
+        result = text ? JSON.parse(text) : null;
+      } catch (e) {
+        console.error('⚠️ A resposta não é um JSON válido.');
+        console.error('Conteúdo bruto:', text);
+        return;
+      }
   
       if (response.ok) {
         console.log('✅ SUCESSO! O servidor aceitou os dados.');
@@ -37,8 +49,8 @@ async function testWebhook() {
         console.error('Detalhe:', result);
       }
     } catch (error) {
-      console.error('❌ Falha na conexão. O servidor está rodando?');
-      console.error(error);
+      console.error('❌ Falha na conexão. Verifique se o servidor está rodando em outro terminal (npm run dev).');
+      console.error('Erro técnico:', error.cause || error.message);
     }
   }
   
