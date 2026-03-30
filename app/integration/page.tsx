@@ -295,17 +295,19 @@ function fetchAndSend(dateString, account) {
         WHERE segments.date = '\${dateString}' AND campaign.id = \${row.campaign.id}
         LIMIT 10
       \`;
+      const locMap = {};
       const locReport = AdsApp.search(locQuery);
       while(locReport.hasNext()){
         const lRow = locReport.next();
         if (lRow.metrics.impressions > 0) {
-          locations.push({
-            tp: lRow.geographicView.locationType || 'Country',
-            n: 'Geo:' + lRow.geographicView.countryCriterionId,
-            i: lRow.metrics.impressions, cl: lRow.metrics.clicks, c: lRow.metrics.costMicros
-          });
+          const key = 'Geo:' + lRow.geographicView.countryCriterionId;
+          if (!locMap[key]) locMap[key] = { tp: lRow.geographicView.locationType || 'Country', n: key, i: 0, cl: 0, c: 0 };
+          locMap[key].i += lRow.metrics.impressions;
+          locMap[key].cl += lRow.metrics.clicks;
+          locMap[key].c += lRow.metrics.costMicros;
         }
       }
+      locations = Object.values(locMap);
     } catch(e) { Logger.log('Loc error: ' + e.message); }
     } // Fim do if (isRecent)
 
