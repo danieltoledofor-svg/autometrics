@@ -1088,12 +1088,18 @@ export default function ProductDetailPage() {
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                    {locations.sort((a,b) => b.cost - a.cost).map(loc => (
-                      <tr key={loc.id} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
+                    {Object.values(locations.reduce((acc: any, loc: any) => {
+                        if (!acc[loc.location_name]) acc[loc.location_name] = { ...loc, impressions: 0, clicks: 0, cost: 0 };
+                        acc[loc.location_name].impressions += loc.impressions;
+                        acc[loc.location_name].clicks += loc.clicks;
+                        acc[loc.location_name].cost += loc.cost;
+                        return acc;
+                      }, {})).sort((a: any, b: any) => b.impressions - a.impressions).map((loc: any, i: number) => (
+                      <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
                         <td className={`px-4 py-3 font-medium ${textHead}`}>{loc.location_name}</td>
                         <td className={`px-4 py-3 text-right text-xs ${textMuted} truncate max-w-[120px]`} title={loc.campaign_name}>{loc.campaign_name}</td>
-                        <td className={`px-4 py-3 text-right ${textMuted}`}>{loc.impressions}</td>
-                        <td className={`px-4 py-3 text-right ${textMuted}`}>{loc.clicks}</td>
+                        <td className={`px-4 py-3 text-right ${textMuted}`}>{loc.impressions.toLocaleString('pt-BR')}</td>
+                        <td className={`px-4 py-3 text-right ${textMuted}`}>{loc.clicks.toLocaleString('pt-BR')}</td>
                         <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(loc.cost)}</td>
                       </tr>
                     ))}
