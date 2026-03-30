@@ -286,10 +286,10 @@ function fetchAndSend(dateString, account) {
 
     audiences = Object.values(audienceMap);
 
-    // 4. Localizações — tenta geographic_view (onde o usuário estava fisicamente)
+    // 4. Localizações — geographic_view (campaign.id must be in SELECT when used in WHERE)
     try {
       const locQuery = \`
-        SELECT geographic_view.country_criterion_id, geographic_view.location_type,
+        SELECT campaign.id, geographic_view.country_criterion_id, geographic_view.location_type,
                metrics.impressions, metrics.clicks, metrics.cost_micros
         FROM geographic_view
         WHERE segments.date = '\${dateString}' AND campaign.id = \${row.campaign.id}

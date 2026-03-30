@@ -967,11 +967,17 @@ export default function ProductDetailPage() {
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                      {audiences.filter(a => a.audience_type === 'Gender').sort((a,b) => b.cost - a.cost).map(aud => (
-                        <tr key={aud.id} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
+                      {Object.values(audiences.filter(a => a.audience_type === 'Gender').reduce((acc: any, aud: any) => {
+                        if (!acc[aud.audience_name]) acc[aud.audience_name] = { ...aud, impressions: 0, clicks: 0, cost: 0 };
+                        acc[aud.audience_name].impressions += aud.impressions;
+                        acc[aud.audience_name].clicks += aud.clicks;
+                        acc[aud.audience_name].cost += aud.cost;
+                        return acc;
+                      }, {})).sort((a: any, b: any) => b.impressions - a.impressions).map((aud: any, i: number) => (
+                        <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
                           <td className={`px-4 py-3 font-medium ${textHead}`}>{aud.audience_name}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.impressions}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.clicks}</td>
+                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.impressions.toLocaleString('pt-BR')}</td>
+                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.clicks.toLocaleString('pt-BR')}</td>
                           <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(aud.cost)}</td>
                         </tr>
                       ))}
@@ -980,9 +986,86 @@ export default function ProductDetailPage() {
                 </div>
               ) : <div className={`p-6 text-center ${textMuted} text-xs`}>Sem dados de gênero.</div>}
             </div>
+
+            {/* DISPOSITIVOS */}
+            <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
+              <div className={`p-4 border-b ${borderCol} flex items-center gap-3`}>
+                <Hash size={18} className="text-violet-400" />
+                <h3 className={`font-semibold ${textHead}`}>Por Dispositivo</h3>
+              </div>
+              {audiences.filter(a => a.audience_type === 'Device').length > 0 ? (
+                <div className="overflow-auto custom-scrollbar max-h-[400px]">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0`}>
+                      <tr>
+                        <th className={`px-4 py-3 border-b ${borderCol}`}>Dispositivo</th>
+                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Impr.</th>
+                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Cliques</th>
+                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Custo</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+                      {Object.values(audiences.filter(a => a.audience_type === 'Device').reduce((acc: any, aud: any) => {
+                        if (!acc[aud.audience_name]) acc[aud.audience_name] = { ...aud, impressions: 0, clicks: 0, cost: 0 };
+                        acc[aud.audience_name].impressions += aud.impressions;
+                        acc[aud.audience_name].clicks += aud.clicks;
+                        acc[aud.audience_name].cost += aud.cost;
+                        return acc;
+                      }, {})).sort((a: any, b: any) => b.impressions - a.impressions).map((aud: any, i: number) => (
+                        <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
+                          <td className={`px-4 py-3 font-medium ${textHead}`}>{aud.audience_name.replace('MOBILE', '📱 Mobile').replace('DESKTOP', '🖥 Desktop').replace('TABLET', '📋 Tablet').replace('CONNECTED_TV', '📺 TV')}</td>
+                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.impressions.toLocaleString('pt-BR')}</td>
+                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.clicks.toLocaleString('pt-BR')}</td>
+                          <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(aud.cost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <div className={`p-6 text-center ${textMuted} text-xs`}>Sem dados de dispositivo.</div>}
+            </div>
+
+            {/* RENDA FAMILIAR */}
+            <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
+              <div className={`p-4 border-b ${borderCol} flex items-center gap-3`}>
+                <TrendingUp size={18} className="text-green-400" />
+                <h3 className={`font-semibold ${textHead}`}>Por Renda Familiar</h3>
+              </div>
+              {audiences.filter(a => a.audience_type === 'Income').length > 0 ? (
+                <div className="overflow-auto custom-scrollbar max-h-[400px]">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0`}>
+                      <tr>
+                        <th className={`px-4 py-3 border-b ${borderCol}`}>Faixa de Renda</th>
+                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Impr.</th>
+                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Cliques</th>
+                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Custo</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+                      {Object.values(audiences.filter(a => a.audience_type === 'Income').reduce((acc: any, aud: any) => {
+                        if (!acc[aud.audience_name]) acc[aud.audience_name] = { ...aud, impressions: 0, clicks: 0, cost: 0 };
+                        acc[aud.audience_name].impressions += aud.impressions;
+                        acc[aud.audience_name].clicks += aud.clicks;
+                        acc[aud.audience_name].cost += aud.cost;
+                        return acc;
+                      }, {})).sort((a: any, b: any) => b.impressions - a.impressions).map((aud: any, i: number) => (
+                        <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
+                          <td className={`px-4 py-3 font-medium ${textHead}`}>{aud.audience_name.replace('INCOME_RANGE_', 'Renda: ').replace(/_/g, '-').replace('0-50', 'Top 10%').replace('50-60', 'Top 11-20%').replace('60-70', 'Top 21-30%').replace('70-80', '30-40%').replace('80-90', '40-50%').replace('90-100', 'Menor 50%')}</td>
+                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.impressions.toLocaleString('pt-BR')}</td>
+                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.clicks.toLocaleString('pt-BR')}</td>
+                          <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(aud.cost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <div className={`p-6 text-center ${textMuted} text-xs`}>Sem dados de renda familiar.</div>}
+            </div>
           </div>
         </div>
       )}
+
 
       {/* ══════════════════════════ ABA LOCAIS ══════════════════════════ */}
       {activeTab === 'locations' && (
