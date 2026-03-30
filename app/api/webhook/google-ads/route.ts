@@ -189,7 +189,7 @@ export async function POST(request: Request) {
         campaign_name: campaign_name, 
         impressions: loc.i ?? loc.impressions ?? 0, 
         clicks: loc.cl ?? loc.clicks ?? 0,
-        cost: (loc.c ?? loc.cost_micros ?? 0) / 1000000, 
+        cost: (loc.c ?? loc.cost_micros ?? 0) / 1000, // script pre-divides by 1000, so /1000 = dollars
         conversions: loc.cv ?? loc.conversions ?? 0,
         updated_at: new Date().toISOString()
       }));

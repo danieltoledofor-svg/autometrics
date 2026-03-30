@@ -286,28 +286,44 @@ function fetchAndSend(dateString, account) {
 
     audiences = Object.values(audienceMap);
 
-    // 4. Localizações — geographic_view (campaign.id must be in SELECT when used in WHERE)
+    // 4. Localizações — geographic_view
     try {
+      const GEO_NAMES = {
+        '2076': 'Brasil', '2840': 'Estados Unidos', '2826': 'Reino Unido',
+        '2124': 'Canadá', '2036': 'Austrália', '2250': 'França',
+        '2276': 'Alemanha', '2724': 'Espanha', '2380': 'Itália',
+        '2392': 'Japão', '2484': 'México', '2032': 'Argentina',
+        '2152': 'Chile', '2170': 'Colômbia', '2604': 'Peru',
+        '2620': 'Portugal', '2703': 'Eslováquia', '2528': 'Países Baixos',
+        '2056': 'Bélgica', '2040': 'Áustria', '2616': 'Polônia'
+      };
       const locQuery = \`
         SELECT campaign.id, geographic_view.country_criterion_id, geographic_view.location_type,
                metrics.impressions, metrics.clicks, metrics.cost_micros
         FROM geographic_view
         WHERE segments.date = '\${dateString}' AND campaign.id = \${row.campaign.id}
-        LIMIT 10
+          AND metrics.impressions > 0
+        ORDER BY metrics.impressions DESC
+        LIMIT 30
       \`;
       const locMap = {};
       const locReport = AdsApp.search(locQuery);
       while(locReport.hasNext()){
         const lRow = locReport.next();
-        if (lRow.metrics.impressions > 0) {
-          const key = 'Geo:' + lRow.geographicView.countryCriterionId;
-          if (!locMap[key]) locMap[key] = { tp: lRow.geographicView.locationType || 'Country', n: key, i: 0, cl: 0, c: 0 };
-          locMap[key].i += lRow.metrics.impressions;
-          locMap[key].cl += lRow.metrics.clicks;
-          locMap[key].c += lRow.metrics.costMicros;
+        const countryId = String(lRow.geographicView.countryCriterionId);
+        const countryName = GEO_NAMES[countryId] || ('País ' + countryId);
+        // Usa apenas a row com mais impressões por país (evita somar hierarquia país+estado+cidade)
+        if (!locMap[countryId] || lRow.metrics.impressions > locMap[countryId].i) {
+          locMap[countryId] = {
+            tp: 'Country',
+            n: countryName,
+            i: lRow.metrics.impressions,
+            cl: lRow.metrics.clicks,
+            c: Math.round(lRow.metrics.costMicros / 1000) // em milésimos de dólar (divide final na API)
+          };
         }
       }
-      locations = Object.values(locMap);
+      locations = Object.values(locMap).slice(0, 5);
     } catch(e) { Logger.log('Loc error: ' + e.message); }
     } // Fim do if (isRecent)
 
