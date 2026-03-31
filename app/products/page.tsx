@@ -145,12 +145,14 @@ export default function ProductsPage() {
        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
        const startDateStr = getLocalYYYYMMDD(sevenDaysAgo);
 
-       const { data: metricsData } = await supabase
-         .from('daily_metrics')
-         .select('product_id, cost, conversion_value')
-         .in('product_id', prodData.map((p: any) => p.id))
-         .gte('date', startDateStr)
-         .limit(50000);
+       const productIds = prodData.map((p: any) => p.id);
+       let metricsData: any[] = [];
+       let p = 0;
+       let m = true;
+       while(m) {
+          const { data: c } = await supabase.from('daily_metrics').select('product_id, cost, conversion_value').in('product_id', productIds).gte('date', startDateStr).range(p*1000, (p+1)*1000-1);
+          if (c && c.length > 0) { metricsData.push(...c); if (c.length < 1000) m = false; else p++; } else m = false;
+       }
        
        const metricsMap: Record<string, {cost: number, revenue: number, roi: number}> = {};
        prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, roi: 0 });
