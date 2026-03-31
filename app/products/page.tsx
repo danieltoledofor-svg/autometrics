@@ -149,7 +149,8 @@ export default function ProductsPage() {
          .from('daily_metrics')
          .select('product_id, cost, conversion_value')
          .in('product_id', prodData.map((p: any) => p.id))
-         .gte('date', startDateStr);
+         .gte('date', startDateStr)
+         .limit(50000);
        
        const metricsMap: Record<string, {cost: number, revenue: number, roi: number}> = {};
        prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, roi: 0 });

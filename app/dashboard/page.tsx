@@ -124,6 +124,7 @@ export default function DashboardPage() {
           .from('daily_metrics')
           .select('*')
           .in('product_id', productIds)
+          .limit(50000)
           .order('date', { ascending: true });
         setMetrics(metData || []);
     } else {

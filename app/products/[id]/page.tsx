@@ -174,7 +174,7 @@ export default function ProductDetailPage() {
         setProduct(prodData);
         setManualData(prev => ({ ...prev, currency: prodData.currency || 'BRL' }));
       }
-      const { data: metricsData } = await supabase.from('daily_metrics').select('*').eq('product_id', productId).order('date', { ascending: true });
+      const { data: metricsData } = await supabase.from('daily_metrics').select('*').eq('product_id', productId).limit(10000).order('date', { ascending: true });
       setMetrics(metricsData || []);
       // Carregar anotações existentes
       const notesMap: Record<string, string> = {};

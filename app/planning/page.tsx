@@ -177,10 +177,10 @@ export default function PlanningPage() {
     setPrevExtraCosts(prevCostData || []);
 
     if (prodData && prodData.length > 0) {
-      const { data: metData } = await supabase.from('daily_metrics').select('*').in('product_id', prodData.map(p => p.id)).gte('date', startDate).lte('date', endDate).order('date', { ascending: true });
+      const { data: metData } = await supabase.from('daily_metrics').select('*').in('product_id', prodData.map(p => p.id)).gte('date', startDate).lte('date', endDate).limit(50000).order('date', { ascending: true });
       setMetrics(metData || []);
 
-      const { data: pMetData } = await supabase.from('daily_metrics').select('*').in('product_id', prodData.map(p => p.id)).gte('date', prevStartStr).lte('date', prevEndStr);
+      const { data: pMetData } = await supabase.from('daily_metrics').select('*').in('product_id', prodData.map(p => p.id)).gte('date', prevStartStr).lte('date', prevEndStr).limit(50000);
       setPrevMetrics(pMetData || []);
     }
     setLoading(false);
