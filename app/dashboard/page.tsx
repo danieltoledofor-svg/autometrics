@@ -168,10 +168,17 @@ export default function DashboardPage() {
   // --- MCCs DISPONÍVEIS ---
   const availableMccs = useMemo(() => {
     const mccs = new Set<string>();
+    let hasIndividuals = false;
     products.forEach(p => {
-      if (p.mcc_name) mccs.add(p.mcc_name);
+      if (p.mcc_name && p.mcc_name.trim() !== '') {
+        mccs.add(p.mcc_name);
+      } else {
+        hasIndividuals = true;
+      }
     });
-    return Array.from(mccs).sort();
+    const arr = Array.from(mccs).sort();
+    if (hasIndividuals) arr.push('Contas Individuais');
+    return arr;
   }, [products]);
 
   // --- PROCESSAMENTO DE DADOS ---
@@ -186,8 +193,10 @@ export default function DashboardPage() {
 
       const product = products.find(p => p.id === row.product_id);
       
+      const mccName = product?.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
+
       // Filtra por MCC
-      if (selectedMcc !== 'all' && product?.mcc_name !== selectedMcc) {
+      if (selectedMcc !== 'all' && mccName !== selectedMcc) {
         return;
       }
       
@@ -295,10 +304,10 @@ export default function DashboardPage() {
 
   return (
     <div className={`min-h-screen font-sans flex ${bgMain}`}>
-      <aside className={`w-16 md:w-64 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+      <aside className={`w-16 md:w-64 shrink-0 border-r flex flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
         {/* Logo - ADICIONADO overflow-hidden PARA EVITAR QUE A LOGO CUBRA O BOTÃO */}
-        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden">
+        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden shrink-0">
            <div className="hidden md:block relative"> 
              {/* Logo com Sombra no modo Claro para garantir visibilidade */}
              <Image 
@@ -341,21 +350,24 @@ export default function DashboardPage() {
       <main className="flex-1 p-4 md:p-8 overflow-y-auto">
         {/* Header e Filtros */}
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-          <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className={textMuted}>Acompanhe seus resultados consolidados.</p></div>
-          <div className="flex flex-wrap gap-4 items-center w-full xl:w-auto">
+          <div className="flex justify-between items-center w-full xl:w-auto">
+             <div><h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1><p className={textMuted}>Acompanhe seus resultados consolidados.</p></div>
+             <button onClick={toggleTheme} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+          </div>
+          <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
              
              {/* SELETOR DE MCC E DATA */}
-             <div className="flex flex-wrap gap-4">
+             <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full sm:w-auto">
                  {availableMccs.length > 0 && (
-                 <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                    <div className="flex items-center gap-2 px-2">
+                 <div className={`flex items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto`}>
+                    <div className="flex items-center gap-2 px-2 w-full">
                        <Target size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
                        <select 
-                          className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-32`}
+                          className={`bg-transparent text-sm font-bold outline-none cursor-pointer flex-1 sm:w-32 ${textHead}`}
                           value={selectedMcc}
                           onChange={(e) => setSelectedMcc(e.target.value)}
                        >
-                          <option value="all">Todas as MCCs</option>
+                          <option value="all">Visão Geral (Todas)</option>
                           {availableMccs.map(mcc => (
                              <option key={mcc} value={mcc}>{mcc}</option>
                           ))}
@@ -365,35 +377,37 @@ export default function DashboardPage() {
                  )}
 
                  {/* SELETOR DE DATA UNIFICADO */}
-                 <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                    <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                       {/* Ícone: Branco no escuro, Indigo no claro */}
-                       <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
-                       <select 
-                          className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
-                          value={dateRange}
-                          onChange={(e) => handlePresetChange(e.target.value)}
-                       >
-                          <option value="today">Hoje</option>
-                          <option value="yesterday">Ontem</option>
-                          <option value="7d">7 Dias</option>
-                          <option value="30d">30 Dias</option>
-                          <option value="this_month">Este Mês</option>
-                          <option value="last_month">Mês Passado</option>
-                          <option value="custom">Personalizado</option>
-                       </select>
+                 <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto gap-2 sm:gap-0`}>
+                    <div className="flex items-center justify-between sm:justify-start gap-2 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit">
+                       <div className="flex items-center gap-2">
+                          {/* Ícone: Branco no escuro, Indigo no claro */}
+                          <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
+                          <select 
+                             className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-auto`}
+                             value={dateRange}
+                             onChange={(e) => handlePresetChange(e.target.value)}
+                          >
+                             <option value="today">Hoje</option>
+                             <option value="yesterday">Ontem</option>
+                             <option value="7d">7 Dias</option>
+                             <option value="30d">30 Dias</option>
+                             <option value="this_month">Este Mês</option>
+                             <option value="last_month">Mês Passado</option>
+                             <option value="custom">Personalizado</option>
+                          </select>
+                       </div>
                     </div>
-                    <div className="flex items-center gap-2 px-2">
+                    <div className="flex items-center justify-between sm:justify-start gap-2 px-2">
                        <input 
                          type="date" 
-                         className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                         className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                          value={startDate}
                          onChange={(e) => handleCustomDateChange('start', e.target.value)}
                        />
                        <span className="text-slate-500 text-xs">até</span>
                        <input 
                          type="date" 
-                         className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                         className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                          value={endDate}
                          onChange={(e) => handleCustomDateChange('end', e.target.value)}
                        />
@@ -401,8 +415,8 @@ export default function DashboardPage() {
                  </div>
              </div>
 
-             <div className={`flex items-center p-1.5 rounded-lg border gap-4 flex-wrap xl:flex-nowrap ${bgCard}`}>
-                <div className="flex items-center gap-3 px-2 border-r border-inherit pr-4">
+             <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-lg border gap-4 sm:gap-4 flex-wrap xl:flex-nowrap ${bgCard} w-full sm:w-auto`}>
+                <div className="flex items-center justify-between sm:justify-start gap-3 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit pr-4">
                    <div>
                       <span className="text-[9px] text-orange-500 uppercase font-bold block">{rateConfig === 'USD' ? 'Dólar Agora' : 'Euro Agora'}</span>
                       <span className="text-xs font-mono font-bold text-orange-400">R$ {(rateConfig === 'USD' ? liveDollar : liveEuro).toFixed(2)}</span>
@@ -421,12 +435,12 @@ export default function DashboardPage() {
                    </div>
                 </div>
                 
-                <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                   <button onClick={() => setViewCurrency('BRL')} className={`px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
-                   <button onClick={() => { setViewCurrency('USD'); setRateConfig('USD'); }} className={`px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
-                   <button onClick={() => { setViewCurrency('EUR'); setRateConfig('EUR'); }} className={`px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
+                <div className={`flex justify-between sm:justify-start items-center p-1 rounded-md gap-1 ${isDark ? 'bg-black' : 'bg-slate-100'} w-full sm:w-auto`}>
+                   <button onClick={() => setViewCurrency('BRL')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
+                   <button onClick={() => { setViewCurrency('USD'); setRateConfig('USD'); }} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
+                   <button onClick={() => { setViewCurrency('EUR'); setRateConfig('EUR'); }} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
                 </div>
-                <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+                <button onClick={toggleTheme} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
              </div>
           </div>
         </header>

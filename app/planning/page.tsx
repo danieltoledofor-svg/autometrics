@@ -189,10 +189,17 @@ export default function PlanningPage() {
   // --- MCCs DISPONÍVEIS ---
   const availableMccs = useMemo(() => {
     const mccs = new Set<string>();
+    let hasIndividuals = false;
     products.forEach(p => {
-      if (p.mcc_name) mccs.add(p.mcc_name);
+      if (p.mcc_name && p.mcc_name.trim() !== '') {
+        mccs.add(p.mcc_name);
+      } else {
+        hasIndividuals = true;
+      }
     });
-    return Array.from(mccs).sort();
+    const arr = Array.from(mccs).sort();
+    if (hasIndividuals) arr.push('Contas Individuais');
+    return arr;
   }, [products]);
 
   const processedData = useMemo(() => {
@@ -206,15 +213,17 @@ export default function PlanningPage() {
     filteredMetrics.forEach(m => {
       const prod = products.find(p => p.id === m.product_id);
       
+      const mccName = prod?.mcc_name?.trim() ? prod.mcc_name : 'Contas Individuais';
+
       // Filtra por MCC
-      if (selectedMcc !== 'all' && prod?.mcc_name !== selectedMcc) {
+      if (selectedMcc !== 'all' && mccName !== selectedMcc) {
         return;
       }
       
       const isUSD = prod?.currency === 'USD';
       const isEUR = prod?.currency === 'EUR';
-      const mcc = prod?.mcc_name || 'Sem MCC';
-      const account = prod?.account_name || 'Sem Conta';
+      const mcc = mccName;
+      const account = m.account_name || prod?.account_name || 'Desconhecida';
       
       let cost = Number(m.cost || 0); let revenue = Number(m.conversion_value || 0); let refunds = Number(m.refunds || 0);
       let costInBRL = cost; let revenueInBRL = revenue; let refundsInBRL = refunds;
@@ -274,8 +283,10 @@ export default function PlanningPage() {
     prevMetrics.forEach(m => {
       const prod = products.find(p => p.id === m.product_id);
       
+      const mccName = prod?.mcc_name?.trim() ? prod.mcc_name : 'Contas Individuais';
+
       // Filtra por MCC
-      if (selectedMcc !== 'all' && prod?.mcc_name !== selectedMcc) {
+      if (selectedMcc !== 'all' && mccName !== selectedMcc) {
         return;
       }
 
@@ -390,25 +401,28 @@ export default function PlanningPage() {
   return (
     <div className={`min-h-screen font-sans p-4 md:p-8 ${bgMain}`}>
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-        <div>
+        <div className="w-full xl:w-auto">
            <Link href="/dashboard" className={`text-xs ${textMuted} hover:underline mb-2 block`}>&larr; Voltar ao Dashboard</Link>
-           <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}><Target className="text-indigo-500" /> Planejamento & DRE</h1>
+           <div className="flex justify-between items-center w-full">
+              <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}><Target className="text-indigo-500" /> Planejamento & DRE</h1>
+              <button onClick={toggleTheme} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+           </div>
         </div>
 
-        <div className="flex flex-wrap gap-4 items-center">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
            
            {/* SELETOR DE MCC E DATA */}
-           <div className="flex flex-wrap gap-4">
+           <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full sm:w-auto">
                {availableMccs.length > 0 && (
-               <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                  <div className="flex items-center gap-2 px-2">
+               <div className={`flex items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto`}>
+                  <div className="flex items-center gap-2 px-2 w-full">
                      <Target size={18} className="text-indigo-500"/>
                      <select 
-                        className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-32`}
+                        className={`bg-transparent text-sm font-bold outline-none cursor-pointer flex-1 sm:w-32 ${textHead}`}
                         value={selectedMcc}
                         onChange={(e) => setSelectedMcc(e.target.value)}
                      >
-                        <option value="all">Todas as MCCs</option>
+                        <option value="all">Visão Geral (Todas)</option>
                         {availableMccs.map(mcc => (
                            <option key={mcc} value={mcc}>{mcc}</option>
                         ))}
@@ -418,23 +432,25 @@ export default function PlanningPage() {
                )}
 
                {/* SELETOR DE DATA UNIFICADO */}
-               <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-                    <div className="flex items-center gap-2 px-2 border-r border-inherit">
-                       <Calendar size={18} className="text-indigo-500"/>
-                       <select className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`} value={dateRange} onChange={(e) => handlePresetChange(e.target.value)}>
-                          <option value="today">Hoje</option><option value="yesterday">Ontem</option><option value="7d">7 Dias</option><option value="30d">30 Dias</option><option value="this_month">Este Mês</option><option value="last_month">Mês Passado</option><option value="custom">Personalizado</option>
-                       </select>
+               <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto gap-2 sm:gap-0`}>
+                    <div className="flex items-center justify-between sm:justify-start gap-2 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit">
+                       <div className="flex items-center gap-2">
+                          <Calendar size={18} className="text-indigo-500"/>
+                          <select className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-auto`} value={dateRange} onChange={(e) => handlePresetChange(e.target.value)}>
+                             <option value="today">Hoje</option><option value="yesterday">Ontem</option><option value="7d">7 Dias</option><option value="30d">30 Dias</option><option value="this_month">Este Mês</option><option value="last_month">Mês Passado</option><option value="custom">Personalizado</option>
+                          </select>
+                       </div>
                     </div>
-                    <div className="flex items-center gap-2 px-2">
-                       <input type="date" className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => handleCustomDateChange('start', e.target.value)} />
+                    <div className="flex items-center justify-between sm:justify-start gap-2 px-2">
+                       <input type="date" className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => handleCustomDateChange('start', e.target.value)} />
                        <span className="text-slate-500 text-xs">até</span>
-                       <input type="date" className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => handleCustomDateChange('end', e.target.value)} />
+                       <input type="date" className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => handleCustomDateChange('end', e.target.value)} />
                     </div>
                </div>
            </div>
            
-           <div className={`flex items-center p-1.5 rounded-lg border gap-4 flex-wrap xl:flex-nowrap ${bgCard}`}>
-              <div className={`flex items-center gap-3 px-2 border-r ${borderCol} pr-4`}>
+           <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-lg border gap-4 sm:gap-4 flex-wrap xl:flex-nowrap ${bgCard} w-full sm:w-auto`}>
+              <div className={`flex items-center justify-between sm:justify-start gap-3 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 ${borderCol} pr-4`}>
                  <div>
                     <span className="text-[9px] text-orange-500 uppercase font-bold block">{rateConfig === 'USD' ? 'Dólar Agora' : 'Euro Agora'}</span>
                     <span className="text-xs font-mono font-bold text-orange-400">R$ {(rateConfig === 'USD' ? liveDollar : liveEuro).toFixed(2)}</span>
@@ -452,15 +468,18 @@ export default function PlanningPage() {
                     </div>
                  </div>
               </div>
-              <div className={`flex p-1 rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-                 <button onClick={() => setViewCurrency('BRL')} className={`px-2 py-1 rounded text-xs font-bold ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
-                 <button onClick={() => { setViewCurrency('USD'); setRateConfig('USD'); }} className={`px-2 py-1 rounded text-xs font-bold ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
-                 <button onClick={() => { setViewCurrency('EUR'); setRateConfig('EUR'); }} className={`px-2 py-1 rounded text-xs font-bold ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
+              <div className={`flex justify-between sm:justify-start items-center p-1 rounded-md gap-1 ${isDark ? 'bg-black' : 'bg-slate-100'} w-full sm:w-auto`}>
+                 <button onClick={() => setViewCurrency('BRL')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
+                 <button onClick={() => { setViewCurrency('USD'); setRateConfig('USD'); }} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
+                 <button onClick={() => { setViewCurrency('EUR'); setRateConfig('EUR'); }} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
               </div>
-              <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+              <button onClick={toggleTheme} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
            </div>
-           <button onClick={() => setEditMode(!editMode)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : `${bgCard} ${textMuted}`}`}><Edit2 size={14}/> {editMode ? 'Modo Edição Ativo' : 'Editar Planilha'}</button>
-           <button onClick={() => setIsGoalModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-lg"><Target size={14}/> Metas</button>
+           
+           <div className="flex gap-2 w-full sm:w-auto">
+             <button onClick={() => setEditMode(!editMode)} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : `${bgCard} ${textMuted}`}`}><Edit2 size={14}/> {editMode ? 'Parar Edição' : 'Editar Planilha'}</button>
+             <button onClick={() => setIsGoalModalOpen(true)} className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-2 shadow-lg"><Target size={14}/> Metas</button>
+           </div>
         </div>
       </div>
 

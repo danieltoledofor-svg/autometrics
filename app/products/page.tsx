@@ -60,6 +60,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
   // Filtros de Navegação
   const [selectedMcc, setSelectedMcc] = useState<string | null>(null);
@@ -400,127 +401,134 @@ export default function ProductsPage() {
   const buttonPrimary = isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-600 text-white shadow';
 
   return (
-    <div className={`min-h-screen font-sans flex flex-col md:flex-row ${bgMain}`}>
+    <div className={`min-h-[100dvh] font-sans flex flex-col md:flex-row ${bgMain}`}>
       
+      {/* MOBILE HEADER */}
+      <div className={`md:hidden flex items-center justify-between p-4 border-b shrink-0 z-30 sticky top-0 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center gap-3">
+           <Image src="/logo.png" alt="Logo" width={120} height={40} className={`w-[120px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} priority />
+        </div>
+        <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>
+           {isMobileSidebarOpen ? <X size={24}/> : <List size={24}/>}
+        </button>
+      </div>
+
       {/* SIDEBAR */}
-      <aside className={`w-full md:w-72 border-r flex flex-col h-screen sticky top-0 z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        {/* CORREÇÃO AQUI: Adicionado overflow-hidden para impedir que a logo cubra o botão abaixo */}
-        <div className="h-20 flex items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden">
-           <div className="hidden md:block relative"><Image src="/logo.png" alt="Logo" width={180} height={60} className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} priority /></div>
-           <div className="md:hidden"><Image src="/logo.png" alt="Logo" width={40} height={40} className={`w-8 h-8 object-contain ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`}/></div>
+      <aside className={`${isMobileSidebarOpen ? 'flex' : 'hidden'} md:flex fixed md:sticky inset-0 md:inset-auto top-[73px] md:top-0 w-full md:w-72 shrink-0 border-r flex-col h-[calc(100dvh-73px)] md:h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+        
+        <div className="hidden md:flex h-20 items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden shrink-0">
+           <div className="relative"><Image src="/logo.png" alt="Logo" width={180} height={60} className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} priority /></div>
         </div>
         
-        <nav className="flex-1 px-2 py-4 space-y-2">
-           {/* CORREÇÃO AQUI: Garantindo w-full para todos os links */}
-           <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><LayoutGrid size={20} /> <span className="hidden md:block font-medium">Dashboard</span></Link>
-           
-           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="hidden md:block font-medium">Planejamento</span></Link>
-           
-           <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><Briefcase size={20} /> <span className="hidden md:block font-medium">Meus Produtos</span></Link>
-           
-           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="hidden md:block font-medium">Integração</span></Link>
-        </nav>
-        
-        {/* Filtros da Sidebar */}
-        <div className="px-4 pb-2 mt-auto">
-          <div className={`p-3 rounded-lg border mb-2 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Estrutura de Contas</p>
-            <div className="flex justify-between items-center">
-              <button onClick={() => setShowHidden(!showHidden)} className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${showHidden ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'text-slate-500 border-transparent hover:bg-slate-800'}`}>
-                {showHidden ? <Eye size={10} /> : <EyeOff size={10} />}
-                {showHidden ? 'Ver Ativos' : 'Ver Ocultos'}
-              </button>
-              <button onClick={resetFilters} className="text-[10px] text-indigo-400 hover:underline">Limpar</button>
+        {/* Scrollable Area for Sidebar Items */}
+        <div className="flex-1 overflow-y-auto flex flex-col custom-scrollbar">
+          <nav className="px-2 py-4 space-y-2 shrink-0">
+             <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><LayoutGrid size={20} /> <span className="font-medium">Dashboard</span></Link>
+             <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="font-medium">Planejamento</span></Link>
+             <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><Briefcase size={20} /> <span className="font-medium">Meus Produtos</span></Link>
+             <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="font-medium">Integração</span></Link>
+          </nav>
+          
+          <div className="px-4 pb-2 mt-2 shrink-0">
+            <div className={`p-3 rounded-lg border mb-2 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Estrutura de Contas</p>
+              <div className="flex justify-between items-center">
+                <button onClick={() => setShowHidden(!showHidden)} className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${showHidden ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'text-slate-500 border-transparent hover:bg-slate-800'}`}>
+                  {showHidden ? <Eye size={10} /> : <EyeOff size={10} />}
+                  {showHidden ? 'Ver Ativos' : 'Ver Ocultos'}
+                </button>
+                <button onClick={resetFilters} className="text-[10px] text-indigo-400 hover:underline">Limpar</button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4 space-y-1 max-h-[40vh]">
-           {structure.length === 0 && !loading && (
-               <div className="text-center py-4 px-2"><p className="text-xs text-slate-500">Nenhuma conta encontrada.</p></div>
-           )}
+          <div className="px-4 pb-4 space-y-1">
+             {structure.length === 0 && !loading && (
+                 <div className="text-center py-4 px-2"><p className="text-xs text-slate-500">Nenhuma conta encontrada.</p></div>
+             )}
 
-           {structure.map(mcc => {
-             const isMccActive = selectedMcc === mcc.name && !selectedAccount;
-             const isExpanded = expandedMccs.includes(mcc.name);
-             return (
-               <div key={mcc.name} className="mb-2">
-                 <div className="flex items-center gap-1 group relative pr-2">
-                    <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
-                    <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
-                       <Globe size={14} className={isMccActive ? 'text-white' : 'text-slate-500'}/>
-                       <span className="truncate w-28">{mcc.name}</span>
-                    </button>
-                    <button onClick={(e) => handleDeleteMcc(mcc.name, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
-                 </div>
-                 {isExpanded && (
-                   <div className={`ml-4 pl-3 border-l mt-1 space-y-1 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                      {mcc.accounts.map(acc => {
-                        const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
-                        const accProds = products.filter(p => (p.mcc_name || 'Outras') === mcc.name && (p.account_name || 'Sem Conta') === acc);
-                        const isHidden = accProds.length > 0 && accProds.every(p => p.is_hidden);
-
-                        return (
-                          <div key={acc} className="flex items-center group/acc pr-2">
-                            <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
-                                <Briefcase size={12}/> <span className={`truncate w-28 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
-                            </button>
-                            <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-1 ${isHidden ? 'text-amber-500 hover:text-amber-400' : 'text-slate-500 hover:text-slate-400'}`} title={isHidden ? "Restaurar Conta" : "Ocultar Conta"}>
-                               {isHidden ? <Eye size={12}/> : <EyeOff size={12}/>}
-                            </button>
-                            <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-0 group-hover/acc:opacity-100 transition-opacity ml-0.5" title="Excluir"><Trash2 size={12}/></button>
-                          </div>
-                        );
-                      })}
+             {structure.map(mcc => {
+               const isMccActive = selectedMcc === mcc.name && !selectedAccount;
+               const isExpanded = expandedMccs.includes(mcc.name);
+               return (
+                 <div key={mcc.name} className="mb-2">
+                   <div className="flex items-center gap-1 group relative pr-2">
+                      <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
+                      <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
+                         <Globe size={14} className={isMccActive ? 'text-white' : 'text-slate-500'}/>
+                         <span className="truncate w-28">{mcc.name}</span>
+                      </button>
+                      <button onClick={(e) => handleDeleteMcc(mcc.name, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
                    </div>
-                 )}
-               </div>
-             )
-           })}
+                   {isExpanded && (
+                     <div className={`ml-4 pl-3 border-l mt-1 space-y-1 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                        {mcc.accounts.map(acc => {
+                          const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
+                          const accProds = products.filter(p => (p.mcc_name || 'Outras') === mcc.name && (p.account_name || 'Sem Conta') === acc);
+                          const isHidden = accProds.length > 0 && accProds.every(p => p.is_hidden);
+
+                          return (
+                            <div key={acc} className="flex items-center group/acc pr-2">
+                              <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
+                                  <Briefcase size={12}/> <span className={`truncate w-28 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
+                              </button>
+                              <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 transition-opacity ml-1 ${isHidden ? 'text-amber-500 hover:text-amber-400' : 'text-slate-500 hover:text-slate-400'}`} title={isHidden ? "Restaurar Conta" : "Ocultar Conta"}>
+                                 {isHidden ? <Eye size={12}/> : <EyeOff size={12}/>}
+                              </button>
+                              <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 transition-opacity ml-0.5" title="Excluir"><Trash2 size={12}/></button>
+                            </div>
+                          );
+                        })}
+                     </div>
+                   )}
+                 </div>
+               )
+             })}
+          </div>
         </div>
         
-        <div className="p-4 border-t border-inherit">
-           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="hidden md:block font-medium">Sair</span></button>
+        <div className="p-4 border-t border-inherit shrink-0">
+           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} /> <span className="font-medium">Sair</span></button>
         </div>
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen relative">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto md:h-screen min-h-[calc(100vh-73px)] relative">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
-            <div className={`flex items-center gap-2 text-xs ${textMuted} mb-1`}>{selectedMcc ? (<><span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedMcc}</span>{selectedAccount && <><ChevronRight size={12}/> <span className={`px-2 py-0.5 rounded text-indigo-500 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedAccount}</span></>}</>) : (<span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>Todas as MCCs</span>)}</div>
-            <h1 className={`text-2xl font-bold flex items-center gap-2 ${textHead}`}>{selectedAccount || selectedMcc || 'Gerenciador de Campanhas'}</h1>
+            <div className={`flex flex-wrap items-center gap-2 text-xs ${textMuted} mb-1`}>{selectedMcc ? (<><span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedMcc}</span>{selectedAccount && <><ChevronRight size={12}/> <span className={`px-2 py-0.5 rounded text-indigo-500 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedAccount}</span></>}</>) : (<span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>Todas as MCCs</span>)}</div>
+            <h1 className={`text-2xl font-bold flex flex-wrap items-center gap-2 ${textHead}`}>{selectedAccount || selectedMcc || 'Gerenciador de Campanhas'}</h1>
           </div>
           
-          <div className="flex gap-3">
-             <button onClick={toggleTheme} className={`p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
-             <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Plus size={18} /> Novo Produto</button>
+          <div className="flex flex-wrap gap-3">
+             <button onClick={toggleTheme} className={`hidden md:block p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+             <button onClick={() => setIsModalOpen(true)} className="flex-1 md:flex-none justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Plus size={18} /> Novo Produto</button>
           </div>
         </div>
 
         {/* BARRA DE FERRAMENTAS E FILTROS */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-           <div className={`p-1.5 rounded-xl flex-1 flex gap-4 items-center border ${bgCard}`}>
-             <div className="pl-3 text-slate-500"><Search size={18} /></div>
-             <input type="text" placeholder="Buscar campanha..." className={`bg-transparent w-full outline-none placeholder:text-slate-600 ${textHead}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+        <div className="flex flex-col gap-4 mb-6">
+           <div className={`p-1.5 rounded-xl flex flex-wrap gap-2 md:gap-4 items-center border ${bgCard}`}>
+             <div className="pl-3 text-slate-500 hidden md:block"><Search size={18} /></div>
+             <input type="text" placeholder="Buscar campanha..." className={`bg-transparent flex-1 outline-none min-w-[120px] px-2 md:px-0 placeholder:text-slate-600 ${textHead}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
              
              {/* Filtro de Status */}
-             <div className={`flex items-center gap-1 px-2 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                <button onClick={() => changeStatusFilter('ALL')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'ALL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`}>Todos</button>
-                <button onClick={() => changeStatusFilter('active')} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-500' : 'text-slate-500 hover:text-emerald-500'}`}><PlayCircle size={12} /> Ativos</button>
-                <button onClick={() => changeStatusFilter('paused')} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'paused' ? 'bg-rose-500/20 text-rose-500' : 'text-slate-500 hover:text-rose-500'}`}><PauseCircle size={12} /> Pausados</button>
+             <div className={`flex flex-wrap items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                <button onClick={() => changeStatusFilter('ALL')} className={`flex-1 md:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'ALL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`}>Todos</button>
+                <button onClick={() => changeStatusFilter('active')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-500' : 'text-slate-500 hover:text-emerald-500'}`}><PlayCircle size={12} /> Ativos</button>
+                <button onClick={() => changeStatusFilter('paused')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'paused' ? 'bg-rose-500/20 text-rose-500' : 'text-slate-500 hover:text-rose-500'}`}><PauseCircle size={12} /> Pausados</button>
              </div>
 
-             <div className={`flex items-center gap-1 px-2 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+             <div className={`flex items-center gap-1 px-2 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'} hidden md:flex`}>
                 <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Grid View"><LayoutGrid size={16}/></button>
                 <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'table' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Table View"><List size={16}/></button>
              </div>
 
-             <button onClick={handleReload} className={`p-2 rounded-lg transition-colors mr-1 ${hoverItem}`} title="Recarregar"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
+             <button onClick={handleReload} className={`p-2 rounded-lg transition-colors hidden md:block mr-1 ${hoverItem}`} title="Recarregar"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
            
-           {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 px-4 rounded-xl flex items-center gap-2 text-amber-500 text-xs font-bold animate-pulse whitespace-nowrap"><AlertTriangle size={16} /> Exibindo Ocultos</div>}
+           {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 p-2 md:px-4 rounded-xl flex items-center justify-center gap-2 text-amber-500 text-xs font-bold animate-pulse"><AlertTriangle size={16} /> Exibindo Ocultos</div>}
         </div>
 
         {/* GRID OU TABELA DE PRODUTOS */}

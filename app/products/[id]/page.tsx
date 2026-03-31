@@ -525,58 +525,59 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-4 w-full xl:w-auto items-end">
-          <button onClick={() => setShowManualEntry(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-900/20">
-            <FileText size={14} /> Lançamento Rápido
+        <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
+          <button onClick={() => setShowManualEntry(true)} className="flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-bold transition-all shadow-lg shadow-indigo-900/20 w-full sm:w-auto">
+            <FileText size={16} className="sm:w-3.5 sm:h-3.5" /> Lançamento Rápido
           </button>
 
-          {/* SELETOR DE DATA PADRONIZADO */}
-          <div className={`flex items-center p-1.5 rounded-xl border ${bgCard} shadow-sm`}>
-            <div className="flex items-center gap-2 px-2 border-r border-inherit">
-              {/* CONTRASTE CORRIGIDO: O ícone fica branco no escuro */}
-              <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"} />
-              <select
-                className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-24`}
-                value={dateRange}
-                onChange={(e) => handlePresetChange(e.target.value)}
-              >
-                <option value="today">Hoje</option>
-                <option value="yesterday">Ontem</option>
-                <option value="7d">7 Dias</option>
-                <option value="30d">30 Dias</option>
-                <option value="this_month">Este Mês</option>
-                <option value="last_month">Mês Passado</option>
-                <option value="custom">Personalizado</option>
-              </select>
+          {/* SELETOR DE DATA */}
+          <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto gap-2 sm:gap-0`}>
+            <div className="flex items-center justify-between sm:justify-start gap-2 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit">
+              <div className="flex items-center gap-2 w-full">
+                <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"} />
+                <select
+                  className={`bg-transparent text-sm font-bold outline-none cursor-pointer text-right sm:text-left flex-1 sm:w-28 ${textHead}`}
+                  value={dateRange}
+                  onChange={(e) => handlePresetChange(e.target.value)}
+                >
+                  <option value="today">Hoje</option>
+                  <option value="yesterday">Ontem</option>
+                  <option value="7d">7 Dias</option>
+                  <option value="30d">30 Dias</option>
+                  <option value="this_month">Este Mês</option>
+                  <option value="last_month">Mês Passado</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </div>
             </div>
-            <div className="flex items-center gap-2 px-2">
+            <div className="flex items-center justify-between sm:justify-start gap-2 px-2">
               <input
                 type="date"
-                className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                 value={startDate}
                 onChange={(e) => handleCustomDateChange('start', e.target.value)}
               />
               <span className="text-slate-500 text-xs">até</span>
               <input
                 type="date"
-                className={`bg-transparent text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                 value={endDate}
                 onChange={(e) => handleCustomDateChange('end', e.target.value)}
               />
             </div>
           </div>
 
-          <div className={`flex p-1 rounded-lg border ${bgCard} gap-2`}>
-            <div className={`flex rounded-md ${isDark ? 'bg-black' : 'bg-slate-100'}`}>
-              <button onClick={() => toggleViewCurrency('ORIGINAL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
-              <button onClick={() => toggleViewCurrency('BRL')} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
+          <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-lg border gap-4 sm:gap-2 w-full sm:w-auto ${bgCard}`}>
+            <div className={`flex rounded-md p-1 sm:p-0 ${isDark ? 'bg-black sm:bg-transparent' : 'bg-slate-100 sm:bg-transparent'} gap-1 w-full sm:w-auto`}>
+              <button onClick={() => toggleViewCurrency('ORIGINAL')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
+              <button onClick={() => toggleViewCurrency('BRL')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
             </div>
-            <button onClick={toggleTheme} className={`${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+            <button onClick={toggleTheme} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
           </div>
         </div>
       </header>
 
-      <div className={`flex flex-wrap gap-0 border-b ${borderCol} mb-8`}>
+      <div className={`flex overflow-x-auto custom-scrollbar gap-0 border-b ${borderCol} mb-8`}>
         {[
           { id: 'ads', icon: <BarChart2 size={15} />, label: 'Visão Geral' },
           { id: 'search_terms', icon: <FileText size={15} />, label: 'Termos de Pesquisa' },
@@ -588,7 +589,7 @@ export default function ProductDetailPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-bold border-b-2 transition-all ${activeTab === tab.id
+            className={`flex items-center gap-2 px-5 py-3 text-sm font-bold border-b-2 whitespace-nowrap transition-all ${activeTab === tab.id
               ? 'border-indigo-500 text-indigo-400'
               : `border-transparent ${textMuted} hover:text-slate-300`
               }`}

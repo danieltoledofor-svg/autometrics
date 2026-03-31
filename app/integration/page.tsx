@@ -479,7 +479,7 @@ ${commonFunctions}`;
         </div>
 
         {/* TAB NAV */}
-        <div className={`flex gap-1 p-1 rounded-xl mb-8 ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-200'}`}>
+        <div className={`flex gap-1 p-1 rounded-xl mb-8 overflow-x-auto custom-scrollbar ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-200'}`}>
           {([
             { key: 'google', icon: <Code size={15} />, label: 'Google Ads' },
             { key: 'postback', icon: <ShoppingBag size={15} />, label: 'Postback S2S' },
@@ -992,36 +992,44 @@ ${commonFunctions}`;
 
                   <div className="space-y-2">
                     {urlParams.map((param, idx) => (
-                      <div key={idx} className={`flex items-center gap-2 p-2 rounded-xl border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                        {/* Badge tipo */}
-                        <span className={`shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${param.locked ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' :
-                          param.ratoeira ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                            'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                          }`}>
-                          {param.locked ? 'UTM*' : param.ratoeira ? 'Ratoeira' : 'UTM'}
-                        </span>
-                        {/* Key */}
-                        <input
-                          type="text"
-                          value={param.key}
-                          readOnly={param.locked}
-                          onChange={e => updateParam(idx, 'key', e.target.value)}
-                          className={`w-28 bg-transparent outline-none text-xs font-mono ${param.locked ? textMuted : textHead} shrink-0`}
-                        />
-                        <span className={`text-slate-500 shrink-0`}>=</span>
-                        {/* Value */}
-                        <input
-                          type="text"
-                          value={param.value}
-                          onChange={e => updateParam(idx, 'value', e.target.value)}
-                          className={`flex-1 bg-transparent outline-none text-xs font-mono ${textHead}`}
-                        />
-                        {/* Remove */}
-                        {!param.locked && (
-                          <button onClick={() => removeParam(idx)} className="shrink-0 p-1 rounded text-slate-500 hover:text-rose-400 transition-colors">
-                            <Trash2 size={12} />
-                          </button>
-                        )}
+                      <div key={idx} className={`flex flex-wrap items-center gap-2 p-2 rounded-xl border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                        {/* Padrão (Key Section) */}
+                        <div className="flex items-center gap-2 min-w-[140px]">
+                          {/* Badge tipo */}
+                          <span className={`shrink-0 text-[8px] sm:text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${param.locked ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' :
+                            param.ratoeira ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                              'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                            }`}>
+                            {param.locked ? 'UTM*' : param.ratoeira ? 'Ratoeira' : 'UTM'}
+                          </span>
+                          {/* Key */}
+                          <input
+                            type="text"
+                            value={param.key}
+                            readOnly={param.locked}
+                            onChange={e => updateParam(idx, 'key', e.target.value)}
+                            className={`w-20 sm:w-28 bg-transparent outline-none text-xs font-mono ${param.locked ? textMuted : textHead} shrink-0`}
+                          />
+                        </div>
+
+                        <span className={`text-slate-500 shrink-0 hidden sm:inline`}>=</span>
+                        
+                        {/* Value Section */}
+                        <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
+                          <span className={`text-slate-500 shrink-0 sm:hidden block`}>=</span>
+                          <input
+                            type="text"
+                            value={param.value}
+                            onChange={e => updateParam(idx, 'value', e.target.value)}
+                            className={`flex-1 min-w-[100px] bg-transparent outline-none text-xs font-mono ${textHead}`}
+                          />
+                          {/* Remove */}
+                          {!param.locked && (
+                            <button onClick={() => removeParam(idx)} className="shrink-0 p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-auto">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
