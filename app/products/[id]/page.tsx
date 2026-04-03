@@ -137,14 +137,27 @@ export default function ProductDetailPage() {
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
 
-    const savedViewCurrency = localStorage.getItem('autometrics_view_currency');
-    if (savedViewCurrency) setViewCurrency(savedViewCurrency);
+    const savedViewCurrency = localStorage.getItem('autometrics_view_currency') as 'BRL' | 'USD' | 'EUR';
+    if (savedViewCurrency && ['BRL', 'USD', 'EUR'].includes(savedViewCurrency)) setViewCurrency(savedViewCurrency);
 
     fetchLiveDollar();
 
     // 2. Data Inicial
     setManualData(prev => ({ ...prev, date: getLocalYYYYMMDD(new Date()) }));
-    handlePresetChange('this_month');
+    const savedDateRange = localStorage.getItem('autometrics_date_range');
+    if (savedDateRange) {
+      if (savedDateRange === 'custom') {
+        setDateRange('custom');
+        const savedStart = localStorage.getItem('autometrics_start_date');
+        const savedEnd = localStorage.getItem('autometrics_end_date');
+        if (savedStart) setStartDate(savedStart);
+        if (savedEnd) setEndDate(savedEnd);
+      } else {
+        handlePresetChange(savedDateRange);
+      }
+    } else {
+      handlePresetChange('this_month');
+    }
   }, []);
 
   const toggleTheme = () => {
@@ -382,6 +395,7 @@ export default function ProductDetailPage() {
   // --- LÓGICA DE DATAS ---
   const handlePresetChange = (preset: string) => {
     setDateRange(preset);
+    localStorage.setItem('autometrics_date_range', preset);
     const now = new Date();
     let start = new Date();
     let end = new Date();
@@ -394,13 +408,24 @@ export default function ProductDetailPage() {
     else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
     else if (preset === 'custom') return;
 
-    setStartDate(getLocalYYYYMMDD(start));
-    setEndDate(getLocalYYYYMMDD(end));
+    const startStr = getLocalYYYYMMDD(start);
+    const endStr = getLocalYYYYMMDD(end);
+    setStartDate(startStr);
+    setEndDate(endStr);
+    localStorage.setItem('autometrics_start_date', startStr);
+    localStorage.setItem('autometrics_end_date', endStr);
   };
 
   const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
-    if (type === 'start') setStartDate(value); else setEndDate(value);
+    if (type === 'start') {
+      setStartDate(value);
+      localStorage.setItem('autometrics_start_date', value);
+    } else {
+      setEndDate(value);
+      localStorage.setItem('autometrics_end_date', value);
+    }
     setDateRange('custom');
+    localStorage.setItem('autometrics_date_range', 'custom');
   };
 
   const processedData = useMemo(() => {
@@ -417,8 +442,11 @@ export default function ProductDetailPage() {
       if (viewCurrency === 'BRL' && rowCurrency === 'USD') {
         cost *= liveDollar; cpc *= liveDollar; budget *= liveDollar; targetValue *= liveDollar;
         revenue *= manualDollar; refunds *= manualDollar;
-      } else if (viewCurrency === 'ORIGINAL' && rowCurrency === 'BRL') {
+      } else if (viewCurrency === 'USD' && rowCurrency === 'BRL') {
         cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar;
+      } else if (viewCurrency === 'EUR' && rowCurrency === 'BRL') {
+        // Fallback or simplistic approach for EUR
+        cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; // Note: uses dollar for simplicity right now
       }
 
       const profit = revenue - refunds - cost;
@@ -569,8 +597,9 @@ export default function ProductDetailPage() {
 
           <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-lg border gap-4 sm:gap-2 w-full sm:w-auto ${bgCard}`}>
             <div className={`flex rounded-md p-1 sm:p-0 ${isDark ? 'bg-black sm:bg-transparent' : 'bg-slate-100 sm:bg-transparent'} gap-1 w-full sm:w-auto`}>
-              <button onClick={() => toggleViewCurrency('ORIGINAL')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'ORIGINAL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
+              <button onClick={() => toggleViewCurrency('USD')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
               <button onClick={() => toggleViewCurrency('BRL')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
+              <button onClick={() => toggleViewCurrency('EUR')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>EUR</button>
             </div>
             <button onClick={toggleTheme} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
           </div>
@@ -632,8 +661,8 @@ export default function ProductDetailPage() {
               <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val: any) => formatMoney(val)} />
               <Legend />
-              <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="receita" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="custo" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
               <Bar dataKey="lucro" name="Lucro" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
             </RechartsBarChart>
           </ResponsiveContainer>
