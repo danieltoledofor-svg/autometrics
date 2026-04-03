@@ -61,6 +61,10 @@ export default function PlanningPage() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   const [tempGoal, setTempGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
+  const [profitType, setProfitType] = useState<'value' | 'percentage'>('value');
+  const [profitInput, setProfitInput] = useState<number>(0);
+  const [goalCurrency, setGoalCurrency] = useState<'BRL' | 'USD' | 'EUR'>('BRL');
+
   const [newCost, setNewCost] = useState({ date: '', description: '', amount: 0, currency: 'BRL', type: 'cost' });
 
   // INICIALIZAÇÃO
@@ -90,6 +94,9 @@ export default function PlanningPage() {
 
       const savedMcc = localStorage.getItem('autometrics_selected_mcc');
       if (savedMcc) setSelectedMcc(savedMcc);
+
+      const savedGoalCurrency = localStorage.getItem('autometrics_goal_currency') as 'BRL' | 'USD' | 'EUR';
+      if (savedGoalCurrency && ['BRL', 'USD', 'EUR'].includes(savedGoalCurrency)) setGoalCurrency(savedGoalCurrency);
 
       const savedDateRange = localStorage.getItem('autometrics_date_range');
       if (savedDateRange) {
@@ -199,9 +206,23 @@ export default function PlanningPage() {
     const { data: goalData } = await supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonthKey).single();
     if (goalData) {
       setGoal({ revenue: goalData.revenue_target, profit: goalData.profit_target, limit: goalData.ad_spend_limit });
-      setTempGoal({ revenue: goalData.revenue_target, profit: goalData.profit_target, limit: goalData.ad_spend_limit });
+      
+      let tbRev = goalData.revenue_target;
+      let tbProf = goalData.profit_target;
+      let tbLim = goalData.ad_spend_limit;
+      // Reverse calc for modal state if user had a foreign goal currency selected previously
+      // Note: we use current manual rates as approximations to populate the input
+      if (goalCurrency === 'USD') { tbRev /= manualDollar; tbProf /= manualDollar; tbLim /= manualDollar; }
+      else if (goalCurrency === 'EUR') { tbRev /= manualEuro; tbProf /= manualEuro; tbLim /= manualEuro; }
+      
+      setTempGoal({ revenue: tbRev, profit: tbProf, limit: tbLim });
+      setProfitInput(tbProf);
+      setProfitType('value');
     } else {
       setGoal({ revenue: 0, profit: 0, limit: 0 });
+      setTempGoal({ revenue: 0, profit: 0, limit: 0 });
+      setProfitInput(0);
+      setProfitType('value');
     }
 
     const { data: costData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate);
@@ -399,13 +420,35 @@ export default function PlanningPage() {
     const isCurrentMonth = currentMonthKey === getLocalYYYYMMDD(today).slice(0, 7);
     const daysInMonth = new Date(parseInt(currentMonthKey.split('-')[0]), parseInt(currentMonthKey.split('-')[1]), 0).getDate();
     const daysPassed = isCurrentMonth ? Math.max(today.getDate(), 1) : daysInMonth;
+    
+    let finalGoal = { ...goal };
+    if (viewCurrency === 'USD') {
+      finalGoal.revenue /= manualDollar;
+      finalGoal.profit /= manualDollar;
+      finalGoal.limit /= manualDollar;
+    } else if (viewCurrency === 'EUR') {
+      finalGoal.revenue /= manualEuro;
+      finalGoal.profit /= manualEuro;
+      finalGoal.limit /= manualEuro;
+    }
+
     const projectedRevenue = isCurrentMonth ? (totals.revenue / daysPassed) * daysInMonth : totals.revenue;
-    const revenueProgress = goal.revenue > 0 ? (totals.revenue / goal.revenue) * 100 : 0;
+    const revenueProgress = finalGoal.revenue > 0 ? (totals.revenue / finalGoal.revenue) * 100 : 0;
+
+    // Daily pacing metrics
+    const dailyTargetRevenue = finalGoal.revenue / daysInMonth;
+    const currentDailyRevenue = totals.revenue / daysPassed;
+    const revenuePacing = currentDailyRevenue - dailyTargetRevenue;
+
+    const dailyTargetProfit = finalGoal.profit / daysInMonth;
+    const currentDailyProfit = totals.profit / daysPassed;
+    const profitPacing = currentDailyProfit - dailyTargetProfit;
+    const isProfitSafe = currentDailyProfit >= dailyTargetProfit && finalGoal.profit > 0;
 
     let accRev = 0;
     const chartData = [...daysArray].sort((a: any, b: any) => a.date.localeCompare(b.date)).map((d: any) => {
        accRev += d.revenue;
-       return { date: d.date.split('-')[2], revenue: accRev, ideal: (goal.revenue / daysInMonth) * parseInt(d.date.split('-')[2]) };
+       return { date: d.date.split('-')[2], revenue: accRev, ideal: (finalGoal.revenue / daysInMonth) * parseInt(d.date.split('-')[2]) };
     });
 
     // Cálculos Estratégicos (Break-even e Top Campanhas)
@@ -428,7 +471,7 @@ export default function PlanningPage() {
        spendShare: totals.ads_cost > 0 ? (c.cost / totals.ads_cost) * 100 : 0
     })) : [];
 
-    return { daysArray, totals, variations, chartData, projectedRevenue, revenueProgress, breakEvenROAS, topCampaigns, bottomCampaigns, isCurrentMonth, daysPassed, daysInMonth };
+    return { daysArray, totals, variations, chartData, projectedRevenue, revenueProgress, breakEvenROAS, topCampaigns, bottomCampaigns, isCurrentMonth, daysPassed, daysInMonth, dailyTargetRevenue, currentDailyRevenue, revenuePacing, dailyTargetProfit, currentDailyProfit, profitPacing, isProfitSafe, finalGoal };
   }, [metrics, prevMetrics, extraCosts, prevExtraCosts, products, viewCurrency, liveDollar, manualDollar, liveEuro, manualEuro, goal, startDate, endDate, selectedMcc]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : viewCurrency === 'EUR' ? 'de-DE' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
@@ -438,9 +481,20 @@ export default function PlanningPage() {
     const userId = user?.id;
     if (!userId) return;
     const currentMonthKey = startDate.slice(0, 7);
-    const payload = { user_id: userId, month_key: currentMonthKey, revenue_target: Number(tempGoal.revenue), profit_target: Number(tempGoal.profit), ad_spend_limit: Number(tempGoal.limit) };
+    
+    let tr = tempGoal.revenue;
+    let finalProfit = profitType === 'percentage' ? tr * (profitInput / 100) : profitInput;
+    let tl = tempGoal.limit;
+
+    if (goalCurrency === 'USD') { tr *= manualDollar; finalProfit *= manualDollar; tl *= manualDollar; }
+    else if (goalCurrency === 'EUR') { tr *= manualEuro; finalProfit *= manualEuro; tl *= manualEuro; }
+
+    const payload = { user_id: userId, month_key: currentMonthKey, revenue_target: tr, profit_target: finalProfit, ad_spend_limit: tl };
     await supabase.from('financial_goals').upsert(payload, { onConflict: 'user_id, month_key' });
-    setGoal(tempGoal); setIsGoalModalOpen(false);
+    
+    setGoal({ revenue: tr, profit: finalProfit, limit: tl });
+    localStorage.setItem('autometrics_goal_currency', goalCurrency);
+    setIsGoalModalOpen(false);
   };
   const handleAddCost = async () => {
     const userId = user?.id;
@@ -597,7 +651,71 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* PAINEL DE INSIGHTS ESTRATÉGICOS */}
+      {/* PAINEL DE ACOMPANHAMENTO DIÁRIO E ESTRATÉGICO */}
+      {(goal.revenue > 0 || goal.profit > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          
+          {/* Velocímetro Diário */}
+          <div className={`${bgCard} p-5 rounded-xl border flex flex-col justify-center relative overflow-hidden shadow-sm`}>
+             <div className="absolute top-0 right-0 p-4 opacity-10"><Target size={40} /></div>
+             <p className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><TrendingUp size={14}/> Velocímetro Diário</p>
+             <div className="space-y-4 z-10 relative">
+               <div>
+                  <p className="text-[10px] uppercase text-slate-500 mb-1">Ritmo Necessário / Dia</p>
+                  <p className="text-lg font-bold text-slate-300">{formatMoney(processedData.dailyTargetRevenue)}</p>
+               </div>
+               <div>
+                  <p className="text-[10px] uppercase text-slate-500 mb-1">Seu Ritmo Atual / Dia</p>
+                  <p className={`text-xl font-bold ${processedData.revenuePacing >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.currentDailyRevenue)}</p>
+               </div>
+               <div className={`text-xs font-bold px-3 py-2 rounded-md inline-block flex items-center gap-2 ${processedData.revenuePacing >= 0 ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'}`}>
+                 {processedData.revenuePacing >= 0 ? `🔥 Acelerado +${formatMoney(Math.abs(processedData.revenuePacing))}/dia` : `⚠️ Atrasado em -${formatMoney(Math.abs(processedData.revenuePacing))}/dia`}
+               </div>
+             </div>
+          </div>
+
+          {/* Lucro Seguro */}
+          <div className={`${bgCard} p-5 rounded-xl border flex flex-col justify-center relative overflow-hidden shadow-sm transition-all ${processedData.isProfitSafe ? 'ring-1 ring-emerald-500/50 bg-emerald-500/5' : ''}`}>
+             <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign size={40} /></div>
+             <p className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><Briefcase size={14}/> Saúde do Lucro</p>
+             <div className="space-y-4 z-10 relative">
+               <p className="text-xs text-slate-400">Mesmo que a receita oscile, o que importa é o lucro no bolso no fim do dia.</p>
+               {processedData.isProfitSafe ? (
+                 <div className="bg-emerald-500/10 text-emerald-500 p-4 rounded-lg border border-emerald-500/30">
+                    <h4 className="font-bold mb-1 flex items-center gap-2">✅ Lucro no Alvo!</h4>
+                    <p className="text-[10px] opacity-90">Sua eficiência está alta. A média atual de <strong className="font-bold">{formatMoney(processedData.currentDailyProfit)}/dia</strong> bate a meta de <strong className="font-bold">{formatMoney(processedData.dailyTargetProfit)}/dia</strong>.</p>
+                 </div>
+               ) : (
+                 <div className="bg-amber-500/10 text-amber-500 p-4 rounded-lg border border-amber-500/30">
+                    <h4 className="font-bold mb-1 flex items-center gap-2">⏳ Atenção no ROI</h4>
+                    <p className="text-[10px] opacity-90">O lucro diário <strong className="font-bold">({formatMoney(processedData.currentDailyProfit)})</strong> está abaixo da média necessária de <strong className="font-bold">{formatMoney(processedData.dailyTargetProfit)}/dia</strong>.</p>
+                 </div>
+               )}
+             </div>
+          </div>
+
+          {/* Matando meu ROI (Top Offenders) */}
+          <div className={`${bgCard} p-5 rounded-xl border flex flex-col justify-start relative overflow-hidden shadow-sm`}>
+             <div className="absolute top-0 right-0 p-4 opacity-10"><AlertCircle size={40} /></div>
+             <p className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><AlertCircle size={14}/> Matando meu ROI</p>
+             <div className="space-y-2 z-10 relative mt-2">
+               {processedData.bottomCampaigns.filter(c => c.profit < 0).length === 0 ? (
+                 <p className="text-xs text-slate-400 mt-4 p-4 border border-slate-700/50 border-dashed rounded-lg text-center">Nenhuma campanha secando seu lucro hoje!</p>
+               ) : (
+                 processedData.bottomCampaigns.filter(c => c.profit < 0).map((c, i) => (
+                   <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-rose-500/5 border border-rose-500/10">
+                     <span className="text-xs font-bold text-slate-300 truncate pr-2 max-w-[60%]"><Package size={10} className="inline mr-1 text-slate-500"/>{c.name}</span>
+                     <span className="text-[10px] uppercase font-bold text-rose-500 bg-rose-500/10 px-2 py-1 rounded">Atrasando: {formatMoney(Math.abs(c.profit))}</span>
+                   </div>
+                 ))
+               )}
+             </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* PAINEL DE INSIGHTS ESTRATÉGICOS (PROJEÇÕES) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
          {/* Widget 1: Previsão de Fechamento (Pacing) */}
          <div className={`${bgCard} p-5 rounded-xl border ${borderCol} flex flex-col justify-between shadow-sm`}>
@@ -881,13 +999,44 @@ export default function PlanningPage() {
       {isGoalModalOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className={`${bgCard} rounded-xl w-full max-w-sm p-6 shadow-2xl`}>
-              <h2 className={`text-xl font-bold ${textHead} mb-4`}>Metas do Mês</h2>
-              <div className="space-y-3">
-                 <div><label className="text-xs uppercase text-blue-500 font-bold">Meta Faturamento</label><input type="number" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={tempGoal.revenue} onChange={e => setTempGoal({...tempGoal, revenue: parseFloat(e.target.value)})} /></div>
-                 <div><label className="text-xs uppercase text-emerald-500 font-bold">Meta Lucro</label><input type="number" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={tempGoal.profit} onChange={e => setTempGoal({...tempGoal, profit: parseFloat(e.target.value)})} /></div>
-                 <div><label className="text-xs uppercase text-amber-500 font-bold">Teto de Gastos</label><input type="number" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={tempGoal.limit} onChange={e => setTempGoal({...tempGoal, limit: parseFloat(e.target.value)})} /></div>
-                 <button onClick={handleSaveGoal} className="w-full bg-indigo-600 text-white font-bold py-2 rounded hover:bg-indigo-700 mt-2">Salvar Metas</button>
-                 <button onClick={() => setIsGoalModalOpen(false)} className={`w-full py-2 ${textMuted} hover:underline`}>Cancelar</button>
+              <div className="flex justify-between items-start mb-4">
+                 <h2 className={`text-xl font-bold ${textHead}`}>Metas do Mês</h2>
+                 <select className={`text-xs font-bold p-1 rounded border outline-none ${bgCard} ${borderCol} ${textHead}`} value={goalCurrency} onChange={e => setGoalCurrency(e.target.value as any)}>
+                    <option value="BRL">BRL</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                 </select>
+              </div>
+              <div className="space-y-4">
+                 <div>
+                    <label className="text-xs uppercase text-blue-500 font-bold mb-1 block">Meta Faturamento</label>
+                    <input type="number" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={tempGoal.revenue} onChange={e => setTempGoal({...tempGoal, revenue: parseFloat(e.target.value)})} />
+                 </div>
+                 
+                 <div>
+                    <div className="flex justify-between items-center mb-1">
+                       <label className="text-xs uppercase text-emerald-500 font-bold">Meta Lucro</label>
+                       <div className="flex bg-slate-100 dark:bg-slate-800 rounded p-0.5">
+                          <button onClick={() => setProfitType('value')} className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all ${profitType === 'value' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-800 dark:text-white' : 'text-slate-500'}`}>Valor</button>
+                          <button onClick={() => setProfitType('percentage')} className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all ${profitType === 'percentage' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-800 dark:text-white' : 'text-slate-500'}`}>Margem %</button>
+                       </div>
+                    </div>
+                    <div className="relative">
+                       <span className={`absolute left-3 top-1/2 -translate-y-1/2 font-bold text-xs ${textMuted}`}>{profitType === 'percentage' ? '%' : (goalCurrency === 'BRL' ? 'R$' : goalCurrency === 'USD' ? '$' : '€')}</span>
+                       <input type="number" className={`w-full p-2 pl-8 rounded border bg-transparent ${textHead} ${borderCol}`} value={profitInput} onChange={e => setProfitInput(parseFloat(e.target.value))} />
+                    </div>
+                    {profitType === 'percentage' && tempGoal.revenue > 0 && typeof profitInput === 'number' && (
+                       <p className="text-[10px] text-slate-400 mt-1">Sua meta será focada em lucrar <strong className="text-emerald-500">{new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: goalCurrency }).format(tempGoal.revenue * (profitInput / 100))}</strong> no fim do mês.</p>
+                    )}
+                 </div>
+
+                 <div>
+                    <label className="text-xs uppercase text-amber-500 font-bold mb-1 block">Teto de Gastos</label>
+                    <input type="number" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={tempGoal.limit} onChange={e => setTempGoal({...tempGoal, limit: parseFloat(e.target.value)})} />
+                 </div>
+                 
+                 <button onClick={handleSaveGoal} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 mt-4 transition-colors">Salvar Metas</button>
+                 <button onClick={() => setIsGoalModalOpen(false)} className={`w-full py-2 text-sm font-medium ${textMuted} hover:underline`}>Cancelar</button>
               </div>
            </div>
         </div>
