@@ -83,10 +83,10 @@ export default function PlanningPage() {
       if (savedEuro) setManualEuro(parseFloat(savedEuro));
       
       const savedCurrency = localStorage.getItem('autometrics_view_currency') as 'BRL' | 'USD' | 'EUR';
-      if (savedCurrency) setViewCurrency(savedCurrency);
+      if (savedCurrency && ['BRL', 'USD', 'EUR'].includes(savedCurrency)) setViewCurrency(savedCurrency);
 
       const savedRateConfig = localStorage.getItem('autometrics_rate_config') as 'USD' | 'EUR';
-      if (savedRateConfig) setRateConfig(savedRateConfig);
+      if (savedRateConfig && ['USD', 'EUR'].includes(savedRateConfig)) setRateConfig(savedRateConfig);
 
       const savedMcc = localStorage.getItem('autometrics_selected_mcc');
       if (savedMcc) setSelectedMcc(savedMcc);
