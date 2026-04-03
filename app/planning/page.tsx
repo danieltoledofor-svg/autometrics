@@ -252,12 +252,15 @@ export default function PlanningPage() {
       if (!day.mccs[mcc]) day.mccs[mcc] = { name: mcc, revenue: 0, ads_cost: 0, refunds: 0, accounts: {} };
       const mccObj = day.mccs[mcc]; mccObj.revenue += revenue; mccObj.ads_cost += cost; mccObj.refunds += refunds;
 
-      if (!mccObj.accounts[account]) mccObj.accounts[account] = { name: account, revenue: 0, ads_cost: 0, refunds: 0 };
-      if (!mccObj.accounts[account]) mccObj.accounts[account] = { name: account, revenue: 0, ads_cost: 0, refunds: 0 };
+      if (!mccObj.accounts[account]) mccObj.accounts[account] = { name: account, revenue: 0, ads_cost: 0, refunds: 0, campaigns: {} };
       const accObj = mccObj.accounts[account]; accObj.revenue += revenue; accObj.ads_cost += cost; accObj.refunds += refunds;
 
-      // Map para o Widget de Top Campanhas
       const campaignName = prod?.name || 'Venda Externa';
+      if (!accObj.campaigns[campaignName]) accObj.campaigns[campaignName] = { name: campaignName, revenue: 0, ads_cost: 0, refunds: 0 };
+      const cmpObj = accObj.campaigns[campaignName];
+      cmpObj.revenue += revenue; cmpObj.ads_cost += cost; cmpObj.refunds += refunds;
+
+      // Map para o Widget de Top Campanhas
       if (!campaignMap[campaignName]) campaignMap[campaignName] = { name: campaignName, revenue: 0, cost: 0, refunds: 0 };
       campaignMap[campaignName].revenue += revenue;
       campaignMap[campaignName].cost += cost;
@@ -740,16 +743,30 @@ export default function PlanningPage() {
                                     <td className={`px-6 py-2 text-right text-xs font-medium ${(mcc.revenue - mcc.ads_cost - mcc.refunds) >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{formatMoney(mcc.revenue - mcc.ads_cost - mcc.refunds)}</td>
                                  </tr>
                                  {Object.values(mcc.accounts).map((acc: any) => (
-                                    <tr key={acc.name} className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
-                                       <td></td>
-                                       <td className="px-6 py-1 text-[10px] text-slate-500 pl-16 flex items-center gap-2 border-l-2 border-slate-800 ml-10">
-                                          <Briefcase size={10}/> {acc.name}
-                                       </td>
-                                       <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(acc.revenue)}</td>
-                                       <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(acc.ads_cost)}</td>
-                                       <td colSpan={2}></td>
-                                       <td className={`px-6 py-1 text-right text-[10px] font-medium ${(acc.revenue - acc.ads_cost - acc.refunds) >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds)}</td>
-                                    </tr>
+                                    <React.Fragment key={acc.name}>
+                                       <tr className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
+                                          <td></td>
+                                          <td className="px-6 py-1 text-[10px] text-slate-500 pl-16 flex items-center gap-2 border-l-2 border-slate-800 ml-10">
+                                             <Briefcase size={10}/> {acc.name}
+                                          </td>
+                                          <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(acc.revenue)}</td>
+                                          <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(acc.ads_cost)}</td>
+                                          <td colSpan={2}></td>
+                                          <td className={`px-6 py-1 text-right text-[10px] font-medium ${(acc.revenue - acc.ads_cost - acc.refunds) >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds)}</td>
+                                       </tr>
+                                       {Object.values(acc.campaigns).map((cmp: any) => (
+                                          <tr key={cmp.name} className={`${isDark ? 'bg-slate-950/20' : 'bg-slate-50/50'}`}>
+                                             <td></td>
+                                             <td className="px-6 py-1 text-[10px] text-slate-400 pl-20 flex items-center gap-2 border-l-2 border-slate-800 ml-16">
+                                                <Package size={10}/> {cmp.name}
+                                             </td>
+                                             <td className="px-6 py-1 text-right text-[10px] text-slate-500">{formatMoney(cmp.revenue)}</td>
+                                             <td className="px-6 py-1 text-right text-[10px] text-slate-500">{formatMoney(cmp.ads_cost)}</td>
+                                             <td colSpan={2}></td>
+                                             <td className={`px-6 py-1 text-right text-[10px] font-medium ${(cmp.revenue - cmp.ads_cost - cmp.refunds) >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(cmp.revenue - cmp.ads_cost - cmp.refunds)}</td>
+                                          </tr>
+                                       ))}
+                                    </React.Fragment>
                                  ))}
                               </React.Fragment>
                            ))}
