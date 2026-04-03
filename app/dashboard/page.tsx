@@ -531,7 +531,8 @@ export default function DashboardPage() {
                                 </td>
                                 <td className="px-6 py-2 text-right text-xs text-blue-400/70">{formatMoney(acc.revenue)}</td>
                                 <td className="px-6 py-2 text-right text-xs text-orange-400/70">{formatMoney(acc.cost)}</td>
-                                <td colSpan={2}></td>
+                                <td className={`px-6 py-2 text-right text-xs font-medium ${acc.profit >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{formatMoney(acc.profit)}</td>
+                                <td></td>
                              </tr>
                              {Object.values(acc.campaigns).map((cmp: any) => (
                                 <tr key={cmp.name} className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
@@ -541,7 +542,8 @@ export default function DashboardPage() {
                                    </td>
                                    <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.revenue)}</td>
                                    <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.cost)}</td>
-                                   <td colSpan={2}></td>
+                                   <td className={`px-6 py-1 text-right text-[10px] font-medium ${cmp.profit >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(cmp.profit)}</td>
+                                   <td></td>
                                 </tr>
                              ))}
                           </React.Fragment>

@@ -61,7 +61,7 @@ export default function PlanningPage() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   const [tempGoal, setTempGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
-  const [newCost, setNewCost] = useState({ date: '', description: '', amount: 0, currency: 'BRL' });
+  const [newCost, setNewCost] = useState({ date: '', description: '', amount: 0, currency: 'BRL', type: 'cost' });
 
   // INICIALIZAÇÃO
   useEffect(() => {
@@ -268,7 +268,7 @@ export default function PlanningPage() {
     extraCosts.forEach(c => {
        // Filtra extras pela data também (embora o fetch já filtre)
        if (c.date < startDate || c.date > endDate) return;
-       if (!dailyMap[c.date]) dailyMap[c.date] = { date: c.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, details: [], mccs: {} };
+       if (!dailyMap[c.date]) dailyMap[c.date] = { date: c.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, extra_revenue: 0, net_extra: 0, details: [], mccs: {} };
        
        let amount = Number(c.amount);
        let amountInBRL = amount;
@@ -278,19 +278,23 @@ export default function PlanningPage() {
        if (viewCurrency === 'BRL') amount = amountInBRL;
        else if (viewCurrency === 'USD') amount = amountInBRL / liveDollar;
        else if (viewCurrency === 'EUR') amount = amountInBRL / liveEuro;
-       const day = dailyMap[c.date]; day.extra_cost += amount;
+       const day = dailyMap[c.date];
+       if (amount >= 0) day.extra_cost += amount;
+       else day.extra_revenue += Math.abs(amount);
+       day.net_extra = day.extra_revenue - day.extra_cost;
        day.details.push({ id: c.id, desc: c.description, val: amount });
     });
 
     const daysArray = Object.values(dailyMap).sort((a: any, b: any) => b.date.localeCompare(a.date));
-    const totals = { revenue: 0, ads_cost: 0, extra_cost: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
-    daysArray.forEach((d: any) => { totals.revenue += d.revenue; totals.ads_cost += d.ads_cost; totals.extra_cost += d.extra_cost; totals.refunds += d.refunds; });
+    const totals = { revenue: 0, ads_cost: 0, extra_cost: 0, extra_revenue: 0, net_extra: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
+    daysArray.forEach((d: any) => { totals.revenue += d.revenue; totals.ads_cost += d.ads_cost; totals.extra_cost += d.extra_cost; totals.extra_revenue += d.extra_revenue; totals.refunds += d.refunds; });
+    totals.net_extra = totals.extra_revenue - totals.extra_cost;
     totals.total_cost = totals.ads_cost + totals.extra_cost;
-    totals.profit = totals.revenue - totals.total_cost - totals.refunds;
+    totals.profit = totals.revenue + totals.extra_revenue - totals.total_cost - totals.refunds;
     totals.roi = totals.ads_cost > 0 ? (totals.profit / totals.ads_cost) * 100 : 0;
     
     // --- Cálculo do Período Anterior ---
-    const prevTotals = { revenue: 0, ads_cost: 0, extra_cost: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
+    const prevTotals = { revenue: 0, ads_cost: 0, extra_cost: 0, extra_revenue: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
     prevMetrics.forEach(m => {
       const prod = products.find(p => p.id === m.product_id);
       
@@ -322,10 +326,11 @@ export default function PlanningPage() {
        if (viewCurrency === 'BRL') amount = amountInBRL;
        else if (viewCurrency === 'USD') amount = amountInBRL / liveDollar;
        else if (viewCurrency === 'EUR') amount = amountInBRL / liveEuro;
-       prevTotals.extra_cost += amount;
+       if (amount >= 0) prevTotals.extra_cost += amount;
+       else prevTotals.extra_revenue += Math.abs(amount);
     });
     prevTotals.total_cost = prevTotals.ads_cost + prevTotals.extra_cost;
-    prevTotals.profit = prevTotals.revenue - prevTotals.total_cost - prevTotals.refunds;
+    prevTotals.profit = prevTotals.revenue + prevTotals.extra_revenue - prevTotals.total_cost - prevTotals.refunds;
     prevTotals.roi = prevTotals.ads_cost > 0 ? (prevTotals.profit / prevTotals.ads_cost) * 100 : 0;
 
     const variations = {
@@ -389,8 +394,9 @@ export default function PlanningPage() {
     const userId = user?.id;
     if (!userId) return;
     if (!newCost.description || !newCost.amount) return alert("Preencha descrição e valor.");
-    await supabase.from('additional_costs').insert([{ ...newCost, user_id: userId, amount: Number(newCost.amount) }]);
-    setNewCost({ date: getLocalYYYYMMDD(new Date()), description: '', amount: 0, currency: 'BRL' });
+    const val = newCost.type === 'revenue' ? -Math.abs(Number(newCost.amount)) : Math.abs(Number(newCost.amount));
+    await supabase.from('additional_costs').insert([{ date: newCost.date, description: newCost.description, currency: newCost.currency, user_id: userId, amount: val }]);
+    setNewCost({ date: getLocalYYYYMMDD(new Date()), description: '', amount: 0, currency: 'BRL', type: 'cost' });
     setIsCostModalOpen(false);
     fetchData(userId);
   };
@@ -515,9 +521,9 @@ export default function PlanningPage() {
              </p>
            )}
         </div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-amber-500 shadow-sm`}>
-           <p className="text-xs font-bold text-slate-500 uppercase">Outros Custos</p>
-           <p className="text-2xl font-bold text-amber-500">{formatMoney(processedData.totals.extra_cost)}</p>
+        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.net_extra >= 0 ? 'border-t-emerald-500' : 'border-t-amber-500'} shadow-sm`}>
+           <p className="text-xs font-bold text-slate-500 uppercase">Extras Net</p>
+           <p className={`text-2xl font-bold ${processedData.totals.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(processedData.totals.net_extra)}</p>
         </div>
         <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} shadow-sm`}>
            <p className="text-xs font-bold text-slate-500 uppercase">Lucro Líquido</p>
@@ -656,7 +662,7 @@ export default function PlanningPage() {
          <div className={`p-4 border-b ${borderCol} flex justify-between items-center`}>
             <h3 className={`font-bold ${textHead}`}>Detalhamento Diário (DRE)</h3>
             <button onClick={() => setIsCostModalOpen(true)} className="flex items-center gap-2 text-xs font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition-colors">
-               <Plus size={14}/> Add Custo Extra
+               <Plus size={14}/> Lançar Extras
             </button>
          </div>
          <div className="overflow-x-auto">
@@ -667,7 +673,7 @@ export default function PlanningPage() {
                      <th className="px-6 py-4">Data</th>
                      <th className="px-6 py-4 text-right text-blue-600">Receita</th>
                      <th className="px-6 py-4 text-right text-orange-600">Ads Cost</th>
-                     <th className="px-6 py-4 text-right text-amber-500">Outros Custos</th>
+                     <th className="px-6 py-4 text-right text-emerald-500">Extras</th>
                      <th className="px-6 py-4 text-right text-rose-400">Reembolso</th>
                      <th className="px-6 py-4 text-right text-emerald-600">Lucro</th>
                   </tr>
@@ -675,7 +681,7 @@ export default function PlanningPage() {
                <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
                   {processedData.daysArray.map((day: any) => {
                      const isExpanded = expandedRows[day.date];
-                     const profit = day.revenue - day.ads_cost - day.extra_cost - day.refunds;
+                     const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds;
                      const dateParts = day.date.split('-');
                      
                      return (
@@ -689,22 +695,22 @@ export default function PlanningPage() {
                               <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(day.revenue)}</td>
                               <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(day.ads_cost)}</td>
                               
-                              {/* CUSTOS EXTRAS */}
+                              {/* EXTRAS */}
                               <td className="px-6 py-4 text-right relative align-top" onClick={(e) => e.stopPropagation()}>
-                                 {day.extra_cost > 0 ? (
+                                 {day.details.length > 0 ? (
                                     <div className="flex flex-col items-end gap-1">
-                                       <span className="text-amber-500 font-bold">{formatMoney(day.extra_cost)}</span>
+                                       <span className={`font-bold ${day.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(day.net_extra)}</span>
                                        <div className="flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed border-slate-700 pt-1">
                                           {day.details.map((d: any) => (
                                              <div key={d.id} className="flex items-center gap-2 group/item">
                                                 <span className={`text-[10px] ${textMuted} truncate max-w-[100px]`} title={d.desc}>{d.desc}</span>
-                                                <span className={`text-[10px] ${textHead}`}>{formatMoney(d.val)}</span>
+                                                <span className={`text-[10px] font-bold ${d.val < 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(Math.abs(d.val))}</span>
                                                 {/* Botão Excluir (Só com Modo Edição) */}
                                                 {editMode && (
                                                    <button 
                                                      onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id); }} 
                                                      className="text-rose-500 hover:text-rose-400 p-1 bg-rose-500/10 rounded"
-                                                     title="Excluir Custo"
+                                                     title="Excluir Extra"
                                                    >
                                                       <Trash2 size={10} />
                                                    </button>
@@ -730,7 +736,8 @@ export default function PlanningPage() {
                                     </td>
                                     <td className="px-6 py-2 text-right text-xs text-blue-400/70">{formatMoney(mcc.revenue)}</td>
                                     <td className="px-6 py-2 text-right text-xs text-orange-400/70">{formatMoney(mcc.ads_cost)}</td>
-                                    <td colSpan={3}></td>
+                                    <td colSpan={2}></td>
+                                    <td className={`px-6 py-2 text-right text-xs font-medium ${(mcc.revenue - mcc.ads_cost - mcc.refunds) >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{formatMoney(mcc.revenue - mcc.ads_cost - mcc.refunds)}</td>
                                  </tr>
                                  {Object.values(mcc.accounts).map((acc: any) => (
                                     <tr key={acc.name} className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
@@ -740,7 +747,8 @@ export default function PlanningPage() {
                                        </td>
                                        <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(acc.revenue)}</td>
                                        <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(acc.ads_cost)}</td>
-                                       <td colSpan={3}></td>
+                                       <td colSpan={2}></td>
+                                       <td className={`px-6 py-1 text-right text-[10px] font-medium ${(acc.revenue - acc.ads_cost - acc.refunds) >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds)}</td>
                                     </tr>
                                  ))}
                               </React.Fragment>
@@ -755,7 +763,7 @@ export default function PlanningPage() {
                      <td className="px-6 py-4"></td>
                      <td className="px-6 py-4 text-right text-blue-500">{formatMoney(processedData.totals.revenue)}</td>
                      <td className="px-6 py-4 text-right text-orange-500">{formatMoney(processedData.totals.ads_cost)}</td>
-                     <td className="px-6 py-4 text-right text-amber-500">{formatMoney(processedData.totals.extra_cost)}</td>
+                     <td className={`px-6 py-4 text-right ${processedData.totals.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(processedData.totals.net_extra)}</td>
                      <td className="px-6 py-4 text-right text-rose-400">{formatMoney(processedData.totals.refunds)}</td>
                      <td className={`px-6 py-4 text-right ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</td>
                   </tr>
@@ -764,14 +772,18 @@ export default function PlanningPage() {
          </div>
       </div>
 
-      {/* MODAL CUSTO EXTRA */}
+      {/* MODAL EXTRAS */}
       {isCostModalOpen && (
          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className={`${bgCard} rounded-xl w-full max-w-sm p-6 shadow-2xl`}>
-               <h3 className={`text-lg font-bold ${textHead} mb-4`}>Lançar Custo Extra</h3>
+               <h3 className={`text-lg font-bold ${textHead} mb-4`}>Lançar Extras</h3>
                <div className="space-y-3">
+                  <div className="flex gap-2 mb-3">
+                     <button onClick={() => setNewCost({...newCost, type: 'cost'})} className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${newCost.type === 'cost' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>Custo Extra</button>
+                     <button onClick={() => setNewCost({...newCost, type: 'revenue'})} className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${newCost.type === 'revenue' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>Receita Extra</button>
+                  </div>
                   <div>
-                    <label className="text-xs uppercase font-bold text-slate-500">Data do Gasto</label>
+                    <label className="text-xs uppercase font-bold text-slate-500">Data do Lançamento</label>
                     <input type="date" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol} [&::-webkit-calendar-picker-indicator]:invert`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
                   </div>
                   <div>
@@ -792,7 +804,7 @@ export default function PlanningPage() {
                         </select>
                      </div>
                   </div>
-                  <button onClick={handleAddCost} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded mt-2">Salvar Despesa</button>
+                  <button onClick={handleAddCost} className={`w-full text-white font-bold py-3 rounded mt-2 transition-colors ${newCost.type === 'revenue' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'}`}>{newCost.type === 'revenue' ? 'Salvar Receita' : 'Salvar Despesa'}</button>
                   <button onClick={() => setIsCostModalOpen(false)} className={`w-full py-2 ${textMuted} hover:underline`}>Cancelar</button>
                </div>
             </div>
