@@ -216,7 +216,7 @@ export default function PlanningPage() {
       else if (goalCurrency === 'EUR') { tbRev /= manualEuro; tbProf /= manualEuro; tbLim /= manualEuro; }
       
       setTempGoal({ revenue: tbRev, profit: tbProf, limit: tbLim });
-      setProfitInput(tbProf);
+      setProfitInput(parseFloat(tbProf.toFixed(2)));
       setProfitType('value');
     } else {
       setGoal({ revenue: 0, profit: 0, limit: 0 });
@@ -432,18 +432,17 @@ export default function PlanningPage() {
       finalGoal.limit /= manualEuro;
     }
 
-    const projectedRevenue = isCurrentMonth ? (totals.revenue / daysPassed) * daysInMonth : totals.revenue;
-    const revenueProgress = finalGoal.revenue > 0 ? (totals.revenue / finalGoal.revenue) * 100 : 0;
-
     // Cálculos de Dias para Média (Diluição no período selecionado)
     const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const sDate = new Date(startDate + "T00:00:00");
     const eDate = new Date(endDate + "T00:00:00");
     const maxEndDate = eDate > todayNorm ? todayNorm : eDate;
-    
     let timeDiff = maxEndDate.getTime() - sDate.getTime();
     let selectedDaysCount = Math.floor(timeDiff / (1000 * 60 * 60 * 24)) + 1;
     if (selectedDaysCount < 1) selectedDaysCount = 1;
+
+    const projectedRevenue = isCurrentMonth ? (totals.revenue / selectedDaysCount) * daysInMonth : totals.revenue;
+    const revenueProgress = finalGoal.revenue > 0 ? (totals.revenue / finalGoal.revenue) * 100 : 0;
 
     // Daily pacing metrics
     const dailyTargetRevenue = finalGoal.revenue / daysInMonth;
@@ -736,23 +735,23 @@ export default function PlanningPage() {
                      {processedData.isCurrentMonth ? 'Ritmo Atual' : 'Mês Fechado'}
                   </span>
                </div>
-               <p className={`text-xs ${textMuted} mb-4`}>Projeção baseada na média diária de {formatMoney(processedData.totals.revenue / Math.max(1, processedData.daysPassed))}/dia</p>
+               <p className={`text-xs ${textMuted} mb-4`}>Projeção baseada na média diária de {formatMoney(processedData.currentDailyRevenue)}/dia</p>
             </div>
             
             <div>
                <div className="flex justify-between items-end mb-1">
                   <div>
                      <span className="text-[10px] font-bold text-slate-400 uppercase">Projeção Final</span>
-                     <p className={`text-xl font-bold ${processedData.projectedRevenue >= goal.revenue && goal.revenue > 0 ? 'text-emerald-500' : textHead}`}>{formatMoney(processedData.projectedRevenue)}</p>
+                     <p className={`text-xl font-bold ${processedData.projectedRevenue >= processedData.finalGoal.revenue && processedData.finalGoal.revenue > 0 ? 'text-emerald-500' : textHead}`}>{formatMoney(processedData.projectedRevenue)}</p>
                   </div>
                   <div className="text-right">
                      <span className="text-[10px] font-bold text-slate-400 uppercase">Sua Meta</span>
-                     <p className={`text-sm font-bold ${textMuted}`}>{formatMoney(goal.revenue)}</p>
+                     <p className={`text-sm font-bold ${textMuted}`}>{formatMoney(processedData.finalGoal.revenue)}</p>
                   </div>
                </div>
-               {goal.revenue > 0 && (
+               {processedData.finalGoal.revenue > 0 && (
                   <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 mt-2">
-                     <div className={`h-2 rounded-full ${processedData.projectedRevenue >= goal.revenue ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min((processedData.projectedRevenue / goal.revenue) * 100, 100)}%` }}></div>
+                     <div className={`h-2 rounded-full ${processedData.projectedRevenue >= processedData.finalGoal.revenue ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min((processedData.projectedRevenue / processedData.finalGoal.revenue) * 100, 100)}%` }}></div>
                   </div>
                )}
             </div>
@@ -1041,8 +1040,15 @@ export default function PlanningPage() {
                  </div>
 
                  <div>
-                    <label className="text-xs uppercase text-amber-500 font-bold mb-1 block">Teto de Gastos</label>
-                    <input type="number" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={tempGoal.limit} onChange={e => setTempGoal({...tempGoal, limit: parseFloat(e.target.value)})} />
+                    <label className="text-xs uppercase text-amber-500 font-bold mb-1 block">
+                       Teto de Gastos <span className="text-[9px] text-slate-500 normal-case font-normal">(faturamento − lucro)</span>
+                    </label>
+                    <input
+                      type="number"
+                      readOnly
+                      className={`w-full p-2 rounded border bg-transparent ${borderCol} ${isDark ? 'text-slate-400' : 'text-slate-500'} cursor-not-allowed`}
+                      value={parseFloat((Math.max(0, (tempGoal.revenue || 0) - (profitType === 'percentage' ? (tempGoal.revenue || 0) * ((profitInput || 0) / 100) : (profitInput || 0)))).toFixed(2))}
+                    />
                  </div>
                  
                  <button onClick={handleSaveGoal} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 mt-4 transition-colors">Salvar Metas</button>
