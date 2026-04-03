@@ -475,10 +475,16 @@ export default function PlanningPage() {
        profitShare: totals.profit > 0 && c.profit > 0 ? (c.profit / totals.profit) * 100 : 0,
        spendShare: totals.ads_cost > 0 ? (c.cost / totals.ads_cost) * 100 : 0
     }));
-    const bottomCampaigns = activeCampaigns.length > 3 ? activeCampaigns.slice(-3).reverse().map(c => ({
-       ...c, 
-       spendShare: totals.ads_cost > 0 ? (c.cost / totals.ads_cost) * 100 : 0
-    })) : [];
+    const avgRoi = activeCampaigns.length > 0 ? activeCampaigns.reduce((s, c) => s + c.roi, 0) / activeCampaigns.length : 0;
+    // bottomCampaigns: all campaigns that either have negative profit OR ROI significantly below the average
+    const bottomCampaigns = activeCampaigns
+       .filter(c => c.profit < 0 || c.roi < 0 || (avgRoi > 0 && c.roi < avgRoi * 0.5 && c.cost > 0))
+       .sort((a, b) => a.roi - b.roi)
+       .map(c => ({
+          ...c,
+          spendShare: totals.ads_cost > 0 ? (c.cost / totals.ads_cost) * 100 : 0,
+          avgRoi
+       }));
 
     return { daysArray, totals, variations, chartData, projectedRevenue, revenueProgress, breakEvenROAS, topCampaigns, bottomCampaigns, isCurrentMonth, daysPassed, daysInMonth, dailyTargetRevenue, currentDailyRevenue, revenuePacing, dailyTargetProfit, currentDailyProfit, profitPacing, isProfitSafe, finalGoal };
   }, [metrics, prevMetrics, extraCosts, prevExtraCosts, products, viewCurrency, liveDollar, manualDollar, liveEuro, manualEuro, goal, startDate, endDate, selectedMcc]);
@@ -706,17 +712,33 @@ export default function PlanningPage() {
           {/* Matando meu ROI (Top Offenders) */}
           <div className={`${bgCard} p-5 rounded-xl border flex flex-col justify-start relative overflow-hidden shadow-sm`}>
              <div className="absolute top-0 right-0 p-4 opacity-10"><AlertCircle size={40} /></div>
-             <p className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><AlertCircle size={14}/> Matando meu ROI</p>
-             <div className="space-y-2 z-10 relative mt-2">
-               {processedData.bottomCampaigns.filter(c => c.profit < 0).length === 0 ? (
-                 <p className="text-xs text-slate-400 mt-4 p-4 border border-slate-700/50 border-dashed rounded-lg text-center">Nenhuma campanha secando seu lucro hoje!</p>
+             <p className="text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-2"><AlertCircle size={14}/> Matando meu ROI</p>
+             <p className={`text-[10px] ${textMuted} mb-3`}>No período selecionado</p>
+             <div className="space-y-2 z-10 relative overflow-y-auto max-h-44">
+               {processedData.bottomCampaigns.length === 0 ? (
+                 <p className="text-xs text-slate-400 mt-4 p-4 border border-slate-700/50 border-dashed rounded-lg text-center">✅ Nenhuma campanha prejudicando o ROI no período!</p>
                ) : (
-                 processedData.bottomCampaigns.filter(c => c.profit < 0).map((c, i) => (
-                   <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-rose-500/5 border border-rose-500/10">
-                     <span className="text-xs font-bold text-slate-300 truncate pr-2 max-w-[60%]"><Package size={10} className="inline mr-1 text-slate-500"/>{c.name}</span>
-                     <span className="text-[10px] uppercase font-bold text-rose-500 bg-rose-500/10 px-2 py-1 rounded">Atrasando: {formatMoney(Math.abs(c.profit))}</span>
-                   </div>
-                 ))
+                 processedData.bottomCampaigns.map((c, i) => {
+                   const isLoss = c.profit < 0 || c.roi < 0;
+                   return (
+                     <div key={i} className={`flex justify-between items-center p-2 rounded-lg border ${isLoss ? 'bg-rose-500/5 border-rose-500/15' : 'bg-amber-500/5 border-amber-500/15'}`}>
+                       <div className="truncate pr-2 max-w-[58%]">
+                         <p className={`text-[11px] font-bold leading-tight ${isLoss ? 'text-rose-300' : 'text-amber-300'}`}>
+                           <Package size={9} className="inline mr-1 opacity-60"/>{c.name}
+                         </p>
+                         <p className="text-[9px] text-slate-500 mt-0.5">{c.spendShare.toFixed(1)}% do gasto total</p>
+                       </div>
+                       <div className="text-right flex-shrink-0">
+                         <p className={`text-[10px] uppercase font-bold ${isLoss ? 'text-rose-500' : 'text-amber-500'}`}>
+                           ROI {c.roi.toFixed(0)}%
+                         </p>
+                         <p className={`text-[10px] font-bold ${isLoss ? 'text-rose-400' : 'text-amber-400'}`}>
+                           {isLoss ? `−${formatMoney(Math.abs(c.profit))}` : `ROI méd: ${c.avgRoi.toFixed(0)}%`}
+                         </p>
+                       </div>
+                     </div>
+                   );
+                 })
                )}
              </div>
           </div>
