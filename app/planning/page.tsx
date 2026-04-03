@@ -435,13 +435,23 @@ export default function PlanningPage() {
     const projectedRevenue = isCurrentMonth ? (totals.revenue / daysPassed) * daysInMonth : totals.revenue;
     const revenueProgress = finalGoal.revenue > 0 ? (totals.revenue / finalGoal.revenue) * 100 : 0;
 
+    // Cálculos de Dias para Média (Diluição no período selecionado)
+    const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const sDate = new Date(startDate + "T00:00:00");
+    const eDate = new Date(endDate + "T00:00:00");
+    const maxEndDate = eDate > todayNorm ? todayNorm : eDate;
+    
+    let timeDiff = maxEndDate.getTime() - sDate.getTime();
+    let selectedDaysCount = Math.floor(timeDiff / (1000 * 60 * 60 * 24)) + 1;
+    if (selectedDaysCount < 1) selectedDaysCount = 1;
+
     // Daily pacing metrics
     const dailyTargetRevenue = finalGoal.revenue / daysInMonth;
-    const currentDailyRevenue = totals.revenue / daysPassed;
+    const currentDailyRevenue = totals.revenue / selectedDaysCount;
     const revenuePacing = currentDailyRevenue - dailyTargetRevenue;
 
     const dailyTargetProfit = finalGoal.profit / daysInMonth;
-    const currentDailyProfit = totals.profit / daysPassed;
+    const currentDailyProfit = totals.profit / selectedDaysCount;
     const profitPacing = currentDailyProfit - dailyTargetProfit;
     const isProfitSafe = currentDailyProfit >= dailyTargetProfit && finalGoal.profit > 0;
 
