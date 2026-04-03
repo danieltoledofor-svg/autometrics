@@ -245,7 +245,7 @@ export default function PlanningPage() {
       else if (viewCurrency === 'USD') { cost = costInBRL / liveDollar; revenue = revenueInBRL / manualDollar; refunds = refundsInBRL / manualDollar; }
       else if (viewCurrency === 'EUR') { cost = costInBRL / liveEuro; revenue = revenueInBRL / manualEuro; refunds = refundsInBRL / manualEuro; }
 
-      if (!dailyMap[m.date]) dailyMap[m.date] = { date: m.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, details: [], mccs: {} };
+      if (!dailyMap[m.date]) dailyMap[m.date] = { date: m.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, extra_revenue: 0, net_extra: 0, details: [], mccs: {} };
       const day = dailyMap[m.date];
       day.revenue += revenue; day.ads_cost += cost; day.refunds += refunds;
 
