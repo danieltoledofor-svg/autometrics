@@ -99,6 +99,17 @@ export default function ProductsPage() {
         setStatusFilter(savedStatus);
       }
 
+      // Carrega View Mode
+      const savedViewMode = localStorage.getItem('autometrics_products_view_mode') as 'grid' | 'table';
+      if (savedViewMode) setViewMode(savedViewMode);
+
+      // Carrega Seleções Globais
+      const savedMcc = localStorage.getItem('autometrics_selected_mcc');
+      if (savedMcc && savedMcc !== 'all') setSelectedMcc(savedMcc); // Integrado ao dashboard/planning
+
+      const savedAccount = localStorage.getItem('autometrics_products_account');
+      if (savedAccount) setSelectedAccount(savedAccount);
+
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
@@ -118,10 +129,14 @@ export default function ProductsPage() {
     localStorage.setItem('autometrics_theme', newTheme);
   };
 
-  // Função para mudar filtro e salvar
   const changeStatusFilter = (newStatus: 'ALL' | 'active' | 'paused') => {
     setStatusFilter(newStatus);
     localStorage.setItem('autometrics_products_status_filter', newStatus);
+  };
+
+  const handleViewModeChange = (mode: 'grid' | 'table') => {
+    setViewMode(mode);
+    localStorage.setItem('autometrics_products_view_mode', mode);
   };
 
   const handleLogout = async () => {
@@ -330,9 +345,26 @@ export default function ProductsPage() {
   });
 
   const toggleMccExpand = (mccName: string) => { setExpandedMccs(prev => prev.includes(mccName) ? prev.filter(m => m !== mccName) : [...prev, mccName]); };
-  const handleSelectMcc = (mccName: string) => { setSelectedMcc(mccName); setSelectedAccount(null); };
-  const handleSelectAccount = (mccName: string, accName: string) => { setSelectedMcc(mccName); setSelectedAccount(accName); };
-  const resetFilters = () => { setSelectedMcc(null); setSelectedAccount(null); };
+  const handleSelectMcc = (mccName: string) => { 
+     setSelectedMcc(mccName); 
+     setSelectedAccount(null); 
+     localStorage.setItem('autometrics_selected_mcc', mccName);
+     localStorage.removeItem('autometrics_products_account');
+  };
+  const handleSelectAccount = (mccName: string, accName: string) => { 
+     setSelectedMcc(mccName); 
+     setSelectedAccount(accName); 
+     localStorage.setItem('autometrics_selected_mcc', mccName);
+     localStorage.setItem('autometrics_products_account', accName);
+  };
+  const resetFilters = () => { 
+     setSelectedMcc(null); 
+     setSelectedAccount(null);
+     localStorage.removeItem('autometrics_selected_mcc');
+     localStorage.removeItem('autometrics_products_account');
+     // Not removing from everything, just locally? Actually, 'all' means reset for dashboard.
+     localStorage.setItem('autometrics_selected_mcc', 'all');
+  };
 
   const toggleStatus = async (product: any, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
@@ -524,8 +556,8 @@ export default function ProductsPage() {
              </div>
 
              <div className={`flex items-center gap-1 px-2 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'} hidden md:flex`}>
-                <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Grid View"><LayoutGrid size={16}/></button>
-                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'table' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Table View"><List size={16}/></button>
+                <button onClick={() => handleViewModeChange('grid')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Grid View"><LayoutGrid size={16}/></button>
+                <button onClick={() => handleViewModeChange('table')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'table' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Table View"><List size={16}/></button>
              </div>
 
              <button onClick={handleReload} className={`p-2 rounded-lg transition-colors hidden md:block mr-1 ${hoverItem}`} title="Recarregar"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>

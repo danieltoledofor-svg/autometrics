@@ -73,7 +73,6 @@ export default function PlanningPage() {
 
       // 2. Data local e Presets
       setNewCost(prev => ({ ...prev, date: getLocalYYYYMMDD(new Date()) }));
-      handlePresetChange('this_month'); // Começa com "Este Mês"
 
       // 3. Preferências
       const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
@@ -82,6 +81,30 @@ export default function PlanningPage() {
       if (savedDollar) setManualDollar(parseFloat(savedDollar));
       const savedEuro = localStorage.getItem('autometrics_manual_euro');
       if (savedEuro) setManualEuro(parseFloat(savedEuro));
+      
+      const savedCurrency = localStorage.getItem('autometrics_view_currency') as 'BRL' | 'USD' | 'EUR';
+      if (savedCurrency) setViewCurrency(savedCurrency);
+
+      const savedRateConfig = localStorage.getItem('autometrics_rate_config') as 'USD' | 'EUR';
+      if (savedRateConfig) setRateConfig(savedRateConfig);
+
+      const savedMcc = localStorage.getItem('autometrics_selected_mcc');
+      if (savedMcc) setSelectedMcc(savedMcc);
+
+      const savedDateRange = localStorage.getItem('autometrics_date_range');
+      if (savedDateRange) {
+        if (savedDateRange === 'custom') {
+          setDateRange('custom');
+          const savedStart = localStorage.getItem('autometrics_start_date');
+          const savedEnd = localStorage.getItem('autometrics_end_date');
+          if (savedStart) setStartDate(savedStart);
+          if (savedEnd) setEndDate(savedEnd);
+        } else {
+          handlePresetChange(savedDateRange);
+        }
+      } else {
+        handlePresetChange('this_month');
+      }
 
       fetchLiveRates();
     }
@@ -121,6 +144,7 @@ export default function PlanningPage() {
   // --- LÓGICA DE DATAS UNIFICADA ---
   const handlePresetChange = (preset: string) => {
     setDateRange(preset);
+    localStorage.setItem('autometrics_date_range', preset);
     const now = new Date();
     let start = new Date();
     let end = new Date();
@@ -133,13 +157,38 @@ export default function PlanningPage() {
     else if (preset === 'last_month') { start = new Date(now.getFullYear(), now.getMonth() - 1, 1); end = new Date(now.getFullYear(), now.getMonth(), 0); }
     else if (preset === 'custom') return;
 
-    setStartDate(getLocalYYYYMMDD(start));
-    setEndDate(getLocalYYYYMMDD(end));
+    const startStr = getLocalYYYYMMDD(start);
+    const endStr = getLocalYYYYMMDD(end);
+    setStartDate(startStr);
+    setEndDate(endStr);
+    localStorage.setItem('autometrics_start_date', startStr);
+    localStorage.setItem('autometrics_end_date', endStr);
   };
 
   const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
-    if (type === 'start') setStartDate(value); else setEndDate(value);
+    if (type === 'start') {
+      setStartDate(value);
+      localStorage.setItem('autometrics_start_date', value);
+    } else {
+      setEndDate(value);
+      localStorage.setItem('autometrics_end_date', value);
+    }
     setDateRange('custom');
+    localStorage.setItem('autometrics_date_range', 'custom');
+  };
+
+  const handleMccChange = (value: string) => {
+    setSelectedMcc(value);
+    localStorage.setItem('autometrics_selected_mcc', value);
+  };
+
+  const handleCurrencyChange = (currency: 'BRL' | 'USD' | 'EUR') => {
+    setViewCurrency(currency);
+    localStorage.setItem('autometrics_view_currency', currency);
+    if (currency !== 'BRL') {
+      setRateConfig(currency);
+      localStorage.setItem('autometrics_rate_config', currency);
+    }
   };
 
   async function fetchData(userId: string) {
@@ -440,7 +489,7 @@ export default function PlanningPage() {
                      <select 
                         className={`bg-transparent text-sm font-bold outline-none cursor-pointer flex-1 sm:w-32 ${textHead}`}
                         value={selectedMcc}
-                        onChange={(e) => setSelectedMcc(e.target.value)}
+                        onChange={(e) => handleMccChange(e.target.value)}
                      >
                         <option value="all">Visão Geral (Todas)</option>
                         {availableMccs.map(mcc => (
@@ -489,9 +538,9 @@ export default function PlanningPage() {
                  </div>
               </div>
               <div className={`flex justify-between sm:justify-start items-center p-1 rounded-md gap-1 ${isDark ? 'bg-black' : 'bg-slate-100'} w-full sm:w-auto`}>
-                 <button onClick={() => setViewCurrency('BRL')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
-                 <button onClick={() => { setViewCurrency('USD'); setRateConfig('USD'); }} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
-                 <button onClick={() => { setViewCurrency('EUR'); setRateConfig('EUR'); }} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
+                 <button onClick={() => handleCurrencyChange('BRL')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
+                 <button onClick={() => handleCurrencyChange('USD')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
+                 <button onClick={() => handleCurrencyChange('EUR')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
               </div>
               <button onClick={toggleTheme} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
            </div>
