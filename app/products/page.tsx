@@ -147,13 +147,26 @@ export default function ProductsPage() {
   async function fetchProducts(currentUserId: string) {
     setLoading(true);
     
-    let query = supabase
-      .from('products')
-      .select('*')
-      .eq('user_id', currentUserId)
-      .order('created_at', { ascending: false });
-
-    const { data: prodData } = await query;
+    let allProducts: any[] = [];
+    let p_prod = 0;
+    let m_prod = true;
+    while (m_prod) {
+      const { data } = await supabase
+        .from('products')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .range(p_prod * 1000, (p_prod + 1) * 1000 - 1);
+        
+      if (data && data.length > 0) {
+        allProducts.push(...data);
+        if (data.length < 1000) m_prod = false;
+        else p_prod++;
+      } else {
+        m_prod = false;
+      }
+    }
+    const prodData = allProducts;
     if (prodData && prodData.length > 0) {
        // Buscar métricas dos últimos 7 dias para o "Mini-Dashboard" (Métricas Vitais)
        const sevenDaysAgo = new Date();

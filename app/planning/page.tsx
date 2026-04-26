@@ -228,7 +228,25 @@ export default function PlanningPage() {
     const { data: costData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate);
     setExtraCosts(costData || []);
 
-    const { data: prodData } = await supabase.from('products').select('id, currency, name, mcc_name, account_name').eq('user_id', userId);
+    let allProducts: any[] = [];
+    let p_prod = 0;
+    let m_prod = true;
+    while (m_prod) {
+      const { data } = await supabase
+        .from('products')
+        .select('id, currency, name, mcc_name, account_name')
+        .eq('user_id', userId)
+        .range(p_prod * 1000, (p_prod + 1) * 1000 - 1);
+        
+      if (data && data.length > 0) {
+        allProducts.push(...data);
+        if (data.length < 1000) m_prod = false;
+        else p_prod++;
+      } else {
+        m_prod = false;
+      }
+    }
+    const prodData = allProducts;
     setProducts(prodData || []);
     
     // Cálculo do período anterior para Comparativo Progressivo

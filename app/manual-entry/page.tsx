@@ -33,13 +33,27 @@ export default function ManualEntryPage() {
   useEffect(() => {
     async function fetchProducts() {
       const currentUserId = localStorage.getItem('autometrics_user_id');
-      let query = supabase.from('products').select('*').eq('status', 'active');
-      
-      if (currentUserId) {
-        query = query.eq('user_id', currentUserId);
-      }
+      let allProducts: any[] = [];
+      let p_prod = 0;
+      let m_prod = true;
+      while (m_prod) {
+        let query = supabase.from('products').select('*').eq('status', 'active').range(p_prod * 1000, (p_prod + 1) * 1000 - 1);
+        
+        if (currentUserId) {
+          query = query.eq('user_id', currentUserId);
+        }
 
-      const { data } = await query;
+        const { data } = await query;
+        if (data && data.length > 0) {
+          allProducts.push(...data);
+          if (data.length < 1000) m_prod = false;
+          else p_prod++;
+        } else {
+          m_prod = false;
+        }
+      }
+      
+      const data = allProducts;
       if (data) {
         setProducts(data);
         if (data.length > 0) setSelectedProductId(data[0].id);
