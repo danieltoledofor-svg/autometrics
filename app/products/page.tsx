@@ -86,6 +86,12 @@ export default function ProductsPage() {
   const [copiedPostback, setCopiedPostback] = useState<string | null>(null);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
+  // Novos Estados para Filtro de Data
+  const [dateFilter, setDateFilter] = useState<string>('7d');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [isCustomDateModalOpen, setIsCustomDateModalOpen] = useState(false);
+
   // --- INICIALIZAÇÃO ---
   useEffect(() => { 
     async function init() {
@@ -103,6 +109,14 @@ export default function ProductsPage() {
       const savedViewMode = localStorage.getItem('autometrics_products_view_mode') as 'grid' | 'table';
       if (savedViewMode) setViewMode(savedViewMode);
 
+      // Carrega Filtro de Data Salvo
+      const savedDateFilter = localStorage.getItem('autometrics_products_date_filter') || '7d';
+      setDateFilter(savedDateFilter);
+      const savedCustomStart = localStorage.getItem('autometrics_products_custom_start') || '';
+      setCustomStartDate(savedCustomStart);
+      const savedCustomEnd = localStorage.getItem('autometrics_products_custom_end') || '';
+      setCustomEndDate(savedCustomEnd);
+
       // Carrega Seleções Globais
       const savedMcc = localStorage.getItem('autometrics_selected_mcc');
       if (savedMcc && savedMcc !== 'all') setSelectedMcc(savedMcc); // Integrado ao dashboard/planning
@@ -118,7 +132,7 @@ export default function ProductsPage() {
       }
 
       setUserId(session.user.id);
-      await fetchProducts(session.user.id);
+      await fetchProducts(session.user.id, savedDateFilter, savedCustomStart, savedCustomEnd);
     }
     init();
   }, []);
@@ -134,6 +148,36 @@ export default function ProductsPage() {
     localStorage.setItem('autometrics_products_status_filter', newStatus);
   };
 
+  const handleDateFilterChange = (newFilter: string) => {
+    setDateFilter(newFilter);
+    localStorage.setItem('autometrics_products_date_filter', newFilter);
+    if (newFilter === 'custom') {
+      setIsCustomDateModalOpen(true);
+    } else if (userId) {
+      fetchProducts(userId, newFilter, customStartDate, customEndDate);
+    }
+  };
+
+  const handleCustomDateApply = () => {
+    localStorage.setItem('autometrics_products_custom_start', customStartDate);
+    localStorage.setItem('autometrics_products_custom_end', customEndDate);
+    if (userId) fetchProducts(userId, 'custom', customStartDate, customEndDate);
+    setIsCustomDateModalOpen(false);
+  };
+
+  const getPeriodLabel = () => {
+    switch(dateFilter) {
+      case 'today': return 'Hoje';
+      case 'yesterday': return 'Ontem';
+      case '7d': return '7D';
+      case '14d': return '14D';
+      case 'this_month': return 'Mês';
+      case 'custom': return 'Personalizado';
+      default: return '7D';
+    }
+  };
+  const periodLabel = getPeriodLabel();
+
   const handleViewModeChange = (mode: 'grid' | 'table') => {
     setViewMode(mode);
     localStorage.setItem('autometrics_products_view_mode', mode);
@@ -144,7 +188,7 @@ export default function ProductsPage() {
     router.push('/');
   };
 
-  async function fetchProducts(currentUserId: string) {
+  async function fetchProducts(currentUserId: string, dFilter: string = dateFilter, cStart: string = customStartDate, cEnd: string = customEndDate) {
     setLoading(true);
     
     let allProducts: any[] = [];
@@ -168,17 +212,49 @@ export default function ProductsPage() {
     }
     const prodData = allProducts;
     if (prodData && prodData.length > 0) {
-       // Buscar métricas dos últimos 7 dias para o "Mini-Dashboard" (Métricas Vitais)
-       const sevenDaysAgo = new Date();
-       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-       const startDateStr = getLocalYYYYMMDD(sevenDaysAgo);
+       let startDateStr = '';
+       let endDateStr = '';
+       const today = new Date();
+       
+       if (dFilter === 'today') {
+         startDateStr = getLocalYYYYMMDD(today);
+         endDateStr = startDateStr;
+       } else if (dFilter === 'yesterday') {
+         const yesterday = new Date(today);
+         yesterday.setDate(today.getDate() - 1);
+         startDateStr = getLocalYYYYMMDD(yesterday);
+         endDateStr = startDateStr;
+       } else if (dFilter === '7d') {
+         const sevenDaysAgo = new Date(today);
+         sevenDaysAgo.setDate(today.getDate() - 7);
+         startDateStr = getLocalYYYYMMDD(sevenDaysAgo);
+         endDateStr = getLocalYYYYMMDD(today);
+       } else if (dFilter === '14d') {
+         const fourteenDaysAgo = new Date(today);
+         fourteenDaysAgo.setDate(today.getDate() - 14);
+         startDateStr = getLocalYYYYMMDD(fourteenDaysAgo);
+         endDateStr = getLocalYYYYMMDD(today);
+       } else if (dFilter === 'this_month') {
+         startDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+         endDateStr = getLocalYYYYMMDD(today);
+       } else if (dFilter === 'custom') {
+         startDateStr = cStart;
+         endDateStr = cEnd;
+       }
+
+       if (!startDateStr || !endDateStr) {
+           const sevenDaysAgo = new Date(today);
+           sevenDaysAgo.setDate(today.getDate() - 7);
+           startDateStr = getLocalYYYYMMDD(sevenDaysAgo);
+           endDateStr = getLocalYYYYMMDD(today);
+       }
 
        const productIds = prodData.map((p: any) => p.id);
        let metricsData: any[] = [];
        let p = 0;
        let m = true;
        while(m) {
-          const { data: c } = await supabase.from('daily_metrics').select('product_id, cost, conversion_value').in('product_id', productIds).gte('date', startDateStr).range(p*1000, (p+1)*1000-1);
+          const { data: c } = await supabase.from('daily_metrics').select('product_id, cost, conversion_value').in('product_id', productIds).gte('date', startDateStr).lte('date', endDateStr).range(p*1000, (p+1)*1000-1);
           if (c && c.length > 0) { metricsData.push(...c); if (c.length < 1000) m = false; else p++; } else m = false;
        }
        
@@ -407,7 +483,7 @@ export default function ProductsPage() {
     setSaving(false);
   };
 
-  const handleReload = () => { if (userId) fetchProducts(userId); };
+  const handleReload = () => { if (userId) fetchProducts(userId, dateFilter, customStartDate, customEndDate); };
 
   // --- GRUPOS DE PRODUTOS ---
   const groupedProducts = useMemo(() => {
@@ -568,6 +644,24 @@ export default function ProductsPage() {
                 <button onClick={() => changeStatusFilter('paused')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'paused' ? 'bg-rose-500/20 text-rose-500' : 'text-slate-500 hover:text-rose-500'}`}><PauseCircle size={12} /> Pausados</button>
              </div>
 
+             {/* Filtro de Data */}
+             <div className={`flex items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'} relative`}>
+               <Calendar size={16} className="text-slate-500 mr-1" />
+               <select 
+                 className={`bg-transparent outline-none text-xs font-bold ${isDark ? 'text-white [&>option]:bg-slate-900' : 'text-black [&>option]:bg-white'} cursor-pointer appearance-none pr-4`}
+                 value={dateFilter}
+                 onChange={(e) => handleDateFilterChange(e.target.value)}
+               >
+                 <option value="today">Hoje</option>
+                 <option value="yesterday">Ontem</option>
+                 <option value="7d">Últimos 7 dias</option>
+                 <option value="14d">Últimos 14 dias</option>
+                 <option value="this_month">Este mês</option>
+                 <option value="custom">Personalizado</option>
+               </select>
+               <ChevronDown size={14} className="text-slate-500 absolute right-2 pointer-events-none" />
+             </div>
+
              <div className={`flex items-center gap-1 px-2 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'} hidden md:flex`}>
                 <button onClick={() => handleViewModeChange('grid')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Grid View"><LayoutGrid size={16}/></button>
                 <button onClick={() => handleViewModeChange('table')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'table' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Table View"><List size={16}/></button>
@@ -627,7 +721,7 @@ export default function ProductsPage() {
                                   <span className={`font-mono font-medium ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.cost, product.currency)}</span>
                                </div>
                                <div className="flex justify-between items-center mt-1 pt-2 border-t border-dashed border-slate-300/20">
-                                  <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark?'text-white':'text-black'}`}>Lucro (7D)</span>
+                                  <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark?'text-white':'text-black'}`}>Lucro ({periodLabel})</span>
                                   <span className={`font-mono font-bold text-sm ${(m7d.revenue - m7d.cost) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney((m7d.revenue - m7d.cost), product.currency)}</span>
                                </div>
                              </div>
@@ -643,9 +737,9 @@ export default function ProductsPage() {
                              <th className="p-3 w-10 text-center"><button onClick={() => handleSelectAll(groupProds.map(p=>p.id))} className="text-slate-400 hover:text-indigo-500">{groupProds.length > 0 && groupProds.every(p => selectedProducts.includes(p.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}</button></th>
                              <th className="p-3 w-12 text-center">Plat.</th>
                              <th className="p-3">Campanha</th>
-                             <th className="p-3">7D Receita</th>
-                             <th className="p-3">7D Custo</th>
-                             <th className="p-3">7D Lucro</th>
+                             <th className="p-3">{periodLabel} Receita</th>
+                             <th className="p-3">{periodLabel} Custo</th>
+                             <th className="p-3">{periodLabel} Lucro</th>
                              <th className="p-3 text-right">Ações</th>
                            </tr>
                          </thead>
@@ -709,6 +803,36 @@ export default function ProductsPage() {
             <div className={`w-px h-8 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
             
             <button onClick={()=>setSelectedProducts([])} className={`p-4 transition-colors border-l ${isDark ? 'text-slate-400 hover:text-white border-slate-800' : 'text-slate-500 hover:text-black border-slate-200'}`} title="Cancelar"><X size={18}/></button>
+          </div>
+        )}
+
+        {/* Modal Data Personalizada */}
+        {isCustomDateModalOpen && (
+          <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className={`rounded-xl w-full max-w-sm p-6 shadow-2xl border ${bgCard}`}>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className={`text-xl font-bold ${textHead}`}>Data Personalizada</h2>
+                <button onClick={() => {
+                  setIsCustomDateModalOpen(false);
+                  if (!customStartDate || !customEndDate) {
+                    setDateFilter('7d');
+                    localStorage.setItem('autometrics_products_date_filter', '7d');
+                    if (userId) fetchProducts(userId, '7d');
+                  }
+                }}><X size={24} className="text-slate-400 hover:text-indigo-500" /></button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-slate-500">Data Inicial</label>
+                  <input type="date" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} style={isDark ? {colorScheme: 'dark'} : {}} value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-slate-500">Data Final</label>
+                  <input type="date" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} style={isDark ? {colorScheme: 'dark'} : {}} value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+                </div>
+                <button onClick={handleCustomDateApply} className="w-full bg-indigo-600 py-3 rounded-lg text-white font-bold hover:bg-indigo-700">Aplicar</button>
+              </div>
+            </div>
           </div>
         )}
 
