@@ -221,13 +221,16 @@ export default function ProductDetailPage() {
       const { data: { user } } = await supabase.auth.getUser();
       const currentUserId = user?.id || product?.user_id;
 
+      const startDateTime = `${startDate} 00:00:00`;
+      const endDateTime = `${endDate} 23:59:59`;
+
       // 1. Dados diários de sessões
       const res = await fetch('/api/vturb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           endpoint: 'sessions/stats_by_day',
-          body: { player_id: pid, start_date: startDate, end_date: endDate, timezone: 'America/Sao_Paulo' },
+          body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, timezone: 'America/Sao_Paulo' },
           userId: currentUserId
         }),
       });
@@ -241,7 +244,7 @@ export default function ProductDetailPage() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             endpoint: 'sessions/stats_by_field',
-            body: { player_id: pid, start_date: startDate, end_date: endDate, field: 'device_type', timezone: 'America/Sao_Paulo' },
+            body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, field: 'device_type', timezone: 'America/Sao_Paulo' },
             userId: currentUserId
           })
         }),
@@ -249,7 +252,7 @@ export default function ProductDetailPage() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             endpoint: 'sessions/stats_by_field',
-            body: { player_id: pid, start_date: startDate, end_date: endDate, field: 'country', timezone: 'America/Sao_Paulo' },
+            body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, field: 'country', timezone: 'America/Sao_Paulo' },
             userId: currentUserId
           })
         }),
@@ -269,9 +272,9 @@ export default function ProductDetailPage() {
 
   const savePlayerId = async () => {
     if (!playerIdInput.trim()) return;
-    // Extrai o UUID da URL do VTurb (ex: app.vturb.com/players/<UUID>/edit)
-    const uuidMatch = playerIdInput.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-    const pid = uuidMatch ? uuidMatch[0] : playerIdInput.trim();
+    // Extrai o MongoID do VTurb (24 caracteres hexadecimais, ex: 69bbefccd54d8d20f100c9bc)
+    const mongoIdMatch = playerIdInput.match(/[0-9a-f]{24}/i);
+    const pid = mongoIdMatch ? mongoIdMatch[0] : playerIdInput.trim();
     await supabase.from('products').update({ vturb_player_id: pid }).eq('id', productId);
     const updated = { ...product, vturb_player_id: pid };
     setProduct(updated);
