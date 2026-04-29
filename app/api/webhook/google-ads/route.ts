@@ -23,27 +23,36 @@ export async function POST(request: Request) {
     // 1. Busca ou Cria o Produto (Vínculo)
     // Tenta buscar primeiro pelo ID exato da campanha
     let product: any = null;
+    const safeCampaignId = campaign_id ? String(campaign_id) : null;
     
-    if (campaign_id) {
-      const { data } = await supabase.from('products').select('id').eq('google_ads_campaign_id', campaign_id).eq('user_id', user_id).maybeSingle();
+    if (safeCampaignId) {
+      const { data } = await supabase.from('products').select('id').eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).maybeSingle();
       if (data) product = data;
     }
 
     // Se n achou pelo ID, tenta buscar pelo nome da campanha E nome da conta para evitar duplicidade de nomes em contas diferentes
     if (!product) {
       const { data } = await supabase.from('products')
-        .select('id')
+        .select('id, google_ads_campaign_id')
         .eq('google_ads_campaign_name', campaign_name)
         .eq('account_name', account_name)
         .eq('user_id', user_id)
         .maybeSingle();
-      if (data) product = data;
+      
+      // Só aceita o match por nome se o produto ainda não tiver um ID diferente salvo
+      if (data && (!data.google_ads_campaign_id || data.google_ads_campaign_id === safeCampaignId)) {
+        product = data;
+      }
     }
 
     // Se ainda n achou, tenta só pelo nome (para produtos antigos criados antes de salvar account_name)
     if (!product) {
-       const { data, error: multiError } = await supabase.from('products').select('id, account_name').eq('google_ads_campaign_name', campaign_name).eq('user_id', user_id).limit(1);
-       if (data && data.length > 0) product = data[0];
+       const { data, error: multiError } = await supabase.from('products').select('id, account_name, google_ads_campaign_id').eq('google_ads_campaign_name', campaign_name).eq('user_id', user_id).limit(10);
+       if (data && data.length > 0) {
+         // Busca um produto que não tenha ID de campanha conflitante
+         const validMatch = data.find(p => !p.google_ads_campaign_id || p.google_ads_campaign_id === safeCampaignId);
+         if (validMatch) product = validMatch;
+       }
     }
 
     if (!product) {
@@ -53,7 +62,7 @@ export async function POST(request: Request) {
         .insert([{
           name: campaign_name,
           google_ads_campaign_name: campaign_name,
-          google_ads_campaign_id: String(campaign_id) || null,
+          google_ads_campaign_id: safeCampaignId,
           user_id: user_id,
           platform: 'Google Ads (Auto)',
           currency: currency_code || 'BRL',
@@ -69,13 +78,15 @@ export async function POST(request: Request) {
       }
       product = newProduct;
     } else {
-      // Se já existe, atualiza nomes de conta/mcc e campaign_id para manter sincronizado (e garantir que produtos antigos ganhem o ID e Conta)
+      // Se já existe, atualiza nomes de conta/mcc, campaign_id e o NOME da campanha (para refletir mudanças feitas no Google Ads)
       await supabase
         .from('products')
         .update({
+          name: campaign_name,
+          google_ads_campaign_name: campaign_name,
           account_name: account_name,
           mcc_name: mcc_name || 'Sem MCC',
-          google_ads_campaign_id: String(campaign_id) || null
+          google_ads_campaign_id: safeCampaignId
         })
         .eq('id', product.id);
     }
