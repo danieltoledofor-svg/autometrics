@@ -218,6 +218,9 @@ export default function ProductDetailPage() {
     setVturbLoading(true);
     setVturbError(null);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id || product?.user_id;
+
       // 1. Dados diários de sessões
       const res = await fetch('/api/vturb', {
         method: 'POST',
@@ -225,6 +228,7 @@ export default function ProductDetailPage() {
         body: JSON.stringify({
           endpoint: 'sessions/stats_by_day',
           body: { player_id: pid, start_date: startDate, end_date: endDate, timezone: 'America/Sao_Paulo' },
+          userId: currentUserId
         }),
       });
       const data = await res.json();
@@ -237,14 +241,16 @@ export default function ProductDetailPage() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             endpoint: 'sessions/stats_by_field',
-            body: { player_id: pid, start_date: startDate, end_date: endDate, field: 'device_type', timezone: 'America/Sao_Paulo' }
+            body: { player_id: pid, start_date: startDate, end_date: endDate, field: 'device_type', timezone: 'America/Sao_Paulo' },
+            userId: currentUserId
           })
         }),
         fetch('/api/vturb', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             endpoint: 'sessions/stats_by_field',
-            body: { player_id: pid, start_date: startDate, end_date: endDate, field: 'country', timezone: 'America/Sao_Paulo' }
+            body: { player_id: pid, start_date: startDate, end_date: endDate, field: 'country', timezone: 'America/Sao_Paulo' },
+            userId: currentUserId
           })
         }),
       ]);
