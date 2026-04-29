@@ -238,25 +238,24 @@ export default function ProductDetailPage() {
       if (data?.error) { setVturbError(data.error); setVturbRows([]); }
       else setVturbRows(Array.isArray(data) ? [...data].reverse() : []);
 
-      // 2. Breakdown por dispositivo
-      const [devRes, cntRes] = await Promise.all([
-        fetch('/api/vturb', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            endpoint: 'sessions/stats_by_field',
-            body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, field: 'device_type', timezone: 'America/Sao_Paulo' },
-            userId: currentUserId
-          })
-        }),
-        fetch('/api/vturb', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            endpoint: 'sessions/stats_by_field',
-            body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, field: 'country', timezone: 'America/Sao_Paulo' },
-            userId: currentUserId
-          })
-        }),
-      ]);
+      // 2. Breakdown por dispositivo (Sequencial para não sobrecarregar a API da Vturb)
+      const devRes = await fetch('/api/vturb', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: 'sessions/stats_by_field',
+          body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, field: 'device_type', timezone: 'America/Sao_Paulo' },
+          userId: currentUserId
+        })
+      });
+
+      const cntRes = await fetch('/api/vturb', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: 'sessions/stats_by_field',
+          body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, field: 'country', timezone: 'America/Sao_Paulo' },
+          userId: currentUserId
+        })
+      });
       const devData = await devRes.json();
       const cntData = await cntRes.json();
       setVturbBreakdown({
