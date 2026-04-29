@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     if (!apiToken) {
         return NextResponse.json(
             { error: 'VTURB_API_TOKEN não configurado. Configure na página de Integração.' },
-            { status: 503 }
+            { status: 400 }
         );
     }
 
@@ -87,7 +87,7 @@ export async function GET(request: Request) {
     if (!apiToken) {
         return NextResponse.json(
             { error: 'VTURB_API_TOKEN não configurado. Configure na página de Integração.' },
-            { status: 503 }
+            { status: 400 }
         );
     }
 
