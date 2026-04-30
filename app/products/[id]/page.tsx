@@ -1298,6 +1298,12 @@ export default function ProductDetailPage() {
                     <h3 className={`font-semibold ${textHead}`}>Dados Diários VTurb</h3>
                     <span className={`text-xs ${textMuted} px-2 py-0.5 rounded ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>{vturbRows.length} dias</span>
                   </div>
+                  
+                  {/* DEBUG BLOCK - REMOVE LATER */}
+                  <div className="p-4 bg-slate-900 text-green-400 font-mono text-xs overflow-auto">
+                    <pre>DEBUG RAW DATA: {JSON.stringify(vturbRows[0], null, 2)}</pre>
+                  </div>
+
                   <div className="overflow-auto">
                     <table className="w-full text-xs text-left border-collapse">
                       <thead className={`text-[10px] uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-500'} sticky top-0`}>
