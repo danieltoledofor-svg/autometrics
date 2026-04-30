@@ -1268,7 +1268,7 @@ export default function ProductDetailPage() {
             const avgEngagement = vturbRows.reduce((s: number, r: any) => s + Number(r.engagement_rate ?? 0), 0) / vturbRows.length;
             const avgPitchRate = vturbRows.reduce((s: number, r: any) => s + Number(r.pitch_rate ?? 0), 0) / vturbRows.length;
 
-            const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+            const pct = (v: number) => `${Number(v).toFixed(1)}%`;
             const moneyBRL = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
             const VKpi = ({ label, value, color }: { label: string; value: string; color: string }) => (
@@ -1315,14 +1315,15 @@ export default function ProductDetailPage() {
                       </thead>
                       <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
                         {vturbRows.map((r: any, i: number) => {
-                          const dp = (r.date || '').split('T')[0].split('-');
-                          const dateLabel = dp.length === 3 ? `${dp[2]}/${dp[1]}/${dp[0]}` : r.date;
+                          const rawDate = r.date || r.day || r.start_date || r.timestamp || '';
+                          const dp = rawDate.split('T')[0].split('-');
+                          const dateLabel = dp.length === 3 ? `${dp[2]}/${dp[1]}/${dp[0]}` : rawDate;
                           return (
                             <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}`}>
                               <td className={`px-4 py-3 sticky left-0 font-medium border-r ${borderCol} ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>{dateLabel}</td>
-                              <td className="px-4 py-3 text-right text-purple-400 font-medium">{Number(r.views ?? 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.unique_views ?? 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.unique_plays ?? 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-purple-400 font-medium">{Number(r.views || r.impressions || 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.unique_views || r.unique_impressions || 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.unique_plays || r.plays || 0).toLocaleString()}</td>
                               <td className="px-4 py-3 text-right text-cyan-400">{pct(Number(r.play_rate ?? 0))}</td>
                               <td className="px-4 py-3 text-right text-blue-400">{pct(Number(r.engagement_rate ?? 0))}</td>
                               <td className="px-4 py-3 text-right text-amber-400 font-medium">{Number(r.pitch_viewers ?? 0).toLocaleString()}</td>
