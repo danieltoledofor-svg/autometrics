@@ -36,6 +36,21 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'autometrics.vercel.app',
+          },
+        ],
+        destination: 'https://autometrics.cloud/:path*',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
