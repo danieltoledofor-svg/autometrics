@@ -1254,19 +1254,19 @@ export default function ProductDetailPage() {
           {product?.vturb_player_id && !vturbLoading && vturbRows.length > 0 && (() => {
             // KPI aggregates
             const total = vturbRows.reduce((acc: any, r: any) => {
-              acc.views += Number(r.views ?? 0);
-              acc.unique_views += Number(r.unique_views ?? 0);
-              acc.unique_plays += Number(r.unique_plays ?? 0);
-              acc.pitch_viewers += Number(r.pitch_viewers ?? 0);
-              acc.clicks += Number(r.clicks ?? 0);
-              acc.conversions += Number(r.conversions ?? 0);
-              acc.conversions_brl += Number(r.conversions_brl ?? 0);
+              acc.views += Number(r.total_viewed ?? 0);
+              acc.unique_views += Number(r.total_viewed_device_uniq ?? 0);
+              acc.unique_plays += Number(r.total_started_device_uniq ?? 0);
+              acc.pitch_viewers += Number(r.total_over_pitch ?? 0);
+              acc.clicks += Number(r.total_clicked ?? 0);
+              acc.conversions += Number(r.total_conversions ?? 0);
+              acc.conversions_brl += Number(r.total_amount_brl ?? 0);
               return acc;
             }, { views: 0, unique_views: 0, unique_plays: 0, pitch_viewers: 0, clicks: 0, conversions: 0, conversions_brl: 0 });
 
-            const avgPlayRate = vturbRows.reduce((s: number, r: any) => s + Number(r.play_rate ?? 0), 0) / vturbRows.length;
-            const avgEngagement = vturbRows.reduce((s: number, r: any) => s + Number(r.engagement_rate ?? 0), 0) / vturbRows.length;
-            const avgPitchRate = vturbRows.reduce((s: number, r: any) => s + Number(r.pitch_rate ?? 0), 0) / vturbRows.length;
+            const avgPlayRate = vturbRows.reduce((s: number, r: any) => s + Number(r.play_rate ?? 0), 0) / (vturbRows.length || 1);
+            const avgEngagement = vturbRows.reduce((s: number, r: any) => s + Number(r.engagement_rate ?? 0), 0) / (vturbRows.length || 1);
+            const avgPitchRate = vturbRows.reduce((s: number, r: any) => s + Number(r.over_pitch_rate ?? 0), 0) / (vturbRows.length || 1);
 
             const pct = (v: number) => `${Number(v).toFixed(1)}%`;
             const moneyBRL = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -1298,12 +1298,6 @@ export default function ProductDetailPage() {
                     <h3 className={`font-semibold ${textHead}`}>Dados Diários VTurb</h3>
                     <span className={`text-xs ${textMuted} px-2 py-0.5 rounded ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>{vturbRows.length} dias</span>
                   </div>
-                  
-                  {/* DEBUG BLOCK - REMOVE LATER */}
-                  <div className="p-4 bg-slate-900 text-green-400 font-mono text-xs overflow-auto">
-                    <pre>DEBUG RAW DATA: {JSON.stringify(vturbRows[0], null, 2)}</pre>
-                  </div>
-
                   <div className="overflow-auto">
                     <table className="w-full text-xs text-left border-collapse">
                       <thead className={`text-[10px] uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-500'} sticky top-0`}>
@@ -1315,22 +1309,22 @@ export default function ProductDetailPage() {
                       </thead>
                       <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
                         {vturbRows.map((r: any, i: number) => {
-                          const rawDate = r.date || r.day || r.start_date || r.timestamp || '';
+                          const rawDate = r.date_key || '';
                           const dp = rawDate.split('T')[0].split('-');
                           const dateLabel = dp.length === 3 ? `${dp[2]}/${dp[1]}/${dp[0]}` : rawDate;
                           return (
                             <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}`}>
                               <td className={`px-4 py-3 sticky left-0 font-medium border-r ${borderCol} ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>{dateLabel}</td>
-                              <td className="px-4 py-3 text-right text-purple-400 font-medium">{Number(r.views || r.impressions || 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.unique_views || r.unique_impressions || 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.unique_plays || r.plays || 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-purple-400 font-medium">{Number(r.total_viewed ?? 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.total_viewed_device_uniq ?? 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.total_started_device_uniq ?? 0).toLocaleString()}</td>
                               <td className="px-4 py-3 text-right text-cyan-400">{pct(Number(r.play_rate ?? 0))}</td>
                               <td className="px-4 py-3 text-right text-blue-400">{pct(Number(r.engagement_rate ?? 0))}</td>
-                              <td className="px-4 py-3 text-right text-amber-400 font-medium">{Number(r.pitch_viewers ?? 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-amber-300">{pct(Number(r.pitch_rate ?? 0))}</td>
-                              <td className="px-4 py-3 text-right text-emerald-400 font-medium">{Number(r.clicks ?? 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-green-400">{Number(r.conversions ?? 0)}</td>
-                              <td className="px-4 py-3 text-right text-green-300 font-bold">{moneyBRL(Number(r.conversions_brl ?? 0))}</td>
+                              <td className="px-4 py-3 text-right text-amber-400 font-medium">{Number(r.total_over_pitch ?? 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-amber-300">{pct(Number(r.over_pitch_rate ?? 0))}</td>
+                              <td className="px-4 py-3 text-right text-emerald-400 font-medium">{Number(r.total_clicked ?? 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-green-400">{Number(r.total_conversions ?? 0)}</td>
+                              <td className="px-4 py-3 text-right text-green-300 font-bold">{moneyBRL(Number(r.total_amount_brl ?? 0))}</td>
                             </tr>
                           );
                         })}
