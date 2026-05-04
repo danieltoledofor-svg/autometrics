@@ -639,16 +639,16 @@ ${commonFunctions}`;
                     ],
                   },
                   {
-                    name: 'Clickbank (V8)',
-                    note: 'Configure aff_sub5 = utm_id na oferta. tid = {tid}, amount = {affiliate_earnings}.',
+                    name: 'ClickBank (Global Postback S2S)',
+                    note: 'A ClickBank resolve Vendas e Checkouts no mesmo link! A Flowtracking já passa a campanha no {traffic_type}.',
                     noteColor: 'blue',
-                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=sale&amount={affiliate_earnings}&cy={currency}&tid={tid}&campaign_id={aff_sub5}`,
-                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=checkout&tid={tid}&campaign_id={aff_sub5}`,
+                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event={event_type}&amount={affiliate_earnings}&cy=USD&tid={receipt_id}&campaign_id={traffic_type}&utm_campaign={campaign}`,
+                    urlCheckout: '',
                     details: [
-                      { label: 'campaign_id', value: '{aff_sub5} (= utm_id)' },
-                      { label: 'tid', value: '{tid}' },
+                      { label: 'event', value: '{event_type}' },
+                      { label: 'campaign_id', value: '{traffic_type}' },
+                      { label: 'tid', value: '{receipt_id}' },
                       { label: 'amount', value: '{affiliate_earnings}' },
-                      { label: 'cy', value: '{currency}' },
                     ],
                   },
                   {
@@ -706,7 +706,9 @@ ${commonFunctions}`;
                         {/* URL VENDA */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold uppercase text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Venda / Upsell</span>
+                            <span className="text-[10px] font-bold uppercase text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                              {p.name.includes('ClickBank') ? 'Link Único (Venda & Checkout)' : 'Venda / Upsell'}
+                            </span>
                             <button onClick={() => copyPostback(p.urlSale, `plat_sale_${p.name}`)} className={`shrink-0 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${isCopiedSale ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
                               {isCopiedSale ? <Check size={12} /> : <Copy size={12} />}
                               {isCopiedSale ? 'Copiado!' : 'Copiar URL Venda'}
@@ -716,16 +718,18 @@ ${commonFunctions}`;
                         </div>
 
                         {/* URL CHECKOUT */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold uppercase text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">Checkout</span>
-                            <button onClick={() => copyPostback(p.urlCheckout, `plat_chk_${p.name}`)} className={`shrink-0 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${isCopiedCheckout ? 'bg-blue-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
-                              {isCopiedCheckout ? <Check size={12} /> : <Copy size={12} />}
-                              {isCopiedCheckout ? 'Copiado!' : 'Copiar URL Checkout'}
-                            </button>
+                        {p.urlCheckout && (
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold uppercase text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">Checkout</span>
+                              <button onClick={() => copyPostback(p.urlCheckout, `plat_chk_${p.name}`)} className={`shrink-0 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${isCopiedCheckout ? 'bg-blue-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
+                                {isCopiedCheckout ? <Check size={12} /> : <Copy size={12} />}
+                                {isCopiedCheckout ? 'Copiado!' : 'Copiar URL Checkout'}
+                              </button>
+                            </div>
+                            <code className={`block text-[10px] font-mono break-all p-2 rounded border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} ${textMuted}`}>{p.urlCheckout}</code>
                           </div>
-                          <code className={`block text-[10px] font-mono break-all p-2 rounded border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} ${textMuted}`}>{p.urlCheckout}</code>
-                        </div>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-500/10">
