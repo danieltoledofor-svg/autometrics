@@ -266,12 +266,17 @@ export default function PlanningPage() {
 
     if (prodData && prodData.length > 0) {
       const fetchMetricsPaginated = async (s: string, e: string) => {
-          let res = [];
-          let p = 0;
-          let m = true;
-          while(m) {
-             const { data: c } = await supabase.from('daily_metrics').select('*').in('product_id', prodData.map(pr => pr.id)).gte('date', s).lte('date', e).range(p*1000, (p+1)*1000-1);
-             if (c && c.length > 0) { res.push(...c); if (c.length < 1000) m = false; else p++; } else m = false;
+          let res: any[] = [];
+          const productIds = prodData.map(pr => pr.id);
+          const chunkSize = 150;
+          for (let i = 0; i < productIds.length; i += chunkSize) {
+              const idChunk = productIds.slice(i, i + chunkSize);
+              let p = 0;
+              let m = true;
+              while(m) {
+                 const { data: c } = await supabase.from('daily_metrics').select('*').in('product_id', idChunk).gte('date', s).lte('date', e).range(p*1000, (p+1)*1000-1);
+                 if (c && c.length > 0) { res.push(...c); if (c.length < 1000) m = false; else p++; } else m = false;
+              }
           }
           return res;
       };

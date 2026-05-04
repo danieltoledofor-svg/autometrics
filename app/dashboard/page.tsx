@@ -157,26 +157,31 @@ export default function DashboardPage() {
     // Se tiver produtos, busca as métricas deles
     if (prodData && prodData.length > 0) {
         const productIds = prodData.map(p => p.id);
+        let allMetrics: any[] = [];
         
-        let allMetrics = [];
-        let page = 0;
-        let hasMore = true;
-        
-        while(hasMore) {
-           const { data: chunk, error } = await supabase
-             .from('daily_metrics')
-             .select('*')
-             .in('product_id', productIds)
-             .range(page * 1000, (page + 1) * 1000 - 1)
-             .order('date', { ascending: false });
-             
-           if (chunk && chunk.length > 0) {
-              allMetrics.push(...chunk);
-              if (chunk.length < 1000) hasMore = false;
-              else page++;
-           } else {
-              hasMore = false;
-           }
+        // Chunk productIds to avoid 400 Bad Request on Supabase
+        const chunkSize = 150;
+        for (let i = 0; i < productIds.length; i += chunkSize) {
+            const idChunk = productIds.slice(i, i + chunkSize);
+            let page = 0;
+            let hasMore = true;
+            
+            while(hasMore) {
+               const { data: chunk, error } = await supabase
+                 .from('daily_metrics')
+                 .select('*')
+                 .in('product_id', idChunk)
+                 .range(page * 1000, (page + 1) * 1000 - 1)
+                 .order('date', { ascending: false });
+                 
+               if (chunk && chunk.length > 0) {
+                  allMetrics.push(...chunk);
+                  if (chunk.length < 1000) hasMore = false;
+                  else page++;
+               } else {
+                  hasMore = false;
+               }
+            }
         }
         setMetrics(allMetrics);
     } else {
