@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 
 const allowedOrigins = [
   'https://autometrics.cloud',
+  'https://www.autometrics.cloud',
   'https://staging.autometrics.cloud',
   'http://localhost:3000' // Local development
 ];
