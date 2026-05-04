@@ -42,15 +42,15 @@ export default function IntegrationPage() {
   const [urlBase, setUrlBase] = useState('');
   const [urlCopied, setUrlCopied] = useState(false);
   const [urlParams, setUrlParams] = useState([
-    { key: 'utm_id', value: '{campaignid}', locked: true, ratoeira: false },
-    { key: 'utm_source', value: 'google', locked: true, ratoeira: false },
-    { key: 'utm_medium', value: 'cpc', locked: true, ratoeira: false },
-    { key: 'utm_campaign', value: '{campaignname}', locked: false, ratoeira: false },
-    { key: 'utm_term', value: '{keyword}', locked: false, ratoeira: false },
-    { key: 'utm_content', value: '{creative}', locked: false, ratoeira: false },
-    { key: 'network', value: '{network}', locked: false, ratoeira: false },
-    { key: 'device', value: '{device}', locked: false, ratoeira: false },
-    { key: 'raclid', value: 'ra_{gclid}_ra', locked: false, ratoeira: true },
+    { key: 'utm_id', value: '{campaignid}', locked: true, custom: false },
+    { key: 'utm_source', value: 'google', locked: true, custom: false },
+    { key: 'utm_medium', value: 'cpc', locked: true, custom: false },
+    { key: 'utm_campaign', value: '{campaignname}', locked: false, custom: false },
+    { key: 'utm_term', value: '{keyword}', locked: false, custom: false },
+    { key: 'utm_content', value: '{creative}', locked: false, custom: false },
+    { key: 'network', value: '{network}', locked: false, custom: false },
+    { key: 'device', value: '{device}', locked: false, custom: false },
+    { key: 'raclid', value: 'ra_{gclid}_ra', locked: false, custom: true },
   ]);
 
 
@@ -621,13 +621,13 @@ ${commonFunctions}`;
                 <Link2 size={16} className="text-indigo-500" /> Como configurar por plataforma
               </h3>
               <p className={`text-xs mb-4 ${textMuted}`}>
-                Adicione a URL de postback <strong>ao lado</strong> da URL da Ratoeira — não substitua. A maioria das plataformas aceita múltiplos postbacks.
+                Adicione a URL de postback <strong>ao lado</strong> da URL do seu tracker atual — não substitua. A maioria das plataformas aceita múltiplos postbacks.
               </p>
               <div className="space-y-4">
                 {[
                   {
                     name: 'Gurumedia',
-                    note: 'Ratoeira usa sub1–sub4. Configure sub5 = utm_id na oferta.',
+                    note: 'Caso use sub1–sub4 para outros trackers. Configure sub5 = utm_id na oferta.',
                     noteColor: 'amber',
                     urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=sale&amount={payout_amount}&cy={offer_currency}&orderid={transaction_id}&campaign_id={sub5}`,
                     urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=checkout&orderid={transaction_id}&campaign_id={sub5}`,
@@ -640,7 +640,7 @@ ${commonFunctions}`;
                   },
                   {
                     name: 'ClickBank (Global Postback S2S)',
-                    note: 'A ClickBank resolve Vendas e Checkouts no mesmo link! A Flowtracking já passa a campanha no {traffic_type}.',
+                    note: 'A ClickBank resolve Vendas e Checkouts no mesmo link! A maioria dos trackers já passa a campanha no {traffic_type}.',
                     noteColor: 'blue',
                     urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event={event_type}&amount={affiliate_earnings}&cy=USD&tid={receipt_id}&campaign_id={traffic_type}&utm_campaign={campaign}`,
                     urlCheckout: '',
@@ -745,9 +745,9 @@ ${commonFunctions}`;
               </div>
 
               <div className="mt-5 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
-                <p className="text-xs font-bold text-amber-400 mb-2">⚠️ Configuração Gurumedia (Ratoeira usa sub1–sub4)</p>
+                <p className="text-xs font-bold text-amber-400 mb-2">⚠️ Configuração Gurumedia (Se usar sub1–sub4 com terceiros)</p>
                 <p className={`text-xs ${textMuted} mb-3`}>
-                  A Ratoeira Ads preenche automaticamente <code className="bg-slate-800 px-1 rounded text-amber-300">sub1</code> a <code className="bg-slate-800 px-1 rounded text-amber-300">sub4</code> com o ID de visita dela.
+                  Alguns trackers preenchem automaticamente <code className="bg-slate-800 px-1 rounded text-amber-300">sub1</code> a <code className="bg-slate-800 px-1 rounded text-amber-300">sub4</code> com o ID de visita.
                   Configure o <strong>sub5</strong> para passar o <code className="bg-slate-800 px-1 rounded text-amber-300">utm_id</code> e use <code className="bg-slate-800 px-1 rounded text-indigo-300">campaign_id={'{sub5}'}</code> na URL de postback de <strong>Venda</strong>.
                 </p>
                 <div className={`rounded-lg p-3 font-mono text-[11px] break-all ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
@@ -770,7 +770,7 @@ ${commonFunctions}`;
             </div>
             <p className={`text-sm ${textMuted} mb-5`}>
               Script leve para registrar <strong>cliques e checkouts</strong> automaticamente direto da sua página.
-              Funciona em paralelo com Ratoeira, Hotjar ou qualquer outro tracker — <strong>sem interferência</strong>.
+              Funciona em paralelo com Hotjar ou qualquer outro tracker — <strong>sem interferência</strong>.
             </p>
 
             <div className={`flex flex-wrap items-center gap-2 text-xs mb-5 p-3 rounded-lg border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
@@ -871,7 +871,7 @@ ${commonFunctions}`;
               <div className={`p-3 rounded-lg border ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
                 <p className="text-xs text-emerald-400 font-bold mb-1">✅ Por que não há conflito</p>
                 <p className={`text-xs ${textMuted}`}>
-                  O pixel usa <code className="bg-slate-800 px-1 rounded">navigator.sendBeacon</code> — assíncrono, não bloqueia a página e não modifica nenhuma variável global. A Ratoeira, Hotjar e outros scripts continuam funcionando normalmente em paralelo.
+                  O pixel usa <code className="bg-slate-800 px-1 rounded">navigator.sendBeacon</code> — assíncrono, não bloqueia a página e não modifica nenhuma variável global. Hotjar e outros scripts continuam funcionando normalmente em paralelo.
                 </p>
               </div>
             </div>
@@ -951,7 +951,7 @@ ${commonFunctions}`;
             setUrlParams(prev => prev.filter((_, i) => i !== idx));
           };
           const addParam = () => {
-            setUrlParams(prev => [...prev, { key: '', value: '', locked: false, ratoeira: false }]);
+            setUrlParams(prev => [...prev, { key: '', value: '', locked: false, custom: false }]);
           };
           const copyUrl = () => {
             navigator.clipboard.writeText(finalUrl);
@@ -964,10 +964,10 @@ ${commonFunctions}`;
               <div className={`rounded-xl p-6 border ${bgCard}`}>
                 <div className="flex items-center gap-3 mb-1">
                   <LinkIcon size={20} className="text-emerald-500" />
-                  <h2 className={`text-lg font-bold ${textHead}`}>URL Builder — Google Ads + Ratoeira</h2>
+                  <h2 className={`text-lg font-bold ${textHead}`}>URL Builder — Google Ads + Trackers Externos</h2>
                 </div>
                 <p className={`text-sm ${textMuted} mb-5`}>
-                  Cole a URL da sua presell/landing page abaixo. Os parâmetros padrão já estão preenchidos com os valores dinâmicos do Google Ads e o rastreamento da Ratoeira.
+                  Cole a URL da sua presell/landing page abaixo. Os parâmetros padrão já estão preenchidos com os valores dinâmicos do Google Ads e rastreamento adicional.
                 </p>
 
                 {/* URL BASE */}
@@ -1001,10 +1001,10 @@ ${commonFunctions}`;
                         <div className="flex items-center gap-2 min-w-[140px]">
                           {/* Badge tipo */}
                           <span className={`shrink-0 text-[8px] sm:text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${param.locked ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' :
-                            param.ratoeira ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                              'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                            }`}>
-                            {param.locked ? 'UTM*' : param.ratoeira ? 'Ratoeira' : 'UTM'}
+                            param.custom ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                            'bg-slate-500/10 text-slate-500 border-transparent'}
+                          `}>
+                            {param.locked ? 'UTM*' : param.custom ? 'Custom' : 'UTM'}
                           </span>
                           {/* Key */}
                           <input
@@ -1042,7 +1042,7 @@ ${commonFunctions}`;
                 {/* LEGENDA */}
                 <div className="flex flex-wrap gap-3 mb-5 text-[10px]">
                   <span className="flex items-center gap-1"><span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded font-bold">UTM*</span> <span className={textMuted}>Obrigatório para AutoMetrics</span></span>
-                  <span className="flex items-center gap-1"><span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold">Ratoeira</span> <span className={textMuted}>Parâmetro de rastreamento Ratoeira Ads</span></span>
+                  <span className="flex items-center gap-1"><span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold">Custom</span> <span className={textMuted}>Parâmetro de rastreamento de Terceiros</span></span>
                   <span className="flex items-center gap-1"><span className="bg-slate-500/20 text-slate-400 border border-slate-500/30 px-1.5 py-0.5 rounded font-bold">UTM</span> <span className={textMuted}>Parâmetro UTM padrão (editável)</span></span>
                 </div>
               </div>
