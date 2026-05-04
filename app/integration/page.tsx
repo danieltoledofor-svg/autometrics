@@ -926,19 +926,7 @@ ${commonFunctions}`;
             )}
           </div>
         )}
-  var uid = '${userId}';
-  var p   = new URLSearchParams(window.location.search);
-  var cid = p.get('utm_id') || p.get('gad_campaignid') || '';
-  if (!cid) return;
-  var tid = 'clk_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
-  navigator.sendBeacon(
-    '${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/' + uid +
-    '?event=click&campaign_id=' + encodeURIComponent(cid) + '&tid=' + tid
-  );
-})();
-</script>`}
-                </pre>
-              </div>
+
 
               <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}>
                 <div className="flex items-center gap-2 mb-3">
