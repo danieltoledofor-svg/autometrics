@@ -811,7 +811,7 @@ ${commonFunctions}`;
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className={`text-xs font-bold uppercase ${textMuted}`}>1. Pixel de Clique — colar na Landing Page</p>
-                  <button onClick={() => copyPostback(`<!-- AutoMetrics Pixel (Clique) -->\n<script>(function(){var uid='${userId}';var p=new URLSearchParams(window.location.search);var cid=p.get('utm_id')||p.get('gad_campaignid')||'';if(!cid)return;var tid='clk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=click&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);})()</\script>`, 'pixel_click')}
+                  <button onClick={() => copyPostback(`<!-- AutoMetrics Pixel (Clique) -->\n<script>(function(){var uid='${userId}';var p=new URLSearchParams(window.location.search);var cid=p.get('utm_id')||p.get('gad_campaignid')||'';if(!cid)return;var tid='clk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=click&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);})()</script>`, 'pixel_click')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === 'pixel_click' ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
                     {copiedPostback === 'pixel_click' ? <Check size={12} /> : <Copy size={12} />}
                     {copiedPostback === 'pixel_click' ? 'Copiado!' : 'Copiar'}
@@ -835,33 +835,71 @@ ${commonFunctions}`;
   //   a.href = u.toString();
   // });
 })()
-</script>`}
+</` + `script>`}
                 </pre>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className={`text-xs font-bold uppercase ${textMuted}`}>2. Pixel de Checkout — colar na Plataforma de Pagamento</p>
-                  <button onClick={() => copyPostback(`<!-- AutoMetrics Pixel (Checkout) -->\n<script>(function(){var uid='${userId}';var p=new URLSearchParams(window.location.search);var cid=p.get('utm_id')||p.get('gad_campaignid')||p.get('subid4')||'';if(!cid)return;var tid='chk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=checkout&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);})()</\script>`, 'pixel_checkout')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === 'pixel_checkout' ? 'bg-blue-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
-                    {copiedPostback === 'pixel_checkout' ? <Check size={12} /> : <Copy size={12} />}
-                    {copiedPostback === 'pixel_checkout' ? 'Copiado!' : 'Copiar'}
-                  </button>
+              <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className={`text-sm font-bold uppercase ${textHead}`}>2. Rastreio de Checkout</h3>
+                  <span className="text-[10px] bg-slate-500/10 text-slate-500 px-2 py-0.5 rounded font-bold uppercase border border-slate-500/20">Atenção</span>
                 </div>
-                <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-50 text-slate-700'}`}>
-                  {`<!-- AutoMetrics Pixel (Checkout) -->
+                
+                {/* Abordagem 1: Produtor (Dono da página) */}
+                <div className="mb-4">
+                  <p className={`text-xs font-bold ${textHead} mb-1 flex items-center gap-1.5`}><span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>Se você FOR O PRODUTOR (dono do checkout):</p>
+                  <p className={`text-xs ${textMuted} mb-2 ml-3`}>Cole este script direto na sua página de checkout, da mesma forma que fez com a Landing Page.</p>
+                  <div className="ml-3">
+                    <div className="flex items-end justify-between mb-2">
+                       <button onClick={() => copyPostback(`<!-- AutoMetrics Pixel (Checkout) -->\n<script>(function(){var uid='${userId}';var p=new URLSearchParams(window.location.search);var cid=p.get('utm_id')||p.get('gad_campaignid')||'';if(!cid)return;var tid='chk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=checkout&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);})()</script>`, 'pixel_checkout')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === 'pixel_checkout' ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
+                        {copiedPostback === 'pixel_checkout' ? <Check size={12} /> : <Copy size={12} />}
+                        {copiedPostback === 'pixel_checkout' ? 'Copiado!' : 'Copiar Pixel de Checkout'}
+                      </button>
+                    </div>
+                    <pre className={`rounded-lg p-3 text-[10px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300 border border-slate-800' : 'bg-slate-50 text-slate-700 border border-slate-200'}`}>
+                      {`<!-- AutoMetrics Pixel (Checkout) -->
 <script>
 (function(){
-  var uid='${userId}';
-  var p=new URLSearchParams(window.location.search);
-  // Tenta ler o utm_id direto ou da gaveta subid4
-  var cid=p.get('utm_id')||p.get('gad_campaignid')||p.get('subid4')||'';
-  if(!cid) return;
-  var tid='chk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
-  navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=checkout&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);
-})()
-</script>`}
-                </pre>
+  var uid = '${userId}';
+  var p   = new URLSearchParams(window.location.search);
+  var cid = p.get('utm_id') || p.get('gad_campaignid') || '';
+  if (!cid) return;
+  var tid = 'chk_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+  navigator.sendBeacon(
+    '${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/' + uid +
+    '?event=checkout&campaign_id=' + encodeURIComponent(cid) + '&tid=' + tid
+  );
+})();
+</` + `script>`}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className={`my-4 border-t ${borderCol}`}></div>
+
+                {/* Abordagem 2: Afiliado (Não tem acesso ao código) */}
+                <div>
+                  <p className={`text-xs font-bold text-amber-500 mb-1 flex items-center gap-1.5`}><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Se você FOR AFILIADO (não altere o código do checkout):</p>
+                  <p className={`text-xs ${textMuted} mb-3 ml-3 leading-relaxed`}>
+                    Como afiliado, você não consegue colar códigos (scripts) na página de checkout da plataforma externa (Clickbank, Buygoods, etc). 
+                    <br/><br/>
+                    <strong>A Solução:</strong> Você deve rastrear os checkouts usando a <strong>Aba de Postback S2S</strong>. Lá, você configura dentro da plataforma (ex: Clickbank) para que ela dispare a URL de postback sempre que ocorrer o evento de "Initiate Checkout" ou "Order Impression".
+                  </p>
+                  
+                  <div className="ml-3">
+                    <button onClick={() => setActiveTab('postback')} className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-colors ${isDark ? 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
+                      Ir para configurações de Postback S2S <ArrowLeft size={14} className="rotate-180" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`p-3 rounded-lg border ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
+                <p className="text-xs text-emerald-400 font-bold mb-1">✅ Por que não há conflito</p>
+                <p className={`text-xs ${textMuted}`}>
+                  O pixel usa <code className="bg-slate-800 px-1 rounded">navigator.sendBeacon</code> — assíncrono, não bloqueia a página e não modifica nenhuma variável global. Hotjar e outros scripts continuam funcionando normalmente em paralelo.
+                </p>
               </div>
             </div>
           </div>
@@ -924,73 +962,6 @@ ${commonFunctions}`;
                 ))}
               </div>
             )}
-          </div>
-        )}
-
-
-              <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <h3 className={`text-sm font-bold uppercase ${textHead}`}>2. Rastreio de Checkout</h3>
-                  <span className="text-[10px] bg-slate-500/10 text-slate-500 px-2 py-0.5 rounded font-bold uppercase border border-slate-500/20">Atenção</span>
-                </div>
-                
-                {/* Abordagem 1: Produtor (Dono da página) */}
-                <div className="mb-4">
-                  <p className={`text-xs font-bold ${textHead} mb-1 flex items-center gap-1.5`}><span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>Se você FOR O PRODUTOR (dono do checkout):</p>
-                  <p className={`text-xs ${textMuted} mb-2 ml-3`}>Cole este script direto na sua página de checkout, da mesma forma que fez com a Landing Page.</p>
-                  <div className="ml-3">
-                    <div className="flex items-end justify-between mb-2">
-                       <button onClick={() => copyPostback(`<!-- AutoMetrics Pixel (Checkout) -->\n<script>(function(){var uid='${userId}';var p=new URLSearchParams(window.location.search);var cid=p.get('utm_id')||p.get('gad_campaignid')||'';if(!cid)return;var tid='chk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=checkout&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);})()</\script>`, 'pixel_checkout')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === 'pixel_checkout' ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
-                        {copiedPostback === 'pixel_checkout' ? <Check size={12} /> : <Copy size={12} />}
-                        {copiedPostback === 'pixel_checkout' ? 'Copiado!' : 'Copiar Pixel de Checkout'}
-                      </button>
-                    </div>
-                    <pre className={`rounded-lg p-3 text-[10px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300 border border-slate-800' : 'bg-slate-50 text-slate-700 border border-slate-200'}`}>
-                      {`<!-- AutoMetrics Pixel (Checkout) -->
-<script>
-(function(){
-  var uid = '${userId}';
-  var p   = new URLSearchParams(window.location.search);
-  var cid = p.get('utm_id') || p.get('gad_campaignid') || '';
-  if (!cid) return;
-  var tid = 'chk_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
-  navigator.sendBeacon(
-    '${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/' + uid +
-    '?event=checkout&campaign_id=' + encodeURIComponent(cid) + '&tid=' + tid
-  );
-})();
-</script>`}
-                    </pre>
-                  </div>
-                </div>
-
-                <div className={`my-4 border-t ${borderCol}`}></div>
-
-                {/* Abordagem 2: Afiliado (Não tem acesso ao código) */}
-                <div>
-                  <p className={`text-xs font-bold text-amber-500 mb-1 flex items-center gap-1.5`}><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Se você FOR AFILIADO (não altere o código do checkout):</p>
-                  <p className={`text-xs ${textMuted} mb-3 ml-3 leading-relaxed`}>
-                    Como afiliado, você não consegue colar códigos (scripts) na página de checkout da plataforma externa (Clickbank, Buygoods, etc). 
-                    <br/><br/>
-                    <strong>A Solução:</strong> Você deve rastrear os checkouts usando a <strong>Aba de Postback S2S</strong>. Lá, você configura dentro da plataforma (ex: Clickbank) para que ela dispare a URL de postback sempre que ocorrer o evento de "Initiate Checkout" ou "Order Impression".
-                  </p>
-                  
-                  <div className="ml-3">
-                    <button onClick={() => setActiveTab('postback')} className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-colors ${isDark ? 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
-                      Ir para configurações de Postback S2S <ArrowLeft size={14} className="rotate-180" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`p-3 rounded-lg border ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
-                <p className="text-xs text-emerald-400 font-bold mb-1">✅ Por que não há conflito</p>
-                <p className={`text-xs ${textMuted}`}>
-                  O pixel usa <code className="bg-slate-800 px-1 rounded">navigator.sendBeacon</code> — assíncrono, não bloqueia a página e não modifica nenhuma variável global. Hotjar e outros scripts continuam funcionando normalmente em paralelo.
-                </p>
-              </div>
-            </div>
           </div>
         )}
 
