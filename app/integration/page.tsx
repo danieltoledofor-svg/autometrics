@@ -36,7 +36,29 @@ export default function IntegrationPage() {
   const [vturbTokenVisible, setVturbTokenVisible] = useState(false);
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'google' | 'postback' | 'pixel' | 'vturb' | 'url'>('google');
+  const [activeTab, setActiveTab] = useState<'google' | 'postback' | 'pixel' | 'vturb' | 'url' | 'logs'>('google');
+  
+  // Logs
+  const [rawLogs, setRawLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'logs' && userId) {
+      fetchLogs();
+    }
+  }, [activeTab, userId]);
+
+  const fetchLogs = async () => {
+    setLoadingLogs(true);
+    const { data } = await supabase
+      .from('raw_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (data) setRawLogs(data);
+    setLoadingLogs(false);
+  };
 
   // URL Builder
   const [urlBase, setUrlBase] = useState('');
@@ -486,6 +508,7 @@ ${commonFunctions}`;
             { key: 'pixel', icon: <MousePointerClick size={15} />, label: 'Pixel' },
             { key: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb' },
             { key: 'url', icon: <LinkIcon size={15} />, label: 'URL Builder' },
+            { key: 'logs', icon: <AlertCircle size={15} />, label: 'Logs Brutos' },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -798,6 +821,111 @@ ${commonFunctions}`;
                   {`<!-- AutoMetrics Pixel (Clique) -->
 <script>
 (function(){
+  var uid='${userId}';
+  var p=new URLSearchParams(window.location.search);
+  var cid=p.get('utm_id')||p.get('gad_campaignid')||'';
+  if(!cid) return;
+  var tid='clk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
+  navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=click&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);
+  
+  // OPCIONAL: Se quiser blindar a venda (injetar ID na URL do Checkout da BuyGoods/Clickbank no subid4):
+  // document.querySelectorAll('a[href*="buygoods.com"], a[href*="clickbank.net"]').forEach(a => {
+  //   var u = new URL(a.href);
+  //   if(u.hostname.includes('buygoods')) u.searchParams.set('subid4', cid);
+  //   a.href = u.toString();
+  // });
+})()
+</script>`}
+                </pre>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className={`text-xs font-bold uppercase ${textMuted}`}>2. Pixel de Checkout — colar na Plataforma de Pagamento</p>
+                  <button onClick={() => copyPostback(`<!-- AutoMetrics Pixel (Checkout) -->\n<script>(function(){var uid='${userId}';var p=new URLSearchParams(window.location.search);var cid=p.get('utm_id')||p.get('gad_campaignid')||p.get('subid4')||'';if(!cid)return;var tid='chk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=checkout&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);})()</\script>`, 'pixel_checkout')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === 'pixel_checkout' ? 'bg-blue-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
+                    {copiedPostback === 'pixel_checkout' ? <Check size={12} /> : <Copy size={12} />}
+                    {copiedPostback === 'pixel_checkout' ? 'Copiado!' : 'Copiar'}
+                  </button>
+                </div>
+                <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-50 text-slate-700'}`}>
+                  {`<!-- AutoMetrics Pixel (Checkout) -->
+<script>
+(function(){
+  var uid='${userId}';
+  var p=new URLSearchParams(window.location.search);
+  // Tenta ler o utm_id direto ou da gaveta subid4
+  var cid=p.get('utm_id')||p.get('gad_campaignid')||p.get('subid4')||'';
+  if(!cid) return;
+  var tid='chk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
+  navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=checkout&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);
+})()
+</script>`}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── ABA: LOGS ─────────────────────── */}
+        {activeTab === 'logs' && userId && (
+          <div className={`rounded-xl p-6 border ${bgCard}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <AlertCircle size={20} className="text-pink-500" />
+                <h2 className={`text-lg font-bold ${textHead}`}>Logs Brutos (Auditoria)</h2>
+              </div>
+              <button onClick={fetchLogs} className={`p-2 text-xs flex items-center gap-2 rounded-lg border ${isDark ? 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
+                <Zap size={14} /> Atualizar
+              </button>
+            </div>
+            <p className={`text-sm ${textMuted} mb-5`}>
+              Aqui você vê todas as requisições cruas que chegaram no seu postback. Excelente para identificar se a plataforma está enviando o ID da campanha corretamente.
+            </p>
+
+            {loadingLogs ? (
+              <p className={`text-sm ${textMuted}`}>Carregando logs...</p>
+            ) : rawLogs.length === 0 ? (
+              <div className={`p-8 text-center rounded-lg border border-dashed ${isDark ? 'border-slate-800 text-slate-500' : 'border-slate-300 text-slate-400'}`}>
+                Nenhum log registrado ainda. As próximas vendas e checkouts aparecerão aqui.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {rawLogs.map(log => (
+                  <div key={log.id} className={`p-4 rounded-xl border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded border ${
+                          log.event_type === 'sale' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                          log.event_type === 'checkout' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                          log.event_type === 'click' ? 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20' :
+                          'bg-slate-500/10 text-slate-500 border-slate-500/20'
+                        }`}>
+                          {log.event_type || 'Desconhecido'}
+                        </span>
+                        <span className={`text-xs font-mono ${textMuted}`}>
+                          {new Date(log.created_at).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <tbody>
+                          {Object.entries(log.payload || {}).map(([k, v]) => (
+                            <tr key={k} className={`border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                              <td className={`py-2 pr-4 font-bold text-indigo-400 w-1/4`}>{k}</td>
+                              <td className={`py-2 break-all ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{String(v)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
   var uid = '${userId}';
   var p   = new URLSearchParams(window.location.search);
   var cid = p.get('utm_id') || p.get('gad_campaignid') || '';

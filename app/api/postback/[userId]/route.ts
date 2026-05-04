@@ -60,6 +60,18 @@ export async function GET(
             return new Response('MISSING_PARAMS', { status: 400 });
         }
 
+        // ── 0. Salvar Log Bruto (Auditoria) ─────────────────────────────
+        try {
+            const payloadStr = Object.fromEntries(searchParams.entries());
+            await supabase.from('raw_logs').insert({
+                user_id: userId,
+                event_type: event,
+                payload: payloadStr
+            });
+        } catch (logErr) {
+            console.error('[Postback] Erro ao salvar log bruto:', logErr);
+        }
+
         const validEvents = ['sale', 'checkout', 'click', 'refund'];
         if (!validEvents.includes(event)) {
             return new Response('INVALID_EVENT', { status: 400 });
