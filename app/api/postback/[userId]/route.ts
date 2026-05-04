@@ -4,37 +4,17 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-/**
- * GET /api/postback/[userId]
- *
- * Parâmetros aceitos:
- *  - event        : sale | checkout | click | refund  (obrigatório)
- *  - campaign_id  : ID numérico da campanha Google Ads (utm_id / gad_campaignid)
- *  - utm_campaign : Nome da campanha Google Ads (fallback quando não há campaign_id)
- *  - amount       : valor da transação (para sale e refund)
- *  - cy           : moeda (BRL, USD...) — default BRL
- *  - tid          : transaction_id para deduplicação
- *
- * URLs de Postback por Plataforma:
- *
- *  Cartpanda: (Disparar em: initial_sale, upsell, initiate_checkout)
- *  -> https://seusite.com/api/postback/[USER_ID]?event=sale&amount={amount_net}&cy={currency}&tid={order_id}&utm_campaign={utm_campaign}&campaign_id={cid}
- *     *(Para checkout trocar event=sale para event=checkout)
- *
- *  Clickbank: (Adicionar Custom Postback/Pixel global)
- *  -> https://seusite.com/api/postback/[USER_ID]?event={event_type}&amount={total_transaction_amount}&cy={order_currency}&tid={receipt_id}&campaign_id={aff_sub1}
- *     *(O script mapeia Purchase/Upsell para sale e Order_impression para checkout automaticamente)
- *
- *  MaxWeb / Buygoods:
- *  -> https://seusite.com/api/postback/[USER_ID]?event=sale&amount={COMMISSION_AMOUNT}&tid={ORDERID}&campaign_id={SUBID}
- *
- *  Gurumedia:
- *  -> https://seusite.com/api/postback/[USER_ID]?event=sale&amount={amount}&tid={transaction_id}&campaign_id={sub5}
- *
- *  Digistore:
- *  -> https://seusite.com/api/postback/[USER_ID]?event=sale&amount={amount}&tid={order_id}&campaign_id={sid5}
- */
-export async function GET(
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS() {
+    return new Response(null, { status: 204, headers: corsHeaders });
+}
+
+async function handleRequest(
     request: Request,
     { params }: { params: Promise<{ userId: string }> }
 ) {
@@ -57,17 +37,17 @@ export async function GET(
 
         // ── Validação básica ────────────────────────────────────────────
         if (!userId || !event) {
-            return new Response('MISSING_PARAMS', { status: 400 });
+            return new Response('MISSING_PARAMS', { status: 400, headers: corsHeaders });
         }
 
         const validEvents = ['sale', 'checkout', 'click', 'refund'];
         if (!validEvents.includes(event)) {
-            return new Response('INVALID_EVENT', { status: 400 });
+            return new Response('INVALID_EVENT', { status: 400, headers: corsHeaders });
         }
 
         // Precisa de pelo menos um identificador de campanha
         if (!campaignId && !campaignName) {
-            return new Response('MISSING_CAMPAIGN_IDENTIFIER', { status: 400 });
+            return new Response('MISSING_CAMPAIGN_IDENTIFIER', { status: 400, headers: corsHeaders });
         }
 
         // ── 1. Localizar o produto ──────────────────────────────────────
@@ -100,7 +80,7 @@ export async function GET(
             console.warn(
                 `[Postback] Produto não encontrado. user_id=${userId} campaign_id=${campaignId} utm_campaign=${campaignName}`
             );
-            return new Response('OK', { status: 200 });
+            return new Response('OK', { status: 200, headers: corsHeaders });
         }
 
         const today = (() => {
@@ -118,9 +98,9 @@ export async function GET(
                 .insert({ product_id: product.id, transaction_id: tid, event_type: event, amount, currency });
 
             if (dupError) {
-                if (dupError.code === '23505') return new Response('OK', { status: 200 }); // duplicata
+                if (dupError.code === '23505') return new Response('OK', { status: 200, headers: corsHeaders }); // duplicata
                 console.error('[Postback] Erro ao inserir postback_event:', dupError.message);
-                return new Response('DB_ERROR', { status: 500 });
+                return new Response('DB_ERROR', { status: 500, headers: corsHeaders });
             }
         }
 
@@ -178,13 +158,27 @@ export async function GET(
 
         if (upsertError) {
             console.error('[Postback] Erro no upsert:', upsertError.message);
-            return new Response('DB_ERROR', { status: 500 });
+            return new Response('DB_ERROR', { status: 500, headers: corsHeaders });
         }
 
-        return new Response('OK', { status: 200 });
+        return new Response('OK', { status: 200, headers: corsHeaders });
 
     } catch (err: any) {
         console.error('[Postback] Erro inesperado:', err.message);
-        return new Response('SERVER_ERROR', { status: 500 });
+        return new Response('SERVER_ERROR', { status: 500, headers: corsHeaders });
     }
+}
+
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ userId: string }> }
+) {
+    return handleRequest(request, { params });
+}
+
+export async function POST(
+    request: Request,
+    { params }: { params: Promise<{ userId: string }> }
+) {
+    return handleRequest(request, { params });
 }
