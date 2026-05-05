@@ -1,99 +1,117 @@
 #!/bin/bash
 # ============================================================
-# Script de Deploy Automático para Hostinger
-# Autometrics - autometrics.cloud
+# Script de Deploy Autometrics.cloud → Hostinger
 # ============================================================
 
 HOSTINGER_USER="u905997120"
 HOSTINGER_HOST="212.85.29.81"
 HOSTINGER_PORT="65002"
 REMOTE_PATH="domains/autometrics.cloud/public_html"
-APP_ROOT="domains/autometrics.cloud"
+SSH_CMD="ssh -p $HOSTINGER_PORT $HOSTINGER_USER@$HOSTINGER_HOST"
+SCP_CMD="scp -P $HOSTINGER_PORT"
 
 echo "=============================="
 echo "   DEPLOY AUTOMETRICS.CLOUD   "
 echo "=============================="
 
-# 1. Build local (NEXT_PUBLIC_ vars são embutidas do .env.local)
+# 1. Build local
 echo ""
-echo "[1/4] Compilando o projeto localmente..."
-BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") npm run build
+echo "[1/5] Compilando o projeto localmente..."
+npm run build
 
 if [ $? -ne 0 ]; then
   echo "❌ Build falhou! Abortando deploy."
   exit 1
 fi
+echo "✅ Build concluído!"
 
-echo "✅ Build concluído com sucesso!"
-
-# 2. Upload dos arquivos compilados
+# 2. Limpar .next antigo no servidor ANTES de enviar o novo
+#    Evita corrupção por mix de arquivos de builds diferentes
 echo ""
-echo "[2/4] Enviando arquivos para o Hostinger via SCP..."
+echo "[2/5] Limpando build antigo no servidor..."
 echo "      (Será pedida a senha do Hostinger)"
-scp -P $HOSTINGER_PORT -r .next next.config.ts package.json server.js \
-    $HOSTINGER_USER@$HOSTINGER_HOST:$REMOTE_PATH/
+$SSH_CMD "rm -rf ~/$REMOTE_PATH/.next && echo '[OK] .next antigo removido'"
 
 if [ $? -ne 0 ]; then
-  echo "❌ Upload falhou! Verifique a senha e tente novamente."
-  exit 1
+  echo "⚠️  Não foi possível limpar o .next antigo (continuando mesmo assim...)"
 fi
 
-echo "✅ Arquivos enviados com sucesso!"
-
-# 3. Instalar dependências no servidor
+# 3. Upload dos arquivos novos
 echo ""
-echo "[3/4] Instalando dependências e reiniciando o servidor..."
+echo "[3/5] Enviando arquivos para o Hostinger..."
 echo "      (Será pedida a senha do Hostinger novamente)"
-ssh -p $HOSTINGER_PORT $HOSTINGER_USER@$HOSTINGER_HOST << 'ENDSSH'
-  # Instalar dependências de produção
-  cd ~/domains/autometrics.cloud/public_html
-  npm install --production 2>/dev/null
+$SCP_CMD -r .next package.json package-lock.json server.js next.config.ts \
+    $HOSTINGER_USER@$HOSTINGER_HOST:~/$REMOTE_PATH/
 
-  # Estratégia 1: Passenger restart (local correto - raiz da app)
+if [ $? -ne 0 ]; then
+  echo "❌ Upload falhou!"
+  exit 1
+fi
+echo "✅ Arquivos enviados!"
+
+# 4. Instalar dependências e reiniciar no servidor
+echo ""
+echo "[4/5] Instalando dependências e reiniciando..."
+echo "      (Será pedida a senha do Hostinger novamente)"
+$SSH_CMD bash << 'ENDSSH'
+  set -e
+  cd ~/domains/autometrics.cloud/public_html
+
+  echo "--- Instalando dependências..."
+  npm ci --production --silent 2>/dev/null || npm install --production --silent 2>/dev/null
+  echo "[OK] Dependências instaladas"
+
+  echo "--- Reiniciando servidor (Passenger)..."
   mkdir -p ~/domains/autometrics.cloud/tmp
   touch ~/domains/autometrics.cloud/tmp/restart.txt
-  echo "[OK] Passenger restart.txt atualizado"
-
-  # Estratégia 2: restart.txt dentro de public_html (fallback)
+  # Fallback: restart.txt dentro do app também
+  mkdir -p ~/domains/autometrics.cloud/public_html/tmp
   touch ~/domains/autometrics.cloud/public_html/tmp/restart.txt 2>/dev/null || true
+  echo "[OK] Restart.txt atualizado"
 
-  # Estratégia 3: Se PM2 estiver disponível
-  if command -v pm2 &> /dev/null; then
+  # Restart PM2 se disponível
+  if command -v pm2 &>/dev/null; then
     pm2 restart autometrics 2>/dev/null || pm2 restart all 2>/dev/null || true
     echo "[OK] PM2 reiniciado"
   fi
 
-  # Estratégia 4: Forçar reinício matando o processo Node atual
-  # (Passenger vai subir um novo automaticamente)
-  PID=$(lsof -ti:3000 2>/dev/null)
+  # Forçar kill do processo atual na porta 3000 (Passenger sobe novo)
+  PID=$(lsof -ti:3000 2>/dev/null || true)
   if [ -n "$PID" ]; then
     kill -SIGTERM $PID 2>/dev/null || true
-    echo "[OK] Processo na porta 3000 finalizado (será reiniciado automaticamente)"
+    echo "[OK] Processo Node.js anterior finalizado"
   fi
 
-  echo "Reinicialização concluída."
+  echo "--- Reinicialização concluída."
 ENDSSH
 
-# 4. Verificar saúde do deploy
+# 5. Verificar saúde
 echo ""
-echo "[4/4] Aguardando servidor reiniciar..."
-sleep 15
+echo "[5/5] Aguardando servidor inicializar (30s)..."
+sleep 30
 
 HEALTH_URL="https://autometrics.cloud/api/health"
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null)
+echo "   Verificando: $HEALTH_URL"
 
-if [ "$HTTP_STATUS" = "200" ]; then
-  echo "✅ Servidor respondendo (HTTP $HTTP_STATUS)"
-  echo "   Detalhes do deploy:"
-  curl -s "$HEALTH_URL" | python3 -m json.tool 2>/dev/null || curl -s "$HEALTH_URL"
-else
-  echo "⚠️  Servidor respondeu com HTTP $HTTP_STATUS ou não está acessível ainda."
-  echo "   Tente acessar manualmente: $HEALTH_URL"
+for i in 1 2 3; do
+  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$HEALTH_URL" 2>/dev/null)
+  if [ "$HTTP_STATUS" = "200" ]; then
+    echo "✅ Servidor OK (HTTP 200)"
+    curl -s "$HEALTH_URL" | python3 -m json.tool 2>/dev/null || curl -s "$HEALTH_URL"
+    break
+  else
+    echo "   Tentativa $i: HTTP $HTTP_STATUS — aguardando mais 15s..."
+    sleep 15
+  fi
+done
+
+if [ "$HTTP_STATUS" != "200" ]; then
+  echo "⚠️  Servidor ainda retorna HTTP $HTTP_STATUS."
+  echo "   Acesse: $HEALTH_URL"
 fi
 
 echo ""
 echo "=============================="
-echo "✅ DEPLOY CONCLUÍDO!"
 echo "   Acesse: https://autometrics.cloud"
-echo "   Health: https://autometrics.cloud/api/health"
+echo "   Health: $HEALTH_URL"
 echo "=============================="
