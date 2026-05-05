@@ -8,16 +8,10 @@ import {
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
 } from 'recharts';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-
-// Configuração Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 // Função para garantir data no fuso local (evita erros de UTC)
 function getLocalYYYYMMDD(date: Date) {
@@ -88,11 +82,20 @@ export default function DashboardPage() {
       const savedDateRange = localStorage.getItem('autometrics_date_range');
       if (savedDateRange) {
         if (savedDateRange === 'custom') {
-          setDateRange('custom');
           const savedStart = localStorage.getItem('autometrics_start_date');
           const savedEnd = localStorage.getItem('autometrics_end_date');
-          if (savedStart) setStartDate(savedStart);
-          if (savedEnd) setEndDate(savedEnd);
+          // Se a data final customizada for muito antiga (fora da janela de 60 dias), reseta para este mês
+          const sixtyDaysAgoLimit = new Date();
+          sixtyDaysAgoLimit.setDate(sixtyDaysAgoLimit.getDate() - 60);
+          const limitStr = getLocalYYYYMMDD(sixtyDaysAgoLimit);
+          if (savedEnd && savedEnd < limitStr) {
+            console.log('[Autometrics] Date range customizado muito antigo, resetando para este mês');
+            handlePresetChange('this_month');
+          } else {
+            setDateRange('custom');
+            if (savedStart) setStartDate(savedStart);
+            if (savedEnd) setEndDate(savedEnd);
+          }
         } else {
           handlePresetChange(savedDateRange);
         }
@@ -128,7 +131,8 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.USDBRL) setLiveDollar(parseFloat(data.USDBRL.bid));
       if (data.EURBRL) setLiveEuro(parseFloat(data.EURBRL.bid));
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e);
+    }
   }
 
   async function fetchInitialData(userId: string) {
@@ -151,13 +155,33 @@ export default function DashboardPage() {
       }
     }
     const prodData = allProducts;
+    console.log('[Autometrics] Produtos encontrados:', prodData.length);
 
     setProducts(prodData || []);
+
+    // Valida o MCC salvo: se não existir mais nos produtos atuais, reseta para 'all'
+    const currentSavedMcc = localStorage.getItem('autometrics_selected_mcc');
+    if (currentSavedMcc && currentSavedMcc !== 'all') {
+      const validMccs = new Set(
+        (prodData || []).map((p: any) => p.mcc_name?.trim() ? p.mcc_name : 'Contas Individuais')
+      );
+      if (!validMccs.has(currentSavedMcc)) {
+        console.log('[Autometrics] MCC salvo inválido ("' + currentSavedMcc + '"), resetando para "all"');
+        setSelectedMcc('all');
+        localStorage.setItem('autometrics_selected_mcc', 'all');
+      }
+    }
 
     // Se tiver produtos, busca as métricas deles
     if (prodData && prodData.length > 0) {
         const productIds = prodData.map(p => p.id);
         let allMetrics: any[] = [];
+        
+        // Define data de corte (60 dias atrás)
+        const sixtyDaysAgo = new Date();
+        sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+        const sixtyDaysAgoStr = getLocalYYYYMMDD(sixtyDaysAgo);
+        console.log('[Autometrics] Buscando métricas desde:', sixtyDaysAgoStr, '| Total product IDs:', productIds.length);
         
         // Chunk productIds to avoid 400 Bad Request on Supabase
         const chunkSize = 150;
@@ -171,20 +195,26 @@ export default function DashboardPage() {
                  .from('daily_metrics')
                  .select('*')
                  .in('product_id', idChunk)
+                 .gte('date', sixtyDaysAgoStr)
                  .range(page * 1000, (page + 1) * 1000 - 1)
                  .order('date', { ascending: false });
                  
-               if (chunk && chunk.length > 0) {
-                  allMetrics.push(...chunk);
-                  if (chunk.length < 1000) hasMore = false;
-                  else page++;
+               if (error) {
+                 console.error('[Autometrics] Erro métricas chunk', i, 'página', page, ':', error.message);
+                 hasMore = false;
+               } else if (chunk && chunk.length > 0) {
+                 allMetrics.push(...chunk);
+                 if (chunk.length < 1000) hasMore = false;
+                 else page++;
                } else {
-                  hasMore = false;
+                 hasMore = false;
                }
             }
         }
+        console.log('[Autometrics] Total métricas carregadas:', allMetrics.length);
         setMetrics(allMetrics);
     } else {
+        console.warn('[Autometrics] Nenhum produto encontrado para este usuário!');
         setMetrics([]);
     }
   }
