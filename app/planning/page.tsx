@@ -203,7 +203,7 @@ export default function PlanningPage() {
     
     // Metas: Busca pela chave do mês de INÍCIO
     const currentMonthKey = startDate.slice(0, 7);
-    const { data: goalData } = await supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonthKey).single();
+    const { data: goalData } = await supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonthKey).maybeSingle();
     if (goalData) {
       setGoal({ revenue: goalData.revenue_target, profit: goalData.profit_target, limit: goalData.ad_spend_limit });
       

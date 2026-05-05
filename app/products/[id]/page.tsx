@@ -294,7 +294,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (showManualEntry && manualData.date && productId) {
       const fetchDayData = async () => {
-        const { data } = await supabase.from('daily_metrics').select('visits, checkouts, vsl_clicks, vsl_checkouts, conversions, conversion_value, refunds, currency').eq('product_id', productId).eq('date', manualData.date).single();
+        const { data } = await supabase.from('daily_metrics').select('visits, checkouts, vsl_clicks, vsl_checkouts, conversions, conversion_value, refunds, currency').eq('product_id', productId).eq('date', manualData.date).maybeSingle();
         if (data) {
           setManualData(prev => ({
             ...prev,
