@@ -29,9 +29,10 @@ export default function DashboardPage() {
   // Dados
   const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
-  
+  const [fetchedFrom, setFetchedFrom] = useState(''); // earliest date loaded into metrics state
+
   // --- NOVOS ESTADOS DE DATA (PADRONIZADO) ---
-  const [dateRange, setDateRange] = useState('this_month'); 
+  const [dateRange, setDateRange] = useState('this_month');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -79,23 +80,15 @@ export default function DashboardPage() {
       setUser(session.user); 
 
       // 3. Inicializa Datas
+      let initialFromDate: string | undefined;
       const savedDateRange = localStorage.getItem('autometrics_date_range');
       if (savedDateRange) {
         if (savedDateRange === 'custom') {
           const savedStart = localStorage.getItem('autometrics_start_date');
           const savedEnd = localStorage.getItem('autometrics_end_date');
-          // Se a data final customizada for muito antiga (fora da janela de 60 dias), reseta para este mês
-          const sixtyDaysAgoLimit = new Date();
-          sixtyDaysAgoLimit.setDate(sixtyDaysAgoLimit.getDate() - 60);
-          const limitStr = getLocalYYYYMMDD(sixtyDaysAgoLimit);
-          if (savedEnd && savedEnd < limitStr) {
-            console.log('[Autometrics] Date range customizado muito antigo, resetando para este mês');
-            handlePresetChange('this_month');
-          } else {
-            setDateRange('custom');
-            if (savedStart) setStartDate(savedStart);
-            if (savedEnd) setEndDate(savedEnd);
-          }
+          setDateRange('custom');
+          if (savedStart) { setStartDate(savedStart); initialFromDate = savedStart; }
+          if (savedEnd) setEndDate(savedEnd);
         } else {
           handlePresetChange(savedDateRange);
         }
@@ -105,7 +98,7 @@ export default function DashboardPage() {
 
       // 4. Carrega Dados
       await Promise.all([
-        fetchInitialData(session.user.id), 
+        fetchInitialData(session.user.id, initialFromDate),
         fetchLiveRates()
       ]);
       
@@ -135,7 +128,7 @@ export default function DashboardPage() {
     }
   }
 
-  async function fetchInitialData(userId: string) {
+  async function fetchInitialData(userId: string, fromDate?: string) {
     let allProducts: any[] = [];
     let p_prod = 0;
     let m_prod = true;
@@ -177,10 +170,16 @@ export default function DashboardPage() {
         const productIds = prodData.map(p => p.id);
         let allMetrics: any[] = [];
         
-        // Define data de corte (60 dias atrás)
-        const sixtyDaysAgo = new Date();
-        sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-        const sixtyDaysAgoStr = getLocalYYYYMMDD(sixtyDaysAgo);
+        // Define data de corte: usa fromDate se fornecido, senão últimos 60 dias
+        let sixtyDaysAgoStr: string;
+        if (fromDate) {
+          sixtyDaysAgoStr = fromDate;
+        } else {
+          const sixtyDaysAgo = new Date();
+          sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+          sixtyDaysAgoStr = getLocalYYYYMMDD(sixtyDaysAgo);
+        }
+        setFetchedFrom(sixtyDaysAgoStr);
         console.log('[Autometrics] Buscando métricas desde:', sixtyDaysAgoStr, '| Total product IDs:', productIds.length);
         
         // Chunk productIds to avoid 400 Bad Request on Supabase
@@ -256,11 +255,16 @@ export default function DashboardPage() {
     if (type === 'start') {
       setStartDate(value);
       localStorage.setItem('autometrics_start_date', value);
+      // Se a data pedida é anterior à janela carregada, re-busca do banco
+      if (user && fetchedFrom && value < fetchedFrom) {
+        setLoading(true);
+        fetchInitialData(user.id, value).then(() => setLoading(false));
+      }
     } else {
       setEndDate(value);
       localStorage.setItem('autometrics_end_date', value);
     }
-    setDateRange('custom'); // Muda o dropdown para "Personalizado" automaticamente
+    setDateRange('custom');
     localStorage.setItem('autometrics_date_range', 'custom');
   };
 
