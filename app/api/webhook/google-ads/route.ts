@@ -23,7 +23,8 @@ export async function POST(request: Request) {
     // 1. Busca ou Cria o Produto (Vínculo)
     // Tenta buscar primeiro pelo ID exato da campanha
     let product: any = null;
-    const safeCampaignId = campaign_id ? String(campaign_id) : null;
+    const rawId = campaign_id ? String(campaign_id) : null;
+    const safeCampaignId = (rawId && rawId !== 'undefined' && rawId !== 'null') ? rawId : null;
     
     if (safeCampaignId) {
       const { data } = await supabase.from('products').select('id').eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).maybeSingle();
@@ -39,8 +40,9 @@ export async function POST(request: Request) {
         .eq('user_id', user_id)
         .maybeSingle();
       
-      // Só aceita o match por nome se o produto ainda não tiver um ID diferente salvo
-      if (data && (!data.google_ads_campaign_id || data.google_ads_campaign_id === safeCampaignId)) {
+      // Só aceita o match por nome se o produto não tiver um ID diferente salvo
+      const existingId = (data?.google_ads_campaign_id && data.google_ads_campaign_id !== 'undefined') ? data.google_ads_campaign_id : null;
+      if (data && (!existingId || existingId === safeCampaignId)) {
         product = data;
       }
     }
@@ -50,7 +52,10 @@ export async function POST(request: Request) {
        const { data, error: multiError } = await supabase.from('products').select('id, account_name, google_ads_campaign_id').eq('google_ads_campaign_name', campaign_name).eq('user_id', user_id).limit(10);
        if (data && data.length > 0) {
          // Busca um produto que não tenha ID de campanha conflitante
-         const validMatch = data.find(p => !p.google_ads_campaign_id || p.google_ads_campaign_id === safeCampaignId);
+         const validMatch = data.find(p => {
+           const pid = (p.google_ads_campaign_id && p.google_ads_campaign_id !== 'undefined') ? p.google_ads_campaign_id : null;
+           return !pid || pid === safeCampaignId;
+         });
          if (validMatch) product = validMatch;
        }
     }
