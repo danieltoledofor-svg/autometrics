@@ -46,7 +46,7 @@ echo "✅ Pacote criado: $TARBALL ($TARBALL_SIZE)"
 echo ""
 echo "[3/4] Enviando pacote para o Hostinger..."
 echo "      (Será pedida a senha do Hostinger)"
-$SCP_CMD "$TARBALL" $HOSTINGER_USER@$HOSTINGER_HOST:~/$REMOTE_PATH/
+cat "$TARBALL" | $SSH_CMD "cat > ~/$REMOTE_PATH/$TARBALL"
 
 if [ $? -ne 0 ]; then
   echo "❌ Upload falhou!"

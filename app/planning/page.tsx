@@ -59,6 +59,8 @@ export default function PlanningPage() {
   const [viewCurrency, setViewCurrency] = useState<'BRL' | 'USD' | 'EUR'>('BRL');
   const [rateConfig, setRateConfig] = useState<'USD' | 'EUR'>('USD');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [dollarInput, setDollarInput] = useState("5,60");
+  const [euroInput, setEuroInput] = useState("6,00");
 
   const [tempGoal, setTempGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
   const [profitType, setProfitType] = useState<'value' | 'percentage'>('value');
@@ -82,9 +84,21 @@ export default function PlanningPage() {
       const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
       if (savedTheme) setTheme(savedTheme);
       const savedDollar = localStorage.getItem('autometrics_manual_dollar');
-      if (savedDollar) setManualDollar(parseFloat(savedDollar));
+      if (savedDollar) {
+        const dVal = parseFloat(savedDollar);
+        setManualDollar(dVal);
+        setDollarInput(dVal.toFixed(2).replace('.', ','));
+      } else {
+        setDollarInput((5.60).toFixed(2).replace('.', ','));
+      }
       const savedEuro = localStorage.getItem('autometrics_manual_euro');
-      if (savedEuro) setManualEuro(parseFloat(savedEuro));
+      if (savedEuro) {
+        const eVal = parseFloat(savedEuro);
+        setManualEuro(eVal);
+        setEuroInput(eVal.toFixed(2).replace('.', ','));
+      } else {
+        setEuroInput((6.00).toFixed(2).replace('.', ','));
+      }
       
       const savedCurrency = localStorage.getItem('autometrics_view_currency') as 'BRL' | 'USD' | 'EUR';
       if (savedCurrency && ['BRL', 'USD', 'EUR'].includes(savedCurrency)) setViewCurrency(savedCurrency);
@@ -137,6 +151,38 @@ export default function PlanningPage() {
   const handleManualEuroChange = (val: number) => {
     setManualEuro(val);
     localStorage.setItem('autometrics_manual_euro', val.toString());
+  };
+
+  const handleDollarInputChange = (val: string) => {
+    const cleanVal = val.replace(/[^0-9.,]/g, '');
+    setDollarInput(cleanVal);
+    
+    const normalized = cleanVal.replace(',', '.');
+    const parsed = parseFloat(normalized);
+    if (!isNaN(parsed) && parsed > 0) {
+      setManualDollar(parsed);
+      localStorage.setItem('autometrics_manual_dollar', parsed.toString());
+    }
+  };
+
+  const handleDollarInputBlur = () => {
+    setDollarInput(manualDollar.toFixed(2).replace('.', ','));
+  };
+
+  const handleEuroInputChange = (val: string) => {
+    const cleanVal = val.replace(/[^0-9.,]/g, '');
+    setEuroInput(cleanVal);
+    
+    const normalized = cleanVal.replace(',', '.');
+    const parsed = parseFloat(normalized);
+    if (!isNaN(parsed) && parsed > 0) {
+      setManualEuro(parsed);
+      localStorage.setItem('autometrics_manual_euro', parsed.toString());
+    }
+  };
+
+  const handleEuroInputBlur = () => {
+    setEuroInput(manualEuro.toFixed(2).replace('.', ','));
   };
 
   async function fetchLiveRates() {
@@ -610,32 +656,97 @@ export default function PlanningPage() {
                </div>
            </div>
            
-           <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-lg border gap-4 sm:gap-4 flex-wrap xl:flex-nowrap ${bgCard} w-full sm:w-auto`}>
-              <div className={`flex items-center justify-between sm:justify-start gap-3 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 ${borderCol} pr-4`}>
-                 <div>
-                    <span className="text-[9px] text-orange-500 uppercase font-bold block">{rateConfig === 'USD' ? 'Dólar Agora' : 'Euro Agora'}</span>
-                    <span className="text-xs font-mono font-bold text-orange-400">R$ {(rateConfig === 'USD' ? liveDollar : liveEuro).toFixed(2)}</span>
-                 </div>
-                 <div>
-                    <span className="text-[9px] text-blue-500 uppercase font-bold block">{rateConfig === 'USD' ? 'Meu Dólar' : 'Meu Euro'}</span>
-                    <div className="flex items-center gap-1">
-                       <span className={`text-[10px] ${textMuted}`}>R$</span>
-                       <input 
-                          type="number" step="0.01" 
-                          className={`w-12 bg-transparent text-xs font-mono font-bold outline-none border-b ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
-                          value={rateConfig === 'USD' ? manualDollar : manualEuro} 
-                          onChange={(e) => rateConfig === 'USD' ? handleManualDollarChange(parseFloat(e.target.value)) : handleManualEuroChange(parseFloat(e.target.value))} 
-                       />
-                    </div>
-                 </div>
-              </div>
-              <div className={`flex justify-between sm:justify-start items-center p-1 rounded-md gap-1 ${isDark ? 'bg-black' : 'bg-slate-100'} w-full sm:w-auto`}>
-                 <button onClick={() => handleCurrencyChange('BRL')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>R$</button>
-                 <button onClick={() => handleCurrencyChange('USD')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>$</button>
-                 <button onClick={() => handleCurrencyChange('EUR')} className={`flex-1 sm:flex-none px-2 py-1 rounded text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>€</button>
-              </div>
-              <button onClick={toggleTheme} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
-           </div>
+            <div className={`flex flex-col xl:flex-row items-stretch xl:items-center gap-4 p-3 rounded-2xl border ${bgCard} w-full xl:w-auto shadow-md`}>
+               {/* View Currency Switcher */}
+               <div className="flex flex-col gap-1.5 flex-1 min-w-[140px]">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Moeda de Exibição</span>
+                  <div className={`flex items-center p-1 rounded-xl ${isDark ? 'bg-black/60' : 'bg-slate-100'} h-10`}>
+                     <button 
+                        type="button"
+                        onClick={() => handleCurrencyChange('BRL')} 
+                        className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
+                     >
+                        <span>R$</span>
+                        <span className="text-[9px] opacity-60 font-medium">BRL</span>
+                     </button>
+                     <button 
+                        type="button"
+                        onClick={() => handleCurrencyChange('USD')} 
+                        className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
+                     >
+                        <span>$</span>
+                        <span className="text-[9px] opacity-60 font-medium">USD</span>
+                     </button>
+                     <button 
+                        type="button"
+                        onClick={() => handleCurrencyChange('EUR')} 
+                        className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
+                     >
+                        <span>€</span>
+                        <span className="text-[9px] opacity-60 font-medium">EUR</span>
+                     </button>
+                  </div>
+               </div>
+
+               {/* Divider on Desktop */}
+               <div className={`hidden xl:block h-10 w-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+
+               {/* Rates config stacked/row */}
+               <div className="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-none">
+                  {/* Dólar */}
+                  <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
+                     <div className="flex flex-col">
+                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Dólar Hoje</span>
+                        <span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2).replace('.', ',')}</span>
+                     </div>
+                     <div className="flex flex-col items-end">
+                        <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Dólar</span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                           <span className="text-[10px] text-slate-500 font-bold">R$</span>
+                           <input 
+                              type="text" 
+                              inputMode="decimal"
+                              className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
+                              value={dollarInput} 
+                              onChange={(e) => handleDollarInputChange(e.target.value)} 
+                              onBlur={handleDollarInputBlur}
+                           />
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Euro */}
+                  <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
+                     <div className="flex flex-col">
+                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Euro Hoje</span>
+                        <span className="text-xs font-mono font-bold text-orange-400">R$ {liveEuro.toFixed(2).replace('.', ',')}</span>
+                     </div>
+                     <div className="flex flex-col items-end">
+                        <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Euro</span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                           <span className="text-[10px] text-slate-500 font-bold">R$</span>
+                           <input 
+                              type="text" 
+                              inputMode="decimal"
+                              className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
+                              value={euroInput} 
+                              onChange={(e) => handleEuroInputChange(e.target.value)} 
+                              onBlur={handleEuroInputBlur}
+                           />
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Theme button on Desktop */}
+               <button 
+                  type="button"
+                  onClick={toggleTheme} 
+                  className={`hidden xl:flex items-center justify-center w-10 h-10 rounded-xl border ${isDark ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:text-black hover:bg-slate-100'} transition-all`}
+               >
+                  {isDark ? <Sun size={18} /> : <Moon size={18} />}
+               </button>
+            </div>
            
            <div className="flex gap-2 w-full sm:w-auto">
              <button onClick={() => setEditMode(!editMode)} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : `${bgCard} ${textMuted}`}`}><Edit2 size={14}/> {editMode ? 'Parar Edição' : 'Editar Planilha'}</button>
