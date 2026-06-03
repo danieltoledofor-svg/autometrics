@@ -658,7 +658,7 @@ export default function PlanningPage() {
            
             <div className={`flex flex-col xl:flex-row items-stretch xl:items-center gap-4 p-3 rounded-2xl border ${bgCard} w-full xl:w-auto shadow-md`}>
                {/* View Currency Switcher */}
-               <div className="flex flex-col gap-1.5 flex-1 min-w-[140px]">
+               <div className="flex flex-col gap-1.5 flex-1 sm:min-w-[140px]">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Moeda de Exibição</span>
                   <div className={`flex items-center p-1 rounded-xl ${isDark ? 'bg-black/60' : 'bg-slate-100'} h-10`}>
                      <button 
@@ -667,7 +667,7 @@ export default function PlanningPage() {
                         className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
                      >
                         <span>R$</span>
-                        <span className="text-[9px] opacity-60 font-medium">BRL</span>
+                        <span className="hidden sm:inline text-[9px] opacity-60 font-medium">BRL</span>
                      </button>
                      <button 
                         type="button"
@@ -675,7 +675,7 @@ export default function PlanningPage() {
                         className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
                      >
                         <span>$</span>
-                        <span className="text-[9px] opacity-60 font-medium">USD</span>
+                        <span className="hidden sm:inline text-[9px] opacity-60 font-medium">USD</span>
                      </button>
                      <button 
                         type="button"
@@ -683,7 +683,7 @@ export default function PlanningPage() {
                         className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
                      >
                         <span>€</span>
-                        <span className="text-[9px] opacity-60 font-medium">EUR</span>
+                        <span className="hidden sm:inline text-[9px] opacity-60 font-medium">EUR</span>
                      </button>
                   </div>
                </div>
@@ -694,48 +694,52 @@ export default function PlanningPage() {
                {/* Rates config stacked/row */}
                <div className="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-none">
                   {/* Dólar */}
-                  <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
-                     <div className="flex flex-col">
-                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Dólar Hoje</span>
-                        <span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2).replace('.', ',')}</span>
-                     </div>
-                     <div className="flex flex-col items-end">
-                        <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Dólar</span>
-                        <div className="flex items-center gap-1 mt-0.5">
-                           <span className="text-[10px] text-slate-500 font-bold">R$</span>
-                           <input 
-                              type="text" 
-                              inputMode="decimal"
-                              className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
-                              value={dollarInput} 
-                              onChange={(e) => handleDollarInputChange(e.target.value)} 
-                              onBlur={handleDollarInputBlur}
-                           />
+                  {rateConfig === 'USD' && (
+                     <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
+                        <div className="flex flex-col">
+                           <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Dólar Hoje</span>
+                           <span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                           <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Dólar</span>
+                           <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-[10px] text-slate-500 font-bold">R$</span>
+                              <input 
+                                 type="text" 
+                                 inputMode="decimal"
+                                 className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
+                                 value={dollarInput} 
+                                 onChange={(e) => handleDollarInputChange(e.target.value)} 
+                                 onBlur={handleDollarInputBlur}
+                              />
+                           </div>
                         </div>
                      </div>
-                  </div>
+                  )}
 
                   {/* Euro */}
-                  <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
-                     <div className="flex flex-col">
-                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Euro Hoje</span>
-                        <span className="text-xs font-mono font-bold text-orange-400">R$ {liveEuro.toFixed(2).replace('.', ',')}</span>
-                     </div>
-                     <div className="flex flex-col items-end">
-                        <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Euro</span>
-                        <div className="flex items-center gap-1 mt-0.5">
-                           <span className="text-[10px] text-slate-500 font-bold">R$</span>
-                           <input 
-                              type="text" 
-                              inputMode="decimal"
-                              className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
-                              value={euroInput} 
-                              onChange={(e) => handleEuroInputChange(e.target.value)} 
-                              onBlur={handleEuroInputBlur}
-                           />
+                  {rateConfig === 'EUR' && (
+                     <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
+                        <div className="flex flex-col">
+                           <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Euro Hoje</span>
+                           <span className="text-xs font-mono font-bold text-orange-400">R$ {liveEuro.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                           <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Euro</span>
+                           <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-[10px] text-slate-500 font-bold">R$</span>
+                              <input 
+                                 type="text" 
+                                 inputMode="decimal"
+                                 className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
+                                 value={euroInput} 
+                                 onChange={(e) => handleEuroInputChange(e.target.value)} 
+                                 onBlur={handleEuroInputBlur}
+                              />
+                           </div>
                         </div>
                      </div>
-                  </div>
+                  )}
                </div>
 
                {/* Theme button on Desktop */}
