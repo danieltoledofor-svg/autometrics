@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, Sun, Moon, LayoutGrid, Package, Settings, 
-  LogOut, RefreshCw, Target, ArrowUpRight, ArrowDownRight
+  LogOut, RefreshCw, Target, ArrowUpRight, ArrowDownRight,
+  ChevronUp, ChevronDown
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
@@ -272,6 +273,20 @@ export default function DashboardPage() {
 
   const handleEuroInputBlur = () => {
     setEuroInput(manualEuro.toFixed(2).replace('.', ','));
+  };
+
+  const handleDollarStep = (amount: number) => {
+    const newVal = Math.max(0, parseFloat((manualDollar + amount).toFixed(2)));
+    setManualDollar(newVal);
+    setDollarInput(newVal.toFixed(2).replace('.', ','));
+    localStorage.setItem('autometrics_manual_dollar', newVal.toString());
+  };
+
+  const handleEuroStep = (amount: number) => {
+    const newVal = Math.max(0, parseFloat((manualEuro + amount).toFixed(2)));
+    setManualEuro(newVal);
+    setEuroInput(newVal.toFixed(2).replace('.', ','));
+    localStorage.setItem('autometrics_manual_euro', newVal.toString());
   };
 
   // --- LÓGICA INTELIGENTE DE DATAS ---
@@ -634,6 +649,24 @@ export default function DashboardPage() {
                                   onChange={(e) => handleDollarInputChange(e.target.value)} 
                                   onBlur={handleDollarInputBlur}
                                />
+                               <div className="flex flex-col gap-0.5 ml-0.5">
+                                   <button 
+                                      type="button"
+                                      onClick={() => handleDollarStep(0.01)}
+                                      className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"
+                                      title="Aumentar 1 centavo"
+                                   >
+                                      <ChevronUp size={12} />
+                                   </button>
+                                   <button 
+                                      type="button"
+                                      onClick={() => handleDollarStep(-0.01)}
+                                      className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"
+                                      title="Diminuir 1 centavo"
+                                   >
+                                      <ChevronDown size={12} />
+                                   </button>
+                                </div>
                             </div>
                          </div>
                       </div>
@@ -658,6 +691,24 @@ export default function DashboardPage() {
                                   onChange={(e) => handleEuroInputChange(e.target.value)} 
                                   onBlur={handleEuroInputBlur}
                                />
+                               <div className="flex flex-col gap-0.5 ml-0.5">
+                                  <button 
+                                     type="button"
+                                     onClick={() => handleEuroStep(0.01)}
+                                     className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"
+                                     title="Aumentar 1 centavo"
+                                  >
+                                     <ChevronUp size={12} />
+                                  </button>
+                                  <button 
+                                     type="button"
+                                     onClick={() => handleEuroStep(-0.01)}
+                                     className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"
+                                     title="Diminuir 1 centavo"
+                                  >
+                                     <ChevronDown size={12} />
+                                  </button>
+                               </div>
                             </div>
                          </div>
                       </div>
