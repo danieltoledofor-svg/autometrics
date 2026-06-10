@@ -325,6 +325,40 @@ function fetchAndSend(dateString, account) {
       }
       locations = Object.values(locMap).slice(0, 5);
     } catch(e) { Logger.log('Loc error: ' + e.message); }
+
+    // 5. Histórico de Alterações (Change Event)
+    try {
+      const histQuery = \`
+        SELECT
+          change_event.change_date_time,
+          change_event.change_resource_type,
+          change_event.resource_change_operation,
+          change_event.user_email
+        FROM change_event
+        WHERE change_event.change_date_time DURING '\${dateString}'
+          AND campaign.id = \${row.campaign.id}
+        LIMIT 20
+      \`;
+      const histReport = AdsApp.search(histQuery);
+      while (histReport.hasNext()) {
+        const hRow = histReport.next();
+        const rawDateTime = hRow.changeEvent.changeDateTime || '';
+        let eventTime = rawDateTime.split(' ')[1] || '';
+        if (eventTime.indexOf('.') !== -1) {
+          eventTime = eventTime.split('.')[0];
+        }
+        const resourceType = hRow.changeEvent.changeResourceType || '';
+        const operation = hRow.changeEvent.resourceChangeOperation || '';
+        const user = hRow.changeEvent.userEmail || '';
+        
+        history.push({
+          time: eventTime,
+          change: resourceType + ' (' + operation + ') por ' + user
+        });
+      }
+    } catch (e) {
+      Logger.log('History error: ' + e.message);
+    }
     } // Fim do if (isRecent)
 
     const payload = {

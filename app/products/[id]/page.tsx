@@ -28,7 +28,7 @@ function getLocalYYYYMMDD(date: Date) {
 const ALL_COLUMNS = [
   // GERAL
   { key: 'date', label: 'Data', category: 'Geral', default: true },
-  { key: 'campaign_status', label: 'Status Dia', category: 'Geral', default: true },
+  { key: 'notes', label: 'Anotações / Histórico', category: 'Geral', default: true },
   { key: 'account_name', label: 'Conta', category: 'Geral', default: true },
 
   // TRÁFEGO ADS
@@ -67,8 +67,6 @@ const ALL_COLUMNS = [
   { key: 'search_top_share', label: 'Parc. Topo', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'search_abs_share', label: 'Parc. Absoluta', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'final_url', label: 'Página Anúncio', category: 'Google Ads', default: false, type: 'link' },
-  // ANOTAÇÕES
-  { key: 'notes', label: 'Anotações', category: 'Geral', default: true },
 ];
 
 export default function ProductDetailPage() {
@@ -689,7 +687,7 @@ export default function ProductDetailPage() {
           <div className="overflow-auto custom-scrollbar flex-1">
             <table className="w-full text-sm text-left border-collapse">
               <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0 z-20 shadow-lg`}>
-                <tr>{ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => (<th key={col.key} className={`px-4 py-4 whitespace-nowrap border-b ${borderCol} text-right ${isDark ? 'bg-slate-950' : 'bg-slate-100'} first:text-left first:sticky first:left-0 first:z-30`}>{col.label}</th>))}</tr>
+                <tr>{ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => (<th key={col.key} className={`px-4 py-4 whitespace-nowrap border-b ${borderCol} ${col.key === 'date' || col.key === 'notes' ? 'text-left' : 'text-right'} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} first:text-left first:sticky first:left-0 first:z-30`}>{col.label}</th>))}</tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
 
