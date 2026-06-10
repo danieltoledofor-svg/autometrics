@@ -335,7 +335,8 @@ function fetchAndSend(dateString, account) {
           change_event.resource_change_operation,
           change_event.user_email
         FROM change_event
-        WHERE change_event.change_date_time DURING '\${dateString}'
+        WHERE change_event.change_date_time >= '\${dateString} 00:00:00'
+          AND change_event.change_date_time <= '\${dateString} 23:59:59'
           AND campaign.id = \${row.campaign.id}
         LIMIT 20
       \`;
