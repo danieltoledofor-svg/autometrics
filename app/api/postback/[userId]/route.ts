@@ -141,10 +141,20 @@ async function handleRequest(
         })();
 
         // ── 2. Deduplicação ────────────────────────────────────────────
+        // Detecção da plataforma de origem
+        const source =
+            searchParams.get('source') ||
+            (searchParams.has('CONV_TYPE') ? 'BuyGoods' :
+            searchParams.has('aff_sub5') || searchParams.has('aff_sub1') ? 'Clickbank' :
+            searchParams.has('COMMISSION_AMOUNT') ? 'MaxWeb' :
+            searchParams.has('amount_affiliate') ? 'Cartpanda' :
+            searchParams.has('sid5') || searchParams.has('sid1') ? 'Digistore' :
+            'Plataforma');
+
         if (tid) {
             const { error: dupError } = await supabase
                 .from('postback_events')
-                .insert({ product_id: product.id, transaction_id: tid, event_type: event, amount, currency });
+                .insert({ product_id: product.id, transaction_id: tid, event_type: event, amount, currency, source });
 
             if (dupError) {
                 if (dupError.code === '23505') return new Response('OK', { status: 200, headers: corsHeaders }); // duplicata

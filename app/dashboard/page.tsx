@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useAuthGuard } from '@/lib/useAuthGuard';
+import SaleAlertNotification from './SaleAlertNotification';
 
 // Função para garantir data no fuso local (evita erros de UTC)
 function getLocalYYYYMMDD(date: Date) {
@@ -825,6 +826,8 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      <SaleAlertNotification products={products} isDark={isDark} />
     </div>
   );
 }
