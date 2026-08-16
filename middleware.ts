@@ -8,37 +8,12 @@ const allowedOrigins = [
   'http://localhost:3000'
 ];
 
-// Routes that require an authenticated Supabase session
-const PROTECTED_ROUTES = [
-  '/products',
-  '/dashboard',
-  '/planning',
-  '/integration',
-  '/manual-entry',
-];
-
-function isAuthenticated(request: NextRequest): boolean {
-  const cookies = request.cookies.getAll();
-  // Supabase v2 stores the session in a cookie named sb-<project-ref>-auth-token
-  return cookies.some(
-    (c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token') && c.value.length > 0
-  );
-}
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ── Route protection (page routes) ───────────────────────────────────────
-  const isProtected = PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
-  if (isProtected) {
-    if (!isAuthenticated(request)) {
-      const loginUrl = new URL('/', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-  }
-
   // ── CORS (API routes) ─────────────────────────────────────────────────────
+  // Page route protection is handled client-side via useAuthGuard (Supabase
+  // stores sessions in localStorage, not cookies, so middleware cannot verify them)
   if (!pathname.startsWith('/api/')) {
     return NextResponse.next();
   }
@@ -65,8 +40,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Run on both page and API routes (exclude static assets and Next internals)
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icon.png|logo.png|.*\\.png$).*)',
-  ],
+  matcher: '/api/:path*',
 };
