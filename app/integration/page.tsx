@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Copy, Check, Code, ArrowLeft, Zap, Calendar,
   Globe, Store, AlertCircle, Sun, Moon, Link2, ShoppingBag, MousePointerClick,
-  Tv2, Key, Eye, EyeOff, Save, CheckCircle2, LinkIcon, ExternalLink, Plus, Trash2
+  Tv2, Key, Eye, EyeOff, Save, CheckCircle2, LinkIcon, ExternalLink, Plus, Trash2,
+  LayoutGrid, Target, Package, Settings, LogOut
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
@@ -20,6 +22,7 @@ export default function IntegrationPage() {
   const router = useRouter();
   const { authChecked } = useAuthGuard();
   const [userId, setUserId] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   const [startDate, setStartDate] = useState('');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
@@ -71,6 +74,7 @@ export default function IntegrationPage() {
         return;
       }
       setUserId(session.user.id);
+      setUserEmail(session.user.email || '');
 
       // Carrega token VTurb já salvo
       const { data: settings } = await supabase
@@ -108,6 +112,11 @@ export default function IntegrationPage() {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('autometrics_theme', newTheme);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
   };
 
   const handleGenerateScript = () => {
@@ -499,7 +508,26 @@ ${commonFunctions}`;
   if (!authChecked) return <div className="min-h-screen bg-black" />;
 
   return (
-    <div className={`min-h-screen font-sans ${bgMain}`}>
+    <div className={`min-h-screen font-sans flex ${bgMain}`}>
+
+      {/* SIDEBAR DESKTOP */}
+      <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+        <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
+          <Image src="/logo.png" alt="Logo" width={180} height={60} className="object-contain object-left" priority />
+        </div>
+        <nav className="flex-1 px-2 py-4 space-y-2">
+          <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20}/> Dashboard</Link>
+          <Link href="/planning" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Target size={20}/> Planejamento</Link>
+          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20}/> Meus Produtos</Link>
+          <Link href="/integration" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Settings size={20}/> Integração</Link>
+        </nav>
+        <div className="p-4 border-t border-inherit">
+          <button onClick={handleLogout} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold w-full transition-colors text-rose-500 ${isDark ? 'hover:bg-slate-900' : 'hover:bg-slate-100'}`}><LogOut size={20}/> Sair ({userEmail.split('@')[0]})</button>
+        </div>
+      </aside>
+
+      {/* MAIN */}
+      <main className="flex-1 overflow-y-auto pb-24 md:pb-8">
       <div className="w-full max-w-4xl mx-auto p-4 md:p-8">
 
         {/* HEADER */}
@@ -1187,6 +1215,26 @@ ${commonFunctions}`;
         })()}
 
       </div>
+      </main>
+
+      {/* BOTTOM NAV */}
+      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+        <div className="flex justify-around items-center px-2 pt-2 pb-5">
+          {[
+            { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
+            { href: '/planning', Icon: Target, label: 'Planejamento', active: false },
+            { href: '/products', Icon: Package, label: 'Produtos', active: false },
+            { href: '/integration', Icon: Settings, label: 'Integração', active: true },
+          ].map(({ href, Icon, label, active }) => (
+            <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+              <Icon size={22}/>
+              <span className="text-[9px] font-bold tracking-wide">{label}</span>
+              {active && <div className="w-1 h-1 rounded-full bg-indigo-500"/>}
+            </Link>
+          ))}
+        </div>
+      </nav>
+
     </div>
   );
 }

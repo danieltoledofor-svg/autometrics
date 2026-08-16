@@ -793,7 +793,7 @@ export default function ProductsPage() {
 
         {/* BULK ACTION BAR */}
         {selectedProducts.length > 0 && (
-          <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 border px-6 flex items-center gap-6 z-50 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300 ${isDark ? 'bg-slate-900 border-slate-700 text-white shadow-indigo-500/10' : 'bg-white border-slate-300 text-slate-900 shadow-slate-300'}`}>
+          <div className={`fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 border px-6 flex items-center gap-6 z-50 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300 ${isDark ? 'bg-slate-900 border-slate-700 text-white shadow-indigo-500/10' : 'bg-white border-slate-300 text-slate-900 shadow-slate-300'}`}>
             <div className="flex items-center gap-3 py-4">
                <div className="bg-indigo-600 text-white w-8 h-8 rounded-full flex justify-center items-center font-bold text-sm shadow-inner">{selectedProducts.length}</div>
                <span className="font-medium text-sm">Selecionados</span>
@@ -859,6 +859,25 @@ export default function ProductsPage() {
         )}
 
       </main>
+
+      {/* BOTTOM NAV */}
+      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+        <div className="flex justify-around items-center px-2 pt-2 pb-5">
+          {[
+            { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
+            { href: '/planning', Icon: Target, label: 'Planejamento', active: false },
+            { href: '/products', Icon: Package, label: 'Produtos', active: true },
+            { href: '/integration', Icon: Settings, label: 'Integração', active: false },
+          ].map(({ href, Icon, label, active }) => (
+            <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+              <Icon size={22}/>
+              <span className="text-[9px] font-bold tracking-wide">{label}</span>
+              {active && <div className="w-1 h-1 rounded-full bg-indigo-500"/>}
+            </Link>
+          ))}
+        </div>
+      </nav>
+
     </div>
   );
 }

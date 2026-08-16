@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
+import {
   Target, TrendingUp, Calendar as CalIcon, Edit2, Plus, Trash2,
-  Sun, Moon, ChevronDown, ChevronRight, Save, DollarSign, AlertCircle, 
+  Sun, Moon, ChevronDown, ChevronRight, Save, DollarSign, AlertCircle,
   Briefcase, Globe, LayoutGrid, LogOut, Package, FileText, Settings, ArrowLeft,
-  Calendar, ChevronUp
+  Calendar, ChevronUp, SlidersHorizontal, X
 } from 'lucide-react';
+import Image from 'next/image';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line 
 } from 'recharts';
@@ -20,6 +21,50 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+const DATE_PRESET_LABELS: Record<string, string> = {
+  today: 'Hoje', yesterday: 'Ontem', '7d': '7 Dias',
+  this_month: 'Este Mês', '30d': '30 Dias', last_month: 'Mês Passado',
+};
+const DATE_PRESETS = ['today', 'yesterday', '7d', 'this_month', '30d', 'last_month'] as const;
+
+function trendPct(arr: number[]): number {
+  if (!arr || arr.length < 2) return 0;
+  const first = arr[0];
+  const last = arr[arr.length - 1];
+  if (!first) return 0;
+  return ((last - first) / Math.abs(first)) * 100;
+}
+
+function SparklineSVG({ data, color }: { data: number[]; color: string }) {
+  if (!data || data.length < 2) return <div className="h-7" />;
+  const w = 80, h = 28;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - ((v - min) / range) * (h - 4) - 2;
+    return [x, y] as [number, number];
+  });
+  const polyPts = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const areaPath = `M${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' L')} L${w},${h} L0,${h} Z`;
+  const lastPt = pts[pts.length - 1];
+  const gradId = `spg${color.replace(/[^a-z0-9]/gi, '')}`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={color} stopOpacity="0.25" />
+          <stop offset="1" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradId})`} />
+      <polyline points={polyPts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastPt[0].toFixed(1)} cy={lastPt[1].toFixed(1)} r="2.5" fill={color} />
+    </svg>
+  );
+}
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
@@ -53,7 +98,8 @@ export default function PlanningPage() {
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false); 
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({}); 
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
 
   // Moeda & Tema
   const [liveDollar, setLiveDollar] = useState(6.00);
@@ -145,6 +191,11 @@ export default function PlanningPage() {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('autometrics_theme', newTheme);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
   };
 
   const handleManualDollarChange = (val: number) => {
@@ -624,18 +675,112 @@ export default function PlanningPage() {
   if (!authChecked) return <div className="min-h-screen bg-black" />;
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
-  return (
-    <div className={`min-h-screen font-sans p-4 md:p-8 ${bgMain}`}>
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-        <div className="w-full xl:w-auto">
-           <Link href="/dashboard" className={`text-xs ${textMuted} hover:underline mb-2 block`}>&larr; Voltar ao Dashboard</Link>
-           <div className="flex justify-between items-center w-full">
-              <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}><Target className="text-indigo-500" /> Planejamento & DRE</h1>
-              <button onClick={toggleTheme} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
-           </div>
-        </div>
+  const mobileKpiCards = [
+    { label: 'Receita', value: processedData.totals.revenue, color: '#3b82f6', data: processedData.daysArray.map((d: any) => d.revenue), isPositiveGood: true, isRoi: false },
+    { label: 'Custo Ads', value: processedData.totals.ads_cost, color: '#f97316', data: processedData.daysArray.map((d: any) => d.ads_cost), isPositiveGood: false, isRoi: false },
+    { label: 'Extras Net', value: processedData.totals.net_extra, color: processedData.totals.net_extra >= 0 ? '#10b981' : '#f59e0b', data: processedData.daysArray.map((d: any) => d.net_extra), isPositiveGood: true, isRoi: false },
+    { label: 'Lucro', value: processedData.totals.profit, color: processedData.totals.profit >= 0 ? '#10b981' : '#f43f5e', data: processedData.daysArray.map((d: any) => d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds), isPositiveGood: true, isRoi: false },
+    { label: 'ROI', value: processedData.totals.roi, color: '#6366f1', data: processedData.daysArray.map((d: any) => d.ads_cost > 0 ? ((d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds) / d.ads_cost) * 100 : 0), isPositiveGood: true, isRoi: true },
+  ];
 
-        <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
+  return (
+    <div className={`min-h-screen font-sans flex ${bgMain}`}>
+
+      {/* SIDEBAR DESKTOP */}
+      <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+        <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
+          <Image src="/logo.png" alt="Logo" width={180} height={60} className="object-contain object-left" priority />
+        </div>
+        <nav className="flex-1 px-2 py-4 space-y-2">
+          <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20}/> Dashboard</Link>
+          <Link href="/planning" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Target size={20}/> Planejamento</Link>
+          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20}/> Meus Produtos</Link>
+          <Link href="/integration" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Settings size={20}/> Integração</Link>
+        </nav>
+        <div className="p-4 border-t border-inherit">
+          <button onClick={handleLogout} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold w-full transition-colors text-rose-500 ${isDark ? 'hover:bg-slate-900' : 'hover:bg-slate-100'}`}><LogOut size={20}/> Sair ({user?.email?.split('@')[0]})</button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
+
+      {/* MOBILE HEADER */}
+      <div className="flex md:hidden items-center justify-between px-1 pt-1 pb-3">
+        <div>
+          <h1 className={`text-xl font-bold leading-tight ${textHead}`}>Planejamento</h1>
+          <p className="text-xs text-slate-500 mt-0.5">{dateRange === 'custom' ? `${startDate} → ${endDate}` : (DATE_PRESET_LABELS[dateRange] || 'Período')}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={toggleTheme} className={`w-9 h-9 flex items-center justify-center rounded-xl border ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}>
+            {isDark ? <Sun size={15}/> : <Moon size={15}/>}
+          </button>
+          <button onClick={() => setShowFilterSheet(true)} className={`w-9 h-9 flex items-center justify-center rounded-xl border ${isDark ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-indigo-50 border-indigo-200 text-indigo-600'}`}>
+            <SlidersHorizontal size={15}/>
+          </button>
+        </div>
+      </div>
+
+      {/* MOBILE DATE CHIPS */}
+      <div className="flex md:hidden gap-2 px-1 pb-3 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        {DATE_PRESETS.map(preset => (
+          <button key={preset} onClick={() => handlePresetChange(preset)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+              dateRange === preset ? 'bg-indigo-600 text-white' : isDark ? 'bg-slate-900 text-slate-400 border border-slate-800' : 'bg-white text-slate-500 border border-slate-200'
+            }`}>
+            {DATE_PRESET_LABELS[preset]}
+          </button>
+        ))}
+      </div>
+
+      {/* MOBILE ACTION ROW */}
+      <div className="flex md:hidden gap-2 px-1 pb-3">
+        <button onClick={() => setEditMode(!editMode)} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold border transition-all ${editMode ? 'bg-amber-500 text-white border-amber-500' : isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}>
+          <Edit2 size={13}/> {editMode ? 'Parar' : 'Editar'}
+        </button>
+        <button onClick={() => setIsGoalModalOpen(true)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white">
+          <Target size={13}/> Metas
+        </button>
+        <button onClick={() => setIsCostModalOpen(true)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white">
+          <Plus size={13}/> Extras
+        </button>
+      </div>
+
+      {/* MOBILE KPI CAROUSEL */}
+      <div className="flex md:hidden gap-3 px-1 pb-3 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        {mobileKpiCards.map(({ label, value, color, data, isPositiveGood, isRoi }) => {
+          const trend = trendPct(data);
+          const trendUp = trend >= 0;
+          const trendGood = isPositiveGood ? trendUp : !trendUp;
+          return (
+            <div key={label} className={`flex-shrink-0 w-[130px] border rounded-2xl p-3 relative overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ background: color }} />
+              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{label}</div>
+              <div className="text-sm font-bold font-mono leading-tight mb-1" style={{ color }}>
+                {isRoi ? `${value.toFixed(1)}%` : formatMoney(value)}
+              </div>
+              {data.length >= 2 && (
+                <div className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5 ${trendGood ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>
+                  {trendUp ? '↑' : '↓'} {Math.abs(trend).toFixed(0)}%
+                </div>
+              )}
+              <SparklineSVG data={data} color={color} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* DESKTOP HEADER */}
+      <header className="hidden md:flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
+      <div className="w-full xl:w-auto">
+         <Link href="/dashboard" className={`text-xs ${textMuted} hover:underline mb-2 block`}>&larr; Voltar ao Dashboard</Link>
+         <div className="flex justify-between items-center w-full">
+            <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}><Target className="text-indigo-500" /> Planejamento & DRE</h1>
+            <button onClick={toggleTheme} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+         </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
            
            {/* SELETOR DE MCC E DATA */}
            <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full sm:w-auto">
@@ -812,11 +957,10 @@ export default function PlanningPage() {
              <button onClick={() => setIsGoalModalOpen(true)} className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-2 shadow-lg"><Target size={14}/> Metas</button>
            </div>
         </div>
-      </div>
+      </header>
 
-      {/* ... (Resto do conteúdo da página mantido igual: KPIs, Gráfico, Tabela, Modais) ... */}
-      {/* KPI SUMÁRIO */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      {/* KPI SUMÁRIO — desktop only */}
+      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm`}>
            <p className="text-xs font-bold text-slate-500 uppercase">Receita</p>
            <p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p>
@@ -859,9 +1003,9 @@ export default function PlanningPage() {
         </div>
       </div>
 
-      {/* PAINEL DE ACOMPANHAMENTO DIÁRIO E ESTRATÉGICO */}
+      {/* PAINEL DE ACOMPANHAMENTO DIÁRIO E ESTRATÉGICO — desktop only */}
       {(goal.revenue > 0 || goal.profit > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="hidden md:grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           
           {/* Velocímetro Diário */}
           <div className={`${bgCard} p-5 rounded-xl border flex flex-col justify-center relative overflow-hidden shadow-sm`}>
@@ -939,8 +1083,8 @@ export default function PlanningPage() {
         </div>
       )}
 
-      {/* PAINEL DE INSIGHTS ESTRATÉGICOS (PROJEÇÕES) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      {/* PAINEL DE INSIGHTS ESTRATÉGICOS (PROJEÇÕES) — desktop only */}
+      <div className="hidden md:grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
          {/* Widget 1: Previsão de Fechamento (Pacing) */}
          <div className={`${bgCard} p-5 rounded-xl border ${borderCol} flex flex-col justify-between shadow-sm`}>
             <div>
@@ -1051,8 +1195,87 @@ export default function PlanningPage() {
          </ResponsiveContainer>
       </div>
 
-      {/* TABELA DE DRE (EXPANSÍVEL) */}
-      <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
+      {/* MOBILE DRE ROWS */}
+      <div className="md:hidden space-y-2 mb-4">
+        {processedData.daysArray.map((day: any) => {
+          const isExpanded = expandedRows[day.date];
+          const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds;
+          const dateParts = day.date.split('-');
+          return (
+            <div key={day.date} className={`rounded-xl border overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="flex items-center justify-between p-3 cursor-pointer" onClick={() => toggleExpand(day.date)}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                    {dateParts[2]}
+                  </div>
+                  <div>
+                    <div className={`text-xs font-bold ${textHead}`}>{dateParts[2]}/{dateParts[1]}/{dateParts[0].slice(2)}</div>
+                    <div className="text-[10px] text-slate-500">{formatMoney(day.revenue)} receita</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="text-[9px] text-slate-500 uppercase">Lucro</div>
+                    <div className={`text-sm font-bold ${profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(profit)}</div>
+                  </div>
+                  {isExpanded ? <ChevronDown size={14} className="text-slate-500"/> : <ChevronRight size={14} className="text-slate-500"/>}
+                </div>
+              </div>
+              {isExpanded && (
+                <div className={`border-t ${borderCol} p-3 space-y-2`}>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <div className="text-[9px] text-slate-500 uppercase mb-0.5">Receita</div>
+                      <div className="font-bold text-blue-500">{formatMoney(day.revenue)}</div>
+                    </div>
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <div className="text-[9px] text-slate-500 uppercase mb-0.5">Ads Cost</div>
+                      <div className="font-bold text-orange-500">{formatMoney(day.ads_cost)}</div>
+                    </div>
+                    {day.refunds > 0 && (
+                      <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                        <div className="text-[9px] text-slate-500 uppercase mb-0.5">Reembolso</div>
+                        <div className="font-bold text-rose-400">{formatMoney(day.refunds)}</div>
+                      </div>
+                    )}
+                    {day.details.length > 0 && (
+                      <div className={`p-2 rounded-lg col-span-2 ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                        <div className={`text-[9px] text-slate-500 uppercase mb-1`}>Extras ({formatMoney(day.net_extra)})</div>
+                        {day.details.map((d: any) => (
+                          <div key={d.id} className="flex items-center justify-between py-0.5">
+                            <span className="text-[10px] text-slate-400 truncate max-w-[55%]">{d.desc}</span>
+                            <div className="flex items-center gap-1">
+                              <span className={`text-[10px] font-bold ${d.val < 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(Math.abs(d.val))}</span>
+                              {editMode && (
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id); }} className="text-rose-500 p-0.5 bg-rose-500/10 rounded">
+                                  <Trash2 size={9} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {/* Totais mobile */}
+        <div className={`rounded-xl border-2 p-3 ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-300 bg-white shadow-sm'}`}>
+          <div className="text-[10px] font-bold uppercase text-slate-500 mb-2">Totais do Período</div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div><div className="text-[9px] text-slate-500 uppercase">Receita</div><div className="font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</div></div>
+            <div><div className="text-[9px] text-slate-500 uppercase">Ads Cost</div><div className="font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</div></div>
+            <div><div className="text-[9px] text-slate-500 uppercase">Extras Net</div><div className={`font-bold ${processedData.totals.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(processedData.totals.net_extra)}</div></div>
+            <div><div className="text-[9px] text-slate-500 uppercase">Lucro</div><div className={`font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* TABELA DE DRE (EXPANSÍVEL) — desktop only */}
+      <div className={`hidden md:block ${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
          <div className={`p-4 border-b ${borderCol} flex justify-between items-center`}>
             <h3 className={`font-bold ${textHead}`}>Detalhamento Diário (DRE)</h3>
             <button onClick={() => setIsCostModalOpen(true)} className="flex items-center gap-2 text-xs font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition-colors">
@@ -1178,6 +1401,93 @@ export default function PlanningPage() {
                </tfoot>
             </table>
          </div>
+      </div>
+
+      </main>
+
+      {/* BOTTOM NAV */}
+      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+        <div className="flex justify-around items-center px-2 pt-2 pb-5">
+          {[
+            { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
+            { href: '/planning', Icon: Target, label: 'Planejamento', active: true },
+            { href: '/products', Icon: Package, label: 'Produtos', active: false },
+            { href: '/integration', Icon: Settings, label: 'Integração', active: false },
+          ].map(({ href, Icon, label, active }) => (
+            <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+              <Icon size={22}/>
+              <span className="text-[9px] font-bold tracking-wide">{label}</span>
+              {active && <div className="w-1 h-1 rounded-full bg-indigo-500"/>}
+            </Link>
+          ))}
+        </div>
+      </nav>
+
+      {/* FILTER BOTTOM SHEET */}
+      <div className={`fixed inset-0 z-50 md:hidden transition-opacity duration-300 ${showFilterSheet ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowFilterSheet(false)}/>
+        <div className={`absolute bottom-0 inset-x-0 rounded-t-3xl border-t transition-transform duration-300 ease-out ${showFilterSheet ? 'translate-y-0' : 'translate-y-full'} ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex justify-center pt-3 pb-2"><div className={`w-10 h-1 rounded-full ${isDark ? 'bg-slate-700' : 'bg-slate-300'}`}/></div>
+          <div className="flex items-center justify-between px-5 pb-4">
+            <h2 className={`text-base font-bold ${textHead}`}>Filtros</h2>
+            <button onClick={() => setShowFilterSheet(false)} className={`w-8 h-8 flex items-center justify-center rounded-full ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}><X size={16}/></button>
+          </div>
+          <div className="px-5 pb-8 space-y-5 overflow-y-auto max-h-[70vh]">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Período</p>
+              <div className="flex flex-wrap gap-2">
+                {DATE_PRESETS.map(preset => (
+                  <button key={preset} onClick={() => handlePresetChange(preset)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${dateRange === preset ? 'bg-indigo-600 text-white' : isDark ? 'bg-slate-900 text-slate-400 border border-slate-800' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                    {DATE_PRESET_LABELS[preset]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Datas personalizadas</p>
+              <div className="flex gap-2">
+                <input type="date" className={`flex-1 p-2 rounded-xl border text-xs bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={e => handleCustomDateChange('start', e.target.value)} />
+                <input type="date" className={`flex-1 p-2 rounded-xl border text-xs bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={e => handleCustomDateChange('end', e.target.value)} />
+              </div>
+            </div>
+            {availableMccs.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">MCC / Conta</p>
+                <select className={`w-full p-2 rounded-xl border text-sm bg-transparent ${textHead} ${borderCol}`} value={selectedMcc} onChange={e => handleMccChange(e.target.value)}>
+                  <option value="all">Visão Geral (Todas)</option>
+                  {availableMccs.map(mcc => <option key={mcc} value={mcc}>{mcc}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Moeda</p>
+              <div className={`flex items-center p-1 rounded-xl ${isDark ? 'bg-black/60' : 'bg-slate-100'}`}>
+                {(['BRL', 'USD', 'EUR'] as const).map(c => (
+                  <button key={c} onClick={() => handleCurrencyChange(c)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewCurrency === c ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400'}`}>{c}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Taxa de Câmbio</p>
+              <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                <div>
+                  <div className="text-[9px] font-bold text-orange-500 uppercase">{rateConfig === 'USD' ? 'Dólar Hoje' : 'Euro Hoje'}</div>
+                  <div className="text-xs font-mono font-bold text-orange-400">R$ {rateConfig === 'USD' ? liveDollar.toFixed(2).replace('.', ',') : liveEuro.toFixed(2).replace('.', ',')}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-bold text-blue-500 uppercase">{rateConfig === 'USD' ? 'Meu Dólar' : 'Meu Euro'}</div>
+                  <input type="text" inputMode="decimal" className={`w-20 text-right p-1 rounded border text-xs font-mono font-bold bg-transparent ${textHead} ${borderCol}`}
+                    value={rateConfig === 'USD' ? dollarInput : euroInput}
+                    onChange={e => rateConfig === 'USD' ? handleDollarInputChange(e.target.value) : handleEuroInputChange(e.target.value)}
+                    onBlur={() => rateConfig === 'USD' ? handleDollarInputBlur() : handleEuroInputBlur()}
+                  />
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setShowFilterSheet(false)} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl">Aplicar</button>
+          </div>
+        </div>
       </div>
 
       {/* MODAL EXTRAS */}
