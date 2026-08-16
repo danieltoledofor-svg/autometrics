@@ -64,9 +64,9 @@ async function handleRequest(
         }
 
         // ── 1. Localizar o produto ──────────────────────────────────────
-        // Prioridade: campaign_id numérico → fallback: campaign_name (google_ads_campaign_name)
         let product: { id: string; currency: string } | null = null;
 
+        // 1a. Busca direta pelo campaign_id numérico
         if (campaignId) {
             const { data } = await supabase
                 .from('products')
@@ -77,7 +77,43 @@ async function handleRequest(
             product = data;
         }
 
-        // Fallback: busca pelo nome da campanha (google_ads_campaign_name)
+        // 1b. Reverse lookup via click_sessions (resolve vst_XXX / IDs de trackers)
+        //     Ativado quando o campaign_id não é um ID numérico reconhecido
+        if (!product && campaignId) {
+            const { data: session } = await supabase
+                .from('click_sessions')
+                .select('utm_id, gad_campaignid, utm_campaign')
+                .eq('user_id', userId)
+                .eq('session_id', campaignId)
+                .single();
+
+            if (session) {
+                const resolvedId   = session.utm_id || session.gad_campaignid || '';
+                const resolvedName = session.utm_campaign || '';
+
+                if (resolvedId) {
+                    const { data } = await supabase
+                        .from('products')
+                        .select('id, currency')
+                        .eq('user_id', userId)
+                        .eq('google_ads_campaign_id', resolvedId)
+                        .single();
+                    product = data;
+                }
+
+                if (!product && resolvedName) {
+                    const { data } = await supabase
+                        .from('products')
+                        .select('id, currency')
+                        .eq('user_id', userId)
+                        .ilike('google_ads_campaign_name', resolvedName.trim())
+                        .single();
+                    product = data;
+                }
+            }
+        }
+
+        // 1c. Fallback: busca pelo nome da campanha (utm_campaign)
         if (!product && campaignName) {
             const { data } = await supabase
                 .from('products')
