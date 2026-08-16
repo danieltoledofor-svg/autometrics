@@ -40,6 +40,9 @@ export default function IntegrationPage() {
   // Aba ativa
   const [activeTab, setActiveTab] = useState<'google' | 'postback' | 'pixel' | 'vturb' | 'url'>('google');
 
+  // Aba de instalação do pixel
+  const [installTab, setInstallTab] = useState<'html' | 'hfcm'>('html');
+
   // URL Builder
   const [urlBase, setUrlBase] = useState('');
   const [urlCopied, setUrlCopied] = useState(false);
@@ -704,13 +707,27 @@ ${commonFunctions}`;
                     ],
                   },
                   {
-                    name: 'MaxWeb / Buygoods',
-                    note: 'Configure SUBID1 = utm_id. O AutoMetrics lerá os respectivos eventos.',
+                    name: 'MaxWeb',
+                    note: 'Configure SUBID1 = utm_id na URL do anúncio.',
                     noteColor: 'indigo',
                     urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=sale&amount={COMMISSION_AMOUNT}&cy=USD&orderid={ORDERID}&campaign_id={SUBID1}`,
                     urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=checkout&orderid={ORDERID}&campaign_id={SUBID1}`,
                     details: [
                       { label: 'campaign_id', value: '{SUBID1} (= utm_id)' },
+                      { label: 'orderid', value: '{ORDERID}' },
+                      { label: 'amount', value: '{COMMISSION_AMOUNT}' },
+                      { label: 'cy', value: 'USD' },
+                    ],
+                  },
+                  {
+                    name: 'Buygoods',
+                    note: '{CONV_TYPE} detecta automaticamente venda, checkout e reembolso — use a mesma URL para todos os eventos.',
+                    noteColor: 'orange',
+                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?cy=USD&amount={COMMISSION_AMOUNT}&campaign_id={SUBID1}&orderid={ORDERID}&event={CONV_TYPE}`,
+                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?cy=USD&amount={COMMISSION_AMOUNT}&campaign_id={SUBID1}&orderid={ORDERID}&event={CONV_TYPE}`,
+                    details: [
+                      { label: 'campaign_id', value: '{SUBID1} (= utm_id via pixel)' },
+                      { label: 'event', value: '{CONV_TYPE} (Sale / InitiateCheckout / Refund)' },
                       { label: 'orderid', value: '{ORDERID}' },
                       { label: 'amount', value: '{COMMISSION_AMOUNT}' },
                       { label: 'cy', value: 'USD' },
@@ -820,31 +837,82 @@ ${commonFunctions}`;
             </div>
 
             <div className="space-y-4">
+              {/* Script principal */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className={`text-xs font-bold uppercase ${textMuted}`}>1. Pixel de Clique — colar na Landing Page</p>
-                  <button onClick={() => copyPostback(`<!-- AutoMetrics Pixel (Clique) -->\n<script>(function(){var uid='${userId}';var p=new URLSearchParams(window.location.search);var cid=p.get('utm_id')||p.get('gad_campaignid')||'';if(!cid)return;var tid='clk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=click&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);})()</\script>`, 'pixel_click')}
+                  <p className={`text-xs font-bold uppercase ${textMuted}`}>1. Script de Rastreamento — colar na Landing Page</p>
+                  <button onClick={() => copyPostback(
+                    `<!-- AutoMetrics — Click Session Tracker -->\n<script>\n(function () {\n  var uid = '${userId}';\n  var p = new URLSearchParams(window.location.search);\n  var utmId       = p.get('utm_id') || '';\n  var gadId       = p.get('gad_campaignid') || '';\n  var utmCampaign = p.get('utm_campaign') || '';\n  var utmSource   = p.get('utm_source') || '';\n  var utmMedium   = p.get('utm_medium') || '';\n  if (!utmId && !gadId && !utmCampaign) return;\n  var base   = 'https://autometrics.cloud/api/track-click/' + uid;\n  var common = '&utm_id='         + encodeURIComponent(utmId)\n             + '&gad_campaignid=' + encodeURIComponent(gadId)\n             + '&utm_campaign='   + encodeURIComponent(utmCampaign)\n             + '&utm_source='     + encodeURIComponent(utmSource)\n             + '&utm_medium='     + encodeURIComponent(utmMedium);\n  ['subid','subid1','subid2','subid3','subid4','subid5','gclid','gbraid'].forEach(function (k) {\n    var v = p.get(k);\n    if (v) new Image().src = base + '?session_id=' + encodeURIComponent(v) + common;\n  });\n})();\n<\/script>`,
+                    'pixel_click'
+                  )}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === 'pixel_click' ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
                     {copiedPostback === 'pixel_click' ? <Check size={12} /> : <Copy size={12} />}
-                    {copiedPostback === 'pixel_click' ? 'Copiado!' : 'Copiar'}
+                    {copiedPostback === 'pixel_click' ? 'Copiado!' : 'Copiar Script'}
                   </button>
                 </div>
                 <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-50 text-slate-700'}`}>
-                  {`<!-- AutoMetrics Pixel (Clique) -->
+                  {`<!-- AutoMetrics — Click Session Tracker -->
 <script>
-(function(){
+(function () {
   var uid = '${userId}';
-  var p   = new URLSearchParams(window.location.search);
-  var cid = p.get('utm_id') || p.get('gad_campaignid') || '';
-  if (!cid) return;
-  var tid = 'clk_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
-  navigator.sendBeacon(
-    '${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/' + uid +
-    '?event=click&campaign_id=' + encodeURIComponent(cid) + '&tid=' + tid
-  );
+  var p = new URLSearchParams(window.location.search);
+  var utmId       = p.get('utm_id') || '';
+  var gadId       = p.get('gad_campaignid') || '';
+  var utmCampaign = p.get('utm_campaign') || '';
+  var utmSource   = p.get('utm_source') || '';
+  var utmMedium   = p.get('utm_medium') || '';
+  if (!utmId && !gadId && !utmCampaign) return;
+  var base   = 'https://autometrics.cloud/api/track-click/' + uid;
+  var common = '&utm_id='         + encodeURIComponent(utmId)
+             + '&gad_campaignid=' + encodeURIComponent(gadId)
+             + '&utm_campaign='   + encodeURIComponent(utmCampaign)
+             + '&utm_source='     + encodeURIComponent(utmSource)
+             + '&utm_medium='     + encodeURIComponent(utmMedium);
+  ['subid','subid1','subid2','subid3','subid4','subid5','gclid','gbraid'].forEach(function (k) {
+    var v = p.get(k);
+    if (v) new Image().src = base + '?session_id=' + encodeURIComponent(v) + common;
+  });
 })();
 </script>`}
                 </pre>
+              </div>
+
+              {/* Instruções de instalação */}
+              <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}>
+                <p className={`text-xs font-bold uppercase mb-3 ${textHead}`}>Como instalar</p>
+                <div className="flex gap-2 mb-4">
+                  {(['html', 'hfcm'] as const).map(t => (
+                    <button key={t} onClick={() => setInstallTab(t)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${installTab === t ? 'bg-indigo-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'}`}`}>
+                      {t === 'html' ? 'HTML puro' : 'HFCM / Elementor'}
+                    </button>
+                  ))}
+                </div>
+
+                {installTab === 'html' && (
+                  <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
+                    <li>Abra o arquivo HTML da sua landing page.</li>
+                    <li>Localize a tag <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>&lt;/body&gt;</code> no final do arquivo.</li>
+                    <li>Cole o script <strong>imediatamente antes</strong> do <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>&lt;/body&gt;</code>.</li>
+                    <li>Salve e publique o arquivo.</li>
+                  </ol>
+                )}
+
+                {installTab === 'hfcm' && (
+                  <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
+                    <li>No painel do WordPress, instale o plugin <strong>HFCM — Header Footer Code Manager</strong> (se ainda não tiver).</li>
+                    <li>Vá em <strong>HFCM &gt; Add new snippet</strong>.</li>
+                    <li>Preencha:
+                      <ul className={`ml-4 mt-1 space-y-1 list-disc list-inside ${textMuted}`}>
+                        <li><strong>Snippet name:</strong> AutoMetrics Tracker</li>
+                        <li><strong>Location:</strong> <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>Before &lt;/body&gt; tag</code></li>
+                        <li><strong>Site display:</strong> Specific Pages → selecione sua landing page</li>
+                      </ul>
+                    </li>
+                    <li>Cole o script no campo de código acima.</li>
+                    <li>Marque <strong>Status: Active</strong> e clique em <strong>Save</strong>.</li>
+                  </ol>
+                )}
               </div>
 
               <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}>
