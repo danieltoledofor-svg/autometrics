@@ -443,7 +443,7 @@ export default function DashboardPage() {
 
       // 3. Sub-Agrupamento por Campanha
       if (!acc.campaigns[campaignName]) {
-         acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0 };
+         acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0, productId: product?.id };
       }
       const cmp = acc.campaigns[campaignName];
       cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds;
@@ -808,7 +808,12 @@ export default function DashboardPage() {
                                 <tr key={cmp.name} className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
                                    <td></td>
                                    <td className="px-6 py-1 text-[10px] text-slate-500 pl-16 flex items-center gap-2 border-l-2 border-slate-800 ml-10">
-                                      <Package size={10}/> {cmp.name}
+                                      <Package size={10}/>
+                                      {cmp.productId ? (
+                                        <Link href={`/products/${cmp.productId}`} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-400 hover:underline transition-colors cursor-pointer">
+                                          {cmp.name}
+                                        </Link>
+                                      ) : cmp.name}
                                    </td>
                                    <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.revenue)}</td>
                                    <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.cost)}</td>
