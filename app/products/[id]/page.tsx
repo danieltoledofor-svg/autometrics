@@ -5,13 +5,15 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon,
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon, ShoppingCart,
-  Video, MousePointer, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash
+  Video, MousePointer, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
+  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut
 } from 'lucide-react';
 import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,6 +71,33 @@ const ALL_COLUMNS = [
   { key: 'final_url', label: 'Página Anúncio', category: 'Google Ads', default: false, type: 'link' },
 ];
 
+const DATE_PRESET_LABELS: Record<string, string> = {
+  today: 'Hoje', yesterday: 'Ontem', '7d': '7 Dias',
+  this_month: 'Este Mês', '30d': '30 Dias', last_month: 'Mês Passado',
+};
+
+function trendPct(arr: number[]): number {
+  if (arr.length < 2) return 0;
+  const first = arr[0] || 0;
+  const last = arr[arr.length - 1] || 0;
+  if (!first) return 0;
+  return ((last - first) / Math.abs(first)) * 100;
+}
+
+function SparklineSVG({ data, color }: { data: number[]; color: string }) {
+  if (!data || data.length < 2) return null;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  const w = 80, h = 28;
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(' ');
+  return (
+    <svg width={w} height={h} className="mt-2">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -124,6 +153,9 @@ export default function ProductDetailPage() {
   const [editingPlayerId, setEditingPlayerId] = useState(false);
   const [playerIdInput, setPlayerIdInput] = useState('');
   const [vturbBreakdown, setVturbBreakdown] = useState<{ device: any[]; country: any[] }>({ device: [], country: [] });
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
@@ -133,6 +165,7 @@ export default function ProductDetailPage() {
         router.replace('/');
       } else {
         setAuthChecked(true);
+        setUserEmail(session.user.email || '');
       }
     });
 
@@ -179,6 +212,11 @@ export default function ProductDetailPage() {
     setViewCurrency(currency);
     localStorage.setItem('autometrics_view_currency', currency);
   };
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.replace('/');
+  }
 
   async function fetchLiveDollar() {
     try {
@@ -560,9 +598,60 @@ export default function ProductDetailPage() {
   })();
 
   return (
-    <div className={`min-h-screen font-sans p-4 md:p-6 relative ${bgMain}`}>
+    <div className={`min-h-screen font-sans flex ${bgMain}`}>
 
-      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
+      {/* ── SIDEBAR DESKTOP ── */}
+      <aside className={`hidden md:flex flex-col w-64 shrink-0 border-r ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} fixed top-0 left-0 h-screen z-50`}>
+        <div className={`p-5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <Image src="/logo.png" alt="Autometrics" width={130} height={28} />
+        </div>
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {[
+            { href: '/dashboard', icon: <LayoutGrid size={18} />, label: 'Dashboard' },
+            { href: '/planning', icon: <Target size={18} />, label: 'Planejamento' },
+            { href: '/products', icon: <Package size={18} />, label: 'Produtos', active: true },
+            { href: '/integration', icon: <Settings size={18} />, label: 'Integração' },
+          ].map(item => (
+            <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${(item as any).active ? 'bg-indigo-600 text-white' : (isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-100')}`}>
+              {item.icon} {item.label}
+            </Link>
+          ))}
+        </nav>
+        <div className={`p-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className={`text-xs ${textMuted} mb-2 truncate`}>{userEmail}</div>
+          <button onClick={handleLogout} className={`flex items-center gap-2 text-xs ${textMuted} hover:text-rose-400 transition-colors`}>
+            <LogOut size={14} /> Sair
+          </button>
+        </div>
+      </aside>
+
+      {/* ── MAIN ── */}
+      <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pb-24 md:pb-8">
+
+        {/* MOBILE HEADER */}
+        <div className={`md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-3 border-b backdrop-blur-md ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
+          <Link href="/products" className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+            <ArrowLeft size={18} />
+          </Link>
+          <div className="flex-1 min-w-0">
+            <h1 className={`text-sm font-bold truncate ${textHead}`}>{product.name}</h1>
+            <span className={`text-[10px] ${textMuted}`}>{product.platform}</span>
+          </div>
+          <button onClick={toggleStatus} className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>
+            {product.status === 'active' ? <PlayCircle size={10} /> : <PauseCircle size={10} />}
+            {product.status === 'active' ? 'Ativo' : 'Pausado'}
+          </button>
+          <button onClick={toggleTheme} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+            {isDark ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+          <button onClick={() => setShowFilterSheet(true)} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+            <SlidersHorizontal size={16} />
+          </button>
+        </div>
+
+        <div className="p-4 md:p-6">
+
+      <header className="hidden md:flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
         <div className="flex items-center gap-4">
           <Link href="/products" className={`p-2 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
             <ArrowLeft size={20} />
@@ -631,7 +720,27 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      <div className={`flex overflow-x-auto custom-scrollbar gap-0 border-b ${borderCol} mb-8`}>
+      {/* MOBILE TAB CHIPS */}
+      <div className="md:hidden flex overflow-x-auto gap-2 mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+        {[
+          { id: 'ads', label: 'Visão Geral' },
+          { id: 'search_terms', label: 'Termos' },
+          { id: 'audiences', label: 'Públicos' },
+          { id: 'locations', label: 'Locais' },
+          { id: 'strategy', label: 'Estratégia' },
+          { id: 'vturb', label: 'VTurb' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className={`hidden md:flex overflow-x-auto custom-scrollbar gap-0 border-b ${borderCol} mb-8`}>
         {[
           { id: 'ads', icon: <BarChart2 size={15} />, label: 'Visão Geral' },
           { id: 'search_terms', icon: <FileText size={15} />, label: 'Termos de Pesquisa' },
@@ -655,7 +764,25 @@ export default function ProductDetailPage() {
 
       {/* ══════════════════════════ ABA GOOGLE ADS ══════════════════════════ */}
       {activeTab === 'ads' && (<>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+
+        {/* MOBILE KPI CAROUSEL */}
+        <div className="md:hidden overflow-x-auto flex gap-3 mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+          {[
+            { label: 'Receita', value: formatMoney(stats.revenue), color: '#3b82f6', data: chart.map(c => c.receita) },
+            { label: 'Custo Ads', value: formatMoney(stats.cost), color: '#f97316', data: chart.map(c => c.custo) },
+            { label: 'Lucro', value: formatMoney(stats.profit), color: stats.profit >= 0 ? '#10b981' : '#f43f5e', data: chart.map(c => c.lucro) },
+            { label: 'ROI', value: `${stats.roi.toFixed(1)}%`, color: '#6366f1', data: rows.map(r => r.roi) },
+            { label: 'CPA', value: formatMoney(globalCpa), color: '#06b6d4', data: rows.map(r => r.cpa) },
+          ].map((kpi, i) => (
+            <div key={i} className={`flex-shrink-0 w-[130px] ${bgCard} rounded-xl p-4 border-t-4`} style={{ borderTopColor: kpi.color }}>
+              <p className={`text-[10px] font-bold uppercase ${textMuted} mb-1`}>{kpi.label}</p>
+              <p className="text-base font-bold" style={{ color: kpi.color }}>{kpi.value}</p>
+              <SparklineSVG data={kpi.data} color={kpi.color} />
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden md:grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
           <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-blue-500`}>
             <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
             <p className="text-2xl font-bold text-blue-500">{formatMoney(stats.revenue)}</p>
@@ -693,6 +820,67 @@ export default function ProductDetailPage() {
           </ResponsiveContainer>
         </div>
 
+        {/* MOBILE DAY CARDS */}
+        <div className="md:hidden space-y-2 mt-4">
+          {rows.slice(0, 30).map((row, idx) => {
+            const parts = row.date.split('/');
+            const dateKey = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '';
+            const hasNote = !!notes[dateKey];
+            return (
+              <div key={idx} className={`rounded-xl border overflow-hidden ${bgCard}`}>
+                <button
+                  className="w-full flex items-center justify-between p-3"
+                  onClick={() => setExpandedRow(expandedRow === idx ? null : idx)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex flex-col items-center justify-center text-center flex-shrink-0 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                      <span className={`text-[9px] font-bold ${textMuted}`}>{parts[1]}/{parts[2]?.slice(2)}</span>
+                      <span className={`text-base font-bold leading-none ${textHead}`}>{parts[0]}</span>
+                    </div>
+                    <div className="text-left">
+                      <p className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</p>
+                      <p className={`text-xs ${textMuted}`}>{row.conversions} conv · ROI {row.roi.toFixed(0)}%</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasNote && <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />}
+                    <span className={`text-xs ${textMuted}`} style={{ display: 'inline-block', transform: expandedRow === idx ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+                  </div>
+                </button>
+                {expandedRow === idx && (
+                  <div className={`px-3 pb-3 border-t ${borderCol}`}>
+                    <div className="grid grid-cols-2 gap-2 pt-3">
+                      <div className={`${isDark ? 'bg-slate-800' : 'bg-slate-50'} rounded-lg p-2.5`}>
+                        <p className={`text-[10px] ${textMuted} mb-0.5`}>Receita</p>
+                        <p className="text-sm font-bold text-blue-500">{formatMoney(row.revenue)}</p>
+                      </div>
+                      <div className={`${isDark ? 'bg-slate-800' : 'bg-slate-50'} rounded-lg p-2.5`}>
+                        <p className={`text-[10px] ${textMuted} mb-0.5`}>Custo Ads</p>
+                        <p className="text-sm font-bold text-orange-500">{formatMoney(row.cost)}</p>
+                      </div>
+                      <div className={`${isDark ? 'bg-slate-800' : 'bg-slate-50'} rounded-lg p-2.5`}>
+                        <p className={`text-[10px] ${textMuted} mb-0.5`}>Cliques</p>
+                        <p className={`text-sm font-bold ${textHead}`}>{(row.clicks || 0).toLocaleString()}</p>
+                      </div>
+                      <div className={`${isDark ? 'bg-slate-800' : 'bg-slate-50'} rounded-lg p-2.5`}>
+                        <p className={`text-[10px] ${textMuted} mb-0.5`}>CPA</p>
+                        <p className="text-sm font-bold text-cyan-500">{formatMoney(row.cpa)}</p>
+                      </div>
+                    </div>
+                    {hasNote && (
+                      <div className={`mt-2 p-2 rounded-lg text-xs italic text-amber-400 ${isDark ? 'bg-amber-400/5' : 'bg-amber-50'}`}>
+                        {notes[dateKey]}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* DESKTOP TABLE */}
+        <div className="hidden md:block">
         <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
           <div className={`p-4 border-b ${borderCol} flex flex-col md:flex-row justify-between items-center gap-4 shrink-0`}>
             <div className="flex items-center gap-3">
@@ -842,6 +1030,7 @@ export default function ProductDetailPage() {
             </table>
           </div>
         </div>
+        </div>{/* end hidden md:block table */}
 
         {showManualEntry && (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -1441,6 +1630,87 @@ export default function ProductDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+        </div>{/* end p-4 md:p-6 */}
+      </main>
+
+      {/* FAB — Lançamento Rápido */}
+      <button
+        onClick={() => setShowManualEntry(true)}
+        className="md:hidden fixed bottom-24 right-4 z-30 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-900/40 transition-all"
+      >
+        <FileText size={18} />
+        <span className="text-sm">Lançamento Rápido</span>
+      </button>
+
+      {/* BOTTOM NAV */}
+      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md pb-5 ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
+        <div className="flex justify-around pt-2">
+          {[
+            { href: '/dashboard', icon: <LayoutGrid size={22} />, label: 'Dashboard' },
+            { href: '/planning', icon: <Target size={22} />, label: 'Planejamento' },
+            { href: '/products', icon: <Package size={22} />, label: 'Produtos', active: true },
+            { href: '/integration', icon: <Settings size={22} />, label: 'Integração' },
+          ].map(item => (
+            <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-0.5 px-3 py-1 ${(item as any).active ? 'text-indigo-500' : textMuted}`}>
+              {item.icon}
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </Link>
+          ))}
+        </div>
+      </nav>
+
+      {/* FILTER SHEET */}
+      {showFilterSheet && (
+        <>
+          <div className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setShowFilterSheet(false)} />
+          <div className={`md:hidden fixed bottom-0 inset-x-0 z-50 rounded-t-2xl border-t shadow-2xl ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} pb-8`}>
+            <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+              <h3 className={`font-bold ${textHead}`}>Filtros</h3>
+              <button onClick={() => setShowFilterSheet(false)}>
+                <X size={20} className={textMuted} />
+              </button>
+            </div>
+            <div className="p-4 space-y-5 overflow-y-auto max-h-[70vh]">
+              <div>
+                <label className={`text-xs font-bold uppercase ${textMuted} block mb-2`}>Período</label>
+                <div className="flex flex-wrap gap-2">
+                  {(['today', 'yesterday', '7d', 'this_month', '30d', 'last_month'] as const).map(preset => (
+                    <button
+                      key={preset}
+                      onClick={() => handlePresetChange(preset)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${dateRange === preset ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}
+                    >
+                      {DATE_PRESET_LABELS[preset]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>De</label>
+                  <input type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={startDate} onChange={e => handleCustomDateChange('start', e.target.value)} />
+                </div>
+                <div>
+                  <label className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>Até</label>
+                  <input type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={endDate} onChange={e => handleCustomDateChange('end', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className={`text-xs font-bold uppercase ${textMuted} block mb-2`}>Moeda de Visualização</label>
+                <div className="flex gap-2">
+                  {['USD', 'BRL', 'EUR'].map(cur => (
+                    <button key={cur} onClick={() => toggleViewCurrency(cur)} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewCurrency === cur ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}>{cur}</button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => setShowFilterSheet(false)} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
     </div>
