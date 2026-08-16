@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Save, Calendar, ArrowLeft, DollarSign, Users, ShoppingCart, RefreshCw, AlertCircle } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuthGuard } from '@/lib/useAuthGuard';
 
 // Configuração do Supabase
 const supabase = createClient(
@@ -12,6 +14,8 @@ const supabase = createClient(
 );
 
 export default function ManualEntryPage() {
+  const router = useRouter();
+  const { authChecked } = useAuthGuard();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -115,6 +119,8 @@ export default function ManualEntryPage() {
       setSaving(false);
     }
   };
+
+  if (!authChecked) return <div className="min-h-screen bg-black" />;
 
   return (
     <div className="min-h-screen bg-black text-slate-200 p-4 md:p-8 flex justify-center">

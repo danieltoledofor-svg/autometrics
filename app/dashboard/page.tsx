@@ -13,6 +13,7 @@ import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { useAuthGuard } from '@/lib/useAuthGuard';
 
 // Função para garantir data no fuso local (evita erros de UTC)
 function getLocalYYYYMMDD(date: Date) {
@@ -24,6 +25,7 @@ function getLocalYYYYMMDD(date: Date) {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { authChecked } = useAuthGuard();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   
@@ -478,6 +480,7 @@ export default function DashboardPage() {
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : viewCurrency === 'EUR' ? 'de-DE' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
   const toggleExpand = (id: string) => { setExpandedRows(prev => ({ ...prev, [id]: !prev[id] })); };
 
+  if (!authChecked) return <div className="min-h-screen bg-black" />;
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
   return (

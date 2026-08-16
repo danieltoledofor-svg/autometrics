@@ -42,6 +42,7 @@ import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { useAuthGuard } from '@/lib/useAuthGuard';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -57,6 +58,7 @@ function getLocalYYYYMMDD(date: Date) {
 
 export default function ProductsPage() {
   const router = useRouter();
+  const { authChecked } = useAuthGuard();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -527,6 +529,8 @@ export default function ProductsPage() {
   const hoverItem = isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100';
   const activeItem = isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-black border border-slate-200';
   const buttonPrimary = isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-600 text-white shadow';
+
+  if (!authChecked) return <div className="min-h-screen bg-black" />;
 
   return (
     <div className={`min-h-[100dvh] font-sans flex flex-col md:flex-row ${bgMain}`}>

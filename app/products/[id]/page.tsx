@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon,
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon, ShoppingCart,
@@ -71,6 +71,7 @@ const ALL_COLUMNS = [
 
 export default function ProductDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const productId = typeof params?.id === 'string' ? params.id : '';
 
   // --- ESTADOS DE DATA ---
@@ -78,6 +79,7 @@ export default function ProductDetailPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  const [authChecked, setAuthChecked] = useState(false);
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,6 +127,15 @@ export default function ProductDetailPage() {
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
+    // Auth guard: block ALL rendering until session is confirmed
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.replace('/');
+      } else {
+        setAuthChecked(true);
+      }
+    });
+
     // 1. Tema e Moeda
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
     if (savedTheme) setTheme(savedTheme);
@@ -279,7 +290,12 @@ export default function ProductDetailPage() {
     fetchVturb(pid);
   };
 
-  useEffect(() => { if (productId) fetchData(); }, [productId]);
+  useEffect(() => {
+    if (!productId) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) fetchData();
+    });
+  }, [productId]);
 
   // Dispara fetch VTurb ao mudar aba ou intervalo de datas
   useEffect(() => {
@@ -508,6 +524,9 @@ export default function ProductDetailPage() {
   const textHead = isDark ? 'text-white' : 'text-slate-900';
   const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
+
+  // Render nothing until auth is confirmed — prevents any HTML leaking to unauthenticated users
+  if (!authChecked) return <div className="min-h-screen bg-black" />;
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
   if (!product) return <div className={`min-h-screen ${bgMain} flex items-center justify-center ${textMuted}`}>Produto não encontrado.</div>;

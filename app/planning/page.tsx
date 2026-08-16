@@ -12,6 +12,8 @@ import {
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuthGuard } from '@/lib/useAuthGuard';
 
 // Configuração Supabase
 const supabase = createClient(
@@ -27,6 +29,8 @@ function getLocalYYYYMMDD(date: Date) {
 }
 
 export default function PlanningPage() {
+  const router = useRouter();
+  const { authChecked } = useAuthGuard();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   
@@ -617,6 +621,7 @@ export default function PlanningPage() {
   const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
 
+  if (!authChecked) return <div className="min-h-screen bg-black" />;
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
 
   return (

@@ -9,6 +9,7 @@ import {
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
+import { useAuthGuard } from '@/lib/useAuthGuard';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +18,7 @@ const supabase = createClient(
 
 export default function IntegrationPage() {
   const router = useRouter();
+  const { authChecked } = useAuthGuard();
   const [userId, setUserId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -490,6 +492,8 @@ ${commonFunctions}`;
   const textHead = isDark ? 'text-white' : 'text-slate-900';
   const textMuted = 'text-slate-500';
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
+
+  if (!authChecked) return <div className="min-h-screen bg-black" />;
 
   return (
     <div className={`min-h-screen font-sans ${bgMain}`}>
