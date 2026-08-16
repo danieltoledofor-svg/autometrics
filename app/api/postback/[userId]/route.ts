@@ -22,13 +22,26 @@ async function handleRequest(
         const { searchParams } = new URL(request.url);
         const { userId } = await params;
 
-        let event = (searchParams.get('event') || '').toLowerCase();
-        
-        // Mapeamento automático de eventos (ex: Clickbank usa "Purchase", "Upsell", etc)
-        if (event === 'purchase' || event === 'upsell' || event === 'combined conversion') event = 'sale';
-        if (event === 'order_impression') event = 'checkout';
-        if (event === 'chargeback') event = 'refund';
-        const campaignId = searchParams.get('campaign_id') || '';     // ID numérico (utm_id)
+        // Buygoods usa CONV_TYPE; outros usam event
+        let event = (searchParams.get('event') || searchParams.get('CONV_TYPE') || '').toLowerCase();
+
+        // Mapeamento automático de eventos
+        // Clickbank: Purchase, Upsell | Buygoods: Sale, InitiateCheckout | Genérico: chargeback
+        if (event === 'purchase' || event === 'upsell' || event === 'combined conversion' || event === 'sale') event = 'sale';
+        if (event === 'order_impression' || event === 'initiatecheckout') event = 'checkout';
+        if (event === 'chargeback' || event === 'refund') event = 'refund';
+
+        // Resolução do campaign_id: várias plataformas usam nomes diferentes
+        //   Buygoods/MaxWeb: campaign_id={SUBID1} no postback configurado
+        //   Fallback 1: subid1 (caso a URL do postback use {SUBID} diretamente)
+        //   Fallback 2: utm_id (Google/Meta padrão)
+        //   Fallback 3: gad_campaignid (Google Ads nativo)
+        const campaignId =
+            searchParams.get('campaign_id') ||
+            searchParams.get('subid1') ||
+            searchParams.get('utm_id') ||
+            searchParams.get('gad_campaignid') ||
+            '';
         const campaignName = searchParams.get('utm_campaign') || '';    // Nome da campanha (fallback)
         const amount = parseFloat(searchParams.get('amount') || '0');
         const currency = (searchParams.get('cy') || 'BRL').toUpperCase();
