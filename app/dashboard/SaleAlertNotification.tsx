@@ -63,7 +63,7 @@ export default function SaleAlertNotification({ products, isDark }: Props) {
   if (!notifications.length) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 w-80 pointer-events-none">
+    <div className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 flex flex-col gap-3 w-72 md:w-80 pointer-events-none">
       {notifications.map(n => (
         <NotificationCard key={n.id} notification={n} onDismiss={dismiss} />
       ))}
