@@ -7,14 +7,14 @@ import {
   Briefcase, Globe, LayoutGrid, LogOut, Package, FileText, Settings, ArrowLeft,
   Calendar, ChevronUp, SlidersHorizontal, X
 } from 'lucide-react';
-import Image from 'next/image';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line 
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
+import { Logo } from '@/app/components/Logo';
 
 // Configuração Supabase
 const supabase = createClient(
@@ -689,12 +689,12 @@ export default function PlanningPage() {
       {/* SIDEBAR DESKTOP */}
       <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
-          <Image src="/logo.png" alt="Logo" width={180} height={60} className="object-contain object-left" priority />
+          <Logo />
         </div>
         <nav className="flex-1 px-2 py-4 space-y-2">
           <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20}/> Dashboard</Link>
-          <Link href="/planning" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Target size={20}/> Planejamento</Link>
-          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20}/> Meus Produtos</Link>
+          <Link href="/planning" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Target size={20}/> Metas</Link>
+          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20}/> Campanhas</Link>
           <Link href="/integration" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Settings size={20}/> Integração</Link>
         </nav>
         <div className="p-4 border-t border-inherit">
@@ -708,7 +708,7 @@ export default function PlanningPage() {
       {/* MOBILE HEADER */}
       <div className="flex md:hidden items-center justify-between px-1 pt-1 pb-3">
         <div>
-          <h1 className={`text-xl font-bold leading-tight ${textHead}`}>Planejamento</h1>
+          <h1 className={`text-xl font-bold leading-tight ${textHead}`}>Metas</h1>
           <p className="text-xs text-slate-500 mt-0.5">{dateRange === 'custom' ? `${startDate} → ${endDate}` : (DATE_PRESET_LABELS[dateRange] || 'Período')}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -746,16 +746,17 @@ export default function PlanningPage() {
         </button>
       </div>
 
-      {/* MOBILE KPI CAROUSEL */}
-      <div className="flex md:hidden gap-3 px-1 pb-3 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-        {mobileKpiCards.map(({ label, value, color, data, isPositiveGood, isRoi }) => {
+      {/* MOBILE KPI GRID 2x2 */}
+      <div className="md:hidden grid grid-cols-2 gap-3 px-1 pb-3">
+        {mobileKpiCards.filter(c => ['Receita', 'Lucro', 'Custo Ads', 'ROI'].includes(c.label)).map(({ label, value, color, data, isPositiveGood, isRoi }) => {
           const trend = trendPct(data);
           const trendUp = trend >= 0;
           const trendGood = isPositiveGood ? trendUp : !trendUp;
+          const displayLabel = label === 'Custo Ads' ? 'Custo' : label;
           return (
-            <div key={label} className={`flex-shrink-0 w-[130px] border rounded-2xl p-3 relative overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div key={label} className={`border rounded-2xl p-3 relative overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
               <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ background: color }} />
-              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{label}</div>
+              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{displayLabel}</div>
               <div className="text-sm font-bold font-mono leading-tight mb-1" style={{ color }}>
                 {isRoi ? `${value.toFixed(1)}%` : formatMoney(value)}
               </div>
@@ -775,7 +776,7 @@ export default function PlanningPage() {
       <div className="w-full xl:w-auto">
          <Link href="/dashboard" className={`text-xs ${textMuted} hover:underline mb-2 block`}>&larr; Voltar ao Dashboard</Link>
          <div className="flex justify-between items-center w-full">
-            <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}><Target className="text-indigo-500" /> Planejamento & DRE</h1>
+            <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}><Target className="text-indigo-500" /> Metas & DRE</h1>
             <button onClick={toggleTheme} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
          </div>
       </div>
@@ -1181,7 +1182,7 @@ export default function PlanningPage() {
       </div>
 
       {/* GRÁFICO */}
-      <div className={`${bgCard} rounded-xl p-6 mb-8 h-64 shadow-sm`}>
+      <div className={`hidden md:block ${bgCard} rounded-xl p-6 mb-8 h-64 shadow-sm`}>
          <ResponsiveContainer width="100%" height="100%">
              <AreaChart data={processedData.chartData}>
                 <defs><linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs>
@@ -1410,8 +1411,8 @@ export default function PlanningPage() {
         <div className="flex justify-around items-center px-2 pt-2 pb-5">
           {[
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
-            { href: '/planning', Icon: Target, label: 'Planejamento', active: true },
-            { href: '/products', Icon: Package, label: 'Produtos', active: false },
+            { href: '/planning', Icon: Target, label: 'Metas', active: true },
+            { href: '/products', Icon: Package, label: 'Campanhas', active: false },
             { href: '/integration', Icon: Settings, label: 'Integração', active: false },
           ].map(({ href, Icon, label, active }) => (
             <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>

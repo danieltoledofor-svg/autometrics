@@ -8,7 +8,7 @@ import {
   LayoutGrid, Target, Package, Settings, LogOut
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { Logo } from '@/app/components/Logo';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
@@ -513,12 +513,12 @@ ${commonFunctions}`;
       {/* SIDEBAR DESKTOP */}
       <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
-          <Image src="/logo.png" alt="Logo" width={180} height={60} className="object-contain object-left" priority />
+          <Logo />
         </div>
         <nav className="flex-1 px-2 py-4 space-y-2">
           <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20}/> Dashboard</Link>
-          <Link href="/planning" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Target size={20}/> Planejamento</Link>
-          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20}/> Meus Produtos</Link>
+          <Link href="/planning" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Target size={20}/> Metas</Link>
+          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20}/> Campanhas</Link>
           <Link href="/integration" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Settings size={20}/> Integração</Link>
         </nav>
         <div className="p-4 border-t border-inherit">
@@ -1222,8 +1222,8 @@ ${commonFunctions}`;
         <div className="flex justify-around items-center px-2 pt-2 pb-5">
           {[
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
-            { href: '/planning', Icon: Target, label: 'Planejamento', active: false },
-            { href: '/products', Icon: Package, label: 'Produtos', active: false },
+            { href: '/planning', Icon: Target, label: 'Metas', active: false },
+            { href: '/products', Icon: Package, label: 'Campanhas', active: false },
             { href: '/integration', Icon: Settings, label: 'Integração', active: true },
           ].map(({ href, Icon, label, active }) => (
             <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>

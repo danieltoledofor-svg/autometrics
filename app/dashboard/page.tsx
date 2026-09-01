@@ -12,9 +12,9 @@ import {
 import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import SaleAlertNotification from './SaleAlertNotification';
+import { Logo } from '@/app/components/Logo';
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
@@ -466,13 +466,7 @@ export default function DashboardPage() {
       {/* ─── DESKTOP SIDEBAR (hidden on mobile) ─── */}
       <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
-          <div className="relative">
-            <Image
-              src="/logo.png" alt="Logo" width={180} height={60}
-              className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`}
-              priority
-            />
-          </div>
+          <Logo />
         </div>
 
         <nav className="flex-1 px-2 py-4 space-y-2">
@@ -480,10 +474,10 @@ export default function DashboardPage() {
             <LayoutGrid size={20} /> <span className="font-medium">Dashboard</span>
           </Link>
           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-            <Target size={20} /> <span className="font-medium">Planejamento</span>
+            <Target size={20} /> <span className="font-medium">Metas</span>
           </Link>
           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-            <Package size={20} /> <span className="font-medium">Meus Produtos</span>
+            <Package size={20} /> <span className="font-medium">Campanhas</span>
           </Link>
           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
             <Settings size={20} /> <span className="font-medium">Integração</span>
@@ -676,15 +670,15 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* ── MOBILE KPI CAROUSEL (hidden on desktop) ── */}
+        {/* ── MOBILE KPI GRID 2x2 (hidden on desktop) ── */}
         {processedData.totals && (
-          <div className="flex md:hidden gap-3 px-1 pb-3 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-            {mobileKpiCards.map(({ label, value, color, data, isPositiveGood, isRoi }) => {
+          <div className="md:hidden grid grid-cols-2 gap-3 px-1 pb-3">
+            {mobileKpiCards.slice(0, 4).map(({ label, value, color, data, isPositiveGood, isRoi }) => {
               const trend = trendPct(data);
               const trendUp = trend >= 0;
               const trendGood = isPositiveGood ? trendUp : !trendUp;
               return (
-                <div key={label} className={`flex-shrink-0 w-[130px] border rounded-2xl p-3 relative overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+                <div key={label} className={`border rounded-2xl p-3 relative overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                   <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ background: color }} />
                   <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{label}</div>
                   <div className="text-sm font-bold font-mono leading-tight mb-1" style={{ color }}>
@@ -719,8 +713,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── BAR CHART (shared, height adjusts per breakpoint) ── */}
-        <div className={`${bgCard} rounded-xl p-4 md:p-6 mb-4 md:mb-8 border shadow-sm`} style={{ height: '13rem' }}>
+        {/* ── BAR CHART (desktop only) ── */}
+        <div className={`hidden md:block ${bgCard} rounded-xl p-4 md:p-6 mb-4 md:mb-8 border shadow-sm`} style={{ height: '13rem' }}>
           <div className="md:hidden text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Receita vs Custo</div>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={processedData.chart}>
@@ -886,8 +880,8 @@ export default function DashboardPage() {
         <div className="flex justify-around items-center px-2 pt-2 pb-5">
           {[
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: true },
-            { href: '/planning', Icon: Target, label: 'Planejamento', active: false },
-            { href: '/products', Icon: Package, label: 'Produtos', active: false },
+            { href: '/planning', Icon: Target, label: 'Metas', active: false },
+            { href: '/products', Icon: Package, label: 'Campanhas', active: false },
             { href: '/integration', Icon: Settings, label: 'Integração', active: false },
           ].map(({ href, Icon, label, active }) => (
             <Link

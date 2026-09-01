@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import Image from 'next/image';
+import { Logo } from '@/app/components/Logo';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -603,13 +603,13 @@ export default function ProductDetailPage() {
       {/* ── SIDEBAR DESKTOP ── */}
       <aside className={`hidden md:flex flex-col w-64 shrink-0 border-r ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} fixed top-0 left-0 h-screen z-50`}>
         <div className={`p-5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-          <Image src="/logo.png" alt="Autometrics" width={130} height={28} />
+          <Logo />
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {[
             { href: '/dashboard', icon: <LayoutGrid size={18} />, label: 'Dashboard' },
-            { href: '/planning', icon: <Target size={18} />, label: 'Planejamento' },
-            { href: '/products', icon: <Package size={18} />, label: 'Produtos', active: true },
+            { href: '/planning', icon: <Target size={18} />, label: 'Metas' },
+            { href: '/products', icon: <Package size={18} />, label: 'Campanhas', active: true },
             { href: '/integration', icon: <Settings size={18} />, label: 'Integração' },
           ].map(item => (
             <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${(item as any).active ? 'bg-indigo-600 text-white' : (isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-100')}`}>
@@ -1649,8 +1649,8 @@ export default function ProductDetailPage() {
         <div className="flex justify-around pt-2">
           {[
             { href: '/dashboard', icon: <LayoutGrid size={22} />, label: 'Dashboard' },
-            { href: '/planning', icon: <Target size={22} />, label: 'Planejamento' },
-            { href: '/products', icon: <Package size={22} />, label: 'Produtos', active: true },
+            { href: '/planning', icon: <Target size={22} />, label: 'Metas' },
+            { href: '/products', icon: <Package size={22} />, label: 'Campanhas', active: true },
             { href: '/integration', icon: <Settings size={22} />, label: 'Integração' },
           ].map(item => (
             <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-0.5 px-3 py-1 ${(item as any).active ? 'text-indigo-500' : textMuted}`}>

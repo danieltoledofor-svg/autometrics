@@ -41,7 +41,7 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import { Logo } from '@/app/components/Logo';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 
 const supabase = createClient(
@@ -538,7 +538,7 @@ export default function ProductsPage() {
       {/* MOBILE HEADER */}
       <div className={`md:hidden flex items-center justify-between p-4 border-b shrink-0 z-30 sticky top-0 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center gap-3">
-           <Image src="/logo.png" alt="Logo" width={120} height={40} className={`w-[120px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} priority />
+           <Logo />
         </div>
         <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>
            {isMobileSidebarOpen ? <X size={24}/> : <List size={24}/>}
@@ -549,15 +549,15 @@ export default function ProductsPage() {
       <aside className={`${isMobileSidebarOpen ? 'flex' : 'hidden'} md:flex fixed md:sticky inset-0 md:inset-auto top-[73px] md:top-0 w-full md:w-72 shrink-0 border-r flex-col h-[calc(100dvh-73px)] md:h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
         
         <div className="hidden md:flex h-20 items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden shrink-0">
-           <div className="relative"><Image src="/logo.png" alt="Logo" width={180} height={60} className={`w-[180px] h-auto object-contain object-left ${!isDark ? 'drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : ''}`} priority /></div>
+           <Logo />
         </div>
         
         {/* Scrollable Area for Sidebar Items */}
         <div className="flex-1 overflow-y-auto flex flex-col custom-scrollbar">
           <nav className="px-2 py-4 space-y-2 shrink-0">
              <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><LayoutGrid size={20} /> <span className="font-medium">Dashboard</span></Link>
-             <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="font-medium">Planejamento</span></Link>
-             <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><Briefcase size={20} /> <span className="font-medium">Meus Produtos</span></Link>
+             <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="font-medium">Metas</span></Link>
+             <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><Briefcase size={20} /> <span className="font-medium">Campanhas</span></Link>
              <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="font-medium">Integração</span></Link>
           </nav>
           
@@ -588,7 +588,7 @@ export default function ProductsPage() {
                       <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
                       <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
                          <Globe size={14} className={isMccActive ? 'text-white' : 'text-slate-500'}/>
-                         <span className="truncate w-28">{mcc.name}</span>
+                         <span className="break-words min-w-0">{mcc.name}</span>
                       </button>
                       <button onClick={(e) => handleDeleteMcc(mcc.name, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
                    </div>
@@ -602,7 +602,7 @@ export default function ProductsPage() {
                           return (
                             <div key={acc} className="flex items-center group/acc pr-2">
                               <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
-                                  <Briefcase size={12}/> <span className={`truncate w-28 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
+                                  <Briefcase size={12}/> <span className={`break-words min-w-0 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
                               </button>
                               <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 transition-opacity ml-1 ${isHidden ? 'text-amber-500 hover:text-amber-400' : 'text-slate-500 hover:text-slate-400'}`} title={isHidden ? "Restaurar Conta" : "Ocultar Conta"}>
                                  {isHidden ? <Eye size={12}/> : <EyeOff size={12}/>}
@@ -642,7 +642,7 @@ export default function ProductsPage() {
         {/* BARRA DE FERRAMENTAS E FILTROS */}
         <div className="flex flex-col gap-4 mb-6">
            <div className={`p-1.5 rounded-xl flex flex-wrap gap-2 md:gap-4 items-center border ${bgCard}`}>
-             <div className="pl-3 text-slate-500 hidden md:block"><Search size={18} /></div>
+             <div className="pl-3 text-slate-500"><Search size={18} /></div>
              <input type="text" placeholder="Buscar campanha..." className={`bg-transparent flex-1 outline-none min-w-[120px] px-2 md:px-0 placeholder:text-slate-600 ${textHead}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
              
              {/* Filtro de Status */}
@@ -865,8 +865,8 @@ export default function ProductsPage() {
         <div className="flex justify-around items-center px-2 pt-2 pb-5">
           {[
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
-            { href: '/planning', Icon: Target, label: 'Planejamento', active: false },
-            { href: '/products', Icon: Package, label: 'Produtos', active: true },
+            { href: '/planning', Icon: Target, label: 'Metas', active: false },
+            { href: '/products', Icon: Package, label: 'Campanhas', active: true },
             { href: '/integration', Icon: Settings, label: 'Integração', active: false },
           ].map(({ href, Icon, label, active }) => (
             <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
