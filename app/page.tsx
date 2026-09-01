@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { Mail, ArrowRight, Loader2, AlertCircle, Lock } from 'lucide-react';
-import Image from 'next/image';
+import { Logo } from '@/app/components/Logo';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -72,16 +72,7 @@ export default function LoginPage() {
         
         <div className="text-center mb-8 flex flex-col items-center">
           
-          {/* --- LOGO GRANDE (FORÇADA) --- */}
-          {/* w-[300px] força a largura para 300 pixels */}
-          <Image 
-            src="/logo.png" 
-            alt="AutoMetrics Logo" 
-            width={250} 
-            height={120}
-            className="w-[300px] h-auto object-contain mb-4" 
-            priority
-          />
+          <Logo size="lg" className="mb-4" />
           
           <p className="text-slate-400 text-sm">Acesse sua central de inteligência.</p>
         </div>
