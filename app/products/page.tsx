@@ -586,9 +586,9 @@ export default function ProductsPage() {
                  <div key={mcc.name} className="mb-2">
                    <div className="flex items-center gap-1 group relative pr-2">
                       <button onClick={() => toggleMccExpand(mcc.name)} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>
-                      <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
-                         <Globe size={14} className={isMccActive ? 'text-white' : 'text-slate-500'}/>
-                         <span className="break-words min-w-0">{mcc.name}</span>
+                      <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 min-w-0 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
+                         <Globe size={14} className={`shrink-0 ${isMccActive ? 'text-white' : 'text-slate-500'}`}/>
+                         <span className="break-all min-w-0">{mcc.name}</span>
                       </button>
                       <button onClick={(e) => handleDeleteMcc(mcc.name, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
                    </div>
@@ -601,8 +601,8 @@ export default function ProductsPage() {
 
                           return (
                             <div key={acc} className="flex items-center group/acc pr-2">
-                              <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
-                                  <Briefcase size={12}/> <span className={`break-words min-w-0 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
+                              <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 min-w-0 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
+                                  <Briefcase size={12} className="shrink-0"/> <span className={`break-all min-w-0 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
                               </button>
                               <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 transition-opacity ml-1 ${isHidden ? 'text-amber-500 hover:text-amber-400' : 'text-slate-500 hover:text-slate-400'}`} title={isHidden ? "Restaurar Conta" : "Ocultar Conta"}>
                                  {isHidden ? <Eye size={12}/> : <EyeOff size={12}/>}
@@ -762,10 +762,10 @@ export default function ProductsPage() {
                                  <td className="p-3">
                                    <div className="flex items-center gap-2">
                                      {product.status === 'active' ? <PlayCircle size={14} className="text-emerald-500 shrink-0"/> : <PauseCircle size={14} className="text-rose-500 shrink-0"/>}
-                                     <span className={`font-bold text-sm ${textHead} truncate max-w-[280px]`} title={product.name}>{product.name}</span>
+                                     <span className={`font-bold text-sm ${textHead} break-words`} title={product.name}>{product.name}</span>
                                      {product.is_hidden && <EyeOff size={12} className="text-amber-500 shrink-0"/>}
                                    </div>
-                                   <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono mt-0.5 truncate max-w-[280px]" title={product.campaign_id}>
+                                   <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono mt-0.5 break-all" title={product.campaign_id}>
                                       <Hash size={10} /> {product.campaign_id}
                                    </div>
                                  </td>

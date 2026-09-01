@@ -846,12 +846,12 @@ export default function DashboardPage() {
                       {isExpanded && Object.values(row.accounts).map((acc: any) => (
                         <React.Fragment key={acc.name}>
                           <div className={`flex items-center justify-between px-5 py-2 border-b ${borderCol} ${isDark ? 'bg-slate-950/60' : 'bg-indigo-50/60'}`}>
-                            <span className="text-xs font-bold text-indigo-400 truncate max-w-[170px]">{acc.name}</span>
+                            <span className="text-xs font-bold text-indigo-400 break-words min-w-0 mr-2">{acc.name}</span>
                             <span className="text-xs font-mono text-blue-400 ml-2 shrink-0">{formatMoney(acc.revenue)}</span>
                           </div>
                           {Object.values(acc.campaigns).map((cmp: any) => (
                             <div key={cmp.name} className={`flex items-center justify-between px-6 py-2 border-b ${borderCol} ${isDark ? 'bg-slate-950/40' : 'bg-slate-50/60'}`}>
-                              <span className="text-[11px] text-slate-500 truncate max-w-[170px]">
+                              <span className="text-[11px] text-slate-500 break-words min-w-0 mr-2">
                                 {cmp.productId ? (
                                   <Link href={`/products/${cmp.productId}`} className="hover:text-indigo-400 active:text-indigo-400">
                                     {cmp.name}

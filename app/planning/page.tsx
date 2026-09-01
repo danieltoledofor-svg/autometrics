@@ -1060,7 +1060,7 @@ export default function PlanningPage() {
                    const isLoss = c.profit < 0 || c.roi < 0;
                    return (
                      <div key={i} className={`flex justify-between items-center p-2 rounded-lg border ${isLoss ? 'bg-rose-500/5 border-rose-500/15' : 'bg-amber-500/5 border-amber-500/15'}`}>
-                       <div className="truncate pr-2 max-w-[58%]">
+                       <div className="min-w-0 pr-2 max-w-[58%]">
                          <p className={`text-[11px] font-bold leading-tight ${isLoss ? 'text-rose-300' : 'text-amber-300'}`}>
                            <Package size={9} className="inline mr-1 opacity-60"/>{c.name}
                          </p>
@@ -1150,9 +1150,9 @@ export default function PlanningPage() {
                ) : (
                   processedData.topCampaigns.map((camp: any, idx: number) => (
                      <div key={idx} className="flex justify-between items-center text-xs">
-                        <div className="truncate pr-2">
+                        <div className="min-w-0 pr-2">
                            <span className="font-bold text-slate-400 mr-2">{idx + 1}.</span>
-                           <span className={`font-medium ${textHead}`}>{camp.name === 'Desconhecida' ? 'Venda Externa' : camp.name}</span>
+                           <span className={`font-medium ${textHead} break-words`}>{camp.name === 'Desconhecida' ? 'Venda Externa' : camp.name}</span>
                            <span className="block text-[9px] text-slate-400 mt-0.5 ml-5">Traz <span className="text-emerald-500 font-bold">{camp.profitShare.toFixed(1)}%</span> do lucro gastando <span className="text-orange-400 font-bold">{camp.spendShare.toFixed(1)}%</span></span>
                         </div>
                         <span className={`font-bold whitespace-nowrap self-start ${camp.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
@@ -1321,7 +1321,7 @@ export default function PlanningPage() {
                                        <div className="flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed border-slate-700 pt-1">
                                           {day.details.map((d: any) => (
                                              <div key={d.id} className="flex items-center gap-2 group/item">
-                                                <span className={`text-[10px] ${textMuted} truncate max-w-[100px]`} title={d.desc}>{d.desc}</span>
+                                                <span className={`text-[10px] ${textMuted} break-words min-w-0`} title={d.desc}>{d.desc}</span>
                                                 <span className={`text-[10px] font-bold ${d.val < 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(Math.abs(d.val))}</span>
                                                 {/* Botão Excluir (Só com Modo Edição) */}
                                                 {editMode && (
