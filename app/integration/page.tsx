@@ -126,6 +126,10 @@ export default function IntegrationPage() {
     if (!identifierName) return alert("Por favor, digite um nome para identificar esta conta/grupo.");
 
     const commonFunctions = `
+// Identifica esta versao no log e no painel. Serve para conferir, sem abrir o
+// banco, se o script colado no gerenciador e mesmo o mais recente.
+const SCRIPT_VERSION = 'v2';
+
 // campaign.primary_status nao existe em versoes antigas da API usada pelo Scripts.
 // Na primeira falha o script desliga o campo e segue sem ele.
 let SUPPORTS_PRIMARY_STATUS = true;
@@ -452,6 +456,7 @@ function processCampaignRow(row, dateString, account, accountStatus) {
     const currency = (row.customer && row.customer.currencyCode) || account.getCurrencyCode();
 
     const payload = {
+      script_version: SCRIPT_VERSION,
       user_id: CONFIG.USER_ID,
       campaign_name: row.campaign.name,
       campaign_id: row.campaign.id,
@@ -499,7 +504,7 @@ function sendToWebhook(payload) {
        try {
          const body = JSON.parse(response.getContentText());
          if (body.diag) {
-           Logger.log('✅ OK | st:' + body.diag.st_recv + ' aud:' + body.diag.aud_recv + ' loc:' + body.diag.loc_recv + (body.diag.errors && body.diag.errors.length ? ' ERROS:' + JSON.stringify(body.diag.errors) : ''));
+           Logger.log('✅ OK | ' + (body.diag.status_src || '?') + ' | st:' + body.diag.st_recv + ' aud:' + body.diag.aud_recv + ' loc:' + body.diag.loc_recv + (body.diag.errors && body.diag.errors.length ? ' ERROS:' + JSON.stringify(body.diag.errors) : ''));
          }
        } catch(pe) {}
     }
@@ -526,7 +531,7 @@ const CONFIG = {
 };
 
 function main() {
-  Logger.log('🚀 Iniciando AutoMetrics MCC para: ' + CONFIG.MCC_NAME);
+  Logger.log('🚀 Iniciando AutoMetrics ' + SCRIPT_VERSION + ' para: ' + CONFIG.MCC_NAME);
   const accountIterator = AdsManagerApp.accounts().get();
   while (accountIterator.hasNext()) {
     const account = accountIterator.next();
@@ -557,7 +562,7 @@ const CONFIG = {
 };
 
 function main() {
-  Logger.log('🚀 Iniciando AutoMetrics Single para: ' + CONFIG.MCC_NAME);
+  Logger.log('🚀 Iniciando AutoMetrics ' + SCRIPT_VERSION + ' para: ' + CONFIG.MCC_NAME);
   const account = AdsApp.currentAccount();
   processAccount(account);
   Logger.log('✅ Finalizado com sucesso.');

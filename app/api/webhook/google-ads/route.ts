@@ -13,7 +13,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { 
       campaign_name, campaign_id, date, metrics, currency_code, user_id, account_name, mcc_name,
-      search_terms = [], audiences = [], locations = [], history = [] 
+      search_terms = [], audiences = [], locations = [], history = [],
+      script_version = 'v1'
     } = body;
 
     // Validação básica
@@ -303,6 +304,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       success: true,
       diag: {
+        // Aparece no log do script: confirma, sem abrir o banco, se o script
+        // colado no gerenciador é o atual.
+        status_src: hasRawStatus
+          ? `${script_version} servidor->${googleStatus}`
+          : `${script_version} SEM CAMPOS CRUS (script desatualizado)`,
         st_recv: search_terms?.length || 0,
         aud_recv: audiences?.length || 0,
         loc_recv: locations?.length || 0,
