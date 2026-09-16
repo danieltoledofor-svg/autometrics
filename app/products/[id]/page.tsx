@@ -939,33 +939,41 @@ export default function ProductDetailPage() {
                       {/* ── EDITOR INLINE DE NOTA ── */}
                       {isEditingThisNote && (
                         <tr className={`${isDark ? 'bg-amber-950/20' : 'bg-amber-50'}`}>
-                          <td colSpan={ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).length} className="px-4 py-3">
-                            <div className={`flex items-start gap-3 p-3 rounded-xl border ${isDark ? 'bg-slate-950 border-amber-500/30' : 'bg-white border-amber-300'}`}>
-                              <NotebookPen size={16} className="text-amber-400 mt-1 shrink-0" />
-                              <div className="flex-1">
-                                <p className={`text-[10px] font-bold uppercase text-amber-400 mb-1`}>Anotação — {row.date}</p>
-                                <textarea
-                                  autoFocus
-                                  rows={3}
-                                  value={noteText}
-                                  onChange={e => setNoteText(e.target.value)}
-                                  placeholder="Digite sua anotação para este dia..."
-                                  className={`w-full rounded-lg p-2 text-sm outline-none resize-none transition-colors border ${isDark
-                                    ? 'bg-slate-900 border-slate-700 text-white focus:border-amber-500 placeholder-slate-600'
-                                    : 'bg-slate-50 border-slate-200 text-black focus:border-amber-400'
-                                    }`}
-                                />
-                              </div>
-                              <div className="flex flex-col gap-2 shrink-0">
-                                <button onClick={() => saveNote(dateKey)}
-                                  className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                                  <Check size={12} /> Salvar
-                                </button>
-                                <button onClick={() => setEditingNote(null)}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'
-                                    }`}>
-                                  <X size={12} /> Fechar
-                                </button>
+                          <td colSpan={ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).length} className="p-0">
+                            {/* A célula acompanha a largura TOTAL da tabela, que rola na
+                                horizontal. Sem o sticky, a caixa nascia fora da área visível
+                                e era preciso rolar para encontrá-la. Presa à esquerda, ela
+                                fica sempre à vista, com largura limitada ao viewport. */}
+                            <div className="sticky left-0 w-[calc(100vw-2rem)] max-w-3xl px-4 py-3">
+                              <div className={`flex flex-col sm:flex-row items-stretch sm:items-start gap-3 p-3 rounded-xl border ${isDark ? 'bg-slate-950 border-amber-500/30' : 'bg-white border-amber-300'}`}>
+                                <div className="flex items-start gap-2 flex-1 min-w-0">
+                                  <NotebookPen size={16} className="text-amber-400 mt-1 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] font-bold uppercase text-amber-400 mb-1">Anotação — {row.date}</p>
+                                    <textarea
+                                      autoFocus
+                                      rows={4}
+                                      value={noteText}
+                                      onChange={e => setNoteText(e.target.value)}
+                                      placeholder="Digite sua anotação para este dia..."
+                                      className={`w-full rounded-lg p-2 text-sm leading-relaxed outline-none resize-y min-h-[88px] transition-colors border ${isDark
+                                        ? 'bg-slate-900 border-slate-700 text-white focus:border-amber-500 placeholder-slate-600'
+                                        : 'bg-slate-50 border-slate-200 text-black focus:border-amber-400'
+                                        }`}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex flex-row sm:flex-col gap-2 shrink-0">
+                                  <button onClick={() => saveNote(dateKey)}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                                    <Check size={12} /> Salvar
+                                  </button>
+                                  <button onClick={() => setEditingNote(null)}
+                                    className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'
+                                      }`}>
+                                    <X size={12} /> Fechar
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </td>

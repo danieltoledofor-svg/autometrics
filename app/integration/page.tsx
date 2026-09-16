@@ -128,7 +128,7 @@ export default function IntegrationPage() {
     const commonFunctions = `
 // Identifica esta versao no log e no painel. Serve para conferir, sem abrir o
 // banco, se o script colado no gerenciador e mesmo o mais recente.
-const SCRIPT_VERSION = 'v8';
+const SCRIPT_VERSION = 'v9';
 
 // Nivel de campos opcionais da query (ver buildCampaignQuery). Comeca no mais
 // completo e desce sozinho se a API do gerenciador nao reconhecer algum campo.
@@ -222,6 +222,55 @@ function reportUnreachableAccounts(directory, visitadas) {
   } catch (e) {
     Logger.log('   falha ao enviar status das contas: ' + e.message);
   }
+}
+
+/**
+ * Extrai o de/para dos campos alterados num change_event.
+ *
+ * changed_fields diz QUAIS campos mudaram; old_resource e new_resource trazem o
+ * recurso antes e depois. Cruzando os tres da para dizer "orcamento: 100 -> 110",
+ * que e como o proprio Google apresenta, em vez de so "CAMPAIGN_BUDGET (UPDATE)".
+ */
+function describeChanges(ev) {
+  const out = [];
+  try {
+    const campos = ev.changedFields;
+    const lista = !campos ? [] : (typeof campos === 'string' ? campos.split(',') : (campos.paths || campos));
+    if (!lista || !lista.length) return out;
+
+    for (let i = 0; i < lista.length; i++) {
+      const caminho = String(lista[i]).trim();
+      if (!caminho) continue;
+      const antes = valorNoCaminho(ev.oldResource, caminho);
+      const depois = valorNoCaminho(ev.newResource, caminho);
+      if (antes === undefined && depois === undefined) continue;
+      out.push({ f: caminho, de: formatarValor(antes), para: formatarValor(depois) });
+    }
+  } catch (e) { /* diagnostico e opcional: nunca derruba a coleta */ }
+  return out;
+}
+
+/** Caminha por 'campaign.campaign_budget.amount_micros' dentro do recurso. */
+function valorNoCaminho(recurso, caminho) {
+  if (!recurso) return undefined;
+  const partes = caminho.split('.');
+  let atual = recurso;
+  for (let i = 0; i < partes.length; i++) {
+    if (atual === null || atual === undefined) return undefined;
+    // a API devolve camelCase; changed_fields vem em snake_case
+    const chave = partes[i].replace(/_([a-z])/g, function (m, c) { return c.toUpperCase(); });
+    atual = atual[chave] !== undefined ? atual[chave] : atual[partes[i]];
+  }
+  return atual;
+}
+
+/** micros viram valor legivel; o resto vai como texto. */
+function formatarValor(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return '';
+  const n = Number(v);
+  if (!isNaN(n) && Math.abs(n) >= 10000 && n % 10000 === 0) return String(n / 1000000);
+  return String(v);
 }
 
 function getAccountStatus() {
@@ -496,7 +545,10 @@ function processCampaignRow(row, dateString, account, accountStatus) {
           change_event.change_date_time,
           change_event.change_resource_type,
           change_event.resource_change_operation,
-          change_event.user_email
+          change_event.user_email,
+          change_event.changed_fields,
+          change_event.old_resource,
+          change_event.new_resource
         FROM change_event
         WHERE change_event.change_date_time >= '\${dateString} 00:00:00'
           AND change_event.change_date_time <= '\${dateString} 23:59:59'
@@ -511,12 +563,20 @@ function processCampaignRow(row, dateString, account, accountStatus) {
         if (eventTime.indexOf('.') !== -1) {
           eventTime = eventTime.split('.')[0];
         }
-        const resourceType = hRow.changeEvent.changeResourceType || '';
-        const operation = hRow.changeEvent.resourceChangeOperation || '';
-        const user = hRow.changeEvent.userEmail || '';
-        
+        const ev = hRow.changeEvent || {};
+        const resourceType = ev.changeResourceType || '';
+        const operation = ev.resourceChangeOperation || '';
+        const user = ev.userEmail || '';
+
         history.push({
           time: eventTime,
+          type: resourceType,
+          op: operation,
+          user: user,
+          // De/para de cada campo alterado, para o painel poder mostrar
+          // "Orcamento: 100 -> 110" em vez de apenas "CAMPAIGN_BUDGET (UPDATE)".
+          fields: describeChanges(ev),
+          // Mantido para nao quebrar quem ainda le o formato antigo.
           change: resourceType + ' (' + operation + ') por ' + user
         });
       }

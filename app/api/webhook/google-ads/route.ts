@@ -8,6 +8,68 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+/** Nomes técnicos do Google em português, para a anotação do dia. */
+const RECURSO_PT: Record<string, string> = {
+  CAMPAIGN: 'Campanha',
+  CAMPAIGN_BUDGET: 'Orçamento',
+  CAMPAIGN_CRITERION: 'Segmentação da campanha',
+  AD_GROUP: 'Grupo de anúncios',
+  AD_GROUP_AD: 'Anúncio',
+  AD_GROUP_CRITERION: 'Palavra-chave / segmentação',
+  AD_GROUP_BID_MODIFIER: 'Ajuste de lance',
+  CAMPAIGN_ASSET: 'Recurso da campanha',
+  AD_GROUP_ASSET: 'Recurso do grupo',
+  ASSET: 'Recurso',
+  FEED: 'Feed',
+};
+
+const OPERACAO_PT: Record<string, string> = {
+  CREATE: 'criou',
+  UPDATE: 'alterou',
+  REMOVE: 'removeu',
+};
+
+const CAMPO_PT: Record<string, string> = {
+  amount_micros: 'valor',
+  target_cpa_micros: 'CPA alvo',
+  target_roas: 'ROAS alvo',
+  status: 'status',
+  name: 'nome',
+  cpc_bid_micros: 'lance de CPC',
+  bidding_strategy_type: 'estratégia de lance',
+  final_urls: 'URL final',
+  start_date: 'data de início',
+  end_date: 'data de término',
+};
+
+/**
+ * Monta a linha do histórico no formato que o Google usa: o que mudou e de que
+ * valor para qual. Antes a anotação dizia apenas "CAMPAIGN_BUDGET (UPDATE) por
+ * fulano", que informa que algo mudou mas não o quê.
+ */
+function descreverAlteracao(hist: any): string {
+  const recurso = RECURSO_PT[hist.type] || hist.type || 'Alteração';
+  const acao = OPERACAO_PT[hist.op] || (hist.op || '').toLowerCase();
+  const quem = hist.user ? ` por ${hist.user}` : '';
+
+  const campos = Array.isArray(hist.fields) ? hist.fields : [];
+  if (!campos.length) {
+    // Sem detalhe disponível: mantém o formato antigo, que ao menos diz o quê.
+    return hist.change || `${recurso} (${hist.op || ''})${quem}`;
+  }
+
+  const detalhes = campos
+    .map((c: any) => {
+      const nome = CAMPO_PT[String(c.f).split('.').pop() || ''] || String(c.f).split('.').pop();
+      const de = c.de === '' || c.de === undefined ? '—' : c.de;
+      const para = c.para === '' || c.para === undefined ? '—' : c.para;
+      return de === para ? `${nome}: ${para}` : `${nome}: ${de} → ${para}`;
+    })
+    .join(', ');
+
+  return `${recurso} — ${acao} ${detalhes}${quem}`;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -198,7 +260,6 @@ export async function POST(request: Request) {
       avg_cpc: num(metrics.average_cpc) / 1000000,
 
       account_name: account_name,
-      target_cpa: num(metrics.target_value),
 
       // Status: 'campaign_status' e o que o anunciante configurou (ENABLED/PAUSED/
       // REMOVED). 'effective_status' e o status real ja resolvido pelo script,
@@ -213,7 +274,6 @@ export async function POST(request: Request) {
       search_impression_share: String(metrics.search_impression_share || '0%'),
       search_top_impression_share: String(metrics.search_top_impression_share || '0%'),
       search_abs_top_share: String(metrics.search_abs_top_share || '0%'),
-      budget_micros: num(metrics.budget_micros),
       bidding_strategy: metrics.bidding_strategy_type,
       currency: currency_code || 'BRL',
 
@@ -228,6 +288,20 @@ export async function POST(request: Request) {
     // Campanha sem anuncios ativos nao retorna final_url. Omitir a coluna
     // preserva o valor ja gravado em vez de apaga-lo.
     if (metrics.final_url) payload.final_url = metrics.final_url;
+
+    // Orçamento e meta de CPA são o valor ATUAL da campanha, não o daquele dia:
+    // o Google não devolve o histórico deles por data. Gravá-los em dias
+    // passados carimbava o valor de hoje sobre todo o histórico, e a evolução
+    // da campanha se perdia — um orçamento que foi de 100 para 110 passava a
+    // exibir 110 em todos os dias anteriores.
+    //
+    // Por isso só são gravados no dia corrente. Dias anteriores mantêm o que foi
+    // registrado quando eles próprios eram "hoje".
+    const hojeStr = new Date().toISOString().slice(0, 10);
+    if (date === hojeStr) {
+      payload.budget_micros = num(metrics.budget_micros);
+      payload.target_cpa = num(metrics.target_value);
+    }
 
     // Uma linha no histórico significa "esta campanha rodou neste dia". O script
     // envia também campanhas sem atividade — é assim que o status de uma campanha
@@ -346,7 +420,7 @@ export async function POST(request: Request) {
           let currentNotes = currentMetrics?.notes || '';
           let addedHistory = false;
           history.forEach((hist: any) => {
-            const histLine = `[AUTO] ${hist.time} - ${hist.change}`;
+            const histLine = `[AUTO] ${hist.time} - ${descreverAlteracao(hist)}`;
             if (!currentNotes.includes(histLine)) {
               currentNotes += (currentNotes ? '\n' : '') + histLine;
               addedHistory = true;
