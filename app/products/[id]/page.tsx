@@ -462,6 +462,10 @@ export default function ProductDetailPage() {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED',
         effective_status: row.effective_status || null,
+        // Revisão retroativa do Google (cliques inválidos cancelados).
+        cost_previous: row.cost_previous,
+        clicks_previous: row.clicks_previous,
+        revised_at: row.revised_at,
         campaign_status_reasons: row.campaign_status_reasons || null,
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
         // Parcelas
@@ -497,6 +501,19 @@ export default function ProductDetailPage() {
   if (!product) return <div className={`min-h-screen ${bgMain} flex items-center justify-center ${textMuted}`}>Produto não encontrado.</div>;
 
   const { rows, stats, chart } = processedData;
+
+  // Dias em que o Google mexeu no custo depois do fato. A diferença é somada
+  // para responder de uma vez "quanto o mês mudou", em vez de conferir dia a dia.
+  const revisoes = (() => {
+    const afetados = rows.filter((r: any) => r.revised_at && r.cost_previous != null);
+    if (!afetados.length) return null;
+    const delta = afetados.reduce((acc: number, r: any) => acc + (Number(r.cost) - Number(r.cost_previous)), 0);
+    const cliques = afetados.reduce((acc: number, r: any) => {
+      const antes = r.clicks_previous == null ? null : Number(r.clicks_previous);
+      return antes == null ? acc : acc + (Number(r.clicks) - antes);
+    }, 0);
+    return { dias: afetados.length, delta, cliques };
+  })();
 
   // Status atual da campanha. O webhook mantém products.google_status com o dia
   // mais recente; antes da migration isso vem vazio, então cai para a linha mais
@@ -827,6 +844,20 @@ export default function ProductDetailPage() {
               <Columns size={14} /> Personalizar Colunas
             </button>
           </div>
+          {revisoes && (
+            <div className={`px-4 py-2.5 border-b flex items-center gap-2 flex-wrap text-xs ${borderCol} ${isDark ? 'bg-sky-500/10' : 'bg-sky-50'}`}>
+              <RefreshCw size={14} className="text-sky-400 shrink-0" />
+              <span className={isDark ? 'text-sky-300' : 'text-sky-700'}>
+                <strong>{revisoes.dias}</strong> {revisoes.dias === 1 ? 'dia teve' : 'dias tiveram'} o custo revisado pelo Google no período
+                {' — '}
+                <strong className={revisoes.delta <= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                  {revisoes.delta <= 0 ? '' : '+'}{formatMoney(revisoes.delta)}
+                </strong>
+                {revisoes.cliques !== 0 && <> · {revisoes.cliques > 0 ? '+' : ''}{revisoes.cliques} cliques</>}
+              </span>
+              <span className={textMuted}>(cliques inválidos cancelados aparecem como devolução)</span>
+            </div>
+          )}
           <div className="overflow-auto custom-scrollbar flex-1">
             <table className="w-full text-sm text-left border-collapse">
               <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0 z-20 shadow-lg`}>
@@ -927,7 +958,23 @@ export default function ProductDetailPage() {
                             );
                           }
                           else if (col.type === 'link') content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14} /></a> : '-';
-                          else if (col.format === 'currency') content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold') : (col.key === 'revenue' ? 'text-blue-500 font-bold' : (col.key === 'cost' ? 'text-orange-500 font-medium' : 'text-slate-400'))}>{formatMoney(val)}</span>;
+                          else if (col.format === 'currency') {
+                            const revisado = col.key === 'cost' && row.revised_at && row.cost_previous != null;
+                            const diff = revisado ? Number(row.cost) - Number(row.cost_previous) : 0;
+                            content = (
+                              <span className={`inline-flex items-center gap-1 ${col.key === 'profit' ? (val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold') : (col.key === 'revenue' ? 'text-blue-500 font-bold' : (col.key === 'cost' ? 'text-orange-500 font-medium' : 'text-slate-400'))}`}>
+                                {formatMoney(val)}
+                                {revisado && (
+                                  <span
+                                    title={`Custo revisado pelo Google: ${formatMoney(Number(row.cost_previous))} → ${formatMoney(Number(row.cost))}${row.clicks_previous != null ? ` · cliques ${row.clicks_previous} → ${row.clicks}` : ''}`}
+                                    className={`text-[9px] font-bold px-1 rounded ${diff <= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}
+                                  >
+                                    {diff <= 0 ? '↓' : '↑'}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          }
                           else if (col.format === 'percentage') content = <span>{formatPercent(val)}</span>;
                           else if (col.format === 'percentage_share') content = <span>{formatShare(val)}</span>;
                           else if (col.format === 'percentage_red') content = <span className={`${val > 50 ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>{formatPercent(val)}</span>;

@@ -316,9 +316,48 @@ export async function POST(request: Request) {
 
     let upsertError = null;
     if (hasAdsActivity) {
-      const { error } = await supabase
+      // Revisão retroativa: o Google cancela cliques inválidos e devolve o valor
+      // dias depois, mudando o custo de um dia já fechado. Comparando o que
+      // chega com o que está gravado, a diferença deixa de precisar ser caçada
+      // campanha por campanha. Só para dias anteriores — no dia corrente o valor
+      // muda o tempo todo por acúmulo normal, e não é revisão.
+      if (date !== hojeStr) {
+        const { data: anterior } = await supabase
+          .from('daily_metrics')
+          .select('cost, clicks')
+          .eq('product_id', product.id)
+          .eq('date', date)
+          .limit(1);
+
+        const antes = anterior && anterior.length ? anterior[0] : null;
+        if (antes) {
+          const custoAntes = Number(antes.cost) || 0;
+          const cliquesAntes = Number(antes.clicks) || 0;
+          // Um centavo de folga evita marcar revisão por arredondamento.
+          const mudouCusto = Math.abs(custoAntes - payload.cost) > 0.005;
+          const mudouCliques = cliquesAntes !== payload.clicks;
+          if (mudouCusto || mudouCliques) {
+            payload.cost_previous = custoAntes;
+            payload.clicks_previous = cliquesAntes;
+            payload.revised_at = new Date().toISOString();
+          }
+        }
+      }
+
+      let { error } = await supabase
         .from('daily_metrics')
         .upsert(payload, { onConflict: 'product_id, date' }); // Upsert mescla os dados
+
+      // As colunas de revisão só existem após a migration. Até lá o Postgres
+      // recusa a linha inteira; sem este resguardo, a coleta pararia de gravar.
+      if (error && /cost_previous|clicks_previous|revised_at/.test(error.message || '')) {
+        delete payload.cost_previous;
+        delete payload.clicks_previous;
+        delete payload.revised_at;
+        ({ error } = await supabase
+          .from('daily_metrics')
+          .upsert(payload, { onConflict: 'product_id, date' }));
+      }
       upsertError = error;
     } else {
       const { error } = await supabase
