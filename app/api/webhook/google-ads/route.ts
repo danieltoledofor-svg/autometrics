@@ -208,9 +208,39 @@ export async function POST(request: Request) {
     // preserva o valor ja gravado em vez de apaga-lo.
     if (metrics.final_url) payload.final_url = metrics.final_url;
 
-    const { error: upsertError } = await supabase
-      .from('daily_metrics')
-      .upsert(payload, { onConflict: 'product_id, date' }); // Upsert mescla os dados
+    // Uma linha no histórico significa "esta campanha rodou neste dia". O script
+    // envia também campanhas sem atividade — é assim que o status de uma campanha
+    // pausada chega até aqui —, mas essas NÃO podem virar linha do dia: enchiam
+    // o detalhamento com campanhas antigas zeradas.
+    //
+    // Sem atividade: atualiza o status na linha que já existir (update não cria
+    // nada quando não há linha) e não grava mais nada. Com atividade: upsert
+    // normal. O status atual da campanha já foi gravado em products acima, e não
+    // depende deste trecho.
+    const hasAdsActivity = payload.impressions > 0 || payload.clicks > 0 || payload.cost > 0;
+
+    let upsertError = null;
+    if (hasAdsActivity) {
+      const { error } = await supabase
+        .from('daily_metrics')
+        .upsert(payload, { onConflict: 'product_id, date' }); // Upsert mescla os dados
+      upsertError = error;
+    } else {
+      const { error } = await supabase
+        .from('daily_metrics')
+        .update({
+          campaign_status: payload.campaign_status,
+          campaign_serving_status: payload.campaign_serving_status,
+          campaign_primary_status: payload.campaign_primary_status,
+          campaign_status_reasons: payload.campaign_status_reasons,
+          account_status: payload.account_status,
+          effective_status: payload.effective_status,
+          updated_at: payload.updated_at,
+        })
+        .eq('product_id', product.id)
+        .eq('date', date);
+      upsertError = error;
+    }
 
     if (upsertError) {
       return NextResponse.json({ error: `Erro SQL: ${upsertError.message}` }, { status: 500 });
