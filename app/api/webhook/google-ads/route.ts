@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { resolveCampaignStatus } from '@/lib/campaignStatus';
+import { resolveCampaignStatus, resolveEffectiveStatus } from '@/lib/campaignStatus';
 
 // Configuração do Cliente Supabase
 // Tenta usar a Service Role (Admin) se disponível, senão usa a Anon
@@ -23,9 +23,24 @@ export async function POST(request: Request) {
 
     // 1. Busca ou Cria o Produto (Vínculo)
     // Tenta buscar primeiro pelo ID exato da campanha
-    // Status real do Google, resolvido uma vez e usado tanto na linha do dia
-    // quanto no status atual da campanha.
-    const googleStatus: string = metrics.effective_status || 'DESCONHECIDO';
+    // Status real do Google.
+    //
+    // A consolidação é feita AQUI, não no script: os scripts instalados nos
+    // gerenciadores só reportam o que leram, então mudar a regra é um deploy em
+    // vez de recolar o script em cada conta.
+    //
+    // Scripts antigos mandavam o rótulo já pronto em effective_status; ele só é
+    // usado quando não vierem os campos crus, para não quebrar quem ainda não
+    // atualizou. Havendo campos crus, a regra nova vale mesmo no script antigo.
+    const hasRawStatus = Boolean(metrics.serving_status || metrics.primary_status || metrics.account_status);
+    const googleStatus: string = hasRawStatus
+      ? resolveEffectiveStatus({
+          status: metrics.status,
+          servingStatus: metrics.serving_status,
+          primaryStatus: metrics.primary_status,
+          accountStatus: metrics.account_status,
+        })
+      : (metrics.effective_status || 'DESCONHECIDO');
     const statusKey = resolveCampaignStatus({
       effective_status: googleStatus,
       campaign_status: metrics.status,

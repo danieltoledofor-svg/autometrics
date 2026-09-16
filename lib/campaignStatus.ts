@@ -63,6 +63,52 @@ const MAP: Record<string, { key: StatusKey; hint: string }> = {
   CONTA_ENCERRADA: { key: 'suspenso', hint: 'A conta foi cancelada ou encerrada' },
 };
 
+/**
+ * Consolida os quatro campos de status crus do Google em um único rótulo.
+ *
+ * Esta regra vivia dentro do script do Google Ads, o que obrigava a recolar o
+ * script em todos os gerenciadores sempre que ela mudasse. Agora o script só
+ * reporta o que leu e a decisão acontece aqui, no servidor: mudar a regra
+ * passou a ser um deploy.
+ *
+ * campaign.status         = o que o anunciante configurou (ENABLED/PAUSED/REMOVED)
+ * campaign.serving_status = veiculação real (SERVING/SUSPENDED/PENDING/ENDED/NONE)
+ * campaign.primary_status = diagnóstico (ELIGIBLE/LIMITED/MISCONFIGURED/...)
+ * customer.status         = conta (ENABLED/SUSPENDED/CANCELED/CLOSED)
+ */
+export function resolveEffectiveStatus(input: {
+  status?: string | null;
+  servingStatus?: string | null;
+  primaryStatus?: string | null;
+  accountStatus?: string | null;
+}): string {
+  const status = (input.status || '').toUpperCase();
+  const serving = (input.servingStatus || '').toUpperCase();
+  const primary = (input.primaryStatus || '').toUpperCase();
+  const account = (input.accountStatus || '').toUpperCase();
+
+  if (account === 'SUSPENDED') return 'CONTA_SUSPENSA';
+  if (account === 'CANCELED' || account === 'CLOSED') return 'CONTA_ENCERRADA';
+
+  if (status === 'REMOVED') return 'REMOVIDA';
+  if (status === 'PAUSED') return 'PAUSADA';
+
+  if (serving === 'SUSPENDED') return 'SUSPENSA';
+  if (serving === 'ENDED' || primary === 'ENDED') return 'ENCERRADA';
+  if (serving === 'PENDING' || primary === 'PENDING') return 'AGENDADA';
+
+  if (primary === 'MISCONFIGURED') return 'COM_ERRO';
+  if (primary === 'NOT_ELIGIBLE') return 'NAO_ELEGIVEL';
+  if (primary === 'LIMITED') return 'LIMITADA';
+  if (primary === 'LEARNING') return 'APRENDENDO';
+  if (primary === 'ELIGIBLE') return 'ATIVA';
+
+  if (serving === 'SERVING') return 'ATIVA';
+  if (serving === 'NONE') return 'NAO_VEICULANDO';
+
+  return status === 'ENABLED' ? 'ATIVA' : 'DESCONHECIDO';
+}
+
 /** Suspenso vence pausado, que vence ativo — usado ao agregar várias linhas. */
 export const STATUS_SEVERITY: Record<StatusKey, number> = { ativo: 0, pausado: 1, suspenso: 2 };
 

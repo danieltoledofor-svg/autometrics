@@ -166,37 +166,6 @@ function getAccountStatus() {
   return 'UNKNOWN';
 }
 
-/**
- * Traduz os quatro campos de status do Google em um unico rotulo.
- *
- * campaign.status        = o que o anunciante configurou (ENABLED/PAUSED/REMOVED)
- * campaign.serving_status = veiculacao real (SERVING/SUSPENDED/PENDING/ENDED/NONE)
- * campaign.primary_status = diagnostico (ELIGIBLE/LIMITED/MISCONFIGURED/...)
- * customer.status         = conta (ENABLED/SUSPENDED/CANCELED/CLOSED)
- */
-function resolveEffectiveStatus(status, servingStatus, primaryStatus, accountStatus) {
-  if (accountStatus === 'SUSPENDED') return 'CONTA_SUSPENSA';
-  if (accountStatus === 'CANCELED' || accountStatus === 'CLOSED') return 'CONTA_ENCERRADA';
-
-  if (status === 'REMOVED') return 'REMOVIDA';
-  if (status === 'PAUSED') return 'PAUSADA';
-
-  if (servingStatus === 'SUSPENDED') return 'SUSPENSA';
-  if (servingStatus === 'ENDED' || primaryStatus === 'ENDED') return 'ENCERRADA';
-  if (servingStatus === 'PENDING' || primaryStatus === 'PENDING') return 'AGENDADA';
-
-  if (primaryStatus === 'MISCONFIGURED') return 'COM_ERRO';
-  if (primaryStatus === 'NOT_ELIGIBLE') return 'NAO_ELEGIVEL';
-  if (primaryStatus === 'LIMITED') return 'LIMITADA';
-  if (primaryStatus === 'LEARNING') return 'APRENDENDO';
-  if (primaryStatus === 'ELIGIBLE') return 'ATIVA';
-
-  if (servingStatus === 'SERVING') return 'ATIVA';
-  if (servingStatus === 'NONE') return 'NAO_VEICULANDO';
-
-  return status === 'ENABLED' ? 'ATIVA' : 'DESCONHECIDO';
-}
-
 function buildCampaignQuery(dateString, withPrimaryStatus) {
   // campaign.serving_status e quem traz SUSPENDED de verdade;
   // campaign.status so conhece ENABLED / PAUSED / REMOVED.
@@ -258,7 +227,6 @@ function processCampaignRow(row, dateString, account, accountStatus) {
   const servingStatus = c.servingStatus || '';
   const primaryStatus = c.primaryStatus || '';
   const statusReasons = (c.primaryStatusReasons || []).join(',');
-  const effectiveStatus = resolveEffectiveStatus(status, servingStatus, primaryStatus, accountStatus);
 
   // ----------------------------------------------------
   // BUSCA DEEP METRICS (Termos, Publicos, Local)
@@ -507,7 +475,6 @@ function processCampaignRow(row, dateString, account, accountStatus) {
         primary_status: primaryStatus,
         status_reasons: statusReasons,
         account_status: accountStatus,
-        effective_status: effectiveStatus,
         final_url: finalUrl,
         target_value: targetValue
       },
