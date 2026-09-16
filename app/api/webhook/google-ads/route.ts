@@ -109,9 +109,22 @@ export async function POST(request: Request) {
         .single();
 
       if (createError) {
-        return NextResponse.json({ error: `Erro ao criar produto: ${createError.message}` }, { status: 500 });
+        const isDuplicate = createError.code === '23505' || /duplicate key/i.test(createError.message || '');
+        if (isDuplicate && safeCampaignId) {
+          const { data: existing } = await supabase
+            .from('products')
+            .select('id, google_status_date')
+            .eq('google_ads_campaign_id', safeCampaignId)
+            .eq('user_id', user_id)
+            .maybeSingle();
+          if (existing) product = existing;
+        }
+        if (!product) {
+          return NextResponse.json({ error: `Erro ao criar produto: ${createError.message}` }, { status: 500 });
+        }
+      } else {
+        product = newProduct;
       }
-      product = newProduct;
     } else {
       // Se já existe, atualiza nomes de conta/mcc, campaign_id e o NOME da campanha (para refletir mudanças feitas no Google Ads)
       const update: any = {
@@ -174,7 +187,7 @@ export async function POST(request: Request) {
       campaign_primary_status: metrics.primary_status || null,
       campaign_status_reasons: metrics.status_reasons || null,
       account_status: metrics.account_status || null,
-      effective_status: metrics.effective_status || 'DESCONHECIDO',
+      effective_status: googleStatus,
 
       search_impression_share: String(metrics.search_impression_share || '0%'),
       search_top_impression_share: String(metrics.search_top_impression_share || '0%'),

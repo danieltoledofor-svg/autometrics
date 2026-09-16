@@ -128,7 +128,7 @@ export default function IntegrationPage() {
     const commonFunctions = `
 // Identifica esta versao no log e no painel. Serve para conferir, sem abrir o
 // banco, se o script colado no gerenciador e mesmo o mais recente.
-const SCRIPT_VERSION = 'v4';
+const SCRIPT_VERSION = 'v5';
 
 // Nivel de campos opcionais da query (ver buildCampaignQuery). Comeca no mais
 // completo e desce sozinho se a API do gerenciador nao reconhecer algum campo.
@@ -304,9 +304,9 @@ function processCampaignRow(row, dateString, account, accountStatus) {
         const stRow = stReport.next();
         const term = stRow.searchTermView.searchTerm;
         if (!stMap[term]) stMap[term] = { t: term, i: 0, cl: 0, c: 0, cv: 0 };
-        stMap[term].i += stRow.metrics.impressions;
-        stMap[term].cl += stRow.metrics.clicks;
-        stMap[term].c += stRow.metrics.costMicros;
+        stMap[term].i += Number(stRow.metrics.impressions || 0);
+        stMap[term].cl += Number(stRow.metrics.clicks || 0);
+        stMap[term].c += Number(stRow.metrics.costMicros || 0);
         stMap[term].cv += Math.round(stRow.metrics.conversions || 0);
       }
       // Pega os top 10 por impressão após deduplicar
@@ -328,9 +328,9 @@ function processCampaignRow(row, dateString, account, accountStatus) {
         const aRow = ageReport.next();
         const key = 'Age|' + aRow.adGroupCriterion.ageRange.type;
         if (!audienceMap[key]) audienceMap[key] = { tp: 'Age', n: aRow.adGroupCriterion.ageRange.type, i: 0, cl: 0, c: 0 };
-        audienceMap[key].i += aRow.metrics.impressions;
-        audienceMap[key].cl += aRow.metrics.clicks;
-        audienceMap[key].c += aRow.metrics.costMicros;
+        audienceMap[key].i += Number(aRow.metrics.impressions || 0);
+        audienceMap[key].cl += Number(aRow.metrics.clicks || 0);
+        audienceMap[key].c += Number(aRow.metrics.costMicros || 0);
       }
 
       const genderQuery = \`
@@ -343,9 +343,9 @@ function processCampaignRow(row, dateString, account, accountStatus) {
         const aRow = genderReport.next();
         const key = 'Gender|' + aRow.adGroupCriterion.gender.type;
         if (!audienceMap[key]) audienceMap[key] = { tp: 'Gender', n: aRow.adGroupCriterion.gender.type, i: 0, cl: 0, c: 0 };
-        audienceMap[key].i += aRow.metrics.impressions;
-        audienceMap[key].cl += aRow.metrics.clicks;
-        audienceMap[key].c += aRow.metrics.costMicros;
+        audienceMap[key].i += Number(aRow.metrics.impressions || 0);
+        audienceMap[key].cl += Number(aRow.metrics.clicks || 0);
+        audienceMap[key].c += Number(aRow.metrics.costMicros || 0);
       }
 
       const incomeQuery = \`
@@ -358,9 +358,9 @@ function processCampaignRow(row, dateString, account, accountStatus) {
         const aRow = incomeReport.next();
         const key = 'Income|' + aRow.adGroupCriterion.incomeRange.type;
         if (!audienceMap[key]) audienceMap[key] = { tp: 'Income', n: aRow.adGroupCriterion.incomeRange.type, i: 0, cl: 0, c: 0 };
-        audienceMap[key].i += aRow.metrics.impressions;
-        audienceMap[key].cl += aRow.metrics.clicks;
-        audienceMap[key].c += aRow.metrics.costMicros;
+        audienceMap[key].i += Number(aRow.metrics.impressions || 0);
+        audienceMap[key].cl += Number(aRow.metrics.clicks || 0);
+        audienceMap[key].c += Number(aRow.metrics.costMicros || 0);
       }
     } catch(e) {}
 
@@ -376,9 +376,9 @@ function processCampaignRow(row, dateString, account, accountStatus) {
         const dRow = deviceReport.next();
         const key = 'Device|' + dRow.segments.device;
         if (!audienceMap[key]) audienceMap[key] = { tp: 'Device', n: dRow.segments.device, i: 0, cl: 0, c: 0 };
-        audienceMap[key].i += dRow.metrics.impressions;
-        audienceMap[key].cl += dRow.metrics.clicks;
-        audienceMap[key].c += dRow.metrics.costMicros;
+        audienceMap[key].i += Number(dRow.metrics.impressions || 0);
+        audienceMap[key].cl += Number(dRow.metrics.clicks || 0);
+        audienceMap[key].c += Number(dRow.metrics.costMicros || 0);
       }
     } catch(e) {}
 
@@ -411,13 +411,14 @@ function processCampaignRow(row, dateString, account, accountStatus) {
         const countryId = String(lRow.geographicView.countryCriterionId);
         const countryName = GEO_NAMES[countryId] || ('País ' + countryId);
         // Usa apenas a row com mais impressões por país (evita somar hierarquia país+estado+cidade)
-        if (!locMap[countryId] || lRow.metrics.impressions > locMap[countryId].i) {
+        const lImpr = Number(lRow.metrics.impressions || 0);
+        if (!locMap[countryId] || lImpr > locMap[countryId].i) {
           locMap[countryId] = {
             tp: 'Country',
             n: countryName,
-            i: lRow.metrics.impressions,
-            cl: lRow.metrics.clicks,
-            c: Math.round(lRow.metrics.costMicros / 1000) // em milésimos de dólar (divide final na API)
+            i: lImpr,
+            cl: Number(lRow.metrics.clicks || 0),
+            c: Math.round(Number(lRow.metrics.costMicros || 0) / 1000) // em milésimos de dólar (divide final na API)
           };
         }
       }
