@@ -16,7 +16,7 @@ import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import SaleAlertNotification from './SaleAlertNotification';
 import { Logo } from '@/app/components/Logo';
-import { resolveCampaignStatus, STATUS_SEVERITY, type CampaignStatus } from '@/lib/campaignStatus';
+import { resolveCampaignStatus, resolveProductStatus, STATUS_SEVERITY, type CampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal, type QuickEntryTarget } from '@/app/components/QuickEntryModal';
 import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type MetricSort } from '@/lib/metricSort';
 
@@ -194,7 +194,7 @@ export default function DashboardPage() {
     while (m_prod) {
       const { data } = await supabase
         .from('products')
-        .select('id, currency, name, google_ads_campaign_name, account_name, mcc_name')
+        .select('id, currency, name, google_ads_campaign_name, account_name, mcc_name, google_status, google_status_reasons, status')
         .eq('user_id', userId)
         .range(p_prod * 1000, (p_prod + 1) * 1000 - 1);
 
@@ -420,8 +420,11 @@ export default function DashboardPage() {
       const cmp = acc.campaigns[campaignName];
       cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds;
 
-      // Campanhas de mesmo nome podem vir de mais de um produto: vale o pior status.
-      const rowStatus = resolveCampaignStatus(row);
+      // O badge mostra o estado ATUAL da campanha, não o daquele dia: quando uma
+      // conta é suspensa hoje, o que importa é ver isso ao lado de qualquer data,
+      // e não descobrir que em 02/09 ela ainda rodava. É também o mesmo status
+      // que a aba Campanhas exibe. Sem produto (venda externa), usa a linha.
+      const rowStatus = product ? resolveProductStatus(product) : resolveCampaignStatus(row);
       const prevStatus: CampaignStatus | null = cmp.status;
       if (!prevStatus || STATUS_SEVERITY[rowStatus.key] > STATUS_SEVERITY[prevStatus.key]) {
         cmp.status = rowStatus;
