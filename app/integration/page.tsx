@@ -128,7 +128,7 @@ export default function IntegrationPage() {
     const commonFunctions = `
 // Identifica esta versao no log e no painel. Serve para conferir, sem abrir o
 // banco, se o script colado no gerenciador e mesmo o mais recente.
-const SCRIPT_VERSION = 'v3';
+const SCRIPT_VERSION = 'v4';
 
 // Nivel de campos opcionais da query (ver buildCampaignQuery). Comeca no mais
 // completo e desce sozinho se a API do gerenciador nao reconhecer algum campo.
@@ -182,8 +182,8 @@ function getAccountStatus() {
  */
 function buildCampaignQuery(dateString, level) {
   let extras = '';
-  if (level <= 1) extras += 'campaign.serving_status,\\n      ';
-  if (level <= 0) extras += 'campaign.primary_status, campaign.primary_status_reasons,\\n      ';
+  if (level <= 1) extras += 'campaign.serving_status, ';
+  if (level <= 0) extras += 'campaign.primary_status, campaign.primary_status_reasons, ';
   return \`
     SELECT
       campaign.id, campaign.name, campaign.status,
