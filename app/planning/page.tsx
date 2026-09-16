@@ -14,6 +14,7 @@ import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
+import { applyTheme } from '@/lib/theme';
 import { Logo } from '@/app/components/Logo';
 
 // Configuração Supabase
@@ -132,7 +133,8 @@ export default function PlanningPage() {
 
       // 3. Preferências
       const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
-      if (savedTheme) setTheme(savedTheme);
+      if (savedTheme) { setTheme(savedTheme); }
+    applyTheme(savedTheme || 'dark');
       const savedDollar = localStorage.getItem('autometrics_manual_dollar');
       if (savedDollar) {
         const dVal = parseFloat(savedDollar);
@@ -191,6 +193,7 @@ export default function PlanningPage() {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('autometrics_theme', newTheme);
+    applyTheme(newTheme);
   };
 
   const handleLogout = async () => {

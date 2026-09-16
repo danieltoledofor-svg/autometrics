@@ -25,3 +25,35 @@ body {
     text-wrap: balance;
   }
 }
+/* ─────────────────────────────────────────────────────────────────────────────
+   Controles nativos (select, input date/time) no Windows.
+
+   O popup de um <select> e o calendário de um <input type="date"> são desenhados
+   pelo sistema, não pela página. No Windows eles assumem o esquema claro por
+   padrão: o fundo vem branco enquanto o texto herda o branco do controle, e as
+   opções somem. macOS e mobile não reproduzem isso, o que fazia o bug passar
+   despercebido aqui.
+
+   `color-scheme` é o que informa ao sistema qual paleta usar; as regras de
+   option/optgroup abaixo cobrem os casos em que o navegador ignora isso.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+select option,
+select optgroup {
+  background-color: #0f172a; /* slate-900 */
+  color: #f1f5f9;            /* slate-100 */
+}
+
+:root[data-theme="light"] select option,
+:root[data-theme="light"] select optgroup {
+  background-color: #ffffff;
+  color: #0f172a;
+}

@@ -17,7 +17,9 @@ export default function RootLayout({
   return (
     // O erro "validateDOMNesting" no console DESTE CHAT é normal e esperado.
     // O Next.js EXIGE estas tags <html> e <body> no seu projeto local.
-    <html lang="pt-BR">
+    // suppressHydrationWarning: o script abaixo ajusta data-theme antes do React
+    // hidratar, então o atributo diverge do HTML do servidor por definição.
+    <html lang="pt-BR" data-theme="dark" suppressHydrationWarning>
       <head>
         {/* Estilos embutidos para garantir que o Fundo Preto funcione aqui no preview 
             sem precisar do arquivo externo globals.css */}
@@ -33,6 +35,14 @@ export default function RootLayout({
         `}} />
       </head>
       <body className="bg-black text-white font-sans antialiased selection:bg-indigo-500 selection:text-white min-h-screen">
+        {/* Aplica o tema antes da hidratação: evita um flash claro e garante que
+            os controles nativos já nasçam com o color-scheme certo. */}
+        <script dangerouslySetInnerHTML={{__html: `
+          try {
+            document.documentElement.dataset.theme =
+              localStorage.getItem('autometrics_theme') === 'light' ? 'light' : 'dark';
+          } catch (e) {}
+        `}} />
         {children}
       </body>
     </html>

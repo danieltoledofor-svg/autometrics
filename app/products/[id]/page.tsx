@@ -4,16 +4,19 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon,
-  PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon, ShoppingCart,
-  Video, MousePointer, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
-  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut
+  PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon,
+  Video, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
+  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle
 } from 'lucide-react';
 import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
+import { applyTheme } from '@/lib/theme';
 import Link from 'next/link';
 import { Logo } from '@/app/components/Logo';
+import { resolveCampaignStatus } from '@/lib/campaignStatus';
+import { QuickEntryModal } from '@/app/components/QuickEntryModal';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,6 +72,7 @@ const ALL_COLUMNS = [
   { key: 'search_top_share', label: 'Parc. Topo', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'search_abs_share', label: 'Parc. Absoluta', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'final_url', label: 'Página Anúncio', category: 'Google Ads', default: false, type: 'link' },
+  { key: 'effective_status', label: 'Status Campanha', category: 'Google Ads', default: true, type: 'status' },
 ];
 
 const DATE_PRESET_LABELS: Record<string, string> = {
@@ -119,12 +123,9 @@ export default function ProductDetailPage() {
   const [liveDollar, setLiveDollar] = useState(6.00);
   const [manualDollar, setManualDollar] = useState(5.60);
 
-  // Estado do Lançamento Manual
-  const [manualData, setManualData] = useState({
-    date: getLocalYYYYMMDD(new Date()),
-    visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0, currency: 'BRL'
-  });
-  const [isSavingManual, setIsSavingManual] = useState(false);
+  // Data pré-selecionada ao abrir o Lançamento Rápido. Os valores do dia são
+  // carregados pelo próprio QuickEntryModal, o mesmo usado no dashboard.
+  const [manualEntryDate, setManualEntryDate] = useState(getLocalYYYYMMDD(new Date()));
 
   const [visibleColumns, setVisibleColumns] = useState(
     ALL_COLUMNS.filter(c => c.default).map(c => c.key)
@@ -171,7 +172,8 @@ export default function ProductDetailPage() {
 
     // 1. Tema e Moeda
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
-    if (savedTheme) setTheme(savedTheme);
+    if (savedTheme) { setTheme(savedTheme); }
+    applyTheme(savedTheme || 'dark');
 
     const savedColumns = localStorage.getItem('autometrics_visible_columns');
     if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) { }
@@ -185,7 +187,7 @@ export default function ProductDetailPage() {
     fetchLiveDollar();
 
     // 2. Data Inicial
-    setManualData(prev => ({ ...prev, date: getLocalYYYYMMDD(new Date()) }));
+    setManualEntryDate(getLocalYYYYMMDD(new Date()));
     const savedDateRange = localStorage.getItem('autometrics_date_range');
     if (savedDateRange) {
       if (savedDateRange === 'custom') {
@@ -206,6 +208,7 @@ export default function ProductDetailPage() {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('autometrics_theme', newTheme);
+    applyTheme(newTheme);
   };
 
   const toggleViewCurrency = (currency: string) => {
@@ -230,10 +233,7 @@ export default function ProductDetailPage() {
     setLoading(true);
     try {
       const { data: prodData } = await supabase.from('products').select('*').eq('id', productId).single();
-      if (prodData) {
-        setProduct(prodData);
-        setManualData(prev => ({ ...prev, currency: prodData.currency || 'BRL' }));
-      }
+      if (prodData) setProduct(prodData);
       const { data: metricsData } = await supabase.from('daily_metrics').select('*').eq('product_id', productId).limit(10000).order('date', { ascending: true });
       setMetrics(metricsData || []);
       // Carregar anotações existentes
@@ -341,81 +341,6 @@ export default function ProductDetailPage() {
       fetchVturb();
     }
   }, [activeTab, startDate, endDate, product?.vturb_player_id]);
-
-  // Carrega dados existentes para edição
-  useEffect(() => {
-    if (showManualEntry && manualData.date && productId) {
-      const fetchDayData = async () => {
-        const { data } = await supabase.from('daily_metrics').select('visits, checkouts, vsl_clicks, vsl_checkouts, conversions, conversion_value, refunds, currency').eq('product_id', productId).eq('date', manualData.date).maybeSingle();
-        if (data) {
-          setManualData(prev => ({
-            ...prev,
-            visits: data.visits || 0, checkouts: data.checkouts || 0, vsl_clicks: data.vsl_clicks || 0, vsl_checkouts: data.vsl_checkouts || 0,
-            sales: data.conversions || 0, revenue: data.conversion_value || 0, refunds: data.refunds || 0, currency: data.currency || prev.currency
-          }));
-        } else {
-          setManualData(prev => ({
-            ...prev, visits: 0, checkouts: 0, vsl_clicks: 0, vsl_checkouts: 0, sales: 0, revenue: 0, refunds: 0
-          }));
-        }
-      };
-      fetchDayData();
-    }
-  }, [manualData.date, showManualEntry, productId]);
-
-
-  const handleSaveManual = async () => {
-    setIsSavingManual(true);
-    try {
-      // 1. Identificar moeda da conta (Google Ads) - Esta é a "Verdade"
-      const accountCurrency = product?.currency || 'BRL';
-      const inputCurrency = manualData.currency;
-
-      let finalRevenue = Number(manualData.revenue);
-      let finalRefunds = Number(manualData.refunds);
-
-      // 2. Converter se a moeda do lançamento for diferente da moeda da conta
-      // Assim, o banco sempre guarda na moeda da conta, evitando que o custo (que também está na moeda da conta) fique com escala errada.
-      if (inputCurrency !== accountCurrency) {
-        if (accountCurrency === 'BRL' && inputCurrency === 'USD') {
-          // Conta é Real, Lançou em Dólar -> Converte para Real (Multiplica)
-          finalRevenue = finalRevenue * manualDollar;
-          finalRefunds = finalRefunds * manualDollar;
-        } else if (accountCurrency === 'USD' && inputCurrency === 'BRL') {
-          // Conta é Dólar, Lançou em Real -> Converte para Dólar (Divide)
-          finalRevenue = finalRevenue / manualDollar;
-          finalRefunds = finalRefunds / manualDollar;
-        }
-        // (Adicionar lógica EUR se necessário, por enquanto assume paridade ou ignora)
-      }
-
-      const payload = {
-        product_id: productId, date: manualData.date,
-        visits: Number(manualData.visits), checkouts: Number(manualData.checkouts),
-        vsl_clicks: Number(manualData.vsl_clicks), vsl_checkouts: Number(manualData.vsl_checkouts),
-        conversions: Number(manualData.sales),
-        conversion_value: finalRevenue, // Salva o valor JÁ CONVERTIDO para a moeda da conta
-        refunds: finalRefunds,          // Salva o valor JÁ CONVERTIDO
-        currency: accountCurrency,      // Força a moeda do registro ser a mesma da conta
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await supabase.from('daily_metrics').upsert(payload, { onConflict: 'product_id, date' });
-      if (error) throw error;
-
-      alert('Dados salvos com sucesso!');
-      setShowManualEntry(false);
-      fetchData();
-    } catch (e: any) { alert('Erro: ' + e.message); }
-    finally { setIsSavingManual(false); }
-  };
-
-  const toggleStatus = async () => {
-    if (!product) return;
-    const newStatus = product.status === 'active' ? 'paused' : 'active';
-    setProduct({ ...product, status: newStatus });
-    await supabase.from('products').update({ status: newStatus }).eq('id', product.id);
-  };
 
   // --- ANOTAÇÕES ---
   const openNote = (rawDate: string, displayDate: string) => {
@@ -536,6 +461,8 @@ export default function ProductDetailPage() {
       return {
         ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED',
+        effective_status: row.effective_status || null,
+        campaign_status_reasons: row.campaign_status_reasons || null,
         strategy: row.bidding_strategy || '-', final_url: row.final_url,
         // Parcelas
         search_impr_share: parseShare(row.search_impression_share),
@@ -570,12 +497,21 @@ export default function ProductDetailPage() {
   if (!product) return <div className={`min-h-screen ${bgMain} flex items-center justify-center ${textMuted}`}>Produto não encontrado.</div>;
 
   const { rows, stats, chart } = processedData;
+
+  // Status atual da campanha. O webhook mantém products.google_status com o dia
+  // mais recente; antes da migration isso vem vazio, então cai para a linha mais
+  // nova da tabela, que já traz o mesmo dado por data.
+  const headerStatus = resolveCampaignStatus({
+    effective_status: product.google_status || rows[0]?.effective_status,
+    campaign_status: rows[0]?.campaign_status,
+    campaign_status_reasons: product.google_status_reasons || rows[0]?.campaign_status_reasons,
+  });
   const globalCpa = stats.conversions > 0 ? stats.cost / stats.conversions : 0;
 
   // --- LINHA DE TOTAIS/MÉDIAS (Atualizada conforme regras) ---
   const AVERAGE_COLS = new Set(['ctr', 'avg_cpc', 'fuga_pagina', 'fuga_bridge', 'fuga_vsl', 'cpa', 'roi', 'search_impr_share', 'search_top_share', 'search_abs_share']);
   const LATEST_COLS = new Set(['target_cpa', 'strategy', 'budget', 'account_name']);
-  const SKIP_COLS = new Set(['date', 'campaign_status', 'final_url', 'notes']);
+  const SKIP_COLS = new Set(['date', 'campaign_status', 'effective_status', 'final_url', 'notes']);
 
   const summaryRow = (() => {
     if (!rows.length) return null;
@@ -637,10 +573,10 @@ export default function ProductDetailPage() {
             <h1 className={`text-sm font-bold truncate ${textHead}`}>{product.name}</h1>
             <span className={`text-[10px] ${textMuted}`}>{product.platform}</span>
           </div>
-          <button onClick={toggleStatus} className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>
-            {product.status === 'active' ? <PlayCircle size={10} /> : <PauseCircle size={10} />}
-            {product.status === 'active' ? 'Ativo' : 'Pausado'}
-          </button>
+          <span className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold border ${headerStatus.badge}`} title={headerStatus.hint}>
+            {headerStatus.key === 'ativo' ? <PlayCircle size={10} /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={10} /> : <PauseCircle size={10} />}
+            {headerStatus.label}
+          </span>
           <button onClick={toggleTheme} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
             {isDark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -659,9 +595,9 @@ export default function ProductDetailPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className={`text-2xl font-bold ${textHead}`}>{product.name}</h1>
-              <button onClick={toggleStatus} className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${product.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>
-                {product.status === 'active' ? <PlayCircle size={12} /> : <PauseCircle size={12} />} {product.status === 'active' ? 'Ativo' : 'Pausado'}
-              </button>
+              <span className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${headerStatus.badge}`} title={headerStatus.hint}>
+                {headerStatus.key === 'ativo' ? <PlayCircle size={12} /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={12} /> : <PauseCircle size={12} />} {headerStatus.label}
+              </span>
             </div>
             <div className={`flex items-center gap-3 text-sm ${textMuted} mt-1`}><span className="flex items-center gap-1"><ExternalLink size={12} /> {product.platform}</span><span>•</span><span className={`font-mono text-xs px-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}><Hash size={10} /> {product.google_ads_campaign_id || 'N/A'}</span></div>
           </div>
@@ -978,6 +914,18 @@ export default function ProductDetailPage() {
                             </td>
                           );
                           if (col.key === 'campaign_status') content = <span className={`flex items-center justify-end gap-1.5 ${val === 'PAUSED' ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {val === 'PAUSED' ? <PauseCircle size={14} /> : <PlayCircle size={14} />}</span>;
+                          else if (col.type === 'status') {
+                            const st = resolveCampaignStatus(row as any);
+                            content = (
+                              <span
+                                title={st.hint}
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-bold whitespace-nowrap ${st.badge}`}
+                              >
+                                {st.key === 'ativo' ? <PlayCircle size={12} /> : st.key === 'suspenso' ? <AlertTriangle size={12} /> : <PauseCircle size={12} />}
+                                {st.label}
+                              </span>
+                            );
+                          }
                           else if (col.type === 'link') content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14} /></a> : '-';
                           else if (col.format === 'currency') content = <span className={col.key === 'profit' ? (val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold') : (col.key === 'revenue' ? 'text-blue-500 font-bold' : (col.key === 'cost' ? 'text-orange-500 font-medium' : 'text-slate-400'))}>{formatMoney(val)}</span>;
                           else if (col.format === 'percentage') content = <span>{formatPercent(val)}</span>;
@@ -1032,51 +980,18 @@ export default function ProductDetailPage() {
         </div>
         </div>{/* end hidden md:block table */}
 
-        {showManualEntry && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className={`${bgCard} rounded-xl w-full max-w-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]`}>
-              <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
-                <h2 className={`text-xl font-bold ${textHead} flex items-center gap-2`}><FileText size={20} className="text-indigo-500" /> Lançamento Rápido (Funil)</h2>
-                <button onClick={() => setShowManualEntry(false)}><X size={24} className="text-slate-400 hover:text-white" /></button>
-              </div>
-
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><label className="text-xs uppercase text-slate-500 font-bold">Data</label><input type="date" className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-200 text-black'} `} value={manualData.date} onChange={e => setManualData({ ...manualData, date: e.target.value })} /></div>
-                  <div>
-                    <label className="text-xs uppercase text-slate-500 font-bold">Moeda</label>
-                    <select className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`} value={manualData.currency} onChange={e => setManualData({ ...manualData, currency: e.target.value })}>
-                      <option value="BRL">BRL</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className={`p-4 rounded-lg border ${isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                  <h3 className="text-xs font-bold text-indigo-400 uppercase mb-3 flex items-center gap-2"><MousePointer size={14} /> Tráfego & VSL</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div><label className="text-[10px] uppercase text-slate-500 font-bold">Visitas Pág.</label><input type="number" className={`w-full border rounded p-2 text-sm ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300'}`} placeholder="0" value={manualData.visits} onChange={e => setManualData({ ...manualData, visits: parseFloat(e.target.value) })} /></div>
-                    <div><label className="text-[10px] uppercase text-slate-500 font-bold">Cliques VSL</label><input type="number" className={`w-full border rounded p-2 text-sm ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300'}`} placeholder="0" value={manualData.vsl_clicks} onChange={e => setManualData({ ...manualData, vsl_clicks: parseFloat(e.target.value) })} /></div>
-                    <div><label className="text-[10px] uppercase text-slate-500 font-bold">Checkout VSL</label><input type="number" className={`w-full border rounded p-2 text-sm ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300'}`} placeholder="0" value={manualData.vsl_checkouts} onChange={e => setManualData({ ...manualData, vsl_checkouts: parseFloat(e.target.value) })} /></div>
-                    <div><label className="text-[10px] uppercase text-slate-500 font-bold">Check. Geral</label><input type="number" className={`w-full border rounded p-2 text-sm ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300'}`} placeholder="0" value={manualData.checkouts} onChange={e => setManualData({ ...manualData, checkouts: parseFloat(e.target.value) })} /></div>
-                  </div>
-                </div>
-
-                <div className={`p-4 rounded-lg border ${isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                  <h3 className="text-xs font-bold text-emerald-400 uppercase mb-3 flex items-center gap-2"><ShoppingCart size={14} /> Vendas & Receita</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div><label className="text-[10px] uppercase text-slate-500 font-bold">Vendas (Qtd)</label><input type="number" className={`w-full border rounded p-2 text-sm ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300'}`} placeholder="0" value={manualData.sales} onChange={e => setManualData({ ...manualData, sales: parseFloat(e.target.value) })} /></div>
-                    <div><label className="text-[10px] uppercase text-blue-500 font-bold">Receita Total</label><input type="number" className={`w-full border rounded p-2 text-sm border-l-4 border-l-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300'}`} placeholder="0.00" value={manualData.revenue} onChange={e => setManualData({ ...manualData, revenue: parseFloat(e.target.value) })} /></div>
-                    <div><label className="text-[10px] uppercase text-rose-500 font-bold">Reembolsos</label><input type="number" className={`w-full border rounded p-2 text-sm border-l-4 border-l-rose-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300'}`} placeholder="0.00" value={manualData.refunds} onChange={e => setManualData({ ...manualData, refunds: parseFloat(e.target.value) })} /></div>
-                  </div>
-                </div>
-
-                <button onClick={handleSaveManual} disabled={isSavingManual} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl mt-2 flex items-center justify-center gap-2 shadow-lg">{isSavingManual ? 'Salvando...' : 'Salvar Dados'} <Save size={16} /></button>
-              </div>
-            </div>
-          </div>
-        )}
+        <QuickEntryModal
+          target={showManualEntry && product ? {
+            productId: String(productId),
+            productName: product.name,
+            accountCurrency: product.currency || 'BRL',
+            date: manualEntryDate,
+          } : null}
+          onClose={() => setShowManualEntry(false)}
+          onSaved={fetchData}
+          manualDollar={manualDollar}
+          isDark={isDark}
+        />
 
         {showColumnModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">

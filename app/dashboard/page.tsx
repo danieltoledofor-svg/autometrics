@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar, Sun, Moon, LayoutGrid, Package, Settings,
   LogOut, Target, ArrowUpRight, ArrowDownRight,
-  ChevronUp, ChevronDown, SlidersHorizontal, X
+  ChevronUp, ChevronDown, SlidersHorizontal, X, FileText
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -13,8 +13,12 @@ import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
+import { applyTheme } from '@/lib/theme';
 import SaleAlertNotification from './SaleAlertNotification';
 import { Logo } from '@/app/components/Logo';
+import { resolveCampaignStatus, STATUS_SEVERITY, type CampaignStatus } from '@/lib/campaignStatus';
+import { QuickEntryModal, type QuickEntryTarget } from '@/app/components/QuickEntryModal';
+import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type MetricSort } from '@/lib/metricSort';
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
@@ -82,6 +86,8 @@ export default function DashboardPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const [quickEntry, setQuickEntry] = useState<QuickEntryTarget | null>(null);
+  const [metricSort, setMetricSort] = useState<MetricSort>('cost');
 
   const [selectedMcc, setSelectedMcc] = useState<string>('all');
   const [showFilterSheet, setShowFilterSheet] = useState(false);
@@ -99,7 +105,9 @@ export default function DashboardPage() {
   useEffect(() => {
     async function init() {
       const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
-      if (savedTheme) setTheme(savedTheme);
+      if (savedTheme) { setTheme(savedTheme); }
+    applyTheme(savedTheme || 'dark');
+      setMetricSort(loadMetricSort());
 
       const savedDollar = localStorage.getItem('autometrics_manual_dollar');
       if (savedDollar) {
@@ -162,6 +170,7 @@ export default function DashboardPage() {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('autometrics_theme', newTheme);
+    applyTheme(newTheme);
   };
 
   const handleLogout = async () => {
@@ -406,10 +415,25 @@ export default function DashboardPage() {
       acc.cost += cost; acc.revenue += revenue; acc.profit += profit; acc.refunds += refunds;
 
       if (!acc.campaigns[campaignName]) {
-        acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0, productId: product?.id };
+        acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0, productId: product?.id, currency: product?.currency || 'BRL', status: null as CampaignStatus | null };
       }
       const cmp = acc.campaigns[campaignName];
       cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds;
+
+      // Campanhas de mesmo nome podem vir de mais de um produto: vale o pior status.
+      const rowStatus = resolveCampaignStatus(row);
+      const prevStatus: CampaignStatus | null = cmp.status;
+      if (!prevStatus || STATUS_SEVERITY[rowStatus.key] > STATUS_SEVERITY[prevStatus.key]) {
+        cmp.status = rowStatus;
+      }
+    });
+
+    // Dentro de cada dia, conta e campanha vêm ordenadas pela métrica escolhida.
+    dailyMap.forEach((day: any) => {
+      day.accountList = sortByMetric(Object.values(day.accounts) as any[], metricSort, (a: any) => a);
+      day.accountList.forEach((acc: any) => {
+        acc.campaignList = sortByMetric(Object.values(acc.campaigns) as any[], metricSort, (c: any) => c);
+      });
     });
 
     const resultRows = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
@@ -426,7 +450,7 @@ export default function DashboardPage() {
     }));
 
     return { chart: chartData, table: resultRows, totals };
-  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, liveEuro, manualEuro, viewCurrency, loading, selectedMcc]);
+  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, liveEuro, manualEuro, viewCurrency, loading, selectedMcc, metricSort]);
 
   const sparklineData = useMemo(() => {
     const last7 = processedData.chart.slice(-7);
@@ -730,6 +754,26 @@ export default function DashboardPage() {
           </ResponsiveContainer>
         </div>
 
+        {/* Ordenação das campanhas dentro de cada data. */}
+        <div className="flex items-center justify-end gap-2 mb-3 flex-wrap">
+          <span className={`text-[11px] font-bold uppercase tracking-wide ${textMuted}`}>Ordenar campanhas por</span>
+          <div className={`flex items-center gap-1 p-1 rounded-lg border ${bgCard}`}>
+            {METRIC_SORTS.map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => { setMetricSort(opt.key); saveMetricSort(opt.key); }}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${
+                  metricSort === opt.key
+                    ? (isDark ? 'bg-slate-800 ' : 'bg-slate-200 ') + opt.color
+                    : 'text-slate-500 hover:text-slate-400'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ── DESKTOP TABLE (hidden on mobile) ── */}
         <div className={`hidden md:block ${bgCard} rounded-xl overflow-hidden shadow-sm border border-inherit`}>
           <div className="overflow-x-auto">
@@ -763,33 +807,54 @@ export default function DashboardPage() {
                         <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
                         <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{row.roi.toFixed(0)}%</td>
                       </tr>
-                      {isExpanded && Object.values(row.accounts).map((acc: any) => (
+                      {isExpanded && (row.accountList || []).map((acc: any) => (
                         <React.Fragment key={acc.name}>
                           <tr className={`${isDark ? 'bg-slate-950/50' : 'bg-slate-100/50'}`}>
                             <td></td>
                             <td className="px-6 py-2 text-xs font-bold text-indigo-400 pl-10 flex items-center gap-2">
-                              <Settings size={12}/> Conta: {acc.name}
+                              <Settings size={12}/> <span className="text-xs">Conta: {acc.name}</span>
                             </td>
                             <td className="px-6 py-2 text-right text-xs text-blue-400/70">{formatMoney(acc.revenue)}</td>
                             <td className="px-6 py-2 text-right text-xs text-orange-400/70">{formatMoney(acc.cost)}</td>
                             <td className={`px-6 py-2 text-right text-xs font-medium ${acc.profit >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{formatMoney(acc.profit)}</td>
                             <td></td>
                           </tr>
-                          {Object.values(acc.campaigns).map((cmp: any) => (
+                          {(acc.campaignList || []).map((cmp: any) => (
                             <tr key={cmp.name} className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
                               <td></td>
-                              <td className="px-6 py-1 text-[10px] text-slate-500 pl-16 flex items-center gap-2 border-l-2 border-slate-800 ml-10">
-                                <Package size={10}/>
-                                {cmp.productId ? (
-                                  <Link href={`/products/${cmp.productId}`} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-400 hover:underline transition-colors cursor-pointer">
-                                    {cmp.name}
-                                  </Link>
-                                ) : cmp.name}
+                              <td className="px-6 py-2 pl-16 border-l-2 border-slate-800 ml-10">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Package size={12} className="text-slate-500 shrink-0"/>
+                                  {cmp.productId ? (
+                                    <Link href={`/products/${cmp.productId}`} target="_blank" rel="noopener noreferrer" className={`text-[13px] font-semibold ${isDark ? 'text-slate-100 hover:text-indigo-400' : 'text-slate-800 hover:text-indigo-600'} hover:underline transition-colors cursor-pointer`}>
+                                      {cmp.name}
+                                    </Link>
+                                  ) : <span className={`text-[13px] font-semibold ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>{cmp.name}</span>}
+                                  {cmp.status && (
+                                    <span
+                                      title={cmp.status.hint}
+                                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide shrink-0 ${cmp.status.badge}`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${cmp.status.dot}`} />
+                                      {cmp.status.label}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.revenue)}</td>
                               <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.cost)}</td>
                               <td className={`px-6 py-1 text-right text-[10px] font-medium ${cmp.profit >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(cmp.profit)}</td>
-                              <td></td>
+                              <td className="px-6 py-1 text-right">
+                                {cmp.productId && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setQuickEntry({ productId: cmp.productId, productName: cmp.name, accountCurrency: cmp.currency, date: row.date }); }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
+                                    title={`Lançar vendas de ${row.date}`}
+                                  >
+                                    <FileText size={11} /> Lançar
+                                  </button>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </React.Fragment>
@@ -843,24 +908,42 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {isExpanded && Object.values(row.accounts).map((acc: any) => (
+                      {isExpanded && (row.accountList || []).map((acc: any) => (
                         <React.Fragment key={acc.name}>
                           <div className={`flex items-center justify-between px-5 py-2 border-b ${borderCol} ${isDark ? 'bg-slate-950/60' : 'bg-indigo-50/60'}`}>
                             <span className="text-xs font-bold text-indigo-400 break-words min-w-0 mr-2">{acc.name}</span>
                             <span className="text-xs font-mono text-blue-400 ml-2 shrink-0">{formatMoney(acc.revenue)}</span>
                           </div>
-                          {Object.values(acc.campaigns).map((cmp: any) => (
-                            <div key={cmp.name} className={`flex items-center justify-between px-6 py-2 border-b ${borderCol} ${isDark ? 'bg-slate-950/40' : 'bg-slate-50/60'}`}>
-                              <span className="text-[11px] text-slate-500 break-words min-w-0 mr-2">
-                                {cmp.productId ? (
-                                  <Link href={`/products/${cmp.productId}`} className="hover:text-indigo-400 active:text-indigo-400">
-                                    {cmp.name}
-                                  </Link>
-                                ) : cmp.name}
-                              </span>
-                              <span className={`text-[11px] font-bold font-mono ml-2 shrink-0 ${cmp.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                {formatMoney(cmp.profit)}
-                              </span>
+                          {(acc.campaignList || []).map((cmp: any) => (
+                            <div key={cmp.name} className={`px-6 py-2.5 border-b ${borderCol} ${isDark ? 'bg-slate-950/40' : 'bg-slate-50/60'}`}>
+                              <div className="flex items-start justify-between gap-2">
+                                <span className={`text-[13px] font-semibold break-words min-w-0 ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
+                                  {cmp.productId ? (
+                                    <Link href={`/products/${cmp.productId}`} className="hover:text-indigo-400 active:text-indigo-400">
+                                      {cmp.name}
+                                    </Link>
+                                  ) : cmp.name}
+                                </span>
+                                <span className={`text-[11px] font-bold font-mono shrink-0 ${cmp.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                  {formatMoney(cmp.profit)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-2 mt-1.5">
+                                {cmp.status ? (
+                                  <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase ${cmp.status.text}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${cmp.status.dot}`} />
+                                    {cmp.status.label}
+                                  </span>
+                                ) : <span />}
+                                {cmp.productId && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setQuickEntry({ productId: cmp.productId, productName: cmp.name, accountCurrency: cmp.currency, date: row.date }); }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 active:bg-emerald-500/20"
+                                  >
+                                    <FileText size={11} /> Lançar
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </React.Fragment>
@@ -874,6 +957,14 @@ export default function DashboardPage() {
         </div>
 
       </main>
+
+      <QuickEntryModal
+        target={quickEntry}
+        onClose={() => setQuickEntry(null)}
+        onSaved={() => { if (user) fetchInitialData(user.id, fetchedFrom || undefined); }}
+        manualDollar={manualDollar}
+        isDark={isDark}
+      />
 
       {/* ─── MOBILE BOTTOM NAVIGATION ─── */}
       <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>

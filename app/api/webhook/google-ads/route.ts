@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { resolveCampaignStatus } from '@/lib/campaignStatus';
 
 // Configuração do Cliente Supabase
 // Tenta usar a Service Role (Admin) se disponível, senão usa a Anon
@@ -22,19 +23,29 @@ export async function POST(request: Request) {
 
     // 1. Busca ou Cria o Produto (Vínculo)
     // Tenta buscar primeiro pelo ID exato da campanha
+    // Status real do Google, resolvido uma vez e usado tanto na linha do dia
+    // quanto no status atual da campanha.
+    const googleStatus: string = metrics.effective_status || 'DESCONHECIDO';
+    const statusKey = resolveCampaignStatus({
+      effective_status: googleStatus,
+      campaign_status: metrics.status,
+    }).key;
+    // Campo legado 'active'/'paused': suspenso conta como parado.
+    const legacyStatus = statusKey === 'ativo' ? 'active' : 'paused';
+
     let product: any = null;
     const rawId = campaign_id ? String(campaign_id) : null;
     const safeCampaignId = (rawId && rawId !== 'undefined' && rawId !== 'null') ? rawId : null;
     
     if (safeCampaignId) {
-      const { data } = await supabase.from('products').select('id').eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).maybeSingle();
+      const { data } = await supabase.from('products').select('id, google_status_date').eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).maybeSingle();
       if (data) product = data;
     }
 
     // Se n achou pelo ID, tenta buscar pelo nome da campanha E nome da conta para evitar duplicidade de nomes em contas diferentes
     if (!product) {
       const { data } = await supabase.from('products')
-        .select('id, google_ads_campaign_id')
+        .select('id, google_ads_campaign_id, google_status_date')
         .eq('google_ads_campaign_name', campaign_name)
         .eq('account_name', account_name)
         .eq('user_id', user_id)
@@ -49,7 +60,7 @@ export async function POST(request: Request) {
 
     // Se ainda n achou, tenta só pelo nome (para produtos antigos criados antes de salvar account_name)
     if (!product) {
-       const { data, error: multiError } = await supabase.from('products').select('id, account_name, google_ads_campaign_id').eq('google_ads_campaign_name', campaign_name).eq('user_id', user_id).limit(10);
+       const { data, error: multiError } = await supabase.from('products').select('id, account_name, google_ads_campaign_id, google_status_date').eq('google_ads_campaign_name', campaign_name).eq('user_id', user_id).limit(10);
        if (data && data.length > 0) {
          // Busca um produto que não tenha ID de campanha conflitante
          const validMatch = data.find(p => {
@@ -71,7 +82,10 @@ export async function POST(request: Request) {
           user_id: user_id,
           platform: 'Google Ads (Auto)',
           currency: currency_code || 'BRL',
-          status: 'active',
+          status: legacyStatus,
+          google_status: googleStatus,
+          google_status_reasons: metrics.status_reasons || null,
+          google_status_date: date,
           account_name: account_name || 'Conta Desconhecida',
           mcc_name: mcc_name || 'Sem MCC'
         }])
@@ -84,16 +98,24 @@ export async function POST(request: Request) {
       product = newProduct;
     } else {
       // Se já existe, atualiza nomes de conta/mcc, campaign_id e o NOME da campanha (para refletir mudanças feitas no Google Ads)
-      await supabase
-        .from('products')
-        .update({
-          name: campaign_name,
-          google_ads_campaign_name: campaign_name,
-          account_name: account_name,
-          mcc_name: mcc_name || 'Sem MCC',
-          google_ads_campaign_id: safeCampaignId
-        })
-        .eq('id', product.id);
+      const update: any = {
+        name: campaign_name,
+        google_ads_campaign_name: campaign_name,
+        account_name: account_name,
+        mcc_name: mcc_name || 'Sem MCC',
+        google_ads_campaign_id: safeCampaignId
+      };
+
+      // O script reprocessa dias antigos a cada rodada. Só o dia mais recente
+      // pode mexer no status atual, senão um dia velho rebaixaria a campanha.
+      if (!product.google_status_date || date >= product.google_status_date) {
+        update.status = legacyStatus;
+        update.google_status = googleStatus;
+        update.google_status_reasons = metrics.status_reasons || null;
+        update.google_status_date = date;
+      }
+
+      await supabase.from('products').update(update).eq('id', product.id);
     }
 
     // 2. Tratamento de CTR (String % para Number)
@@ -107,26 +129,41 @@ export async function POST(request: Request) {
     // 3. Payload Seguro (O SEGREDO ESTÁ AQUI)
     // Removemos 'conversion_value', 'visits', 'checkouts', 'refunds' deste objeto.
     // Assim, o upsert vai atualizar APENAS o que veio do Google e MANTER o que você digitou.
-    const payload = {
+    // Campanha pausada/suspensa chega com metricas ausentes ou zeradas.
+    // Normaliza tudo para numero para nao gravar NaN nas colunas.
+    const num = (v: any) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const payload: any = {
       product_id: product.id,
       date: date,
 
       // Dados que o Google MANDA e pode atualizar
-      impressions: metrics.impressions,
-      clicks: metrics.clicks,
-      cost: metrics.cost_micros / 1000000,
+      impressions: num(metrics.impressions),
+      clicks: num(metrics.clicks),
+      cost: num(metrics.cost_micros) / 1000000,
       ctr: cleanCtr,
-      avg_cpc: metrics.average_cpc / 1000000,
+      avg_cpc: num(metrics.average_cpc) / 1000000,
 
       account_name: account_name,
-      target_cpa: metrics.target_value || 0,
-      final_url: metrics.final_url,
-      campaign_status: metrics.status,
+      target_cpa: num(metrics.target_value),
+
+      // Status: 'campaign_status' e o que o anunciante configurou (ENABLED/PAUSED/
+      // REMOVED). 'effective_status' e o status real ja resolvido pelo script,
+      // combinando veiculacao, diagnostico e status da conta.
+      campaign_status: metrics.status || 'UNKNOWN',
+      campaign_serving_status: metrics.serving_status || null,
+      campaign_primary_status: metrics.primary_status || null,
+      campaign_status_reasons: metrics.status_reasons || null,
+      account_status: metrics.account_status || null,
+      effective_status: metrics.effective_status || 'DESCONHECIDO',
 
       search_impression_share: String(metrics.search_impression_share || '0%'),
       search_top_impression_share: String(metrics.search_top_impression_share || '0%'),
       search_abs_top_share: String(metrics.search_abs_top_share || '0%'),
-      budget_micros: metrics.budget_micros,
+      budget_micros: num(metrics.budget_micros),
       bidding_strategy: metrics.bidding_strategy_type,
       currency: currency_code || 'BRL',
 
@@ -137,6 +174,10 @@ export async function POST(request: Request) {
       // Se a linha já existir (com sua receita manual), o valor antigo será preservado.
       // Se a linha for nova (criada pelo script), o banco usará o DEFAULT 0.
     };
+
+    // Campanha sem anuncios ativos nao retorna final_url. Omitir a coluna
+    // preserva o valor ja gravado em vez de apaga-lo.
+    if (metrics.final_url) payload.final_url = metrics.final_url;
 
     const { error: upsertError } = await supabase
       .from('daily_metrics')

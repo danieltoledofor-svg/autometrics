@@ -12,6 +12,7 @@ import { Logo } from '@/app/components/Logo';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
+import { applyTheme } from '@/lib/theme';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -65,7 +66,8 @@ export default function IntegrationPage() {
   useEffect(() => {
     // Tema
     const savedTheme = localStorage.getItem('autometrics_theme') as 'dark' | 'light';
-    if (savedTheme) setTheme(savedTheme);
+    if (savedTheme) { setTheme(savedTheme); }
+    applyTheme(savedTheme || 'dark');
 
     async function getUser() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -112,6 +114,7 @@ export default function IntegrationPage() {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('autometrics_theme', newTheme);
+    applyTheme(newTheme);
   };
 
   const handleLogout = async () => {
@@ -123,6 +126,10 @@ export default function IntegrationPage() {
     if (!identifierName) return alert("Por favor, digite um nome para identificar esta conta/grupo.");
 
     const commonFunctions = `
+// campaign.primary_status nao existe em versoes antigas da API usada pelo Scripts.
+// Na primeira falha o script desliga o campo e segue sem ele.
+let SUPPORTS_PRIMARY_STATUS = true;
+
 function processAccount(account) {
   let currentDate = parseDate(CONFIG.START_DATE);
   const today = new Date(); 
@@ -131,10 +138,17 @@ function processAccount(account) {
 
   if (currentDate > today) currentDate = today;
 
+  // Conta suspensa por pagamento/politica: as campanhas continuam ENABLED,
+  // quem denuncia a suspensao e o status da conta. Busca uma vez so.
+  const accountStatus = getAccountStatus();
+  if (accountStatus !== 'ENABLED' && accountStatus !== 'UNKNOWN') {
+    Logger.log('⚠️ Conta ' + account.getName() + ' com status ' + accountStatus);
+  }
+
   while (currentDate <= today) {
     const dateString = Utilities.formatDate(currentDate, account.getTimeZone(), "yyyy-MM-dd");
     try {
-      fetchAndSend(dateString, account);
+      fetchAndSend(dateString, account, accountStatus);
     } catch (e) {
       Logger.log('Erro no dia ' + dateString + ': ' + e.message);
     }
@@ -142,10 +156,58 @@ function processAccount(account) {
   }
 }
 
-function fetchAndSend(dateString, account) {
-  const query = \`
+function getAccountStatus() {
+  try {
+    const r = AdsApp.search("SELECT customer.status FROM customer LIMIT 1");
+    if (r.hasNext()) return r.next().customer.status || 'UNKNOWN';
+  } catch (e) {
+    Logger.log('Status da conta indisponivel: ' + e.message);
+  }
+  return 'UNKNOWN';
+}
+
+/**
+ * Traduz os quatro campos de status do Google em um unico rotulo.
+ *
+ * campaign.status        = o que o anunciante configurou (ENABLED/PAUSED/REMOVED)
+ * campaign.serving_status = veiculacao real (SERVING/SUSPENDED/PENDING/ENDED/NONE)
+ * campaign.primary_status = diagnostico (ELIGIBLE/LIMITED/MISCONFIGURED/...)
+ * customer.status         = conta (ENABLED/SUSPENDED/CANCELED/CLOSED)
+ */
+function resolveEffectiveStatus(status, servingStatus, primaryStatus, accountStatus) {
+  if (accountStatus === 'SUSPENDED') return 'CONTA_SUSPENSA';
+  if (accountStatus === 'CANCELED' || accountStatus === 'CLOSED') return 'CONTA_ENCERRADA';
+
+  if (status === 'REMOVED') return 'REMOVIDA';
+  if (status === 'PAUSED') return 'PAUSADA';
+
+  if (servingStatus === 'SUSPENDED') return 'SUSPENSA';
+  if (servingStatus === 'ENDED' || primaryStatus === 'ENDED') return 'ENCERRADA';
+  if (servingStatus === 'PENDING' || primaryStatus === 'PENDING') return 'AGENDADA';
+
+  if (primaryStatus === 'MISCONFIGURED') return 'COM_ERRO';
+  if (primaryStatus === 'NOT_ELIGIBLE') return 'NAO_ELEGIVEL';
+  if (primaryStatus === 'LIMITED') return 'LIMITADA';
+  if (primaryStatus === 'LEARNING') return 'APRENDENDO';
+  if (primaryStatus === 'ELIGIBLE') return 'ATIVA';
+
+  if (servingStatus === 'SERVING') return 'ATIVA';
+  if (servingStatus === 'NONE') return 'NAO_VEICULANDO';
+
+  return status === 'ENABLED' ? 'ATIVA' : 'DESCONHECIDO';
+}
+
+function buildCampaignQuery(dateString, withPrimaryStatus) {
+  // campaign.serving_status e quem traz SUSPENDED de verdade;
+  // campaign.status so conhece ENABLED / PAUSED / REMOVED.
+  const primary = withPrimaryStatus
+    ? 'campaign.primary_status, campaign.primary_status_reasons,'
+    : '';
+  return \`
     SELECT
       campaign.id, campaign.name, campaign.status,
+      campaign.serving_status, \${primary}
+      campaign.end_date,
       metrics.impressions, metrics.clicks, metrics.ctr,
       metrics.average_cpc, metrics.cost_micros,
       metrics.search_impression_share, metrics.search_top_impression_share,
@@ -157,17 +219,68 @@ function fetchAndSend(dateString, account) {
       campaign.maximize_conversions.target_cpa_micros
     FROM campaign
     WHERE segments.date = '\${dateString}'
-    AND metrics.impressions > 0 
   \`;
+}
 
-  const report = AdsApp.search(query);
+function fetchAndSend(dateString, account, accountStatus) {
+  // IMPORTANTE: nao filtrar por metrics.impressions > 0 aqui.
+  // Campanha pausada/suspensa tem 0 impressoes e sumia completamente do relatorio,
+  // impedindo que o painel recebesse o status atual dela.
+  let report;
+  try {
+    report = AdsApp.search(buildCampaignQuery(dateString, SUPPORTS_PRIMARY_STATUS));
+  } catch (e) {
+    if (!SUPPORTS_PRIMARY_STATUS) throw e;
+    Logger.log('primary_status indisponivel nesta versao da API, seguindo sem ele: ' + e.message);
+    SUPPORTS_PRIMARY_STATUS = false;
+    report = AdsApp.search(buildCampaignQuery(dateString, false));
+  }
 
   while (report.hasNext()) {
     const row = report.next();
-    
+    // Um erro em uma campanha nao pode derrubar as demais do mesmo dia.
+    try {
+      processCampaignRow(row, dateString, account, accountStatus);
+    } catch (e) {
+      const cname = (row && row.campaign && row.campaign.name) || '?';
+      Logger.log('Erro na campanha ' + cname + ' em ' + dateString + ': ' + e.message);
+    }
+  }
+}
+
+function processCampaignRow(row, dateString, account, accountStatus) {
+  const m = row.metrics || {};
+  const impressions = Number(m.impressions || 0);
+  const clicks = Number(m.clicks || 0);
+  const costMicros = Number(m.costMicros || 0);
+  const c = row.campaign || {};
+  const status = c.status || 'UNKNOWN';
+  const servingStatus = c.servingStatus || '';
+  const primaryStatus = c.primaryStatus || '';
+  const statusReasons = (c.primaryStatusReasons || []).join(',');
+  const effectiveStatus = resolveEffectiveStatus(status, servingStatus, primaryStatus, accountStatus);
+
+  // ----------------------------------------------------
+  // BUSCA DEEP METRICS (Termos, Publicos, Local)
+  // Apenas para os ultimos 3 dias para economizar cota do Google (Bandwidth limit)
+  // ----------------------------------------------------
+  const loopDate = parseDate(dateString);
+  const todayDiff = new Date();
+  todayDiff.setHours(0,0,0,0);
+  const timeDiff = Math.abs(todayDiff.getTime() - loopDate.getTime());
+  const diffDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
+  const isRecent = diffDays <= 3;
+
+  const hasActivity = impressions > 0 || clicks > 0 || costMicros > 0;
+
+  // Sem atividade: so envia nos dias recentes, para o painel receber o status
+  // atual (PAUSED / suspensa) sem inflar o historico antigo com linhas zeradas.
+  // Campanha removida sem atividade nao interessa em nenhum caso.
+  if (!hasActivity && (!isRecent || status === 'REMOVED')) return;
+
     let finalUrl = '';
     try {
-      const adQuery = "SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE campaign.id = " + row.campaign.id + " LIMIT 1";
+      const adQuery = "SELECT ad_group_ad.ad.final_urls FROM ad_group_ad WHERE campaign.id = " + row.campaign.id + " AND ad_group_ad.status != 'REMOVED' LIMIT 1";
       const adReport = AdsApp.search(adQuery);
       if(adReport.hasNext()) {
          const adRow = adReport.next();
@@ -184,23 +297,12 @@ function fetchAndSend(dateString, account) {
         targetValue = row.campaign.targetRoas.targetRoas;
     }
 
-    // ----------------------------------------------------
-    // BUSCA DEEP METRICS (Termos, Públicos, Local)
-    // Apenas para os últimos 3 dias para economizar cota do Google (Bandwidth limit)
-    // ----------------------------------------------------
-    const loopDate = parseDate(dateString);
-    const todayDiff = new Date();
-    todayDiff.setHours(0,0,0,0);
-    const timeDiff = Math.abs(todayDiff.getTime() - loopDate.getTime());
-    const diffDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
-    const isRecent = diffDays <= 3;
-
     let searchTerms = [];
     let audiences = [];
     let locations = [];
     let history = [];
 
-    if (isRecent) {
+    if (isRecent && hasActivity) {
       // 1. Termos de Pesquisa (top 10 por impressoes) — deduplicado por termo
       try {
       const stQuery = \`
@@ -374,7 +476,12 @@ function fetchAndSend(dateString, account) {
     } catch (e) {
       Logger.log('History error: ' + e.message);
     }
-    } // Fim do if (isRecent)
+    } // Fim do if (isRecent && hasActivity)
+
+    // Campanha pausada/suspensa costuma vir sem orcamento e sem metricas de leilao.
+    // Tudo com fallback para nao quebrar o envio.
+    const budget = row.campaignBudget || {};
+    const currency = (row.customer && row.customer.currencyCode) || account.getCurrencyCode();
 
     const payload = {
       user_id: CONFIG.USER_ID,
@@ -383,19 +490,24 @@ function fetchAndSend(dateString, account) {
       date: dateString,
       account_name: account.getName(),
       mcc_name: CONFIG.MCC_NAME, 
-      currency_code: row.customer.currencyCode,
+      currency_code: currency,
       metrics: {
-        impressions: row.metrics.impressions,
-        clicks: row.metrics.clicks,
-        ctr: row.metrics.ctr,
-        average_cpc: row.metrics.averageCpc,
-        cost_micros: row.metrics.costMicros,
-        search_impression_share: row.metrics.searchImpressionShare,
-        search_top_impression_share: row.metrics.searchTopImpressionShare,
-        search_abs_top_share: row.metrics.searchAbsoluteTopImpressionShare,
+        impressions: impressions,
+        clicks: clicks,
+        ctr: m.ctr || 0,
+        average_cpc: Number(m.averageCpc || 0),
+        cost_micros: costMicros,
+        search_impression_share: m.searchImpressionShare,
+        search_top_impression_share: m.searchTopImpressionShare,
+        search_abs_top_share: m.searchAbsoluteTopImpressionShare,
         bidding_strategy_type: row.campaign.biddingStrategyType,
-        budget_micros: row.campaignBudget.amountMicros,
-        status: row.campaign.status,
+        budget_micros: Number(budget.amountMicros || 0),
+        status: status,
+        serving_status: servingStatus,
+        primary_status: primaryStatus,
+        status_reasons: statusReasons,
+        account_status: accountStatus,
+        effective_status: effectiveStatus,
         final_url: finalUrl,
         target_value: targetValue
       },
@@ -405,7 +517,6 @@ function fetchAndSend(dateString, account) {
       history: history
     };
     sendToWebhook(payload);
-  }
 }
 
 function sendToWebhook(payload) {
@@ -452,8 +563,14 @@ function main() {
   const accountIterator = AdsManagerApp.accounts().get();
   while (accountIterator.hasNext()) {
     const account = accountIterator.next();
-    AdsManagerApp.select(account);
-    processAccount(account);
+    // Conta suspensa/cancelada faz o select() ou a leitura lancar excecao.
+    // Sem este try/catch, uma unica conta com problema abortava o MCC inteiro.
+    try {
+      AdsManagerApp.select(account);
+      processAccount(account);
+    } catch (e) {
+      Logger.log('⚠️ Conta ignorada (' + account.getName() + '): ' + e.message);
+    }
   }
   Logger.log('✅ Finalizado com sucesso.');
 }
