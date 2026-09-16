@@ -181,7 +181,7 @@ function fetchAccountDirectory() {
       const row = r.next();
       const c = row.customerClient || {};
       if (c.manager) continue; // gerenciadores nao tem campanhas
-      lista.push({ nome: c.descriptiveName || '', status: c.status || 'UNKNOWN' });
+      lista.push({ name: c.descriptiveName || '', status: c.status || 'UNKNOWN' });
     }
   } catch (e) {
     Logger.log('Diretorio de contas indisponivel: ' + e.message);
@@ -197,8 +197,8 @@ function reportUnreachableAccounts(directory, visitadas) {
   const fora = [];
   for (let i = 0; i < directory.length; i++) {
     const c = directory[i];
-    if (!c.nome || visitadas[c.nome]) continue;
-    fora.push({ name: c.nome, status: c.status });
+    if (!c.name || visitadas[c.name]) continue;
+    fora.push({ name: c.name, status: c.status });
   }
   if (!fora.length) return;
 
