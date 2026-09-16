@@ -128,7 +128,7 @@ export default function IntegrationPage() {
     const commonFunctions = `
 // Identifica esta versao no log e no painel. Serve para conferir, sem abrir o
 // banco, se o script colado no gerenciador e mesmo o mais recente.
-const SCRIPT_VERSION = 'v7';
+const SCRIPT_VERSION = 'v8';
 
 // Nivel de campos opcionais da query (ver buildCampaignQuery). Comeca no mais
 // completo e desce sozinho se a API do gerenciador nao reconhecer algum campo.
@@ -203,7 +203,7 @@ function reportUnreachableAccounts(directory, visitadas) {
   if (!fora.length) return;
 
   Logger.log('⚠️ ' + fora.length + ' conta(s) nao acessivel(is): ' +
-             fora.map(function (c) { return c.nome + ' (' + c.status + ')'; }).join(', '));
+             fora.map(function (c) { return c.name + ' (' + c.status + ')'; }).join(', '));
 
   const options = {
     method: 'post',
