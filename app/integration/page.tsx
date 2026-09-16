@@ -128,7 +128,7 @@ export default function IntegrationPage() {
     const commonFunctions = `
 // Identifica esta versao no log e no painel. Serve para conferir, sem abrir o
 // banco, se o script colado no gerenciador e mesmo o mais recente.
-const SCRIPT_VERSION = 'v6';
+const SCRIPT_VERSION = 'v7';
 
 // Nivel de campos opcionais da query (ver buildCampaignQuery). Comeca no mais
 // completo e desce sozinho se a API do gerenciador nao reconhecer algum campo.
@@ -157,6 +157,70 @@ function processAccount(account) {
       Logger.log('Erro no dia ' + dateString + ': ' + e.message);
     }
     currentDate.setDate(currentDate.getDate() + 1);
+  }
+}
+
+/**
+ * Lista TODAS as contas filhas do gerenciador, com o status de cada uma.
+ *
+ * AdsManagerApp.accounts() devolve apenas as contas que o script consegue
+ * abrir — conta suspensa fica de fora, sem aviso. Por isso as campanhas dela
+ * nunca eram atualizadas e o painel seguia mostrando o ultimo status conhecido,
+ * normalmente "ativo". customer_client enxerga essas contas.
+ *
+ * Roda no contexto do gerenciador, antes do primeiro select().
+ */
+function fetchAccountDirectory() {
+  const lista = [];
+  try {
+    const r = AdsApp.search(
+      "SELECT customer_client.descriptive_name, customer_client.status, customer_client.manager " +
+      "FROM customer_client WHERE customer_client.level <= 1"
+    );
+    while (r.hasNext()) {
+      const row = r.next();
+      const c = row.customerClient || {};
+      if (c.manager) continue; // gerenciadores nao tem campanhas
+      lista.push({ nome: c.descriptiveName || '', status: c.status || 'UNKNOWN' });
+    }
+  } catch (e) {
+    Logger.log('Diretorio de contas indisponivel: ' + e.message);
+  }
+  return lista;
+}
+
+/**
+ * Conta que aparece no diretorio mas o script nao conseguiu abrir: informa o
+ * painel para que as campanhas dela deixem de figurar como ativas.
+ */
+function reportUnreachableAccounts(directory, visitadas) {
+  const fora = [];
+  for (let i = 0; i < directory.length; i++) {
+    const c = directory[i];
+    if (!c.nome || visitadas[c.nome]) continue;
+    fora.push({ name: c.nome, status: c.status });
+  }
+  if (!fora.length) return;
+
+  Logger.log('⚠️ ' + fora.length + ' conta(s) nao acessivel(is): ' +
+             fora.map(function (c) { return c.nome + ' (' + c.status + ')'; }).join(', '));
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      user_id: CONFIG.USER_ID,
+      mcc_name: CONFIG.MCC_NAME,
+      script_version: SCRIPT_VERSION,
+      accounts: fora
+    }),
+    muteHttpExceptions: true
+  };
+  try {
+    const resp = UrlFetchApp.fetch(CONFIG.WEBHOOK_URL + '/accounts', options);
+    Logger.log('   status das contas enviado: HTTP ' + resp.getResponseCode() + ' ' + resp.getContentText());
+  } catch (e) {
+    Logger.log('   falha ao enviar status das contas: ' + e.message);
   }
 }
 
@@ -543,9 +607,15 @@ const CONFIG = {
 
 function main() {
   Logger.log('🚀 Iniciando AutoMetrics ' + SCRIPT_VERSION + ' para: ' + CONFIG.MCC_NAME);
+
+  // Antes de iterar: quais contas o gerenciador tem, e em que estado.
+  const directory = fetchAccountDirectory();
+  const visitadas = {};
+
   const accountIterator = AdsManagerApp.accounts().get();
   while (accountIterator.hasNext()) {
     const account = accountIterator.next();
+    visitadas[account.getName()] = true;
     // Conta suspensa/cancelada faz o select() ou a leitura lancar excecao.
     // Sem este try/catch, uma unica conta com problema abortava o MCC inteiro.
     try {
@@ -555,6 +625,10 @@ function main() {
       Logger.log('⚠️ Conta ignorada (' + account.getName() + '): ' + e.message);
     }
   }
+
+  // Contas que o iterador nem chegou a listar — tipicamente suspensas.
+  reportUnreachableAccounts(directory, visitadas);
+
   Logger.log('✅ Finalizado com sucesso.');
 }
 
