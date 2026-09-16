@@ -128,11 +128,11 @@ export default function IntegrationPage() {
     const commonFunctions = `
 // Identifica esta versao no log e no painel. Serve para conferir, sem abrir o
 // banco, se o script colado no gerenciador e mesmo o mais recente.
-const SCRIPT_VERSION = 'v2';
+const SCRIPT_VERSION = 'v3';
 
-// campaign.primary_status nao existe em versoes antigas da API usada pelo Scripts.
-// Na primeira falha o script desliga o campo e segue sem ele.
-let SUPPORTS_PRIMARY_STATUS = true;
+// Nivel de campos opcionais da query (ver buildCampaignQuery). Comeca no mais
+// completo e desce sozinho se a API do gerenciador nao reconhecer algum campo.
+let QUERY_LEVEL = 0;
 
 function processAccount(account) {
   let currentDate = parseDate(CONFIG.START_DATE);
@@ -170,18 +170,24 @@ function getAccountStatus() {
   return 'UNKNOWN';
 }
 
-function buildCampaignQuery(dateString, withPrimaryStatus) {
-  // campaign.serving_status e quem traz SUSPENDED de verdade;
-  // campaign.status so conhece ENABLED / PAUSED / REMOVED.
-  const primary = withPrimaryStatus
-    ? 'campaign.primary_status, campaign.primary_status_reasons,'
-    : '';
+/**
+ * Monta a query por nivel de campos opcionais.
+ *
+ * 0 = serving_status + primary_status   (melhor diagnostico)
+ * 1 = so serving_status                 (primary_status nao existe nesta API)
+ * 2 = nenhum dos dois                   (so o basico, sempre funciona)
+ *
+ * Os campos de status variam conforme a versao da API que o gerenciador usa.
+ * Sem esta escada, um unico campo desconhecido derruba a coleta inteira.
+ */
+function buildCampaignQuery(dateString, level) {
+  let extras = '';
+  if (level <= 1) extras += 'campaign.serving_status,\\n      ';
+  if (level <= 0) extras += 'campaign.primary_status, campaign.primary_status_reasons,\\n      ';
   return \`
     SELECT
       campaign.id, campaign.name, campaign.status,
-      campaign.serving_status, \${primary}
-      campaign.end_date,
-      metrics.impressions, metrics.clicks, metrics.ctr,
+      \${extras}metrics.impressions, metrics.clicks, metrics.ctr,
       metrics.average_cpc, metrics.cost_micros,
       metrics.search_impression_share, metrics.search_top_impression_share,
       metrics.search_absolute_top_impression_share,
@@ -199,14 +205,18 @@ function fetchAndSend(dateString, account, accountStatus) {
   // IMPORTANTE: nao filtrar por metrics.impressions > 0 aqui.
   // Campanha pausada/suspensa tem 0 impressoes e sumia completamente do relatorio,
   // impedindo que o painel recebesse o status atual dela.
-  let report;
-  try {
-    report = AdsApp.search(buildCampaignQuery(dateString, SUPPORTS_PRIMARY_STATUS));
-  } catch (e) {
-    if (!SUPPORTS_PRIMARY_STATUS) throw e;
-    Logger.log('primary_status indisponivel nesta versao da API, seguindo sem ele: ' + e.message);
-    SUPPORTS_PRIMARY_STATUS = false;
-    report = AdsApp.search(buildCampaignQuery(dateString, false));
+  //
+  // Desce um nivel a cada campo recusado e guarda o nivel que funcionou, para
+  // nao repetir a tentativa a cada dia e a cada conta.
+  let report = null;
+  while (report === null) {
+    try {
+      report = AdsApp.search(buildCampaignQuery(dateString, QUERY_LEVEL));
+    } catch (e) {
+      if (QUERY_LEVEL >= 2) throw e;
+      QUERY_LEVEL++;
+      Logger.log('⚠️ Campo de status recusado pela API (' + e.message + '). Reduzindo para o nivel ' + QUERY_LEVEL + '.');
+    }
   }
 
   while (report.hasNext()) {
