@@ -54,8 +54,8 @@ export async function POST(request: Request) {
     const safeCampaignId = (rawId && rawId !== 'undefined' && rawId !== 'null') ? rawId : null;
     
     if (safeCampaignId) {
-      const { data } = await supabase.from('products').select('id, google_status_date').eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).maybeSingle();
-      if (data) product = data;
+      const { data } = await supabase.from('products').select('id, google_status_date').eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).limit(1);
+      if (data && data.length) product = data[0];
     }
 
     // Se n achou pelo ID, tenta buscar pelo nome da campanha E nome da conta para evitar duplicidade de nomes em contas diferentes
@@ -65,12 +65,13 @@ export async function POST(request: Request) {
         .eq('google_ads_campaign_name', campaign_name)
         .eq('account_name', account_name)
         .eq('user_id', user_id)
-        .maybeSingle();
-      
+        .limit(1);
+
+      const match = data && data.length ? data[0] : null;
       // Só aceita o match por nome se o produto não tiver um ID diferente salvo
-      const existingId = (data?.google_ads_campaign_id && data.google_ads_campaign_id !== 'undefined') ? data.google_ads_campaign_id : null;
-      if (data && (!existingId || existingId === safeCampaignId)) {
-        product = data;
+      const existingId = (match?.google_ads_campaign_id && match.google_ads_campaign_id !== 'undefined') ? match.google_ads_campaign_id : null;
+      if (match && (!existingId || existingId === safeCampaignId)) {
+        product = match;
       }
     }
 
@@ -110,17 +111,37 @@ export async function POST(request: Request) {
 
       if (createError) {
         const isDuplicate = createError.code === '23505' || /duplicate key/i.test(createError.message || '');
-        if (isDuplicate && safeCampaignId) {
-          const { data: existing } = await supabase
-            .from('products')
-            .select('id, google_status_date')
-            .eq('google_ads_campaign_id', safeCampaignId)
-            .eq('user_id', user_id)
-            .maybeSingle();
-          if (existing) product = existing;
+        if (isDuplicate) {
+          // Alguma linha já ocupa a chave. Tenta todas as formas de achá-la
+          // antes de descartar o dia desta campanha.
+          const porId = safeCampaignId
+            ? await supabase.from('products').select('id, google_status_date')
+                .eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).limit(1)
+            : { data: null };
+          if (porId.data && porId.data.length) product = porId.data[0];
+
+          if (!product) {
+            const { data: porNome } = await supabase.from('products')
+              .select('id, google_status_date')
+              .eq('google_ads_campaign_name', campaign_name)
+              .eq('user_id', user_id)
+              .limit(1);
+            if (porNome && porNome.length) product = porNome[0];
+          }
+
+          if (!product) {
+            const { data: porTitulo } = await supabase.from('products')
+              .select('id, google_status_date')
+              .eq('name', campaign_name)
+              .eq('user_id', user_id)
+              .limit(1);
+            if (porTitulo && porTitulo.length) product = porTitulo[0];
+          }
         }
         if (!product) {
-          return NextResponse.json({ error: `Erro ao criar produto: ${createError.message}` }, { status: 500 });
+          return NextResponse.json({
+            error: `Erro ao criar produto "${campaign_name}" (id ${safeCampaignId ?? 'sem id'}, conta ${account_name}): ${createError.message}`
+          }, { status: 500 });
         }
       } else {
         product = newProduct;
