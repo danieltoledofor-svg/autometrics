@@ -21,6 +21,14 @@ const RECURSO_PT: Record<string, string> = {
   AD_GROUP_ASSET: 'Recurso do grupo',
   ASSET: 'Recurso',
   FEED: 'Feed',
+  AD: 'Anúncio',
+  CAMPAIGN_SHARED_SET: 'Lista compartilhada',
+  SHARED_SET: 'Lista compartilhada',
+  ASSET_SET: 'Conjunto de recursos',
+  CUSTOMER_ASSET: 'Recurso da conta',
+  AD_GROUP_FEED: 'Feed do grupo',
+  CAMPAIGN_FEED: 'Feed da campanha',
+  BIDDING_STRATEGY: 'Estratégia de lance',
 };
 
 const OPERACAO_PT: Record<string, string> = {
@@ -50,12 +58,13 @@ const CAMPO_PT: Record<string, string> = {
 function descreverAlteracao(hist: any): string {
   const recurso = RECURSO_PT[hist.type] || hist.type || 'Alteração';
   const acao = OPERACAO_PT[hist.op] || (hist.op || '').toLowerCase();
-  const quem = hist.user ? ` por ${hist.user}` : '';
 
+  // O e-mail de quem alterou não entra na anotação: é dado pessoal de operadores
+  // e a plataforma é usada por várias contas.
   const campos = Array.isArray(hist.fields) ? hist.fields : [];
   if (!campos.length) {
-    // Sem detalhe disponível: mantém o formato antigo, que ao menos diz o quê.
-    return hist.change || `${recurso} (${hist.op || ''})${quem}`;
+    // Sem o de/para, ao menos o recurso e a ação, em português.
+    return `${recurso} — ${acao}`;
   }
 
   const detalhes = campos
@@ -67,7 +76,7 @@ function descreverAlteracao(hist: any): string {
     })
     .join(', ');
 
-  return `${recurso} — ${acao} ${detalhes}${quem}`;
+  return `${recurso} — ${acao} ${detalhes}`;
 }
 
 export async function POST(request: Request) {
