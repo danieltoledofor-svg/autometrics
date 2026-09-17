@@ -988,13 +988,14 @@ ${commonFunctions}`;
                   },
                   {
                     name: 'Buygoods',
-                    note: '{CONV_TYPE} detecta automaticamente venda, checkout e reembolso — use a mesma URL para todos os eventos.',
+                    note: 'O link da BuyGoods precisa levar subid = utm_id. Usa FlowTracking? Ela ocupa os subids — use a aba Conversão Automática.',
                     noteColor: 'orange',
-                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?cy=USD&amount={COMMISSION_AMOUNT}&campaign_id={SUBID1}&orderid={ORDERID}&event={CONV_TYPE}&source=BuyGoods`,
-                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?cy=USD&amount={COMMISSION_AMOUNT}&campaign_id={SUBID1}&orderid={ORDERID}&event={CONV_TYPE}&source=BuyGoods`,
+                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?cy=USD&amount={COMMISSION_AMOUNT}&campaign_id={SUBID}&orderid={ORDERID}&event={CONV_TYPE}&source=BuyGoods`,
+                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?cy=USD&amount={COMMISSION_AMOUNT}&campaign_id={SUBID}&orderid={ORDERID}&event={CONV_TYPE}&source=BuyGoods`,
                     details: [
-                      { label: 'campaign_id', value: '{SUBID1} (= utm_id via pixel)' },
-                      { label: 'event', value: '{CONV_TYPE} (Sale / InitiateCheckout / Refund)' },
+                      // A BuyGoods não tem a macro {SUBID1}: o primeiro subid é {SUBID}
+                      { label: 'campaign_id', value: '{SUBID} (= utm_id)' },
+                      { label: 'event', value: '{CONV_TYPE} (frontend / upsell / sale / InitiateCheckout)' },
                       { label: 'orderid', value: '{ORDERID}' },
                       { label: 'amount', value: '{COMMISSION_AMOUNT}' },
                       { label: 'cy', value: 'USD' },
@@ -1118,7 +1119,7 @@ ${commonFunctions}`;
               name: 'BuyGoods',
               postback: `${origin}/api/postback/${userId}?source=BuyGoods&event={CONV_TYPE}&cy=USD&amount={COMMISSION_AMOUNT}&orderid={ORDERID}&product={PRODUCT_CODENAME}&subid1={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}`,
               details: [
-                { label: 'event', value: '{CONV_TYPE} (frontend / upsell / downsell / refund)' },
+                { label: 'event', value: '{CONV_TYPE} (frontend / upsell / sale)' },
                 { label: 'subid1', value: '{SUBID} (ftsession)' },
                 { label: 'subid2', value: '{SUBID2} (gclid)' },
                 { label: 'orderid', value: '{ORDERID}' },
@@ -1195,7 +1196,7 @@ ${commonFunctions}`;
                   {copyBtn(plat.postback, `conv_pb_${convPlatform}`, 'Copiar URL')}
                 </div>
                 <p className={`text-xs mb-3 ${textMuted}`}>
-                  A mesma URL recebe venda, upsell, downsell e reembolso — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{CONV_TYPE}'}</code> identifica o evento.
+                  A mesma URL recebe venda frontend e upsell — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{CONV_TYPE}'}</code> identifica o evento.
                 </p>
                 <code className={`block text-[11px] font-mono break-all p-3 rounded border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'} ${textMuted}`}>{plat.postback}</code>
                 <div className="flex flex-wrap gap-2 mt-3">
