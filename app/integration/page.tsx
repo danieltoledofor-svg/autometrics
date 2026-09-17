@@ -42,7 +42,11 @@ export default function IntegrationPage() {
   const [vturbTokenVisible, setVturbTokenVisible] = useState(false);
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'google' | 'postback' | 'pixel' | 'vturb' | 'url'>('google');
+  const [activeTab, setActiveTab] = useState<'google' | 'postback' | 'conversion' | 'pixel' | 'vturb' | 'url'>('google');
+
+  // Conversão Automática: tracker externo e plataforma de venda selecionados
+  const [convTracker, setConvTracker] = useState<'flowtracking'>('flowtracking');
+  const [convPlatform, setConvPlatform] = useState<'buygoods'>('buygoods');
 
   // Aba de instalação do pixel
   const [installTab, setInstallTab] = useState<'html' | 'hfcm'>('html');
@@ -787,6 +791,7 @@ ${commonFunctions}`;
           {([
             { key: 'google', icon: <Code size={15} />, label: 'Google Ads' },
             { key: 'postback', icon: <ShoppingBag size={15} />, label: 'Postback S2S' },
+            { key: 'conversion', icon: <Zap size={15} />, label: 'Conversão Automática' },
             { key: 'pixel', icon: <MousePointerClick size={15} />, label: 'Pixel' },
             { key: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb' },
             { key: 'url', icon: <LinkIcon size={15} />, label: 'URL Builder' },
@@ -1074,6 +1079,153 @@ ${commonFunctions}`;
             </div>
           </div>
         )}
+
+        {/* ── ABA: CONVERSÃO AUTOMÁTICA ────────────────────────── */}
+        {activeTab === 'conversion' && userId && (() => {
+          const origin = typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud";
+
+          // A FlowTracking ocupa todos os subids da plataforma: SUBID/SUBID4 = ftsession_<ft_sid>,
+          // SUBID2 = gclid. O script guarda gclid e ftsession ligados à campanha do clique,
+          // e o postback resolve a campanha por qualquer um dos subids.
+          const flowScript = `<!-- AutoMetrics — Conversão Automática (FlowTracking) -->
+<script>
+(function () {
+  var uid = '${userId}';
+  var p = new URLSearchParams(window.location.search);
+  var utmId       = p.get('utm_id') || '';
+  var gadId       = p.get('gad_campaignid') || '';
+  var utmCampaign = p.get('utm_campaign') || '';
+  var utmSource   = p.get('utm_source') || '';
+  var utmMedium   = p.get('utm_medium') || '';
+  if (!utmId && !gadId && !utmCampaign) return;
+  var base   = 'https://autometrics.cloud/api/track-click/' + uid;
+  var common = '&utm_id='         + encodeURIComponent(utmId)
+             + '&gad_campaignid=' + encodeURIComponent(gadId)
+             + '&utm_campaign='   + encodeURIComponent(utmCampaign)
+             + '&utm_source='     + encodeURIComponent(utmSource)
+             + '&utm_medium='     + encodeURIComponent(utmMedium);
+  var ids = [];
+  ['gclid','gbraid','wbraid'].forEach(function (k) { if (p.get(k)) ids.push(p.get(k)); });
+  if (p.get('ft_sid')) ids.push('ftsession_' + p.get('ft_sid'));
+  ids.forEach(function (v) {
+    new Image().src = base + '?session_id=' + encodeURIComponent(v) + common;
+  });
+})();
+</script>`;
+
+          const platforms = {
+            buygoods: {
+              name: 'BuyGoods',
+              postback: `${origin}/api/postback/${userId}?source=BuyGoods&event={CONV_TYPE}&cy=USD&amount={COMMISSION_AMOUNT}&orderid={ORDERID}&product={PRODUCT_CODENAME}&subid1={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}`,
+              details: [
+                { label: 'event', value: '{CONV_TYPE} (frontend / upsell / downsell / refund)' },
+                { label: 'subid1', value: '{SUBID} (ftsession)' },
+                { label: 'subid2', value: '{SUBID2} (gclid)' },
+                { label: 'orderid', value: '{ORDERID}' },
+                { label: 'amount', value: '{COMMISSION_AMOUNT}' },
+              ],
+              steps: [
+                <>Na BuyGoods, abra <strong>Settings → Postback / Pixels</strong> (onde está o postback da FlowTracking).</>,
+                <><strong>Mantenha</strong> o postback da FlowTracking como está e <strong>adicione um novo</strong> postback.</>,
+                <>Cole a URL de postback do passo 2 e salve.</>,
+              ],
+            },
+          } as const;
+          const plat = platforms[convPlatform];
+          const stepBadge = (n: number) => (
+            <span className="bg-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white shrink-0">{n}</span>
+          );
+          const subTabClass = (active: boolean) => `px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${active ? 'bg-indigo-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'}`}`;
+          const copyBtn = (text: string, key: string, label: string) => (
+            <button onClick={() => copyPostback(text, key)}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === key ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
+              {copiedPostback === key ? <Check size={12} /> : <Copy size={12} />}
+              {copiedPostback === key ? 'Copiado!' : label}
+            </button>
+          );
+
+          return (
+            <div className="space-y-6">
+              <div className={`rounded-xl p-6 border ${bgCard}`}>
+                <div className="flex items-center gap-3 mb-1">
+                  <Zap size={20} className="text-amber-400" />
+                  <h2 className={`text-lg font-bold ${textHead}`}>Conversão Automática</h2>
+                </div>
+                <p className={`text-sm ${textMuted} mb-5`}>
+                  Cada venda feita na plataforma entra automaticamente na campanha certa do AutoMetrics,
+                  funcionando <strong>junto</strong> com o seu tracker — nada do que ele já faz é alterado.
+                </p>
+
+                <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>Tracker</p>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <button onClick={() => setConvTracker('flowtracking')} className={subTabClass(convTracker === 'flowtracking')}>FlowTracking</button>
+                </div>
+
+                <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>Plataforma de venda</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setConvPlatform('buygoods')} className={subTabClass(convPlatform === 'buygoods')}>BuyGoods</button>
+                </div>
+              </div>
+
+              <div className={`flex flex-wrap items-center gap-2 text-xs font-mono p-4 rounded-lg border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                <span className="bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded">Clique (gclid + ft_sid)</span>
+                <span className={textMuted}>→ script liga à campanha →</span>
+                <span className="bg-cyan-500/20 text-cyan-400 px-2 py-1 rounded">FlowTracking preenche os subids</span>
+                <span className={textMuted}>→</span>
+                <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">{plat.name} dispara postback → venda na campanha</span>
+              </div>
+
+              {/* PASSO 1: SCRIPT */}
+              <div className={`rounded-xl p-6 border ${bgCard}`}>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${textHead}`}>{stepBadge(1)} Script nas páginas do funil</h3>
+                  {copyBtn(flowScript, 'conv_flow_script', 'Copiar Script')}
+                </div>
+                <p className={`text-xs mb-3 ${textMuted}`}>
+                  Cole antes do <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>&lt;/body&gt;</code> em <strong>todas as páginas antes do checkout</strong> (pré-lander e VSL),
+                  junto com o script da FlowTracking. Ele liga o <strong>gclid</strong> e a sessão da FlowTracking à campanha do clique.
+                </p>
+                <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-50 text-slate-700'}`}>{flowScript}</pre>
+              </div>
+
+              {/* PASSO 2: POSTBACK */}
+              <div className={`rounded-xl p-6 border ${bgCard}`}>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${textHead}`}>{stepBadge(2)} Postback na {plat.name}</h3>
+                  {copyBtn(plat.postback, `conv_pb_${convPlatform}`, 'Copiar URL')}
+                </div>
+                <p className={`text-xs mb-3 ${textMuted}`}>
+                  A mesma URL recebe venda, upsell, downsell e reembolso — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{CONV_TYPE}'}</code> identifica o evento.
+                </p>
+                <code className={`block text-[11px] font-mono break-all p-3 rounded border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'} ${textMuted}`}>{plat.postback}</code>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {plat.details.map(d => (
+                    <span key={d.label} className={`text-[10px] px-2 py-0.5 rounded font-mono ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-500'}`}>
+                      <span className="text-indigo-400">{d.label}</span>=<span className="text-blue-400">{d.value}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* PASSO 3: CONFIGURAR NA PLATAFORMA */}
+              <div className={`rounded-xl p-6 border ${bgCard}`}>
+                <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${textHead}`}>{stepBadge(3)} Configurar na {plat.name}</h3>
+                <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
+                  {plat.steps.map((s, i) => <li key={i}>{s}</li>)}
+                </ol>
+              </div>
+
+              <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                <p className="text-xs font-bold text-amber-400 mb-2">⚠️ Antes de ativar</p>
+                <ul className={`space-y-1 text-xs ${textMuted} list-disc list-inside`}>
+                  <li>A URL do anúncio precisa ter <code className="bg-slate-800 px-1 rounded text-indigo-300">utm_id={'{campaignid}'}</code> (ou o <code className="bg-slate-800 px-1 rounded text-indigo-300">gad_campaignid</code> automático do Google).</li>
+                  <li>A campanha precisa estar cadastrada no AutoMetrics com o mesmo ID do Google Ads.</li>
+                  <li>Vendas de cliques anteriores à instalação do script não são atribuídas.</li>
+                </ul>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── ABA 3: PIXEL DE RASTREAMENTO ─────────────────────── */}
         {activeTab === 'pixel' && userId && (

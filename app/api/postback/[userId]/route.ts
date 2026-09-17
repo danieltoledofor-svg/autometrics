@@ -27,21 +27,27 @@ async function handleRequest(
 
         // Mapeamento automático de eventos
         // Clickbank: Purchase, Upsell | Buygoods: Sale, InitiateCheckout | Genérico: chargeback
-        if (event === 'purchase' || event === 'upsell' || event === 'combined conversion' || event === 'sale') event = 'sale';
+        // Buygoods: frontend, upsell, downsell (às vezes numerados, ex.: upsell1)
+        if (event === 'purchase' || event === 'combined conversion' || event === 'sale' || event === 'frontend' ||
+            event.startsWith('upsell') || event.startsWith('downsell')) event = 'sale';
         if (event === 'order_impression' || event === 'initiatecheckout') event = 'checkout';
         if (event === 'chargeback' || event === 'refund') event = 'refund';
 
         // Resolução do campaign_id: várias plataformas usam nomes diferentes
         //   Buygoods/MaxWeb: campaign_id={SUBID1} no postback configurado
-        //   Fallback 1: subid1 (caso a URL do postback use {SUBID} diretamente)
-        //   Fallback 2: utm_id (Google/Meta padrão)
-        //   Fallback 3: gad_campaignid (Google Ads nativo)
+        //   Fallback 1: utm_id (Google/Meta padrão)
+        //   Fallback 2: gad_campaignid (Google Ads nativo)
+        //   Fallback 3: subid1–subid5 — trackers como a FlowTracking ocupam todos os
+        //     subids (ftsession_XXX, gclid...), resolvidos via click_sessions
         const campaignId =
             searchParams.get('campaign_id') ||
-            searchParams.get('subid1') ||
             searchParams.get('utm_id') ||
             searchParams.get('gad_campaignid') ||
             '';
+        const subIds = ['subid1', 'subid2', 'subid3', 'subid4', 'subid5']
+            .map(k => searchParams.get(k) || '')
+            .filter(Boolean);
+        const candidateIds = [...new Set([campaignId, ...subIds].filter(Boolean))];
         const campaignName = searchParams.get('utm_campaign') || '';    // Nome da campanha (fallback)
         const amount = parseFloat(searchParams.get('amount') || '0');
         const currency = (searchParams.get('cy') || 'BRL').toUpperCase();
@@ -59,7 +65,7 @@ async function handleRequest(
         }
 
         // Precisa de pelo menos um identificador de campanha
-        if (!campaignId && !campaignName) {
+        if (!candidateIds.length && !campaignName) {
             return new Response('MISSING_CAMPAIGN_IDENTIFIER', { status: 400, headers: corsHeaders });
         }
 
@@ -67,25 +73,27 @@ async function handleRequest(
         let product: { id: string; currency: string } | null = null;
 
         // 1a. Busca direta pelo campaign_id numérico
-        if (campaignId) {
+        for (const id of candidateIds) {
+            if (product) break;
             const { data } = await supabase
                 .from('products')
                 .select('id, currency')
                 .eq('user_id', userId)
-                .eq('google_ads_campaign_id', campaignId)
-                .single();
+                .eq('google_ads_campaign_id', id)
+                .maybeSingle();
             product = data;
         }
 
-        // 1b. Reverse lookup via click_sessions (resolve vst_XXX / IDs de trackers)
-        //     Ativado quando o campaign_id não é um ID numérico reconhecido
-        if (!product && campaignId) {
+        // 1b. Reverse lookup via click_sessions (resolve vst_XXX, ftsession_XXX, gclid)
+        //     Ativado quando nenhum candidato é um ID numérico reconhecido
+        for (const id of candidateIds) {
+            if (product) break;
             const { data: session } = await supabase
                 .from('click_sessions')
                 .select('utm_id, gad_campaignid, utm_campaign')
                 .eq('user_id', userId)
-                .eq('session_id', campaignId)
-                .single();
+                .eq('session_id', id)
+                .maybeSingle();
 
             if (session) {
                 const resolvedId   = session.utm_id || session.gad_campaignid || '';
@@ -127,7 +135,7 @@ async function handleRequest(
         if (!product) {
             // Campanha não encontrada — retorna OK (plataforma não tentará reenviar)
             console.warn(
-                `[Postback] Produto não encontrado. user_id=${userId} campaign_id=${campaignId} utm_campaign=${campaignName}`
+                `[Postback] Produto não encontrado. user_id=${userId} candidatos=${candidateIds.join(',')} utm_campaign=${campaignName}`
             );
             return new Response('OK', { status: 200, headers: corsHeaders });
         }
