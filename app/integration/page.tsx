@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Copy, Check, Code, ArrowLeft, Zap, Calendar,
-  Globe, Store, AlertCircle, Sun, Moon, Link2, ShoppingBag, MousePointerClick,
+  Globe, Store, AlertCircle, Sun, Moon, Link2, MousePointerClick,
   Tv2, Key, Eye, EyeOff, Save, CheckCircle2, LinkIcon, ExternalLink, Plus, Trash2,
   LayoutGrid, Target, Package, Settings, LogOut
 } from 'lucide-react';
@@ -42,7 +42,7 @@ export default function IntegrationPage() {
   const [vturbTokenVisible, setVturbTokenVisible] = useState(false);
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'google' | 'postback' | 'conversion' | 'pixel' | 'vturb' | 'url'>('google');
+  const [activeTab, setActiveTab] = useState<'google' | 'conversion' | 'pixel' | 'vturb' | 'url'>('google');
 
   // Conversão Automática: tracker externo e plataforma de venda selecionados
   const [convTracker, setConvTracker] = useState<'flowtracking'>('flowtracking');
@@ -790,7 +790,6 @@ ${commonFunctions}`;
         <div className={`flex gap-1 p-1 rounded-xl mb-8 overflow-x-auto custom-scrollbar ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-200'}`}>
           {([
             { key: 'google', icon: <Code size={15} />, label: 'Google Ads' },
-            { key: 'postback', icon: <ShoppingBag size={15} />, label: 'Postback S2S' },
             { key: 'conversion', icon: <Zap size={15} />, label: 'Conversão Automática' },
             { key: 'pixel', icon: <MousePointerClick size={15} />, label: 'Pixel' },
             { key: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb' },
@@ -883,202 +882,6 @@ ${commonFunctions}`;
               </div>
             )}
           </>
-        )}
-
-        {/* ── ABA 2: POSTBACK S2S ──────────────────────────────── */}
-        {activeTab === 'postback' && userId && (
-          <div className="space-y-6">
-            <div className={`rounded-xl p-6 border ${bgCard}`}>
-              <div className="flex items-center gap-3 mb-1">
-                <ShoppingBag size={20} className="text-indigo-500" />
-                <h2 className={`text-lg font-bold ${textHead}`}>Postback S2S — Plataformas de Venda</h2>
-              </div>
-              <p className={`text-sm ${textMuted} mb-6`}>
-                Registre vendas (e upsells) e checkouts automaticamente. Cole a URL de postback da sua plataforma e os eventos serão registrados na campanha certa via <code className="bg-slate-800 px-1 rounded text-indigo-300">utm_id</code>.
-              </p>
-
-              <div className={`flex flex-wrap items-center gap-2 text-xs font-mono mb-6 p-4 rounded-lg border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                <span className="bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded">utm_id={'{campaignid}'}</span>
-                <span className={textMuted}>→ capturado como subid</span>
-                <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded">venda ocorre</span>
-                <span className={textMuted}>→ plataforma dispara postback</span>
-                <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">AutoMetrics registra</span>
-              </div>
-
-              <div className="space-y-3">
-                {[
-                  { key: 'sale', label: 'Venda / Upsell', color: 'emerald', placeholders: 'event=sale&amount={payout_amount}&cy={offer_currency}&orderid={transaction_id}&campaign_id={sub1}' },
-                  { key: 'checkout', label: 'Checkout', color: 'blue', placeholders: 'event=checkout&orderid={transaction_id}&campaign_id={sub1}' },
-                ].map(({ key, label, color, placeholders }) => {
-                  const url = `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?${placeholders}`;
-                  const isCopied = copiedPostback === key;
-                  return (
-                    <div key={key} className={`flex items-start gap-3 p-3 rounded-xl border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                      <span className={`mt-0.5 text-[10px] font-bold uppercase px-2 py-1 rounded shrink-0 bg-${color}-500/10 text-${color}-500 border border-${color}-500/20`}>{label}</span>
-                      <code className={`flex-1 text-[11px] font-mono break-all ${textMuted}`}>{url}</code>
-                      <button onClick={() => copyPostback(url, key)} className={`shrink-0 p-2 rounded-lg transition-all ${isCopied ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-500 hover:text-black'}`}`} title="Copiar">
-                        {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className={`rounded-xl p-6 border ${bgCard}`}>
-              <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2 ${textHead}`}>
-                <Link2 size={16} className="text-indigo-500" /> Como configurar por plataforma
-              </h3>
-              <p className={`text-xs mb-4 ${textMuted}`}>
-                Adicione a URL de postback <strong>ao lado</strong> da URL da Ratoeira — não substitua. A maioria das plataformas aceita múltiplos postbacks.
-              </p>
-              <div className="space-y-4">
-                {[
-                  {
-                    name: 'Gurumedia',
-                    note: 'Ratoeira usa sub1–sub4. Configure sub5 = utm_id na oferta.',
-                    noteColor: 'amber',
-                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=sale&amount={payout_amount}&cy={offer_currency}&orderid={transaction_id}&campaign_id={sub5}&source=Gurumedia`,
-                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=checkout&orderid={transaction_id}&campaign_id={sub5}&source=Gurumedia`,
-                    details: [
-                      { label: 'campaign_id', value: '{sub5} (= utm_id)' },
-                      { label: 'orderid', value: '{transaction_id}' },
-                      { label: 'amount', value: '{payout_amount}' },
-                      { label: 'cy', value: '{offer_currency}' },
-                    ],
-                  },
-                  {
-                    name: 'Clickbank (V8)',
-                    note: 'Configure aff_sub5 = utm_id na oferta. tid = {tid}, amount = {affiliate_earnings}.',
-                    noteColor: 'blue',
-                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=sale&amount={affiliate_earnings}&cy={currency}&tid={tid}&campaign_id={aff_sub5}&source=Clickbank`,
-                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=checkout&tid={tid}&campaign_id={aff_sub5}&source=Clickbank`,
-                    details: [
-                      { label: 'campaign_id', value: '{aff_sub5} (= utm_id)' },
-                      { label: 'tid', value: '{tid}' },
-                      { label: 'amount', value: '{affiliate_earnings}' },
-                      { label: 'cy', value: '{currency}' },
-                    ],
-                  },
-                  {
-                    name: 'Cartpanda',
-                    note: 'Cartpanda passa utm_campaign automaticamente via {utm_campaign}.',
-                    noteColor: 'emerald',
-                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=sale&amount={amount_affiliate}&cy={currency}&orderid={order_id}&campaign_id={utm_campaign}&source=Cartpanda`,
-                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=checkout&orderid={order_id}&campaign_id={utm_campaign}&source=Cartpanda`,
-                    details: [
-                      { label: 'campaign_id', value: '{utm_campaign} (= utm_id)' },
-                      { label: 'orderid', value: '{order_id}' },
-                      { label: 'amount', value: '{amount_affiliate}' },
-                      { label: 'cy', value: '{currency}' },
-                    ],
-                  },
-                  {
-                    name: 'MaxWeb',
-                    note: 'Configure SUBID1 = utm_id na URL do anúncio.',
-                    noteColor: 'indigo',
-                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=sale&amount={COMMISSION_AMOUNT}&cy=USD&orderid={ORDERID}&campaign_id={SUBID1}&source=MaxWeb`,
-                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=checkout&orderid={ORDERID}&campaign_id={SUBID1}&source=MaxWeb`,
-                    details: [
-                      { label: 'campaign_id', value: '{SUBID1} (= utm_id)' },
-                      { label: 'orderid', value: '{ORDERID}' },
-                      { label: 'amount', value: '{COMMISSION_AMOUNT}' },
-                      { label: 'cy', value: 'USD' },
-                    ],
-                  },
-                  {
-                    name: 'Buygoods',
-                    note: 'O link da BuyGoods precisa levar subid = utm_id. Usa FlowTracking? Ela ocupa os subids — use a aba Conversão Automática.',
-                    noteColor: 'orange',
-                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?cy=USD&amount={COMMISSION_AMOUNT}&campaign_id={SUBID}&orderid={ORDERID}&event={CONV_TYPE}&source=BuyGoods`,
-                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?cy=USD&amount={COMMISSION_AMOUNT}&campaign_id={SUBID}&orderid={ORDERID}&event={CONV_TYPE}&source=BuyGoods`,
-                    details: [
-                      // A BuyGoods não tem a macro {SUBID1}: o primeiro subid é {SUBID}
-                      { label: 'campaign_id', value: '{SUBID} (= utm_id)' },
-                      { label: 'event', value: '{CONV_TYPE} (frontend / upsell / sale / InitiateCheckout)' },
-                      { label: 'orderid', value: '{ORDERID}' },
-                      { label: 'amount', value: '{COMMISSION_AMOUNT}' },
-                      { label: 'cy', value: 'USD' },
-                    ],
-                  },
-                  {
-                    name: 'Digistore',
-                    note: 'sid1–5 configuráveis. Use sid5 = utm_id na configuração da oferta.',
-                    noteColor: 'cyan',
-                    urlSale: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=sale&amount={amount_affiliate}&cy={currency}&orderid={transaction_id}&campaign_id={sid5}&source=Digistore`,
-                    urlCheckout: `${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId}?event=checkout&orderid={transaction_id}&campaign_id={sid5}&source=Digistore`,
-                    details: [
-                      { label: 'campaign_id', value: '{sid5} (= utm_id)' },
-                      { label: 'orderid', value: '{transaction_id}' },
-                      { label: 'amount', value: '{amount_affiliate}' },
-                      { label: 'cy', value: '{currency}' },
-                    ],
-                  },
-                ].map(p => {
-                  const isCopiedSale = copiedPostback === `plat_sale_${p.name}`;
-                  const isCopiedCheckout = copiedPostback === `plat_chk_${p.name}`;
-                  return (
-                    <div key={p.name} className={`rounded-xl border p-4 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                      <div className="flex items-start justify-between gap-3 mb-4">
-                        <div>
-                          <p className={`font-bold text-sm ${textHead}`}>{p.name}</p>
-                          <p className={`text-xs mt-0.5 text-${p.noteColor}-400`}>{p.note}</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        {/* URL VENDA */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold uppercase text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Venda / Upsell</span>
-                            <button onClick={() => copyPostback(p.urlSale, `plat_sale_${p.name}`)} className={`shrink-0 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${isCopiedSale ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
-                              {isCopiedSale ? <Check size={12} /> : <Copy size={12} />}
-                              {isCopiedSale ? 'Copiado!' : 'Copiar URL Venda'}
-                            </button>
-                          </div>
-                          <code className={`block text-[10px] font-mono break-all p-2 rounded border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} ${textMuted}`}>{p.urlSale}</code>
-                        </div>
-
-                        {/* URL CHECKOUT */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold uppercase text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">Checkout</span>
-                            <button onClick={() => copyPostback(p.urlCheckout, `plat_chk_${p.name}`)} className={`shrink-0 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${isCopiedCheckout ? 'bg-blue-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
-                              {isCopiedCheckout ? <Check size={12} /> : <Copy size={12} />}
-                              {isCopiedCheckout ? 'Copiado!' : 'Copiar URL Checkout'}
-                            </button>
-                          </div>
-                          <code className={`block text-[10px] font-mono break-all p-2 rounded border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} ${textMuted}`}>{p.urlCheckout}</code>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-500/10">
-                        {p.details.map(d => (
-                          <span key={d.label} className={`text-[10px] px-2 py-0.5 rounded font-mono ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-500'}`}>
-                            <span className="text-indigo-400">{d.label}</span>=<span className="text-blue-400">{d.value}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-5 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
-                <p className="text-xs font-bold text-amber-400 mb-2">⚠️ Configuração Gurumedia (Ratoeira usa sub1–sub4)</p>
-                <p className={`text-xs ${textMuted} mb-3`}>
-                  A Ratoeira Ads preenche automaticamente <code className="bg-slate-800 px-1 rounded text-amber-300">sub1</code> a <code className="bg-slate-800 px-1 rounded text-amber-300">sub4</code> com o ID de visita dela.
-                  Configure o <strong>sub5</strong> para passar o <code className="bg-slate-800 px-1 rounded text-amber-300">utm_id</code> e use <code className="bg-slate-800 px-1 rounded text-indigo-300">campaign_id={'{sub5}'}</code> na URL de postback de <strong>Venda</strong>.
-                </p>
-                <div className={`rounded-lg p-3 font-mono text-[11px] break-all ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
-                  {`${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/${userId || 'SEU_USER_ID'}?event=sale&amount={payout_amount}&cy={offer_currency}&tid={transaction_id}&campaign_id={sub5}`}
-                </div>
-              </div>
-              <p className={`text-xs mt-3 ${textMuted}`}>
-                ⚠️ Certifique-se que <code className="bg-slate-800 px-1 rounded text-indigo-300">utm_id={'{campaignid}'}</code> está na URL do anúncio no Google Ads.
-              </p>
-            </div>
-          </div>
         )}
 
         {/* ── ABA: CONVERSÃO AUTOMÁTICA ────────────────────────── */}
@@ -1375,12 +1178,12 @@ ${commonFunctions}`;
                   <p className={`text-xs ${textMuted} mb-3 ml-3 leading-relaxed`}>
                     Como afiliado, você não consegue colar códigos (scripts) na página de checkout da plataforma externa (Clickbank, Buygoods, etc). 
                     <br/><br/>
-                    <strong>A Solução:</strong> Você deve rastrear os checkouts usando a <strong>Aba de Postback S2S</strong>. Lá, você configura dentro da plataforma (ex: Clickbank) para que ela dispare a URL de postback sempre que ocorrer o evento de "Initiate Checkout" ou "Order Impression".
+                    <strong>A Solução:</strong> Use a aba <strong>Conversão Automática</strong>. Lá você configura o postback dentro da plataforma (ex: BuyGoods) para que as vendas cheguem direto na campanha.
                   </p>
                   
                   <div className="ml-3">
-                    <button onClick={() => setActiveTab('postback')} className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-colors ${isDark ? 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
-                      Ir para configurações de Postback S2S <ArrowLeft size={14} className="rotate-180" />
+                    <button onClick={() => setActiveTab('conversion')} className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-colors ${isDark ? 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
+                      Ir para Conversão Automática <ArrowLeft size={14} className="rotate-180" />
                     </button>
                   </div>
                 </div>
