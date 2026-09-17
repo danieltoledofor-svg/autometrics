@@ -26,7 +26,7 @@ export function Logo({ className = '', size = 'md' }: LogoProps) {
         <path d="M4 9 L12 3 M12 3 L12 6.5 M12 3 L8.5 3" stroke="#3B82F6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <span className="font-extrabold tracking-tight leading-none" style={{ fontSize: font, letterSpacing: '-0.02em' }}>
-        <span style={{ color: '#ffffff' }}>auto</span><span style={{ color: '#3B82F6' }}>metrics</span>
+        <span className="logo-auto" style={{ color: '#ffffff' }}>auto</span><span style={{ color: '#3B82F6' }}>metrics</span>
       </span>
     </div>
   );
