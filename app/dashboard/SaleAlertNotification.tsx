@@ -19,7 +19,6 @@ interface Props {
 }
 
 const SOUND_URL = '/sounds/nova-venda.mp3';
-const AUTO_DISMISS_MS = 12000;
 const SOUND_THROTTLE_MS = 3000;   // várias vendas juntas não viram barulho
 
 export default function SaleAlertNotification({ products, isDark }: Props) {
@@ -122,10 +121,7 @@ function NotificationCard({
   onDismiss: (id: string) => void;
   isDark: boolean;
 }) {
-  useEffect(() => {
-    const t = setTimeout(() => onDismiss(notification.id), AUTO_DISMISS_MS);
-    return () => clearTimeout(t);
-  }, [notification.id, onDismiss]);
+  // Sem fechamento automático: o cartão fica até o usuário clicar no ✕.
 
   // Valor cheio no bloco verde só cabe até 6 dígitos; acima disso, sem centavos.
   const fmt = (digits: number) =>
