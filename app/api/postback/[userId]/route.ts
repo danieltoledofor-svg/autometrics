@@ -22,8 +22,14 @@ async function handleRequest(
         const { searchParams } = new URL(request.url);
         const { userId } = await params;
 
+        // Modo teste: resolve a campanha e responde em JSON o que seria gravado,
+        // sem tocar em postback_events nem daily_metrics.
+        const dryRun = searchParams.get('dry_run') === '1';
+        const trace: string[] = [];
+
         // Buygoods usa CONV_TYPE; outros usam event
         let event = (searchParams.get('event') || searchParams.get('CONV_TYPE') || '').toLowerCase();
+        const rawEvent = event;
 
         // Mapeamento automático de eventos
         // Clickbank: Purchase, Upsell | Buygoods: Sale, InitiateCheckout | Genérico: chargeback
@@ -82,6 +88,7 @@ async function handleRequest(
                 .eq('google_ads_campaign_id', id)
                 .maybeSingle();
             product = data;
+            trace.push(`campanha ${id}: ${data ? 'encontrada' : 'não'}`);
         }
 
         // 1b. Reverse lookup via click_sessions (resolve vst_XXX, ftsession_XXX, gclid)
@@ -94,6 +101,7 @@ async function handleRequest(
                 .eq('user_id', userId)
                 .eq('session_id', id)
                 .maybeSingle();
+            trace.push(`sessão ${id}: ${session ? `utm_id=${session.utm_id || '-'} gad=${session.gad_campaignid || '-'}` : 'não'}`);
 
             if (session) {
                 const resolvedId   = session.utm_id || session.gad_campaignid || '';
@@ -107,6 +115,7 @@ async function handleRequest(
                         .eq('google_ads_campaign_id', resolvedId)
                         .single();
                     product = data;
+                    trace.push(`  → campanha ${resolvedId} cadastrada: ${data ? 'sim' : 'não'}`);
                 }
 
                 if (!product && resolvedName) {
@@ -130,6 +139,14 @@ async function handleRequest(
                 .ilike('google_ads_campaign_name', campaignName.trim())
                 .single();
             product = data;
+            trace.push(`nome ${campaignName}: ${data ? 'encontrado' : 'não'}`);
+        }
+
+        if (dryRun) {
+            return Response.json(
+                { dry_run: true, event: rawEvent, mapped_event: event, amount, currency, orderid: tid, candidates: candidateIds, trace, product_id: product?.id ?? null },
+                { headers: corsHeaders }
+            );
         }
 
         if (!product) {

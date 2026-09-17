@@ -24,7 +24,7 @@ async function handleRequest(
 
         const sessionId = searchParams.get('session_id') || '';
         if (!userId || !sessionId) {
-            return new Response('', { status: 204, headers: corsHeaders });
+            return new Response(null, { status: 204, headers: corsHeaders });
         }
 
         const utmId       = searchParams.get('utm_id') || '';
@@ -35,19 +35,27 @@ async function handleRequest(
 
         // Nada de útil para armazenar — ignora silenciosamente
         if (!utmId && !gadId && !utmCampaign) {
-            return new Response('', { status: 204, headers: corsHeaders });
+            return new Response(null, { status: 204, headers: corsHeaders });
         }
 
-        await supabase
+        const { error } = await supabase
             .from('click_sessions')
             .upsert(
                 { user_id: userId, session_id: sessionId, utm_id: utmId, gad_campaignid: gadId, utm_campaign: utmCampaign, utm_source: utmSource, utm_medium: utmMedium },
                 { onConflict: 'user_id, session_id' }
             );
 
-        return new Response('', { status: 204, headers: corsHeaders });
+        // Antes a falha de gravação era silenciosa (ex.: RLS bloqueando a chave pública)
+        if (error) console.error('[TrackClick] Erro ao gravar sessão:', error.message);
+
+        // debug=1 devolve o resultado da gravação, para testar sem abrir o banco
+        if (searchParams.get('debug') === '1') {
+            return Response.json({ saved: !error, error: error?.message ?? null, session_id: sessionId, utm_id: utmId, gad_campaignid: gadId }, { headers: corsHeaders });
+        }
+
+        return new Response(null, { status: 204, headers: corsHeaders });
     } catch {
-        return new Response('', { status: 204, headers: corsHeaders });
+        return new Response(null, { status: 204, headers: corsHeaders });
     }
 }
 
