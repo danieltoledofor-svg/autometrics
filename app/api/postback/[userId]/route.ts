@@ -27,8 +27,15 @@ async function handleRequest(
         const dryRun = searchParams.get('dry_run') === '1';
         const trace: string[] = [];
 
+        // O teste de postback das plataformas dispara a URL sem substituir as
+        // macros, então chega o texto "{CONV_TYPE}" literal. Vale como vazio.
+        const param = (key: string) => {
+            const v = searchParams.get(key) || '';
+            return /^\{.*\}$/.test(v.trim()) ? '' : v;
+        };
+
         // Buygoods usa CONV_TYPE; outros usam event
-        let event = (searchParams.get('event') || searchParams.get('CONV_TYPE') || '').toLowerCase();
+        let event = (param('event') || param('CONV_TYPE')).toLowerCase();
         const rawEvent = event;
 
         // Mapeamento automático de eventos
@@ -46,34 +53,42 @@ async function handleRequest(
         //   Fallback 3: subid1–subid5 — trackers como a FlowTracking ocupam todos os
         //     subids (ftsession_XXX, gclid...), resolvidos via click_sessions
         const campaignId =
-            searchParams.get('campaign_id') ||
-            searchParams.get('utm_id') ||
-            searchParams.get('gad_campaignid') ||
+            param('campaign_id') ||
+            param('utm_id') ||
+            param('gad_campaignid') ||
             '';
         const subIds = ['subid1', 'subid2', 'subid3', 'subid4', 'subid5']
-            .map(k => searchParams.get(k) || '')
+            .map(k => param(k))
             .filter(Boolean);
         const candidateIds = [...new Set([campaignId, ...subIds].filter(Boolean))];
-        const campaignName = searchParams.get('utm_campaign') || '';    // Nome da campanha (fallback)
-        const amount = parseFloat(searchParams.get('amount') || '0');
-        const currency = (searchParams.get('cy') || 'BRL').toUpperCase();
+        const campaignName = param('utm_campaign');    // Nome da campanha (fallback)
+        const amount = parseFloat(param('amount') || '0') || 0;
+        const currency = (param('cy') || 'BRL').toUpperCase();
         // Aceita tid (Clickbank), orderid (Cartpanda/MaxWeb/Buygoods) ou transid como alias
-        const tid = searchParams.get('tid') || searchParams.get('orderid') || searchParams.get('transid') || '';
+        const tid = param('tid') || param('orderid') || param('transid');
 
         // ── Validação básica ────────────────────────────────────────────
-        if (!userId || !event) {
-            return new Response('MISSING_PARAMS', { status: 400, headers: corsHeaders });
-        }
+        // Nada aqui devolve erro: o teste de postback da plataforma exige 200,
+        // e um 400 faria a plataforma reenviar ou recusar a URL. O motivo vai
+        // no corpo da resposta e no log.
+        const ignore = (motivo: string) => {
+            console.warn(`[Postback] Ignorado (${motivo}). user_id=${userId} evento=${rawEvent || '-'} candidatos=${candidateIds.join(',') || '-'}`);
+            if (dryRun) {
+                return Response.json(
+                    { dry_run: true, ignorado: motivo, event: rawEvent, amount, currency, orderid: tid, candidates: candidateIds, product_id: null },
+                    { headers: corsHeaders }
+                );
+            }
+            return new Response(`OK (${motivo})`, { status: 200, headers: corsHeaders });
+        };
+
+        if (!userId || !event) return ignore('sem evento');
 
         const validEvents = ['sale', 'checkout', 'click', 'refund'];
-        if (!validEvents.includes(event)) {
-            return new Response('INVALID_EVENT', { status: 400, headers: corsHeaders });
-        }
+        if (!validEvents.includes(event)) return ignore(`evento desconhecido: ${rawEvent}`);
 
         // Precisa de pelo menos um identificador de campanha
-        if (!candidateIds.length && !campaignName) {
-            return new Response('MISSING_CAMPAIGN_IDENTIFIER', { status: 400, headers: corsHeaders });
-        }
+        if (!candidateIds.length && !campaignName) return ignore('sem identificador de campanha');
 
         // ── 1. Localizar o produto ──────────────────────────────────────
         let product: { id: string; currency: string } | null = null;
