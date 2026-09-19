@@ -1,0 +1,74 @@
+# Google Ads API no Autometrics
+
+Conexão direta com o Google Ads, no lugar dos scripts colados em cada MCC.
+
+- **Custo mais rápido e correto**: uma consulta por conta traz os 30 dias de todas as campanhas. A coleta roda a cada 15 min e relê a janela inteira, então quando o Google estorna cliques inválidos dias depois, a revisão aparece sozinha (registrada em `cost_previous`/`revised_at`).
+- **Pausar/ativar campanha** pela tela de Campanhas, com confirmação no Google e registro em `google_ads_actions`.
+- **Mais dados**: até 50 termos de pesquisa por campanha/dia (o script trazia 10) e nomes de país vindos do próprio Google.
+
+O script e a API gravam pelo mesmo código (`lib/googleAds/ingest.ts`) e podem rodar juntos durante a transição.
+
+> **Mudança do Google em 09/09/2026:** o developer token deixou de existir. O nível de acesso agora pertence ao **projeto do Google Cloud** que gera o Client ID do OAuth. Não use a Central de API da MCC — pedidos feitos por lá não são processados.
+
+## 1. Google Cloud
+
+1. Em [console.cloud.google.com](https://console.cloud.google.com), crie um projeto (ex.: *Autometrics*).
+2. **APIs e serviços → Biblioteca** → ative a **Google Ads API**.
+3. **Acesso à API**: abra a [página do Google Ads API no Cloud Console](https://console.cloud.google.com/google/ads-apis/overview) e peça acesso.
+   - **Explorer**: contas reais, **2.880 consultas/dia**. Dá para ~9 contas ativas no ritmo padrão.
+   - **Basic**: 15.000/dia. Exige a verificação da marca do projeto; depois disso a análise é automática, em minutos. **Recomendado.**
+4. **Google Auth Platform → Branding / Público-alvo**:
+   - Tipo de usuário: **Externo**. Domínio autorizado: `autometrics.cloud`.
+   - Escopo: `https://www.googleapis.com/auth/adwords`.
+   - **Publique o app ("Em produção")**. Em modo *Teste* o Google invalida a autorização a cada **7 dias** e a coleta para.
+   - Na hora de conectar vai aparecer "O Google não verificou este app": clique em *Avançado → Acessar*. Para uso próprio isso não é problema.
+5. **Clientes → Criar cliente OAuth → Aplicativo da Web**. Em *URIs de redirecionamento autorizados*, adicione:
+   ```
+   https://autometrics.cloud/api/google-ads/oauth/callback
+   https://www.autometrics.cloud/api/google-ads/oauth/callback
+   http://localhost:3000/api/google-ads/oauth/callback
+   ```
+   Copie o **Client ID** e o **Client secret**.
+
+## 2. Variáveis de ambiente no servidor (Hostinger)
+
+| Variável | Valor |
+|---|---|
+| `GOOGLE_ADS_CLIENT_ID` | Client ID do passo 1.5 |
+| `GOOGLE_ADS_CLIENT_SECRET` | Client secret do passo 1.5 |
+| `GOOGLE_ADS_TOKEN_KEY` | Chave que criptografa os tokens. Gere com `openssl rand -base64 32`. **Nunca troque depois de conectar** — os tokens salvos ficam ilegíveis e é preciso reconectar. |
+| `GOOGLE_ADS_CRON_SECRET` | Senha do agendador. Gere com `openssl rand -hex 24`. |
+| `GOOGLE_ADS_DAILY_QUOTA` | `2880` no Explorer (padrão), `15000` depois de liberar o Basic. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Já deve existir (o webhook usa). As rotas novas não funcionam sem ela. |
+
+Opcionais: `GOOGLE_ADS_SYNC_INTERVAL_MIN` (15), `GOOGLE_ADS_DEEP_INTERVAL_MIN` (120 — termos/públicos/histórico), `GOOGLE_ADS_IDLE_INTERVAL_MIN` (360 — contas sem campanha ativa), `GOOGLE_ADS_LOOKBACK_DAYS` (30), `GOOGLE_ADS_API_VERSION` (v25), `GOOGLE_ADS_SYNC_BUDGET_SEC` (50).
+
+## 3. Supabase
+
+Rode `migration_google_ads_api.sql` no SQL Editor. Cria `google_ads_connections` (token criptografado, sem acesso pela chave pública), `google_ads_accounts`, `google_ads_actions`, `google_ads_usage` e a coluna `products.google_ads_customer_id`.
+
+## 4. Conectar
+
+1. **Integração → Google Ads → Conectar Google Ads**, com o login do Google que tem acesso às MCCs. Todas as subcontas entram de uma vez, agrupadas pela MCC.
+   Se as MCCs estão em logins diferentes, conecte cada um ("Conectar outra conta Google").
+2. **Sincronizar tudo** e compare o custo de hoje/ontem com a interface do Google Ads.
+3. Desmarque as contas que não quer coletar.
+
+## 5. Agendamento
+
+No fim de `migration_google_ads_api.sql` está o `cron.schedule` para o Supabase chamar `/api/google-ads/sync` a cada 5 minutos (ative `pg_cron` e `pg_net` em *Database → Extensions* antes). Cada chamada processa só as contas vencidas e desacelera sozinha perto do limite de consultas do dia.
+
+## 6. Desligar os scripts
+
+Depois de alguns dias com os números batendo, remova os scripts das MCCs. Enquanto os dois rodam, o nome da MCC no painel continua sendo o que foi digitado no script — a API não renomeia campanhas que já existem.
+
+## Rotas
+
+| Rota | Uso |
+|---|---|
+| `POST /api/google-ads/oauth/start` | Link de consentimento (painel) |
+| `GET /api/google-ads/oauth/callback` | Volta do Google |
+| `GET/POST/DELETE /api/google-ads/connections` | Listar, reler contas, desconectar |
+| `PATCH /api/google-ads/accounts` | Ligar/desligar coleta de uma conta |
+| `POST /api/google-ads/sync` | Painel: `{ account_id }` · Agendador: `Authorization: Bearer $GOOGLE_ADS_CRON_SECRET` |
+| `POST /api/google-ads/campaign-status` | `{ product_id, status: "ENABLED" \| "PAUSED" }` |

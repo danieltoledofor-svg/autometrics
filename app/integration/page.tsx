@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
+import { GoogleAdsApiPanel } from './GoogleAdsApiPanel';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -812,6 +813,11 @@ ${commonFunctions}`;
         {/* ── ABA 1: GOOGLE ADS ────────────────────────────────── */}
         {activeTab === 'google' && (
           <>
+            <div className="mb-8">
+              <GoogleAdsApiPanel isDark={isDark} />
+            </div>
+
+            <h3 className={`text-xs font-bold uppercase tracking-wider mb-4 ${textMuted}`}>Script do Google Ads (método antigo)</h3>
             {!generatedScript ? (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-6">

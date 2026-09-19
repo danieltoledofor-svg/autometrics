@@ -43,6 +43,7 @@ import { resolveProductStatus, type StatusKey } from '@/lib/campaignStatus';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Logo } from '@/app/components/Logo';
+import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type MetricSort } from '@/lib/metricSort';
@@ -812,12 +813,13 @@ export default function ProductsPage() {
                                       </span>
                                     );
                                   })()}
+                                  <CampaignStatusToggle product={product} isDark={isDark} onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
                                   <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'bg-emerald-500 text-white' : (isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black')}`} title="Copiar Postback">{copiedPostback === product.id ? <Check size={14}/> : <Copy size={14}/>}</button>
                                   <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-amber-500/20 text-amber-500' : (isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black')}`} title={product.is_hidden ? "Restaurar" : "Arquivar"}>{product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
                                   <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`} title="Excluir"><Trash2 size={14} /></button>
                                </div>
 
-                               <div className="flex items-center gap-2 mb-3 pr-28">
+                               <div className="flex items-center gap-2 mb-3 pr-36">
                                  <button onClick={(e)=>toggleSelectProduct(product.id, e)} className={`${isSelected ? 'text-indigo-500' : 'text-slate-300 hover:text-slate-400'}`}>{isSelected ? <CheckSquare size={16}/> : <Square size={16}/>}</button>
                                  {renderPlatformBadge(product)}
                                </div>
@@ -886,6 +888,7 @@ export default function ProductsPage() {
                                  <td className="p-3"><span className={`font-mono text-xs font-bold ${(m7d.revenue - m7d.cost) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(m7d.revenue - m7d.cost, product.currency)}</span></td>
                                  <td className="p-3 text-right" onClick={e=>e.stopPropagation()}>
                                    <div className="flex justify-end gap-1">
+                                      <CampaignStatusToggle product={product} isDark={isDark} onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
                                       <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'text-emerald-500 bg-emerald-500/10' : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200')}`} title="Copiar Postback">{copiedPostback === product.id ? <Check size={14}/> : <Copy size={14}/>}</button>
                                       <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors hover:text-rose-500 ${isDark ? 'text-slate-400 hover:bg-rose-500/20' : 'text-slate-500 hover:bg-rose-100'}`} title="Excluir"><Trash2 size={14} /></button>
                                    </div>
