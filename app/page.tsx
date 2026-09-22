@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { Mail, ArrowRight, Loader2, AlertCircle, Lock } from 'lucide-react';
 import { Logo } from '@/app/components/Logo';
+import Link from 'next/link';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -67,7 +68,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
+    <div className="relative min-h-screen bg-black flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
         
         <div className="text-center mb-8 flex flex-col items-center">
@@ -124,6 +125,12 @@ export default function LoginPage() {
             <button onClick={() => { setIsResetPassword(false); setMsg(''); }} className="text-sm text-slate-500 hover:text-white transition-colors">Voltar para o Login</button>
           </div>
         )}
+      </div>
+
+      {/* Links exigidos pelo Google na tela de consentimento do login. */}
+      <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-6 text-xs text-slate-600">
+        <Link href="/privacidade" className="hover:text-slate-400 transition-colors">Política de Privacidade</Link>
+        <Link href="/termos" className="hover:text-slate-400 transition-colors">Termos de Uso</Link>
       </div>
     </div>
   );
