@@ -30,7 +30,81 @@ function getLocalYYYYMMDD(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-const ALL_COLUMNS = [
+
+/**
+ * Métricas que o Google devolve na mesma consulta diária e que antes eram
+ * descartadas. Ficam desligadas por padrão — quem quiser liga no seletor de
+ * colunas, do mesmo jeito que faria na interface do Google Ads.
+ *
+ * agg: 'sum' soma o período (contagens e dinheiro acumulado);
+ *      'avg' tira a média (taxas, parcelas e custos por conversão).
+ * money: converte junto com o custo quando a moeda de exibição muda.
+ * rate: vem como fração (0,45) e é exibida como 45,00%.
+ */
+const GOOGLE_METRICS_CATALOG: {
+  m: string; label: string; cat: string; agg: 'sum' | 'avg'; money?: boolean; rate?: boolean;
+}[] = [
+  // Conversões medidas pelo Google
+  { m: 'conversions', label: 'Conversões (Google)', cat: 'Google · Conversões', agg: 'sum' },
+  { m: 'conversions_value', label: 'Valor de conversão', cat: 'Google · Conversões', agg: 'sum', money: true },
+  { m: 'conversions_from_interactions_rate', label: 'Taxa de conversão', cat: 'Google · Conversões', agg: 'avg', rate: true },
+  { m: 'cost_per_conversion', label: 'Custo por conversão', cat: 'Google · Conversões', agg: 'avg', money: true },
+  { m: 'value_per_conversion', label: 'Valor por conversão', cat: 'Google · Conversões', agg: 'avg', money: true },
+  { m: 'all_conversions', label: 'Todas as conversões', cat: 'Google · Conversões', agg: 'sum' },
+  { m: 'all_conversions_value', label: 'Valor de todas as conv.', cat: 'Google · Conversões', agg: 'sum', money: true },
+  { m: 'all_conversions_from_interactions_rate', label: 'Taxa de todas as conv.', cat: 'Google · Conversões', agg: 'avg', rate: true },
+  { m: 'cost_per_all_conversions', label: 'Custo por todas as conv.', cat: 'Google · Conversões', agg: 'avg', money: true },
+  { m: 'view_through_conversions', label: 'Conversões por visualização', cat: 'Google · Conversões', agg: 'sum' },
+
+  // Tráfego e custo
+  { m: 'interactions', label: 'Interações', cat: 'Google · Tráfego', agg: 'sum' },
+  { m: 'interaction_rate', label: 'Taxa de interação', cat: 'Google · Tráfego', agg: 'avg', rate: true },
+  { m: 'average_cpm', label: 'CPM médio', cat: 'Google · Tráfego', agg: 'avg', money: true },
+  { m: 'average_cost', label: 'Custo médio', cat: 'Google · Tráfego', agg: 'avg', money: true },
+  { m: 'invalid_clicks', label: 'Cliques inválidos', cat: 'Google · Tráfego', agg: 'sum' },
+  { m: 'invalid_click_rate', label: 'Taxa de cliques inválidos', cat: 'Google · Tráfego', agg: 'avg', rate: true },
+
+  // Leilão — o que existe na API (o relatório de insights de leilão não é exposto)
+  { m: 'search_impression_share', label: 'Parcela de impressões', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_top_impression_share', label: 'Parcela no topo', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_absolute_top_impression_share', label: 'Parcela no topo absoluto', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_budget_lost_impression_share', label: 'Perdida por orçamento', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_budget_lost_top_impression_share', label: 'Perdida no topo (orçamento)', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_budget_lost_absolute_top_impression_share', label: 'Perdida no topo abs. (orçamento)', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_rank_lost_impression_share', label: 'Perdida por classificação', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_rank_lost_top_impression_share', label: 'Perdida no topo (classificação)', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_rank_lost_absolute_top_impression_share', label: 'Perdida no topo abs. (classificação)', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_exact_match_impression_share', label: 'Parcela em correspondência exata', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'search_click_share', label: 'Parcela de cliques', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'absolute_top_impression_percentage', label: '% no topo absoluto', cat: 'Google · Leilão', agg: 'avg', rate: true },
+  { m: 'top_impression_percentage', label: '% no topo', cat: 'Google · Leilão', agg: 'avg', rate: true },
+
+  // Display e vídeo
+  { m: 'content_impression_share', label: 'Parcela na rede de display', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
+  { m: 'content_budget_lost_impression_share', label: 'Display perdida (orçamento)', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
+  { m: 'content_rank_lost_impression_share', label: 'Display perdida (classificação)', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
+  { m: 'video_views', label: 'Visualizações de vídeo', cat: 'Google · Display e vídeo', agg: 'sum' },
+  { m: 'video_view_rate', label: 'Taxa de visualização', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
+  { m: 'average_cpv', label: 'CPV médio', cat: 'Google · Display e vídeo', agg: 'avg', money: true },
+  { m: 'engagements', label: 'Engajamentos', cat: 'Google · Display e vídeo', agg: 'sum' },
+  { m: 'engagement_rate', label: 'Taxa de engajamento', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
+];
+
+/** Prefixo g_ separa a métrica do Google da coluna de mesmo nome do painel. */
+const GOOGLE_COLUMN_KEY = (m: string) => `g_${m}`;
+const GOOGLE_MONEY_KEYS = new Set(GOOGLE_METRICS_CATALOG.filter(c => c.money).map(c => GOOGLE_COLUMN_KEY(c.m)));
+const GOOGLE_AVG_KEYS = new Set(GOOGLE_METRICS_CATALOG.filter(c => c.agg === 'avg').map(c => GOOGLE_COLUMN_KEY(c.m)));
+
+interface ColumnDef {
+  key: string;
+  label: string;
+  category: string;
+  default: boolean;
+  format?: string;
+  type?: string;
+}
+
+const ALL_COLUMNS: ColumnDef[] = [
   // GERAL
   { key: 'date', label: 'Data', category: 'Geral', default: true },
   { key: 'notes', label: 'Anotações / Histórico', category: 'Geral', default: true },
@@ -73,6 +147,14 @@ const ALL_COLUMNS = [
   { key: 'search_abs_share', label: 'Parc. Absoluta', category: 'Google Ads', default: false, format: 'percentage_share' },
   { key: 'final_url', label: 'Página Anúncio', category: 'Google Ads', default: false, type: 'link' },
   { key: 'effective_status', label: 'Status Campanha', category: 'Google Ads', default: true, type: 'status' },
+
+  ...GOOGLE_METRICS_CATALOG.map(c => ({
+    key: GOOGLE_COLUMN_KEY(c.m),
+    label: c.label,
+    category: c.cat,
+    default: false,
+    format: c.money ? 'currency' : c.rate ? 'percentage' : undefined,
+  })),
 ];
 
 const DATE_PRESET_LABELS: Record<string, string> = {
@@ -458,8 +540,22 @@ export default function ProductDetailPage() {
       const fullDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
       const parseShare = (val: any) => (!val || val === '< 10%') ? 0 : parseFloat(val);
 
+      // Bloco completo do Google: cada métrica vira coluna g_<nome>, com o
+      // dinheiro na mesma moeda do custo e as taxas já em porcentagem.
+      const adFx = cost && Number(row.cost) ? cost / Number(row.cost) : 1;
+      const googleCols: Record<string, number> = {};
+      if (row.google_metrics && typeof row.google_metrics === 'object') {
+        for (const c of GOOGLE_METRICS_CATALOG) {
+          const raw = (row.google_metrics as any)[c.m];
+          if (raw === undefined || raw === null) continue;
+          const v = Number(raw);
+          if (!Number.isFinite(v)) continue;
+          googleCols[GOOGLE_COLUMN_KEY(c.m)] = c.money ? v * adFx : c.rate ? v * 100 : v;
+        }
+      }
+
       return {
-        ...row, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
+        ...row, ...googleCols, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED',
         effective_status: row.effective_status || null,
         // Revisão retroativa do Google (cliques inválidos cancelados).
@@ -526,7 +622,7 @@ export default function ProductDetailPage() {
   const globalCpa = stats.conversions > 0 ? stats.cost / stats.conversions : 0;
 
   // --- LINHA DE TOTAIS/MÉDIAS (Atualizada conforme regras) ---
-  const AVERAGE_COLS = new Set(['ctr', 'avg_cpc', 'fuga_pagina', 'fuga_bridge', 'fuga_vsl', 'cpa', 'roi', 'search_impr_share', 'search_top_share', 'search_abs_share']);
+  const AVERAGE_COLS = new Set(['ctr', 'avg_cpc', 'fuga_pagina', 'fuga_bridge', 'fuga_vsl', 'cpa', 'roi', 'search_impr_share', 'search_top_share', 'search_abs_share', ...GOOGLE_AVG_KEYS]);
   const LATEST_COLS = new Set(['target_cpa', 'strategy', 'budget', 'account_name']);
   const SKIP_COLS = new Set(['date', 'campaign_status', 'effective_status', 'final_url', 'notes']);
 
@@ -1054,7 +1150,9 @@ export default function ProductDetailPage() {
               <div className={`p-6 border-b flex justify-between items-center ${borderCol}`}><h2 className={`text-xl font-bold ${textHead} flex items-center gap-2`}><Columns size={20} className="text-indigo-500" /> Personalizar Colunas</h2><button onClick={() => setShowColumnModal(false)} className="text-slate-400 hover:text-white"><X size={24} /></button></div>
               <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {['Geral', 'Tráfego', 'Custo', 'Métricas de Fuga', 'Funil', 'Financeiro', 'Google Ads'].map(category => (
+                  {/* As categorias saem da própria lista de colunas: métrica nova
+                      do Google aparece aqui sem precisar editar esta tela. */}
+                  {[...new Set(ALL_COLUMNS.map(c => c.category))].map(category => (
                     <div key={category}>
                       {ALL_COLUMNS.some(c => c.category === category) && (
                         <>

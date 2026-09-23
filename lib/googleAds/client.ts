@@ -177,6 +177,23 @@ export async function search<T = any>(ctx: AdsContext, query: string): Promise<T
   return rows;
 }
 
+/**
+ * Metadados da API: quais campos cada recurso aceita nesta versão.
+ *
+ * Fica num serviço à parte (googleAdsFields), com consulta sem FROM e sem
+ * conta — não dá para pedir isso pelo searchStream.
+ */
+export async function searchFields(refreshToken: string, query: string): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/googleAdsFields:search`, {
+    method: 'POST',
+    headers: await headers({ refreshToken }),
+    body: JSON.stringify({ query }),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = await res.json();
+  return data.results || [];
+}
+
 /** IDs que o usuário do OAuth acessa diretamente (sem passar por gerenciador). */
 export async function listAccessibleCustomers(refreshToken: string): Promise<string[]> {
   const res = await fetch(`${API_BASE}/customers:listAccessibleCustomers`, {

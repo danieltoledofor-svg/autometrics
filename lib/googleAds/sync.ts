@@ -1,6 +1,7 @@
 import { search, AdsContext, GoogleAdsError } from './client';
 import { supabaseAdmin, decryptSecret } from './server';
 import { ingestCampaignDay } from './ingest';
+import { campaignMetricFields, normalizeMetrics } from './fields';
 
 /**
  * Coleta direta pela Google Ads API.
@@ -177,15 +178,18 @@ export async function syncAccount(
            campaign.bidding_strategy_type, campaign_budget.amount_micros,
            campaign.target_cpa.target_cpa_micros, campaign.target_roas.target_roas,
            campaign.maximize_conversions.target_cpa_micros,
+           campaign.maximize_conversion_value.target_roas,
+           campaign.advertising_channel_type, campaign.advertising_channel_sub_type,
+           campaign.start_date, campaign.end_date, campaign.optimization_score,
            customer.currency_code, customer.status
     FROM campaign`);
 
-  // 2. Métricas por dia da janela inteira, numa consulta só.
+  // 2. Métricas por dia da janela inteira, numa consulta só. A lista de campos
+  //    vem da própria API: pedir uma métrica que a versão não tem derruba a
+  //    consulta inteira, e o Google muda esse conjunto a cada versão.
+  const metricFields = await campaignMetricFields(refreshToken, usage);
   const metricRows = await q(`
-    SELECT campaign.id, segments.date,
-           metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.cost_micros,
-           metrics.search_impression_share, metrics.search_top_impression_share,
-           metrics.search_absolute_top_impression_share
+    SELECT campaign.id, segments.date, ${metricFields.join(', ')}
     FROM campaign
     WHERE segments.date BETWEEN '${start}' AND '${today}'`);
 
@@ -364,6 +368,15 @@ export async function syncAccount(
         account_status: accountStatus,
         final_url: finalUrls.get(cid) || '',
         target_value: target,
+        // Bloco completo do Google, já normalizado (micros convertidos).
+        google_metrics: normalizeMetrics(m, metricFields),
+      },
+      campaign_settings: {
+        channel_type: camp.advertisingChannelType || null,
+        channel_sub_type: camp.advertisingChannelSubType || null,
+        start_date: camp.startDate || null,
+        end_date: camp.endDate || null,
+        optimization_score: n(camp.optimizationScore) || null,
       },
       search_terms: recent && searchTerms.has(k)
         ? [...searchTerms.get(k)!.values()].sort((a, b) => b.i - a.i).slice(0, TOP_SEARCH_TERMS)

@@ -96,6 +96,21 @@ export interface IngestOptions {
 }
 
 /**
+ * Configurações atuais da campanha para a tabela products. Só a coleta pela
+ * API as envia; o script antigo nunca as leu.
+ */
+function settingsPatch(settings: any): Record<string, any> {
+  if (!settings) return {};
+  const patch: Record<string, any> = {};
+  if (settings.channel_type) patch.google_channel_type = settings.channel_type;
+  if (settings.channel_sub_type) patch.google_channel_sub_type = settings.channel_sub_type;
+  if (settings.start_date) patch.google_start_date = settings.start_date;
+  if (settings.end_date && settings.end_date !== '2037-12-30') patch.google_end_date = settings.end_date;
+  if (settings.optimization_score) patch.google_optimization_score = settings.optimization_score;
+  return patch;
+}
+
+/**
  * Grava um dia de uma campanha: produto, daily_metrics, termos, públicos,
  * locais e histórico.
  *
@@ -106,6 +121,7 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
   const { 
     campaign_name, campaign_id, date, metrics, currency_code, user_id, account_name, mcc_name,
     search_terms = [], audiences = [], locations = [], history = [],
+    campaign_settings = null,
     script_version = 'v1'
   } = body;
 
@@ -250,6 +266,7 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
     };
     if (opts.keepExistingMcc) delete update.mcc_name;
     if (opts.customerId) update.google_ads_customer_id = opts.customerId;
+    Object.assign(update, settingsPatch(campaign_settings));
 
     // O script reprocessa dias antigos a cada rodada. Só o dia mais recente
     // pode mexer no status atual, senão um dia velho rebaixaria a campanha.
@@ -260,7 +277,13 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
       update.google_status_date = date;
     }
 
-    await supabase.from('products').update(update).eq('id', product.id);
+    let { error: updateError } = await supabase.from('products').update(update).eq('id', product.id);
+    // Colunas novas só existem depois da migration; sem este resguardo, o
+    // update inteiro falha e o status da campanha para de ser atualizado.
+    if (updateError && /google_channel_type|google_channel_sub_type|google_start_date|google_end_date|google_optimization_score/.test(updateError.message || '')) {
+      for (const k of Object.keys(settingsPatch(campaign_settings))) delete update[k];
+      ({ error: updateError } = await supabase.from('products').update(update).eq('id', product.id));
+    }
   }
 
   // 2. Tratamento de CTR (String % para Number)
@@ -312,6 +335,7 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
 
     updated_at: new Date().toISOString()
 
+
     // OBSERVAÇÃO CRÍTICA:
     // Não incluímos 'conversion_value' aqui. 
     // Se a linha já existir (com sua receita manual), o valor antigo será preservado.
@@ -321,6 +345,17 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
   // Campanha sem anuncios ativos nao retorna final_url. Omitir a coluna
   // preserva o valor ja gravado em vez de apaga-lo.
   if (metrics.final_url) payload.final_url = metrics.final_url;
+
+  // Bloco completo de métricas do Google (só a coleta pela API envia).
+  //
+  // As conversões do Google ganham colunas próprias em vez de entrar em
+  // conversion_value: aquela coluna é a receita real, vinda dos postbacks, e
+  // misturar as duas destruiria o cálculo de lucro do painel.
+  if (metrics.google_metrics && typeof metrics.google_metrics === 'object') {
+    payload.google_metrics = metrics.google_metrics;
+    payload.google_conversions = num(metrics.google_metrics.conversions);
+    payload.google_conversion_value = num(metrics.google_metrics.conversions_value);
+  }
 
   // Orçamento e meta de CPA são o valor ATUAL da campanha, não o daquele dia:
   // o Google não devolve o histórico deles por data. Gravá-los em dias
@@ -383,10 +418,13 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
 
     // As colunas de revisão só existem após a migration. Até lá o Postgres
     // recusa a linha inteira; sem este resguardo, a coleta pararia de gravar.
-    if (error && /cost_previous|clicks_previous|revised_at/.test(error.message || '')) {
+    if (error && /cost_previous|clicks_previous|revised_at|google_metrics|google_conversions|google_conversion_value/.test(error.message || '')) {
       delete payload.cost_previous;
       delete payload.clicks_previous;
       delete payload.revised_at;
+      delete payload.google_metrics;
+      delete payload.google_conversions;
+      delete payload.google_conversion_value;
       ({ error } = await supabase
         .from('daily_metrics')
         .upsert(payload, { onConflict: 'product_id, date' }));
