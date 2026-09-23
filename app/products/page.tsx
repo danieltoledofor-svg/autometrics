@@ -46,6 +46,7 @@ import { Logo } from '@/app/components/Logo';
 import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
+import { isValidDay } from '@/lib/useDayInput';
 import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type MetricSort } from '@/lib/metricSort';
 
 const supabase = createClient(
@@ -184,6 +185,11 @@ export default function ProductsPage() {
   };
 
   const handleCustomDateApply = () => {
+    // Data pela metade consultava o banco com "0002-10-26" ou vazio.
+    if (!isValidDay(customStartDate) || !isValidDay(customEndDate)) {
+      alert('Preencha as duas datas por completo.');
+      return;
+    }
     localStorage.setItem('autometrics_products_custom_start', customStartDate);
     localStorage.setItem('autometrics_products_custom_end', customEndDate);
     if (userId) fetchProducts(userId, 'custom', customStartDate, customEndDate);

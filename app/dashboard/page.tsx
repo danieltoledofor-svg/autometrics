@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
+import { useDayInput, isValidDay } from '@/lib/useDayInput';
 import SaleAlertNotification from './SaleAlertNotification';
 import { Logo } from '@/app/components/Logo';
 import { resolveCampaignStatus, resolveProductStatus, STATUS_SEVERITY, type CampaignStatus } from '@/lib/campaignStatus';
@@ -147,8 +148,8 @@ export default function DashboardPage() {
           const savedStart = localStorage.getItem('autometrics_start_date');
           const savedEnd = localStorage.getItem('autometrics_end_date');
           setDateRange('custom');
-          if (savedStart) { setStartDate(savedStart); initialFromDate = savedStart; }
-          if (savedEnd) setEndDate(savedEnd);
+          if (isValidDay(savedStart)) { setStartDate(savedStart!); initialFromDate = savedStart!; }
+          if (isValidDay(savedEnd)) setEndDate(savedEnd!);
         } else {
           handlePresetChange(savedDateRange);
         }
@@ -340,6 +341,11 @@ export default function DashboardPage() {
     setDateRange('custom');
     localStorage.setItem('autometrics_date_range', 'custom');
   };
+
+  // Os campos de data guardam o que está sendo digitado; a tela só recebe a
+  // data quando ela está completa (ver lib/useDayInput).
+  const startInput = useDayInput(startDate, v => handleCustomDateChange('start', v));
+  const endInput = useDayInput(endDate, v => handleCustomDateChange('end', v));
 
   const handleMccChange = (value: string) => {
     setSelectedMcc(value);
@@ -572,15 +578,15 @@ export default function DashboardPage() {
                   <input
                     type="date"
                     className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                    value={startDate}
-                    onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                    value={startInput.value}
+                    onChange={(e) => startInput.onChange(e.target.value)}
                   />
                   <span className="text-slate-500 text-xs">até</span>
                   <input
                     type="date"
                     className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                    value={endDate}
-                    onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                    value={endInput.value}
+                    onChange={(e) => endInput.onChange(e.target.value)}
                   />
                 </div>
               </div>
@@ -1046,15 +1052,15 @@ export default function DashboardPage() {
               <div className="flex gap-3">
                 <div className="flex-1">
                   <div className="text-[10px] text-slate-500 mb-1 font-medium">De</div>
-                  <input type="date" value={startDate}
-                    onChange={e => handleCustomDateChange('start', e.target.value)}
+                  <input type="date" value={startInput.value}
+                    onChange={e => startInput.onChange(e.target.value)}
                     className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors ${isDark ? 'bg-slate-900 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
                   />
                 </div>
                 <div className="flex-1">
                   <div className="text-[10px] text-slate-500 mb-1 font-medium">Até</div>
-                  <input type="date" value={endDate}
-                    onChange={e => handleCustomDateChange('end', e.target.value)}
+                  <input type="date" value={endInput.value}
+                    onChange={e => endInput.onChange(e.target.value)}
                     className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors ${isDark ? 'bg-slate-900 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
                   />
                 </div>

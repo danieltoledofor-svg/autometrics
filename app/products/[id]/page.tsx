@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 import { applyTheme } from '@/lib/theme';
+import { useDayInput, isValidDay } from '@/lib/useDayInput';
 import Link from 'next/link';
 import { Logo } from '@/app/components/Logo';
 import { resolveCampaignStatus } from '@/lib/campaignStatus';
@@ -276,8 +277,8 @@ export default function ProductDetailPage() {
         setDateRange('custom');
         const savedStart = localStorage.getItem('autometrics_start_date');
         const savedEnd = localStorage.getItem('autometrics_end_date');
-        if (savedStart) setStartDate(savedStart);
-        if (savedEnd) setEndDate(savedEnd);
+        if (isValidDay(savedStart)) setStartDate(savedStart!);
+        if (isValidDay(savedEnd)) setEndDate(savedEnd!);
       } else {
         handlePresetChange(savedDateRange);
       }
@@ -494,6 +495,11 @@ export default function ProductDetailPage() {
     setDateRange('custom');
     localStorage.setItem('autometrics_date_range', 'custom');
   };
+
+  // Os campos de data guardam o que está sendo digitado; a tela só recebe a
+  // data quando ela está completa (ver lib/useDayInput).
+  const startInput = useDayInput(startDate, v => handleCustomDateChange('start', v));
+  const endInput = useDayInput(endDate, v => handleCustomDateChange('end', v));
 
   const processedData = useMemo(() => {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
@@ -745,15 +751,15 @@ export default function ProductDetailPage() {
               <input
                 type="date"
                 className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                value={startDate}
-                onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                value={startInput.value}
+                onChange={(e) => startInput.onChange(e.target.value)}
               />
               <span className="text-slate-500 text-xs">até</span>
               <input
                 type="date"
                 className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                value={endDate}
-                onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                value={endInput.value}
+                onChange={(e) => endInput.onChange(e.target.value)}
               />
             </div>
           </div>
@@ -1758,11 +1764,11 @@ export default function ProductDetailPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>De</label>
-                  <input type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={startDate} onChange={e => handleCustomDateChange('start', e.target.value)} />
+                  <input type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={startInput.value} onChange={e => startInput.onChange(e.target.value)} />
                 </div>
                 <div>
                   <label className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>Até</label>
-                  <input type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={endDate} onChange={e => handleCustomDateChange('end', e.target.value)} />
+                  <input type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={endInput.value} onChange={e => endInput.onChange(e.target.value)} />
                 </div>
               </div>
               <div>

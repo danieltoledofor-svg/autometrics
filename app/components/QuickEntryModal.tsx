@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { FileText, X, MousePointer, ShoppingCart, Save } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import { isValidDay } from '@/lib/useDayInput';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -199,7 +200,7 @@ export function QuickEntryModal({ target, onClose, onSaved, manualDollar, isDark
 
           <button
             onClick={handleSave}
-            disabled={saving || loading || !data.date}
+            disabled={saving || loading || !isValidDay(data.date)}
             className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-4 rounded-xl mt-2 flex items-center justify-center gap-2 shadow-lg transition-colors"
           >
             {loading ? 'Carregando dia...' : saving ? 'Salvando...' : 'Salvar Lançamento'} <Save size={16} />

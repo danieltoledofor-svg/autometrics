@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
+import { useDayInput, isValidDay, safeDay } from '@/lib/useDayInput';
 import { Logo } from '@/app/components/Logo';
 
 // Configuração Supabase
@@ -170,8 +171,8 @@ export default function PlanningPage() {
           setDateRange('custom');
           const savedStart = localStorage.getItem('autometrics_start_date');
           const savedEnd = localStorage.getItem('autometrics_end_date');
-          if (savedStart) setStartDate(savedStart);
-          if (savedEnd) setEndDate(savedEnd);
+          if (isValidDay(savedStart)) setStartDate(savedStart!);
+          if (isValidDay(savedEnd)) setEndDate(savedEnd!);
         } else {
           handlePresetChange(savedDateRange);
         }
@@ -302,6 +303,11 @@ export default function PlanningPage() {
     localStorage.setItem('autometrics_date_range', 'custom');
   };
 
+  // Os campos de data guardam o que está sendo digitado; a tela só recebe a
+  // data quando ela está completa (ver lib/useDayInput).
+  const startInput = useDayInput(startDate, v => handleCustomDateChange('start', v));
+  const endInput = useDayInput(endDate, v => handleCustomDateChange('end', v));
+
   const handleMccChange = (value: string) => {
     setSelectedMcc(value);
     localStorage.setItem('autometrics_selected_mcc', value);
@@ -368,8 +374,9 @@ export default function PlanningPage() {
     setProducts(prodData || []);
     
     // Cálculo do período anterior para Comparativo Progressivo
-    const sDate = new Date(startDate + "T00:00:00");
-    const eDate = new Date(endDate + "T23:59:59");
+    const hojeISO = getLocalYYYYMMDD(new Date());
+    const sDate = new Date(safeDay(startDate, hojeISO) + "T00:00:00");
+    const eDate = new Date(safeDay(endDate, hojeISO) + "T23:59:59");
     const diffTime = Math.abs(eDate.getTime() - sDate.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
@@ -575,8 +582,8 @@ export default function PlanningPage() {
 
     // Cálculos de Dias para Média (Diluição no período selecionado)
     const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const sDate = new Date(startDate + "T00:00:00");
-    const eDate = new Date(endDate + "T00:00:00");
+    const sDate = new Date(safeDay(startDate, getLocalYYYYMMDD(today)) + "T00:00:00");
+    const eDate = new Date(safeDay(endDate, getLocalYYYYMMDD(today)) + "T00:00:00");
     const maxEndDate = eDate > todayNorm ? todayNorm : eDate;
     let timeDiff = maxEndDate.getTime() - sDate.getTime();
     let selectedDaysCount = Math.floor(timeDiff / (1000 * 60 * 60 * 24)) + 1;
@@ -817,9 +824,9 @@ export default function PlanningPage() {
                        </div>
                     </div>
                     <div className="flex items-center justify-between sm:justify-start gap-2 px-2">
-                       <input type="date" className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={(e) => handleCustomDateChange('start', e.target.value)} />
+                       <input type="date" className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startInput.value} onChange={(e) => startInput.onChange(e.target.value)} />
                        <span className="text-slate-500 text-xs">até</span>
-                       <input type="date" className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={(e) => handleCustomDateChange('end', e.target.value)} />
+                       <input type="date" className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endInput.value} onChange={(e) => endInput.onChange(e.target.value)} />
                     </div>
                </div>
            </div>
@@ -1451,8 +1458,8 @@ export default function PlanningPage() {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Datas personalizadas</p>
               <div className="flex gap-2">
-                <input type="date" className={`flex-1 p-2 rounded-xl border text-xs bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startDate} onChange={e => handleCustomDateChange('start', e.target.value)} />
-                <input type="date" className={`flex-1 p-2 rounded-xl border text-xs bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endDate} onChange={e => handleCustomDateChange('end', e.target.value)} />
+                <input type="date" className={`flex-1 p-2 rounded-xl border text-xs bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startInput.value} onChange={e => startInput.onChange(e.target.value)} />
+                <input type="date" className={`flex-1 p-2 rounded-xl border text-xs bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endInput.value} onChange={e => endInput.onChange(e.target.value)} />
               </div>
             </div>
             {availableMccs.length > 0 && (
