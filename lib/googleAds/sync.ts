@@ -456,9 +456,12 @@ export async function syncAccount(
 
 // ── orquestração ────────────────────────────────────────────────────────────
 
-const SYNC_INTERVAL_MIN = Number(process.env.GOOGLE_ADS_SYNC_INTERVAL_MIN) || 15;
+// De hora em hora, a mesma frequência do script do Google Ads — é o ritmo que
+// o painel já tinha e que as decisões do dia a dia seguem. Cada rodada traz
+// tudo: custo, status e o diagnóstico (termos, públicos, locais, histórico).
+const SYNC_INTERVAL_MIN = Number(process.env.GOOGLE_ADS_SYNC_INTERVAL_MIN) || 60;
 const IDLE_INTERVAL_MIN = Number(process.env.GOOGLE_ADS_IDLE_INTERVAL_MIN) || 360;
-const DEEP_INTERVAL_MIN = Number(process.env.GOOGLE_ADS_DEEP_INTERVAL_MIN) || 120;
+const DEEP_INTERVAL_MIN = Number(process.env.GOOGLE_ADS_DEEP_INTERVAL_MIN) || 60;
 /** Limite diário do nível de acesso do projeto: Explorer 2.880, Basic 15.000. */
 export const DAILY_QUOTA = Number(process.env.GOOGLE_ADS_DAILY_QUOTA) || 2880;
 

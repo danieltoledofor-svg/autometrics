@@ -2,7 +2,7 @@
 
 Conexão direta com o Google Ads, no lugar dos scripts colados em cada MCC.
 
-- **Custo mais rápido e correto**: uma consulta por conta traz os 30 dias de todas as campanhas. A coleta roda a cada 15 min e relê a janela inteira, então quando o Google estorna cliques inválidos dias depois, a revisão aparece sozinha (registrada em `cost_previous`/`revised_at`).
+- **Custo mais rápido e correto**: uma consulta por conta traz os 30 dias de todas as campanhas. A coleta roda de hora em hora — o mesmo ritmo do script — e relê a janela inteira, então quando o Google estorna cliques inválidos dias depois, a revisão aparece sozinha (registrada em `cost_previous`/`revised_at`).
 - **Pausar/ativar campanha** pela tela de Campanhas, com confirmação no Google e registro em `google_ads_actions`.
 - **Mais dados**: até 50 termos de pesquisa por campanha/dia (o script trazia 10) e nomes de país vindos do próprio Google.
 
@@ -41,7 +41,7 @@ O script e a API gravam pelo mesmo código (`lib/googleAds/ingest.ts`) e podem r
 | `GOOGLE_ADS_DAILY_QUOTA` | `2880` no Explorer (padrão), `15000` depois de liberar o Basic. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Já deve existir (o webhook usa). As rotas novas não funcionam sem ela. |
 
-Opcionais: `GOOGLE_ADS_SYNC_INTERVAL_MIN` (15), `GOOGLE_ADS_DEEP_INTERVAL_MIN` (120 — termos/públicos/histórico), `GOOGLE_ADS_IDLE_INTERVAL_MIN` (360 — contas sem campanha ativa), `GOOGLE_ADS_LOOKBACK_DAYS` (30), `GOOGLE_ADS_API_VERSION` (v25), `GOOGLE_ADS_SYNC_BUDGET_SEC` (50).
+Opcionais: `GOOGLE_ADS_SYNC_INTERVAL_MIN` (60), `GOOGLE_ADS_DEEP_INTERVAL_MIN` (60 — termos/públicos/histórico), `GOOGLE_ADS_IDLE_INTERVAL_MIN` (360 — contas sem campanha ativa), `GOOGLE_ADS_LOOKBACK_DAYS` (30), `GOOGLE_ADS_API_VERSION` (v25), `GOOGLE_ADS_SYNC_BUDGET_SEC` (50).
 
 ## 3. Supabase
 
@@ -56,7 +56,7 @@ Rode `migration_google_ads_api.sql` no SQL Editor. Cria `google_ads_connections`
 
 ## 5. Agendamento
 
-No fim de `migration_google_ads_api.sql` está o `cron.schedule` para o Supabase chamar `/api/google-ads/sync` a cada 5 minutos (ative `pg_cron` e `pg_net` em *Database → Extensions* antes). Cada chamada processa só as contas vencidas e desacelera sozinha perto do limite de consultas do dia.
+No fim de `migration_google_ads_api.sql` está o `cron.schedule` para o Supabase chamar `/api/google-ads/sync` a cada 5 minutos (ative `pg_cron` e `pg_net` em *Database → Extensions* antes). Cada chamada processa só as contas que completaram a hora e desacelera sozinha perto do limite de consultas do dia.
 
 ## 6. Desligar os scripts
 

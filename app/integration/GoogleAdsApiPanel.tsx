@@ -217,7 +217,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400">Recomendado</span>
           </h3>
           <p className={`text-sm mt-1 ${muted}`}>
-            Conexão direta: custo relido a cada 15 min (com revisões do Google), pausar/ativar campanhas pelo painel e sem script para colar.
+            Conexão direta: atualização de hora em hora (com as revisões de custo do Google), pausar/ativar campanhas pelo painel e sem script para colar.
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
