@@ -77,7 +77,47 @@ export async function discoverAccounts(refreshToken: string): Promise<{ accounts
     }
   }
 
+  await nameDirectManagers(refreshToken, [...found.values()], infos, errors);
   return { accounts: [...found.values()], errors };
+}
+
+/**
+ * Gerenciador das contas que não vieram por nenhuma MCC acessível.
+ *
+ * Sem isto, todas caem num balde "Sem gerenciador" — o que, em quem tem
+ * dezenas de contas, esconde justamente a informação usada para achar a conta.
+ * customer_manager_link responde na própria conta cliente; quando o
+ * gerenciador não é um dos acessíveis, resta o número dele, que já agrupa.
+ */
+async function nameDirectManagers(
+  refreshToken: string,
+  accounts: DiscoveredAccount[],
+  infos: { id: string; name: string }[],
+  errors: string[],
+) {
+  const conhecidos = new Map(infos.map(i => [i.id, i.name]));
+  const soltas = accounts.filter(a => !a.mcc_name && a.status !== 'CANCELED' && a.status !== 'CLOSED');
+  let semVinculo = 0;
+
+  for (const conta of soltas) {
+    try {
+      const rows = await search({ refreshToken, customerId: conta.customer_id, loginCustomerId: conta.customer_id },
+        `SELECT customer_manager_link.manager_customer, customer_manager_link.status
+         FROM customer_manager_link WHERE customer_manager_link.status = 'ACTIVE'`);
+      const link = rows[0]?.customerManagerLink?.managerCustomer;
+      if (!link) continue;
+      const id = cleanCustomerId(String(link).split('/').pop() || '');
+      if (!id) continue;
+      conta.login_customer_id = id;
+      conta.mcc_name = conhecidos.get(id) || `Gerenciador ${id.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')}`;
+    } catch {
+      // Conta sem permissão para ler o vínculo: fica em "Sem gerenciador".
+      // Uma linha por conta encheria o aviso da conexão sem ajudar ninguém.
+      semVinculo++;
+    }
+  }
+
+  if (semVinculo) errors.push(`gerenciador não identificado em ${semVinculo} conta(s)`);
 }
 
 /**
@@ -91,9 +131,23 @@ export async function refreshConnectionAccounts(connection: { id: string; user_i
   const now = new Date().toISOString();
 
   if (accounts.length) {
-    const rows = accounts.map(a => ({ ...a, user_id: connection.user_id, connection_id: connection.id, updated_at: now }));
-    const { error } = await db.from('google_ads_accounts').upsert(rows, { onConflict: 'user_id,customer_id' });
-    if (error) throw new Error('Erro ao salvar contas: ' + error.message);
+    // Conta suspensa ou cancelada nasce com a coleta desligada: ela não responde
+    // e cada tentativa ainda consome cota. Conta que já existe mantém a escolha
+    // do usuário, exceto quando o Google a derrubou — aí desliga.
+    const { data: existentes } = await db.from('google_ads_accounts')
+      .select('customer_id').eq('user_id', connection.user_id);
+    const jaExiste = new Set((existentes || []).map(e => e.customer_id));
+    const base = (a: DiscoveredAccount) => ({ ...a, user_id: connection.user_id, connection_id: connection.id, updated_at: now });
+
+    const novas = accounts.filter(a => !jaExiste.has(a.customer_id)).map(a => ({ ...base(a), sync_enabled: a.status === 'ENABLED' }));
+    const antigasMortas = accounts.filter(a => jaExiste.has(a.customer_id) && a.status !== 'ENABLED').map(a => ({ ...base(a), sync_enabled: false }));
+    const antigasVivas = accounts.filter(a => jaExiste.has(a.customer_id) && a.status === 'ENABLED').map(base);
+
+    for (const lote of [novas, antigasMortas, antigasVivas]) {
+      if (!lote.length) continue;
+      const { error } = await db.from('google_ads_accounts').upsert(lote, { onConflict: 'user_id,customer_id' });
+      if (error) throw new Error('Erro ao salvar contas: ' + error.message);
+    }
   }
 
   await markClosedAccounts(connection.user_id, accounts);

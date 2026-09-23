@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Plug, RefreshCw, Trash2, CheckCircle2, AlertCircle, Loader2, ShieldCheck, Folder, Clock,
+  ChevronRight, ChevronDown, EyeOff, Eye,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -64,6 +65,10 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [syncAll, setSyncAll] = useState<{ done: number; total: number } | null>(null);
   const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+  // Grupos fechados por padrão: são dezenas de contas, e o que importa no dia a
+  // dia é o resumo de cada gerenciador.
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const [showInactive, setShowInactive] = useState(false);
 
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
@@ -153,6 +158,10 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
   // Uma conta por requisição: nenhuma chamada estoura o tempo limite do servidor.
   const syncEverything = async () => {
     const list = accounts.filter(a => a.sync_enabled && (a.status || 'ENABLED') === 'ENABLED');
+    if (!list.length) {
+      setNotice({ kind: 'error', text: 'Nenhuma conta ativa marcada para coleta.' });
+      return;
+    }
     setSyncAll({ done: 0, total: list.length });
     let fails = 0;
     for (let i = 0; i < list.length; i++) {
@@ -167,15 +176,33 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
     await load();
   };
 
+  const isActive = (a: Account) => (a.status || 'ENABLED') === 'ENABLED';
+
+  /** Contas por gerenciador, com o resumo que aparece no cabeçalho fechado. */
   const groups = useMemo(() => {
     const map = new Map<string, Account[]>();
     for (const a of accounts) {
-      const g = a.mcc_name || 'Contas diretas';
+      const g = a.mcc_name || 'Sem gerenciador';
       if (!map.has(g)) map.set(g, []);
       map.get(g)!.push(a);
     }
-    return [...map.entries()];
+    return [...map.entries()].map(([name, list]) => {
+      const ativas = list.filter(isActive);
+      const coletando = list.filter(a => a.sync_enabled && isActive(a));
+      const custoHoje = coletando.reduce((t, a) => t + (Number(a.last_sync_summary?.cost_today) || 0), 0);
+      const ultima = coletando
+        .map(a => a.last_sync_at)
+        .filter(Boolean)
+        .sort()
+        .pop() as string | undefined;
+      const comErro = list.filter(a => a.last_sync_status === 'erro' || a.last_sync_status === 'parcial').length;
+      const moeda = ativas[0]?.currency_code || '';
+      return { name, list, ativas: ativas.length, coletando: coletando.length, custoHoje, ultima: ultima || null, comErro, moeda };
+    }).sort((a, b) => b.ativas - a.ativas || a.name.localeCompare(b.name));
   }, [accounts]);
+
+  const toggleGroup = (name: string) =>
+    setOpenGroups(prev => prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]);
 
   if (loading) {
     return <div className={`${card} rounded-xl p-6 border flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} className="animate-spin" /> Carregando conexão com o Google Ads…</div>;
@@ -254,48 +281,87 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
           </div>
         ))}
 
-        {groups.map(([group, list]) => (
-          <div key={group}>
-            <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 ${muted}`}>
-              <Folder size={14} /> {group} <span className="bg-slate-500/10 px-2 py-0.5 rounded-full">{list.length}</span>
-            </h4>
-            <div className={`rounded-lg border divide-y ${rowBorder} ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
-              {list.map(a => {
-                const closed = a.status && a.status !== 'ENABLED';
-                const s = a.last_sync_summary;
-                const statusColor = a.last_sync_status === 'ok' ? 'text-emerald-500' : a.last_sync_status === 'parcial' ? 'text-amber-500' : a.last_sync_status === 'erro' ? 'text-rose-500' : muted;
-                return (
-                  <div key={a.id} className="p-3 flex flex-wrap items-center gap-3">
-                    <label className="flex items-center gap-2 cursor-pointer" title={a.sync_enabled ? 'Coleta ligada' : 'Coleta desligada'}>
-                      <input type="checkbox" checked={a.sync_enabled} onChange={() => toggleSync(a)} className="accent-indigo-600 w-4 h-4" />
-                    </label>
-                    <div className="flex-1 min-w-[180px]">
-                      <p className={`text-sm font-bold ${textHead} ${closed ? 'opacity-60' : ''}`}>
-                        {a.name}
-                        {closed && <span className="ml-2 text-[10px] font-bold uppercase text-rose-500">{a.status}</span>}
-                      </p>
-                      <p className={`text-[11px] font-mono ${muted}`}>{fmtCustomer(a.customer_id)} · {a.currency_code || '—'}</p>
-                    </div>
-                    <div className={`text-xs text-right ${muted}`}>
-                      <p className={`flex items-center justify-end gap-1 ${statusColor}`}>
-                        <Clock size={12} /> {timeAgo(a.last_sync_at)}{a.last_sync_status ? ` · ${a.last_sync_status}` : ''}
-                      </p>
-                      {s && typeof s.cost_today === 'number' && (
-                        <p>{s.enabled_campaigns} ativa(s) · hoje {a.currency_code} {s.cost_today.toFixed(2)}</p>
-                      )}
-                    </div>
-                    <button onClick={() => syncAccount(a)} disabled={!!busy || !!syncAll || !!closed} className={btnGhost} title="Sincronizar agora">
-                      <RefreshCw size={14} className={busy === `sync-${a.id}` ? 'animate-spin' : ''} />
-                    </button>
-                    {a.last_sync_error && (
-                      <p className={`w-full text-[11px] break-words ${a.last_sync_status === 'erro' ? 'text-rose-500' : 'text-amber-500'}`}>{a.last_sync_error}</p>
-                    )}
-                  </div>
-                );
-              })}
+        {accounts.length > 0 && (
+          <label className={`flex items-center gap-2 text-xs cursor-pointer ${muted}`}>
+            <input type="checkbox" checked={showInactive} onChange={() => setShowInactive(v => !v)} className="accent-indigo-600 w-3.5 h-3.5" />
+            {showInactive ? <Eye size={13} /> : <EyeOff size={13} />}
+            Mostrar contas suspensas e canceladas
+          </label>
+        )}
+
+        {groups.map(g => {
+          const aberto = openGroups.includes(g.name);
+          const visiveis = showInactive ? g.list : g.list.filter(isActive);
+          return (
+            <div key={g.name} className={`rounded-lg border ${rowBorder} overflow-hidden`}>
+              <button
+                onClick={() => toggleGroup(g.name)}
+                className={`w-full p-3 flex items-center gap-3 text-left transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}
+              >
+                {aberto ? <ChevronDown size={16} className="text-slate-500 shrink-0" /> : <ChevronRight size={16} className="text-slate-500 shrink-0" />}
+                <Folder size={15} className="text-indigo-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-bold truncate ${textHead}`}>{g.name}</p>
+                  <p className={`text-[11px] ${muted}`}>
+                    {g.ativas} ativa(s) de {g.list.length} · {g.coletando} coletando
+                    {g.comErro > 0 && <span className="text-amber-500"> · {g.comErro} com aviso</span>}
+                  </p>
+                </div>
+                <div className={`text-xs text-right shrink-0 ${muted}`}>
+                  {g.coletando > 0 && (
+                    <>
+                      <p className="flex items-center justify-end gap-1"><Clock size={12} /> {timeAgo(g.ultima)}</p>
+                      <p>hoje {g.moeda} {g.custoHoje.toFixed(2)}</p>
+                    </>
+                  )}
+                </div>
+              </button>
+
+              {aberto && (
+                <div className={`border-t divide-y ${rowBorder} ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {visiveis.length === 0 && (
+                    <p className={`p-3 text-xs ${muted}`}>
+                      Nenhuma conta ativa aqui. Marque "mostrar contas suspensas e canceladas" para ver as {g.list.length}.
+                    </p>
+                  )}
+                  {visiveis.map(a => {
+                    const closed = !isActive(a);
+                    const s = a.last_sync_summary;
+                    const statusColor = a.last_sync_status === 'ok' ? 'text-emerald-500' : a.last_sync_status === 'parcial' ? 'text-amber-500' : a.last_sync_status === 'erro' ? 'text-rose-500' : muted;
+                    return (
+                      <div key={a.id} className="p-3 flex flex-wrap items-center gap-3">
+                        <input type="checkbox" checked={a.sync_enabled} onChange={() => toggleSync(a)}
+                          className="accent-indigo-600 w-4 h-4 cursor-pointer"
+                          title={a.sync_enabled ? 'Coleta ligada' : 'Coleta desligada'} />
+                        <div className="flex-1 min-w-[180px]">
+                          <p className={`text-sm font-bold ${textHead} ${closed ? 'opacity-60' : ''}`}>
+                            {a.name}
+                            {closed && <span className="ml-2 text-[10px] font-bold uppercase text-rose-500">{a.status}</span>}
+                          </p>
+                          <p className={`text-[11px] font-mono ${muted}`}>{fmtCustomer(a.customer_id)} · {a.currency_code || '—'}</p>
+                        </div>
+                        <div className={`text-xs text-right ${muted}`}>
+                          <p className={`flex items-center justify-end gap-1 ${statusColor}`}>
+                            <Clock size={12} /> {timeAgo(a.last_sync_at)}{a.last_sync_status ? ` · ${a.last_sync_status}` : ''}
+                          </p>
+                          {s && typeof s.cost_today === 'number' && (
+                            <p>{s.enabled_campaigns} campanha(s) ativa(s) · hoje {a.currency_code} {s.cost_today.toFixed(2)}</p>
+                          )}
+                        </div>
+                        <button onClick={() => syncAccount(a)} disabled={!!busy || !!syncAll || closed} className={btnGhost} title="Sincronizar agora">
+                          <RefreshCw size={14} className={busy === `sync-${a.id}` ? 'animate-spin' : ''} />
+                        </button>
+                        {a.last_sync_error && (
+                          <p className={`w-full text-[11px] break-words ${a.last_sync_status === 'erro' ? 'text-rose-500' : 'text-amber-500'}`}>{a.last_sync_error}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
