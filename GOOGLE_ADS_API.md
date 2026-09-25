@@ -5,6 +5,7 @@ Conexão direta com o Google Ads, no lugar dos scripts colados em cada MCC.
 - **Custo mais rápido e correto**: uma consulta por conta traz os 30 dias de todas as campanhas. A coleta roda de hora em hora — o mesmo ritmo do script — e relê a janela inteira, então quando o Google estorna cliques inválidos dias depois, a revisão aparece sozinha (registrada em `cost_previous`/`revised_at`).
 - **Pausar/ativar campanha** pela tela de Campanhas, com confirmação no Google e registro em `google_ads_actions`.
 - **Mais dados**: até 50 termos de pesquisa por campanha/dia (o script trazia 10) e nomes de país vindos do próprio Google.
+- **Grupos de anúncios, anúncios e palavras-chave**: abas próprias na campanha, com o desempenho do período, textos dos anúncios, força do anúncio e índice de qualidade. Só a API traz este nível.
 
 O script e a API gravam pelo mesmo código (`lib/googleAds/ingest.ts`) e podem rodar juntos durante a transição.
 
@@ -46,6 +47,19 @@ Opcionais: `GOOGLE_ADS_SYNC_INTERVAL_MIN` (60), `GOOGLE_ADS_DEEP_INTERVAL_MIN` (
 ## 3. Supabase
 
 Rode `migration_google_ads_api.sql` no SQL Editor. Cria `google_ads_connections` (token criptografado, sem acesso pela chave pública), `google_ads_accounts`, `google_ads_actions`, `google_ads_usage` e a coluna `products.google_ads_customer_id`.
+
+Depois, na ordem:
+- `migration_google_ads_metricas.sql` — todas as métricas do Google por dia na campanha.
+- `migration_google_ads_estrutura.sql` — grupos de anúncios, anúncios e palavras-chave (`google_ads_entities` e `google_ads_entity_metrics`). Sem ela a coleta segue normal e só pula este nível.
+
+## Consultas por conta
+
+| Quando | Consultas |
+|---|---|
+| Toda rodada | status das campanhas + métricas de 30 dias (2) |
+| Rodada completa (de hora em hora) | + termos, públicos, dispositivo, local, histórico, URLs (8) + grupos, anúncios e palavras-chave (6: configuração atual e métricas por dia de cada nível) |
+
+A primeira coleta completa de uma conta traz 30 dias de grupos, anúncios e palavras-chave; as seguintes, só os últimos 4 dias, que são os que ainda mudam.
 
 ## 4. Conectar
 

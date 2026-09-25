@@ -2,6 +2,7 @@ import { search, AdsContext, GoogleAdsError } from './client';
 import { supabaseAdmin, decryptSecret } from './server';
 import { ingestCampaignDay } from './ingest';
 import { campaignMetricFields, normalizeMetrics } from './fields';
+import { syncEntities, EntitySyncResult } from './entities';
 
 /**
  * Coleta direta pela Google Ads API.
@@ -32,6 +33,7 @@ export interface AccountRow {
   time_zone: string | null;
   status: string | null;
   last_deep_sync_at?: string | null;
+  entities_synced_at?: string | null;
 }
 
 export interface SyncSummary {
@@ -43,6 +45,8 @@ export interface SyncSummary {
   api_calls: number;
   enabled_campaigns: number;
   cost_today: number;
+  /** Grupos, anúncios e palavras-chave — só na coleta profunda. */
+  entities?: EntitySyncResult;
   errors: string[];
 }
 
@@ -449,6 +453,23 @@ export async function syncAccount(
   await runPool(rest.filter(p => p.date !== today), INGEST_CONCURRENCY, ingestOne);
   await runPool(rest.filter(p => p.date === today), INGEST_CONCURRENCY, ingestOne);
 
+  if (deep) {
+    // Campanhas que ganharam produto agora, no ingest acima.
+    const missing = campaignIds.filter(cid => !productByCampaign.has(cid));
+    for (let i = 0; i < missing.length; i += 200) {
+      const { data } = await db.from('products').select('id, google_ads_campaign_id')
+        .eq('user_id', account.user_id).in('google_ads_campaign_id', missing.slice(i, i + 200));
+      for (const p of data || []) productByCampaign.set(String(p.google_ads_campaign_id), p.id);
+    }
+    // Primeira vez na conta: a janela inteira. Depois, só os dias que ainda mudam.
+    summary.entities = await syncEntities(q, {
+      start: account.entities_synced_at ? deepStart : start,
+      end: today,
+      productIdFor: cid => productByCampaign.get(cid),
+      errors,
+    });
+  }
+
   summary.api_calls = apiCalls;
   summary.cost_today = Math.round(summary.cost_today * 100) / 100;
   return summary;
@@ -525,6 +546,7 @@ export async function syncAccountRecord(
     await db.from('google_ads_accounts').update({
       last_sync_at: now,
       ...(deep ? { last_deep_sync_at: now } : {}),
+      ...(summary.entities?.ran && !summary.errors.some(e => /^(ad_group|ad|keyword)\b/.test(e)) ? { entities_synced_at: now } : {}),
       last_sync_status: summary.errors.length ? 'parcial' : 'ok',
       last_sync_error: summary.errors.length ? summary.errors.slice(0, 10).join(' | ').slice(0, 2000) : null,
       last_sync_summary: summary,

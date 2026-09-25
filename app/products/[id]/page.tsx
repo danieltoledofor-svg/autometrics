@@ -6,7 +6,7 @@ import {
   ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon,
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon,
   Video, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
-  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle
+  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound
 } from 'lucide-react';
 import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { Logo } from '@/app/components/Logo';
 import { resolveCampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal } from '@/app/components/QuickEntryModal';
+import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -230,7 +231,8 @@ export default function ProductDetailPage() {
   const [locations, setLocations] = useState<any[]>([]);
 
   // --- ABA VTURB ---
-  const [activeTab, setActiveTab] = useState<'ads' | 'search_terms' | 'audiences' | 'locations' | 'strategy' | 'vturb'>('ads');
+  const [activeTab, setActiveTab] = useState<'ads' | 'ad_groups' | 'ad_list' | 'keywords' | 'search_terms' | 'audiences' | 'locations' | 'strategy' | 'vturb'>('ads');
+  const [entityAdGroup, setEntityAdGroup] = useState('');
   const [vturbRows, setVturbRows] = useState<any[]>([]);
   const [vturbLoading, setVturbLoading] = useState(false);
   const [vturbError, setVturbError] = useState<string | null>(null);
@@ -586,6 +588,13 @@ export default function ProductDetailPage() {
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
+  // Grupos/anúncios/palavras-chave vêm na moeda da conta: mesma conversão do custo.
+  const entityFx = (() => {
+    const cur = metrics[metrics.length - 1]?.currency || product?.currency || 'BRL';
+    if (viewCurrency === 'BRL' && cur === 'USD') return liveDollar;
+    if (viewCurrency !== 'BRL' && cur === 'BRL') return 1 / liveDollar;
+    return 1;
+  })();
   const formatShare = (val: number) => val === 0 ? '< 10%' : `${(val * 100).toFixed(2)}%`;
 
 
@@ -779,6 +788,9 @@ export default function ProductDetailPage() {
       <div className="md:hidden flex overflow-x-auto gap-2 mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>
         {[
           { id: 'ads', label: 'Visão Geral' },
+          { id: 'ad_groups', label: 'Grupos' },
+          { id: 'ad_list', label: 'Anúncios' },
+          { id: 'keywords', label: 'Palavras-chave' },
           { id: 'search_terms', label: 'Termos' },
           { id: 'audiences', label: 'Públicos' },
           { id: 'locations', label: 'Locais' },
@@ -798,6 +810,9 @@ export default function ProductDetailPage() {
       <div className={`hidden md:flex overflow-x-auto custom-scrollbar gap-0 border-b ${borderCol} mb-8`}>
         {[
           { id: 'ads', icon: <BarChart2 size={15} />, label: 'Visão Geral' },
+          { id: 'ad_groups', icon: <Layers size={15} />, label: 'Grupos de Anúncios' },
+          { id: 'ad_list', icon: <Megaphone size={15} />, label: 'Anúncios' },
+          { id: 'keywords', icon: <KeyRound size={15} />, label: 'Palavras-chave' },
           { id: 'search_terms', icon: <FileText size={15} />, label: 'Termos de Pesquisa' },
           { id: 'audiences', icon: <BarChart size={15} />, label: 'Públicos' },
           { id: 'locations', icon: <Globe size={15} />, label: 'Locais' },
@@ -1185,6 +1200,24 @@ export default function ProductDetailPage() {
         )}
 
       </>)}
+
+      {/* ══════════════════════ GRUPOS, ANÚNCIOS E PALAVRAS-CHAVE ══════════════════════ */}
+      {(activeTab === 'ad_groups' || activeTab === 'ad_list' || activeTab === 'keywords') && (
+        <GoogleAdsEntitiesTab
+          supabase={supabase}
+          productId={productId}
+          level={({ ad_groups: 'ad_group', ad_list: 'ad', keywords: 'keyword' } as Record<string, EntityLevel>)[activeTab]}
+          startDate={startDate}
+          endDate={endDate}
+          fx={entityFx}
+          formatMoney={formatMoney}
+          channelType={product?.google_channel_type}
+          adGroupFilter={entityAdGroup}
+          onAdGroupFilter={setEntityAdGroup}
+          onOpenAdGroup={(id, target) => { setEntityAdGroup(id); setActiveTab(target === 'ad' ? 'ad_list' : 'keywords'); }}
+          ui={{ isDark, bgCard, borderCol, textHead, textMuted }}
+        />
+      )}
 
       {/* ══════════════════════════ ABA TERMOS DE PESQUISA ══════════════════════════ */}
       {activeTab === 'search_terms' && (
