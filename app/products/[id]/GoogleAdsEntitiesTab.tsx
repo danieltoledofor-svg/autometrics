@@ -130,7 +130,9 @@ export function GoogleAdsEntitiesTab(props: Props) {
         .select('level, entity_id, ad_group_id, name, status, details')
         .eq('product_id', productId).order('id')),
       // Antes da migration de colunas, google_metrics não existe.
-      loadMetrics(`${base}, google_metrics`).catch(() => loadMetrics(base)),
+      loadMetrics(`${base}, google_metrics, conversion_actions`)
+        .catch(() => loadMetrics(`${base}, google_metrics`))
+        .catch(() => loadMetrics(base)),
     ]).then(([ents, mets]) => {
       if (cancelled) return;
       cache.set(key, { at: Date.now(), entities: ents, metrics: mets });
@@ -154,6 +156,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
       impressions: m.impressions, clicks: m.clicks, cost: m.cost,
       conversions: m.conversions, conversions_value: m.conversions_value,
       google_metrics: m.google_metrics,
+      conversion_actions: m.conversion_actions,
     })), [metrics, level]);
 
   const withData = useMemo(() => new Set(dayRows.filter(d => Number(d.impressions) > 0).map(d => d.key)), [dayRows]);

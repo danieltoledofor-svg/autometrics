@@ -3,7 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Columns, Search } from 'lucide-react';
 import {
-  aggregate, CampaignDay, DayRow, EMPTY_VALUES, formatMetric, METRIC_COLUMNS, MetricColumn, ColumnFormat,
+  aggregate, CampaignDay, DayRow, emptyValues, formatMetric, METRIC_COLUMNS, MetricColumn, ColumnFormat,
+  actionColumns, actionNames,
 } from '@/lib/metrics/dimension';
 import { customValue } from '@/lib/metrics/formula';
 import { ColumnPicker, Ui } from './ColumnPicker';
@@ -89,16 +90,21 @@ export function DimensionTable(props: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
 
+  // Cada ação de conversão da conta (Checkout, Compra…) vira colunas próprias.
+  const actions = useMemo(() => actionNames(dayRows), [dayRows]);
+  const allColumns = useMemo(() => [...METRIC_COLUMNS, ...actionColumns(actions)], [actions]);
+  const empty = useMemo(() => emptyValues(actions), [actions]);
+
   // Colunas de métrica visíveis, na ordem do catálogo; personalizadas no fim.
   const metricCols: (MetricColumn & { custom?: boolean })[] = useMemo(() => {
-    const base = METRIC_COLUMNS.filter(c => visible.includes(c.key));
+    const base = allColumns.filter(c => visible.includes(c.key));
     const cust = custom.compiled.filter(c => visible.includes(c.key)).map(c => ({
       key: c.key, label: c.name, category: 'Personalizadas',
       format: (c.format === 'money' ? 'money' : c.format === 'percent' ? 'pct' : 'dec') as ColumnFormat,
       custom: true,
     }));
     return [...base, ...cust];
-  }, [visible, custom.compiled]);
+  }, [visible, custom.compiled, allColumns]);
 
   const withCustom = (v: Record<string, number | null>) => {
     const out = { ...v };
@@ -106,13 +112,13 @@ export function DimensionTable(props: Props) {
     return out;
   };
 
-  const values = useMemo(() => aggregate(dayRows, { fx, campaignDays }), [dayRows, fx, campaignDays]);
+  const values = useMemo(() => aggregate(dayRows, { fx, campaignDays, actionNames: actions }), [dayRows, fx, campaignDays, actions]);
 
   const allRows = useMemo(() => items.map(item => ({
     item,
-    v: withCustom(values.get(item.key) || EMPTY_VALUES),
+    v: withCustom(values.get(item.key) || empty),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  })), [items, values, custom.compiled]);
+  })), [items, values, custom.compiled, empty]);
 
   const valueOf = (row: { item: DimItem; v: Record<string, number | null> }, key: string): number | string | null => {
     if (key === 'name') return row.item.name;
@@ -141,10 +147,10 @@ export function DimensionTable(props: Props) {
 
   const total = useMemo(() => {
     const keys = new Set(rows.map(r => r.item.key));
-    const agg = aggregate(dayRows.filter(d => keys.has(d.key)), { fx, campaignDays, keyOf: () => '__total' });
-    return withCustom(agg.get('__total') || EMPTY_VALUES);
+    const agg = aggregate(dayRows.filter(d => keys.has(d.key)), { fx, campaignDays, keyOf: () => '__total', actionNames: actions });
+    return withCustom(agg.get('__total') || empty);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, dayRows, fx, campaignDays, custom.compiled]);
+  }, [rows, dayRows, fx, campaignDays, custom.compiled, actions, empty]);
 
   const filterFields: FilterField[] = useMemo(() => [
     { key: 'name', label: props.nameLabel, type: 'text' },
@@ -152,9 +158,9 @@ export function DimensionTable(props: Props) {
       const sample = items.map(i => d.value!(i)).find(v => v !== null && v !== undefined);
       return { key: d.key, label: d.label, type: typeof sample === 'number' ? 'number' as const : 'text' as const };
     }),
-    ...METRIC_COLUMNS.map(c => ({ key: c.key, label: `${c.estimate ? '≈ ' : ''}${c.label}`, type: 'number' as const, unit: c.format === 'pct' ? '%' : undefined })),
+    ...allColumns.map(c => ({ key: c.key, label: `${c.estimate ? '≈ ' : ''}${c.label}`, type: 'number' as const, unit: c.format === 'pct' ? '%' : undefined })),
     ...custom.compiled.map(c => ({ key: c.key, label: c.name, type: 'number' as const, unit: c.format === 'percent' ? '%' : undefined })),
-  ], [dims, items, custom.compiled, props.nameLabel]);
+  ], [dims, items, custom.compiled, props.nameLabel, allColumns]);
 
   const toggleSort = (key: string) => setSort(s => s.key === key
     ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' }
@@ -276,7 +282,7 @@ export function DimensionTable(props: Props) {
 
       {pickerOpen && (
         <ColumnPicker
-          columns={METRIC_COLUMNS}
+          columns={allColumns}
           visible={visible}
           onChange={changeVisible}
           onReset={() => changeVisible(DEFAULT_VISIBLE)}

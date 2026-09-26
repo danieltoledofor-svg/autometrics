@@ -1,5 +1,7 @@
 import { supabaseAdmin } from './server';
 import { normalizeMetrics } from './fields';
+import { ACTION_SELECT, ACTION_WHERE, addActionRow } from './conversionActions';
+import type { ActionCounts } from '@/lib/metrics/dimension';
 
 /**
  * Grupos de anúncios, anúncios e palavras-chave.
@@ -19,6 +21,13 @@ import { normalizeMetrics } from './fields';
 export type EntityLevel = 'ad_group' | 'ad' | 'keyword';
 
 const BASE_METRICS = ['metrics.impressions', 'metrics.clicks', 'metrics.cost_micros', 'metrics.conversions', 'metrics.conversions_value'];
+
+/** Só o que identifica o item — a consulta de ações de conversão não precisa do resto. */
+const ID_FIELDS: Record<EntityLevel, string> = {
+  ad_group: 'campaign.id, ad_group.id',
+  ad: 'campaign.id, ad_group.id, ad_group_ad.ad.id',
+  keyword: 'campaign.id, ad_group.id, ad_group_criterion.criterion_id',
+};
 
 const FIELDS: Record<EntityLevel, { from: string; fields: string[]; where: string }> = {
   ad_group: {
@@ -213,6 +222,10 @@ export async function syncEntities(
          WHERE segments.date BETWEEN '${opts.start}' AND '${opts.end}'
            AND metrics.impressions > 0`);
     let usedMetrics = metricList;
+    // Conversões por ação (Checkout, Compra…). Se falhar, o resto segue sem elas.
+    const actionsQuery = q(`SELECT ${ID_FIELDS[f.from === 'ad_group' ? 'ad_group' : f.from === 'ad_group_ad' ? 'ad' : 'keyword']}, segments.date, ${ACTION_SELECT}
+         FROM ${f.from} WHERE segments.date BETWEEN '${opts.start}' AND '${opts.end}' AND ${ACTION_WHERE}`)
+      .catch((e: any) => { opts.errors.push(`${level} (ações de conversão): ${e.message}`); return null; });
     const [config, daily] = await Promise.all([
       q(`SELECT ${fields} FROM ${f.from} WHERE ${f.where}`),
       // Métrica extra recusada pelo Google: refaz com o básico em vez de perder o nível.
@@ -226,13 +239,13 @@ export async function syncEntities(
       opts.errors.push(`${level}: ${e.message}`);
       return [null, null] as const;
     });
-    return { level, config, daily, metricList: usedMetrics };
+    return { level, config, daily, metricList: usedMetrics, actionRows: await actionsQuery };
   }));
 
   const db = supabaseAdmin();
   const now = new Date().toISOString();
 
-  for (const { level, config, daily, metricList } of fetched) {
+  for (const { level, config, daily, metricList, actionRows } of fetched) {
     if (!config || !daily) continue;
 
     const entities = new Map<string, Entity>();
@@ -241,6 +254,14 @@ export async function syncEntities(
       if (e) entities.set(`${e.campaignId}|${e.entity_id}`, e);
     }
     const current = new Set(entities.keys());
+
+    // Ações por item e dia; chave campanha|item|dia.
+    const actions = new Map<string, ActionCounts>();
+    for (const r of actionRows || []) {
+      const e = toEntity(level, r);
+      if (e) addActionRow(actions, `${e.campaignId}|${e.entity_id}|${r.segments?.date}`, r);
+    }
+    const withActions = new Set<string>();
 
     const metricRows: any[] = [];
     for (const r of daily) {
@@ -259,7 +280,22 @@ export async function syncEntities(
         conversions: n(r.metrics?.conversions),
         conversions_value: n(r.metrics?.conversionsValue),
         google_metrics: normalizeMetrics(r.metrics, metricList),
+        // {} quando a consulta de ações rodou e não achou nada: limpa o que estava gravado.
+        ...(actionRows ? { conversion_actions: actions.get(`${k}|${r.segments?.date}`) || {} } : {}),
         updated_at: now,
+      });
+      withActions.add(`${k}|${r.segments?.date}`);
+    }
+    // Conversão num dia sem impressão (clique de um dia, conversão contada em outro).
+    for (const [ak, ca] of actions) {
+      if (withActions.has(ak)) continue;
+      const [campaignId, entityId, date] = ak.split('|');
+      const pid = opts.productIdFor(campaignId);
+      if (!pid || !entities.has(`${campaignId}|${entityId}`)) continue;
+      metricRows.push({
+        product_id: pid, level, entity_id: entityId, date,
+        impressions: 0, clicks: 0, cost: 0, conversions: 0, conversions_value: 0,
+        google_metrics: {}, conversion_actions: ca, updated_at: now,
       });
     }
 
@@ -281,10 +317,14 @@ export async function syncEntities(
     });
     await inChunks(metricRows, 500, async chunk => {
       let { error } = await db.from('google_ads_entity_metrics').upsert(chunk, { onConflict: 'product_id, level, entity_id, date' });
-      // Coluna google_metrics só existe depois de migration_colunas_filtros.sql.
+      // conversion_actions e google_metrics só existem depois das migrations.
+      if (error && /conversion_actions/.test(error.message || '')) {
+        ({ error } = await db.from('google_ads_entity_metrics').upsert(
+          chunk.map(({ conversion_actions, ...rest }) => rest), { onConflict: 'product_id, level, entity_id, date' }));
+      }
       if (error && /google_metrics/.test(error.message || '')) {
         ({ error } = await db.from('google_ads_entity_metrics').upsert(
-          chunk.map(({ google_metrics, ...rest }) => rest), { onConflict: 'product_id, level, entity_id, date' }));
+          chunk.map(({ google_metrics, conversion_actions, ...rest }) => rest), { onConflict: 'product_id, level, entity_id, date' }));
       }
       if (error) opts.errors.push(`${level} (métricas): ${error.message}`);
     });

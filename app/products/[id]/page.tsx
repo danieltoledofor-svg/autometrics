@@ -23,6 +23,7 @@ import { SegmentTab } from './SegmentTab';
 import { useCustomColumns } from '@/app/components/metrics/useCustomColumns';
 import { ColumnPicker } from '@/app/components/metrics/ColumnPicker';
 import { GOOGLE_METRICS_CATALOG, GOOGLE_COLUMN_KEY } from '@/lib/metrics/catalog';
+import { actionColumns, actionNames, actionSlug } from '@/lib/metrics/dimension';
 import type { CampaignDay } from '@/lib/metrics/dimension';
 import { customValue } from '@/lib/metrics/formula';
 
@@ -485,8 +486,19 @@ export default function ProductDetailPage() {
         }
       }
 
+      // Conversões por ação (Checkout, Compra…), como a coluna personalizada do Google.
+      const actionCols: Record<string, number | null> = {};
+      for (const [name, ca] of Object.entries((row.google_conversion_actions || {}) as Record<string, any>)) {
+        const slug = actionSlug(name);
+        const all = Number(ca?.a) || 0;
+        actionCols[`ca_${slug}_all`] = all;
+        actionCols[`ca_${slug}_conv`] = Number(ca?.c) || 0;
+        actionCols[`ca_${slug}_value`] = (Number(ca?.v) || 0) * adFx;
+        actionCols[`ca_${slug}_cost`] = all ? cost / all : null;
+      }
+
       return {
-        ...row, ...googleCols, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
+        ...row, ...googleCols, ...actionCols, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED',
         effective_status: row.effective_status || null,
         // Revisão retroativa do Google (cliques inválidos cancelados).
@@ -582,9 +594,13 @@ export default function ProductDetailPage() {
   });
   const globalCpa = stats.conversions > 0 ? stats.cost / stats.conversions : 0;
 
+  // Ações de conversão do Google que aparecem no período (Checkout, Compra…).
+  const actionDefs: ColumnDef[] = actionColumns(actionNames(metrics.map((m: any) => ({ conversion_actions: m.google_conversion_actions }))))
+    .map(c => ({ key: c.key, label: c.label, category: c.category, default: false, format: c.format === 'money' ? 'currency' : 'decimal' }));
   // Colunas personalizadas entram na Visão Geral como mais uma categoria.
   const OVERVIEW_COLUMNS: ColumnDef[] = [
     ...ALL_COLUMNS,
+    ...actionDefs,
     ...customColumns.compiled.map(c => ({
       key: c.key, label: c.name, category: 'Colunas personalizadas', default: false,
       format: c.format === 'money' ? 'currency' : c.format === 'percent' ? 'percentage' : 'decimal',
@@ -607,7 +623,8 @@ export default function ProductDetailPage() {
   // Total do período para as fórmulas: soma o que é somável e recalcula as taxas.
   const customTotals = (() => {
     const t: Record<string, number> = {};
-    const SUM_KEYS = ['impressions', 'clicks', 'cost', 'conversions', 'revenue', 'refunds', 'profit', 'visits', 'checkouts', 'vsl_clicks', 'vsl_checkouts'];
+    const SUM_KEYS = ['impressions', 'clicks', 'cost', 'conversions', 'revenue', 'refunds', 'profit', 'visits', 'checkouts', 'vsl_clicks', 'vsl_checkouts',
+      ...actionDefs.map(c => c.key).filter(k => !k.endsWith('_cost'))];
     for (const r of rows as any[]) {
       for (const k of SUM_KEYS) t[k] = (t[k] || 0) + Number(r[k] || 0);
       for (const c of GOOGLE_METRICS_CATALOG) {
@@ -629,6 +646,12 @@ export default function ProductDetailPage() {
       roi: t.cost ? (t.profit / t.cost) * 100 : 0,
       budget: (rows as any[])[0]?.budget,
     };
+    for (const c of actionDefs) {
+      if (c.key.endsWith('_cost')) {
+        const all = t[c.key.replace(/_cost$/, '_all')];
+        totals[c.key] = all ? t.cost / all : null;
+      }
+    }
     const out: Record<string, number | null> = {};
     for (const c of customColumns.compiled) out[c.key] = customValue(c, overviewVar(totals));
     return out;
@@ -645,6 +668,15 @@ export default function ProductDetailPage() {
     shownColumns.forEach(col => {
       if (SKIP_COLS.has(col.key)) { result[col.key] = null; return; }
       if (col.key in customTotals) { result[col.key] = customTotals[col.key]; return; }
+      // Ações de conversão: soma o período; custo por ação recalcula no total.
+      if (col.key.startsWith('ca_')) {
+        const sum = (k: string) => rows.reduce((a: number, r: any) => a + (Number(r[k]) || 0), 0);
+        if (col.key.endsWith('_cost')) {
+          const all = sum(col.key.replace(/_cost$/, '_all'));
+          result[col.key] = all ? stats.cost / all : null;
+        } else result[col.key] = sum(col.key);
+        return;
+      }
       
       // Valores Atuais (Latest, pegamos da row[0])
       if (LATEST_COLS.has(col.key)) {
@@ -1170,7 +1202,7 @@ export default function ProductDetailPage() {
 
         {showColumnModal && (
           <ColumnPicker
-            columns={ALL_COLUMNS}
+            columns={[...ALL_COLUMNS, ...actionDefs]}
             visible={visibleColumns}
             onChange={v => {
               setVisibleColumns(v);

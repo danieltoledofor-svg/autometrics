@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { resolveCampaignStatus, resolveEffectiveStatus } from '@/lib/campaignStatus';
+import { mergeGoogleMetrics } from '@/lib/metrics/catalog';
 
 // Configuração do Cliente Supabase
 // Tenta usar a Service Role (Admin) se disponível, senão usa a Anon
@@ -356,6 +357,11 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
     payload.google_conversions = num(metrics.google_metrics.conversions);
     payload.google_conversion_value = num(metrics.google_metrics.conversions_value);
   }
+  // Conversões por ação (Checkout, Compra…). Ausente = a consulta não rodou
+  // nesta coleta, e o valor gravado fica como está.
+  if (metrics.google_conversion_actions && typeof metrics.google_conversion_actions === 'object') {
+    payload.google_conversion_actions = metrics.google_conversion_actions;
+  }
 
   // Orçamento e meta de CPA são o valor ATUAL da campanha, não o daquele dia:
   // o Google não devolve o histórico deles por data. Gravá-los em dias
@@ -418,6 +424,12 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
 
     // As colunas de revisão só existem após a migration. Até lá o Postgres
     // recusa a linha inteira; sem este resguardo, a coleta pararia de gravar.
+    if (error && /google_conversion_actions/.test(error.message || '')) {
+      delete payload.google_conversion_actions;
+      ({ error } = await supabase
+        .from('daily_metrics')
+        .upsert(payload, { onConflict: 'product_id, date' }));
+    }
     if (error && /cost_previous|clicks_previous|revised_at|google_metrics|google_conversions|google_conversion_value/.test(error.message || '')) {
       delete payload.cost_previous;
       delete payload.clicks_previous;
@@ -481,9 +493,35 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
       cost: (st.c ?? st.cost_micros ?? 0) / 1000000,
       conversions: st.cv ?? st.conversions ?? 0,
       ...(st.g ? { google_metrics: st.g } : {}),
+      // Palavra-chave que acionou o termo (só a API manda). Vazia no script.
+      keyword: st.kw || '',
+      keyword_match_type: st.km || '',
+      ...(st.ag !== undefined ? { ad_group_name: st.ag, term_status: st.st, term_match_type: st.tm } : {}),
+      ...(st.ca ? { conversion_actions: st.ca } : {}),
       updated_at: new Date().toISOString()
     }));
-    diagTasks.push(safeTask(upsertDeep('search_terms', stPayload, 'product_id, date, search_term'), 'search_terms_catch'));
+    diagTasks.push(safeTask((async () => {
+      const onConflict = 'product_id, date, search_term, keyword, keyword_match_type';
+      let { error } = await supabase.from('search_terms').upsert(stPayload, { onConflict });
+      if (error && /keyword|conversion_actions|ad_group_name|term_status|term_match_type|no unique or exclusion constraint/.test(error.message || '')) {
+        // Antes de migration_termos_conversoes.sql a chave é (produto, dia,
+        // termo): junta as palavras-chave de cada termo e grava como antes.
+        const byTerm = new Map<string, any>();
+        for (const { keyword, keyword_match_type, ad_group_name, term_status, term_match_type, conversion_actions, ...row } of stPayload) {
+          const cur = byTerm.get(row.search_term);
+          if (!cur) { byTerm.set(row.search_term, { ...row }); continue; }
+          cur.impressions += row.impressions; cur.clicks += row.clicks; cur.cost += row.cost; cur.conversions += row.conversions;
+          if (cur.google_metrics && row.google_metrics) cur.google_metrics = mergeGoogleMetrics(cur.google_metrics, row.google_metrics);
+        }
+        await upsertDeep('search_terms', [...byTerm.values()], 'product_id, date, search_term');
+        return;
+      }
+      if (error) { taskErrors.push(`search_terms: ${error.message}`); return; }
+      // As linhas com palavra-chave substituem as sem (vindas do script) do mesmo dia.
+      if (script_version === 'api' && stPayload.some((r: any) => r.keyword)) {
+        await supabase.from('search_terms').delete().eq('product_id', product.id).eq('date', date).eq('keyword', '');
+      }
+    })(), 'search_terms_catch'));
   }
 
   if (audiences && audiences.length > 0) {

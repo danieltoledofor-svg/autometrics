@@ -52,6 +52,43 @@ export const METRIC_COLUMNS: MetricColumn[] = [
   })),
 ];
 
+/**
+ * Conversões do Google por ação de conversão (Checkout, Compra…): a = todas as
+ * conversões, c = conversões, v = valor de todas as conversões.
+ */
+export type ActionCounts = Record<string, { a?: number; c?: number; v?: number }>;
+
+/** Nome da ação vira pedaço de chave: "Checkout Início" → checkout_inicio. */
+export function actionSlug(name: string): string {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'acao';
+}
+
+export const ACTION_CATEGORY = 'Google · Ações de conversão';
+
+/**
+ * Colunas de cada ação — o equivalente à coluna personalizada do Google que
+ * filtra "Todas as conversões" por uma ação.
+ */
+export function actionColumns(names: string[]): MetricColumn[] {
+  return names.flatMap(name => {
+    const s = actionSlug(name);
+    return [
+      { key: `ca_${s}_all`, label: `${name} · todas as conv.`, category: ACTION_CATEGORY, format: 'dec' as ColumnFormat },
+      { key: `ca_${s}_conv`, label: `${name} · conversões`, category: ACTION_CATEGORY, format: 'dec' as ColumnFormat },
+      { key: `ca_${s}_value`, label: `${name} · valor`, category: ACTION_CATEGORY, format: 'money' as ColumnFormat },
+      { key: `ca_${s}_cost`, label: `Custo / ${name}`, category: ACTION_CATEGORY, format: 'money' as ColumnFormat },
+    ];
+  });
+}
+
+/** Ações que aparecem nas linhas, em ordem alfabética. */
+export function actionNames(rows: { conversion_actions?: ActionCounts | null }[]): string[] {
+  const set = new Set<string>();
+  for (const r of rows) for (const k of Object.keys(r.conversion_actions || {})) set.add(k);
+  return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
 /** Um dia de um item, como vem do banco. Dinheiro na moeda da conta. */
 export interface DayRow {
   key: string;
@@ -62,6 +99,7 @@ export interface DayRow {
   conversions: number;
   conversions_value?: number;
   google_metrics?: Record<string, number> | null;
+  conversion_actions?: ActionCounts | null;
 }
 
 /** O dia da campanha: vendas reais (já na moeda da tela) e o total do Google. */
@@ -86,9 +124,10 @@ interface Acc {
   wnum: Record<string, number>;
   wden: Record<string, number>;
   real: { conversions: number; revenue: number; refunds: number };
+  actions: Record<string, { a: number; c: number; v: number }>;
 }
 
-const newAcc = (): Acc => ({ impressions: 0, clicks: 0, cost: 0, sums: {}, wnum: {}, wden: {}, real: { conversions: 0, revenue: 0, refunds: 0 } });
+const newAcc = (): Acc => ({ impressions: 0, clicks: 0, cost: 0, sums: {}, wnum: {}, wden: {}, real: { conversions: 0, revenue: 0, refunds: 0 }, actions: {} });
 const num = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
 
 function add(acc: Acc, r: DayRow, fx: number, campaign?: CampaignDay) {
@@ -126,6 +165,13 @@ function add(acc: Acc, r: DayRow, fx: number, campaign?: CampaignDay) {
     acc.wden[m] = (acc.wden[m] || 0) + impr;
   }
 
+  for (const [name, ca] of Object.entries(r.conversion_actions || {})) {
+    const cur = acc.actions[name] || (acc.actions[name] = { a: 0, c: 0, v: 0 });
+    cur.a += num(ca?.a);
+    cur.c += num(ca?.c);
+    cur.v += num(ca?.v) * fx;
+  }
+
   if (campaign) {
     const gconv = num(g.conversions ?? r.conversions);
     const w = campaign.g_conversions > 0
@@ -140,7 +186,7 @@ function add(acc: Acc, r: DayRow, fx: number, campaign?: CampaignDay) {
 
 const div = (a: number, b: number) => (b ? a / b : null);
 
-function finish(acc: Acc): Record<string, number | null> {
+function finish(acc: Acc, names: string[] = []): Record<string, number | null> {
   const s = acc.sums;
   const out: Record<string, number | null> = {
     impressions: acc.impressions,
@@ -188,6 +234,15 @@ function finish(acc: Acc): Record<string, number | null> {
       out[key] = v === null ? null : v * 100;
     }
   }
+
+  for (const name of new Set([...names, ...Object.keys(acc.actions)])) {
+    const s = actionSlug(name);
+    const ca = acc.actions[name] || { a: 0, c: 0, v: 0 };
+    out[`ca_${s}_all`] = ca.a;
+    out[`ca_${s}_conv`] = ca.c;
+    out[`ca_${s}_value`] = ca.v;
+    out[`ca_${s}_cost`] = div(acc.cost, ca.a);
+  }
   return out;
 }
 
@@ -197,7 +252,7 @@ function finish(acc: Acc): Record<string, number | null> {
  */
 export function aggregate(
   rows: DayRow[],
-  opts: { fx: number; campaignDays?: Map<string, CampaignDay>; keyOf?: (r: DayRow) => string },
+  opts: { fx: number; campaignDays?: Map<string, CampaignDay>; keyOf?: (r: DayRow) => string; actionNames?: string[] },
 ): Map<string, Record<string, number | null>> {
   const accs = new Map<string, Acc>();
   for (const r of rows) {
@@ -207,12 +262,13 @@ export function aggregate(
     add(acc, r, opts.fx, opts.campaignDays?.get(r.date));
   }
   const out = new Map<string, Record<string, number | null>>();
-  for (const [k, acc] of accs) out.set(k, finish(acc));
+  for (const [k, acc] of accs) out.set(k, finish(acc, opts.actionNames));
   return out;
 }
 
 /** Valores de um item sem nenhum dia no período. */
 export const EMPTY_VALUES = finish(newAcc());
+export const emptyValues = (actionNames: string[] = []) => finish(newAcc(), actionNames);
 
 export function formatMetric(v: number | null | undefined, format: ColumnFormat, formatMoney: (n: number) => string): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';

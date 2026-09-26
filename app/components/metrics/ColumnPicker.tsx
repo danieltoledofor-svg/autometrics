@@ -82,6 +82,7 @@ export function ColumnPicker({ columns, visible, onChange, onReset, onClose, cus
         {editing ? (
           <FormulaEditor
             initial={editing}
+            extraVars={columns}
             ui={ui}
             onCancel={() => setEditing(null)}
             onSave={async col => {
@@ -174,8 +175,10 @@ export function ColumnPicker({ columns, visible, onChange, onReset, onClose, cus
   );
 }
 
-function FormulaEditor({ initial, ui, onCancel, onSave }: {
+function FormulaEditor({ initial, extraVars, ui, onCancel, onSave }: {
   initial: Omit<CustomColumn, 'id'> & { id?: string };
+  /** Colunas desta tabela que não estão no catálogo fixo (ações de conversão). */
+  extraVars: PickerColumn[];
   ui: Ui;
   onCancel: () => void;
   onSave: (col: Omit<CustomColumn, 'id'> & { id?: string }) => Promise<string | null>;
@@ -189,10 +192,16 @@ function FormulaEditor({ initial, ui, onCancel, onSave }: {
   const [saveError, setSaveError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
 
+  const variables = useMemo(() => {
+    const fixed = new Set(FORMULA_VARIABLES.map(v => v.key));
+    return [...FORMULA_VARIABLES, ...extraVars.filter(c => !fixed.has(c.key) && /^ca_/.test(c.key))
+      .map(c => ({ key: c.key, label: c.label, category: c.category }))];
+  }, [extraVars]);
   const parsed = useMemo(() => parseFormula(formula), [formula]);
-  const known = useMemo(() => new Set(FORMULA_VARIABLES.map(v => v.key)), []);
-  const unknown = parsed.vars.filter(v => !known.has(v));
-  const labelOf = useMemo(() => new Map(FORMULA_VARIABLES.map(v => [v.key, v.label])), []);
+  const known = useMemo(() => new Set(variables.map(v => v.key)), [variables]);
+  // Ação de conversão de outra campanha também vale: aqui ela só dá "—".
+  const unknown = parsed.vars.filter(v => !known.has(v) && !/^ca_[a-z0-9_]+_(all|conv|value|cost)$/.test(v));
+  const labelOf = useMemo(() => new Map(variables.map(v => [v.key, v.label])), [variables]);
 
   const insert = (text: string) => {
     const el = ref.current;
@@ -207,13 +216,13 @@ function FormulaEditor({ initial, ui, onCancel, onSave }: {
   const vt = varSearch.trim().toLowerCase();
   const groups = useMemo(() => {
     const out = new Map<string, typeof FORMULA_VARIABLES>();
-    for (const v of FORMULA_VARIABLES) {
+    for (const v of variables) {
       if (vt && !v.label.toLowerCase().includes(vt) && !v.key.includes(vt)) continue;
       if (!out.has(v.category)) out.set(v.category, []);
       out.get(v.category)!.push(v);
     }
     return [...out.entries()];
-  }, [vt]);
+  }, [vt, variables]);
 
   const valid = name.trim() && parsed.ok && !unknown.length;
   const inputCls = `w-full rounded-lg px-3 py-2 text-sm border ${borderCol} ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'} outline-none focus:border-indigo-500`;

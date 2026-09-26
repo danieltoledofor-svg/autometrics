@@ -3,6 +3,8 @@ import { supabaseAdmin, decryptSecret } from './server';
 import { ingestCampaignDay } from './ingest';
 import { campaignMetricFields, normalizeMetrics, selectableFields, metricFieldsFor } from './fields';
 import { DIMENSION_STORED_METRICS, mergeGoogleMetrics } from '@/lib/metrics/catalog';
+import { ACTION_SELECT, ACTION_WHERE, addActionRow, stableActions } from './conversionActions';
+import type { ActionCounts } from '@/lib/metrics/dimension';
 import { syncEntities, EntitySyncResult } from './entities';
 
 /**
@@ -48,6 +50,7 @@ export interface SyncSummary {
   cost_today: number;
   /** Grupos, anúncios e palavras-chave — só na coleta profunda. */
   entities?: EntitySyncResult;
+  entities_full?: boolean;
   errors: string[];
 }
 
@@ -229,10 +232,31 @@ export async function syncAccount(
       return optional(label, build(BASE.join(', ')), errors);
     }
   };
+  // Termo com a palavra-chave que o acionou, o grupo e o status. Se o Google
+  // recusar esses campos, cai para o termo sozinho, como antes.
+  const TERM_KW = 'search_term_view.status, segments.search_term_match_type, segments.keyword.info.text, segments.keyword.info.match_type, ad_group.name';
+  let termsWithKeyword = true;
+  const termsQuery = async () => {
+    const build = (mt: string, kw: boolean) =>
+      `SELECT campaign.id, segments.date, search_term_view.search_term, ${kw ? `${TERM_KW}, ` : ''}${mt} FROM search_term_view WHERE ${range} AND metrics.impressions > 0`;
+    try { return await q(build(m('search_term_view'), true)); } catch (e1: any) {
+      try {
+        const rows = await q(build(BASE.join(', '), true));
+        console.warn(`[google-ads] termos: métricas extras recusadas, seguiu com o básico — ${e1.message}`);
+        bags.search_term_view = BASE;
+        return rows;
+      } catch (e2: any) {
+        termsWithKeyword = false;
+        bags.search_term_view = BASE;
+        errors.push(`termos (sem palavra-chave): ${e2.message}`);
+        return optional('termos', build(BASE.join(', '), false), errors);
+      }
+    }
+  };
   const [adRows, stRows, ageRows, genderRows, incomeRows, deviceRows, geoRows, changeRows] = deep
     ? await Promise.all([
         optional('url', `SELECT campaign.id, ad_group_ad.ad.final_urls FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'`, errors),
-        rich('termos', 'search_term_view', mt => `SELECT campaign.id, segments.date, search_term_view.search_term, ${mt} FROM search_term_view WHERE ${range} AND metrics.impressions > 0`),
+        termsQuery(),
         rich('idade', 'age_range_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.age_range.type, ${mt} FROM age_range_view WHERE ${range} AND metrics.impressions > 0`),
         rich('gênero', 'gender_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.gender.type, ${mt} FROM gender_view WHERE ${range} AND metrics.impressions > 0`),
         rich('renda', 'income_range_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.income_range.type, ${mt} FROM income_range_view WHERE ${range} AND metrics.impressions > 0`),
@@ -242,6 +266,22 @@ export async function syncAccount(
       ])
     : [[], [], [], [], [], [], [], []];
   const bagOf = (resource: string, r: any) => normalizeMetrics(r.metrics, bags[resource] || BASE);
+
+  // Conversões por ação (Checkout, Compra…), por campanha e dia, na janela
+  // inteira: o Google conta conversão com atraso, e dia antigo também muda.
+  // null = consulta não rodou; aí o que está gravado fica como está.
+  const [campaignActionRows, termActionRows] = deep
+    ? await Promise.all([
+        optional('ações de conversão', `SELECT campaign.id, segments.date, ${ACTION_SELECT} FROM campaign WHERE segments.date BETWEEN '${start}' AND '${today}' AND ${ACTION_WHERE}`, errors),
+        optional('termos (ações de conversão)', `SELECT campaign.id, segments.date, search_term_view.search_term, ${termsWithKeyword ? 'segments.keyword.info.text, segments.keyword.info.match_type, ' : ''}${ACTION_SELECT} FROM search_term_view WHERE ${range} AND ${ACTION_WHERE}`, errors),
+      ])
+    : [null, null];
+  const campaignActions = new Map<string, ActionCounts>();
+  for (const r of campaignActionRows || []) addActionRow(campaignActions, `${r.campaign.id}|${r.segments.date}`, r);
+  const actionsQueried = deep && !errors.some(e => e.startsWith('ações de conversão'));
+  const termKey = (r: any) => `${r.searchTermView?.searchTerm}|${r.segments?.keyword?.info?.text || ''}|${r.segments?.keyword?.info?.matchType || ''}`;
+  const termActions = new Map<string, ActionCounts>();
+  for (const r of termActionRows || []) addActionRow(termActions, `${r.campaign.id}|${r.segments.date}|${termKey(r)}`, r);
 
   // Nome dos países que não estão no dicionário local.
   const unknownGeo = [...new Set(geoRows.map((r: any) => String(r.geographicView?.countryCriterionId || '')))]
@@ -278,14 +318,21 @@ export async function syncAccount(
     if (!term) continue;
     if (!searchTerms.has(k)) searchTerms.set(k, new Map());
     const m = searchTerms.get(k)!;
-    const cur = m.get(term) || { t: term, i: 0, cl: 0, c: 0, cv: 0, g: null };
+    const tk = termKey(r);
+    const kwInfo = r.segments?.keyword?.info || {};
+    const cur = m.get(tk) || {
+      t: term, i: 0, cl: 0, c: 0, cv: 0, g: null,
+      kw: kwInfo.text || '', km: kwInfo.matchType || '',
+      ag: r.adGroup?.name || null, st: r.searchTermView?.status || null, tm: r.segments?.searchTermMatchType || null,
+      ca: termActions.get(`${k}|${tk}`) || (termActionRows ? {} : undefined),
+    };
     cur.i += n(r.metrics?.impressions);
     cur.cl += n(r.metrics?.clicks);
     cur.c += n(r.metrics?.costMicros);
     cur.cv += n(r.metrics?.conversions);
     const g = bagOf('search_term_view', r);
     cur.g = cur.g ? mergeGoogleMetrics(cur.g, g) : g;
-    m.set(term, cur);
+    m.set(tk, cur);
   }
 
   const audiences = new Map<string, Map<string, any>>();
@@ -357,14 +404,28 @@ export async function syncAccount(
       .eq('user_id', account.user_id).in('google_ads_campaign_id', campaignIds.slice(i, i + 200));
     for (const p of data || []) productByCampaign.set(String(p.google_ads_campaign_id), p.id);
   }
-  const stored = new Map<string, { impressions: number; clicks: number; cost: number }>();
+  // O que já está gravado, para não regravar dia que não mudou. Conversões
+  // entram na comparação: o Google as conta com atraso, e um dia antigo com
+  // os mesmos cliques e custo ainda pode ganhar conversões.
+  const stored = new Map<string, { impressions: number; clicks: number; cost: number; conversions: number; actions: string | null }>();
   const productIds = [...new Set(productByCampaign.values())];
+  let storedCols = 'product_id, date, impressions, clicks, cost, google_conversions, google_conversion_actions';
   for (let i = 0; i < productIds.length; i += 100) {
     for (let page = 0; ; page++) {
-      const { data } = await db.from('daily_metrics').select('product_id, date, impressions, clicks, cost')
+      let { data, error } = await db.from('daily_metrics').select(storedCols)
         .in('product_id', productIds.slice(i, i + 100)).gte('date', start).lte('date', today)
         .range(page * 1000, page * 1000 + 999);
-      for (const d of data || []) stored.set(`${d.product_id}|${d.date}`, { impressions: n(d.impressions), clicks: n(d.clicks), cost: n(d.cost) });
+      if (error && storedCols.includes('google_conversion_actions')) {
+        // Antes de migration_termos_conversoes.sql.
+        storedCols = 'product_id, date, impressions, clicks, cost, google_conversions';
+        ({ data, error } = await db.from('daily_metrics').select(storedCols)
+          .in('product_id', productIds.slice(i, i + 100)).gte('date', start).lte('date', today)
+          .range(page * 1000, page * 1000 + 999));
+      }
+      for (const d of (data || []) as any[]) stored.set(`${d.product_id}|${d.date}`, {
+        impressions: n(d.impressions), clicks: n(d.clicks), cost: n(d.cost), conversions: n(d.google_conversions),
+        actions: 'google_conversion_actions' in d ? stableActions(d.google_conversion_actions) : null,
+      });
       if (!data || data.length < 1000) break;
     }
   }
@@ -412,6 +473,7 @@ export async function syncAccount(
         target_value: target,
         // Bloco completo do Google, já normalizado (micros convertidos).
         google_metrics: normalizeMetrics(m, metricFields),
+        ...(actionsQueried ? { google_conversion_actions: campaignActions.get(k) || {} } : {}),
       },
       campaign_settings: {
         channel_type: camp.advertisingChannelType || null,
@@ -420,8 +482,10 @@ export async function syncAccount(
         end_date: camp.endDate || String(camp.endDateTime || '').slice(0, 10) || null,
         optimization_score: n(camp.optimizationScore) || null,
       },
+      // Os de mais impressões, e nunca corta um termo que converteu.
       search_terms: recent && searchTerms.has(k)
-        ? [...searchTerms.get(k)!.values()].sort((a, b) => b.i - a.i).slice(0, TOP_SEARCH_TERMS)
+        ? [...searchTerms.get(k)!.values()].sort((a, b) => b.i - a.i)
+            .filter((t, idx) => idx < TOP_SEARCH_TERMS || t.cv > 0 || Object.keys(t.ca || {}).length > 0)
         : [],
       audiences: recent && audiences.has(k) ? [...audiences.get(k)!.values()] : [],
       locations: recent && locations.has(k)
@@ -448,7 +512,9 @@ export async function syncAccount(
     if (date < deepStart && prev
         && prev.impressions === n(m.impressions)
         && prev.clicks === n(m.clicks)
-        && Math.abs(prev.cost - n(m.costMicros) / 1e6) < 0.005) {
+        && Math.abs(prev.cost - n(m.costMicros) / 1e6) < 0.005
+        && Math.abs(prev.conversions - n(m.conversions)) < 0.001
+        && (!actionsQueried || prev.actions === null || prev.actions === stableActions(campaignActions.get(key(cid, date)) || {}))) {
       summary.days_unchanged++;
       continue;
     }
@@ -499,9 +565,13 @@ export async function syncAccount(
         .eq('user_id', account.user_id).in('google_ads_campaign_id', missing.slice(i, i + 200));
       for (const p of data || []) productByCampaign.set(String(p.google_ads_campaign_id), p.id);
     }
-    // Primeira vez na conta: a janela inteira. Depois, só os dias que ainda mudam.
+    // Janela inteira na primeira vez e uma vez por dia (conversões chegam
+    // atrasadas); nas outras rodadas, só os dias que mais mudam.
+    const fullEntities = !account.entities_synced_at
+      || Date.now() - new Date(account.entities_synced_at).getTime() >= 24 * 60 * 60 * 1000;
+    summary.entities_full = fullEntities;
     summary.entities = await syncEntities(q, {
-      start: account.entities_synced_at ? deepStart : start,
+      start: fullEntities ? start : deepStart,
       end: today,
       productIdFor: cid => productByCampaign.get(cid),
       selectable: fields => selectableFields(refreshToken, fields, usage),
@@ -586,7 +656,7 @@ export async function syncAccountRecord(
     await db.from('google_ads_accounts').update({
       last_sync_at: now,
       ...(deep ? { last_deep_sync_at: now } : {}),
-      ...(summary.entities?.ran && !summary.errors.some(e => /^(ad_group|ad|keyword)\b/.test(e)) ? { entities_synced_at: now } : {}),
+      ...(summary.entities?.ran && summary.entities_full && !summary.errors.some(e => /^(ad_group|ad|keyword)(:| \((itens|métricas)\))/.test(e)) ? { entities_synced_at: now } : {}),
       last_sync_status: summary.errors.length ? 'parcial' : 'ok',
       last_sync_error: summary.errors.length ? summary.errors.slice(0, 10).join(' | ').slice(0, 2000) : null,
       last_sync_summary: summary,
