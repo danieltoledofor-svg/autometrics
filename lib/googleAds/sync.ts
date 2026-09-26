@@ -51,6 +51,8 @@ export interface SyncSummary {
   /** Grupos, anúncios e palavras-chave — só na coleta profunda. */
   entities?: EntitySyncResult;
   entities_full?: boolean;
+  /** Dias passados que ganharam orçamento/meta pelo histórico de alterações. */
+  backfilled_days?: number;
   errors: string[];
 }
 
@@ -124,6 +126,45 @@ function formatValue(v: any): string {
   return String(v);
 }
 
+/** Meta atual da campanha: CPA alvo (na moeda da conta) ou ROAS alvo. */
+function campaignTarget(camp: any): number {
+  if (n(camp?.maximizeConversions?.targetCpaMicros)) return n(camp.maximizeConversions.targetCpaMicros) / 1e6;
+  if (n(camp?.targetCpa?.targetCpaMicros)) return n(camp.targetCpa.targetCpaMicros) / 1e6;
+  if (n(camp?.maximizeConversionValue?.targetRoas)) return n(camp.maximizeConversionValue.targetRoas);
+  if (n(camp?.targetRoas?.targetRoas)) return n(camp.targetRoas.targetRoas);
+  return 0;
+}
+
+const TARGET_PATHS: [string, number][] = [
+  ['maximize_conversions.target_cpa_micros', 1e6],
+  ['target_cpa.target_cpa_micros', 1e6],
+  ['maximize_conversion_value.target_roas', 1],
+  ['target_roas.target_roas', 1],
+];
+
+/**
+ * Orçamento e meta de cada dia que passou, a partir do histórico de alterações.
+ *
+ * O Google só informa o valor atual. Partindo dele e desfazendo, da mais nova
+ * para a mais antiga, cada alteração feita depois de um dia, chega-se ao valor
+ * que valia no fim daquele dia. O histórico da API cobre 30 dias.
+ */
+export function reconstructDaily(
+  current: number,
+  changes: { date: string; before: number }[],
+  days: string[],
+): Map<string, number> {
+  const sorted = [...changes].sort((a, b) => b.date.localeCompare(a.date));
+  const out = new Map<string, number>();
+  let value = current;
+  let i = 0;
+  for (const day of [...days].sort().reverse()) {
+    while (i < sorted.length && sorted[i].date > day) value = sorted[i++].before;
+    out.set(day, value);
+  }
+  return out;
+}
+
 function describeChanges(ev: any) {
   const raw = ev.changedFields;
   const list: string[] = !raw ? [] : typeof raw === 'string' ? raw.split(',') : (raw.paths || raw);
@@ -187,7 +228,7 @@ export async function syncAccount(
     'campaign.maximize_conversions.target_cpa_micros', 'campaign.maximize_conversion_value.target_roas',
     'campaign.advertising_channel_type', 'campaign.advertising_channel_sub_type',
     'campaign.start_date', 'campaign.end_date', 'campaign.start_date_time', 'campaign.end_date_time',
-    'campaign.optimization_score',
+    'campaign.optimization_score', 'campaign.campaign_budget',
   ];
   const available = await selectableFields(refreshToken, optionalCampaignFields, usage);
   const statusRows = await q(`
@@ -407,9 +448,9 @@ export async function syncAccount(
   // O que já está gravado, para não regravar dia que não mudou. Conversões
   // entram na comparação: o Google as conta com atraso, e um dia antigo com
   // os mesmos cliques e custo ainda pode ganhar conversões.
-  const stored = new Map<string, { impressions: number; clicks: number; cost: number; conversions: number; actions: string | null }>();
+  const stored = new Map<string, { impressions: number; clicks: number; cost: number; conversions: number; actions: string | null; budget: number; target: number }>();
   const productIds = [...new Set(productByCampaign.values())];
-  let storedCols = 'product_id, date, impressions, clicks, cost, google_conversions, google_conversion_actions';
+  let storedCols = 'product_id, date, impressions, clicks, cost, budget_micros, target_cpa, google_conversions, google_conversion_actions';
   for (let i = 0; i < productIds.length; i += 100) {
     for (let page = 0; ; page++) {
       let { data, error } = await db.from('daily_metrics').select(storedCols)
@@ -417,7 +458,7 @@ export async function syncAccount(
         .range(page * 1000, page * 1000 + 999);
       if (error && storedCols.includes('google_conversion_actions')) {
         // Antes de migration_termos_conversoes.sql.
-        storedCols = 'product_id, date, impressions, clicks, cost, google_conversions';
+        storedCols = 'product_id, date, impressions, clicks, cost, budget_micros, target_cpa, google_conversions';
         ({ data, error } = await db.from('daily_metrics').select(storedCols)
           .in('product_id', productIds.slice(i, i + 100)).gte('date', start).lte('date', today)
           .range(page * 1000, page * 1000 + 999));
@@ -425,6 +466,7 @@ export async function syncAccount(
       for (const d of (data || []) as any[]) stored.set(`${d.product_id}|${d.date}`, {
         impressions: n(d.impressions), clicks: n(d.clicks), cost: n(d.cost), conversions: n(d.google_conversions),
         actions: 'google_conversion_actions' in d ? stableActions(d.google_conversion_actions) : null,
+        budget: n(d.budget_micros), target: n(d.target_cpa),
       });
       if (!data || data.length < 1000) break;
     }
@@ -439,10 +481,7 @@ export async function syncAccount(
     const camp = c.campaign || {};
     const recent = date >= deepStart;
     const k = key(cid, date);
-    let target = 0;
-    if (n(camp.maximizeConversions?.targetCpaMicros)) target = n(camp.maximizeConversions.targetCpaMicros) / 1e6;
-    else if (n(camp.targetCpa?.targetCpaMicros)) target = n(camp.targetCpa.targetCpaMicros) / 1e6;
-    else if (n(camp.targetRoas?.targetRoas)) target = n(camp.targetRoas.targetRoas);
+    const target = campaignTarget(camp);
 
     return {
       script_version: 'api',
@@ -544,7 +583,7 @@ export async function syncAccount(
     if (!productByCampaign.has(p.campaign_id) && !firstOfNew.has(p.campaign_id)) firstOfNew.set(p.campaign_id, p);
   }
   const ingestOne = async (p: any) => {
-    const res = await ingestCampaignDay(p, { keepExistingMcc: true, customerId: account.customer_id });
+    const res = await ingestCampaignDay(p, { keepExistingMcc: true, customerId: account.customer_id, today });
     if (res.status !== 200) errors.push(`${p.campaign_name} ${p.date}: ${res.body?.error || res.body?.message}`);
     else {
       summary.days_written++;
@@ -556,6 +595,68 @@ export async function syncAccount(
   const rest = payloads.filter(p => !firsts.has(p));
   await runPool(rest.filter(p => p.date !== today), INGEST_CONCURRENCY, ingestOne);
   await runPool(rest.filter(p => p.date === today), INGEST_CONCURRENCY, ingestOne);
+
+  // Dias passados sem orçamento ou meta: reconstrói pelo histórico de
+  // alterações. Só preenche o que está vazio — valor gravado quando o dia era
+  // "hoje" é o registro mais fiel e fica como está.
+  const backfillBudgetAndTarget = async () => {
+    const missing = new Map<string, string[]>(); // campanha → dias
+    for (const [cid] of campaigns) {
+      const pid = productByCampaign.get(cid);
+      if (!pid) continue;
+      for (const [k, v] of stored) {
+        const [p, date] = k.split('|');
+        if (p !== pid || date >= today || (v.budget && v.target)) continue;
+        if (!missing.has(cid)) missing.set(cid, []);
+        missing.get(cid)!.push(date);
+      }
+    }
+    if (!missing.size) return;
+    const events = await optional('histórico de orçamento', `SELECT change_event.change_date_time, change_event.change_resource_type, change_event.change_resource_name, change_event.changed_fields, change_event.old_resource, change_event.campaign FROM change_event WHERE change_event.change_date_time >= '${start} 00:00:00' AND change_event.change_date_time <= '${today} 23:59:59' AND change_event.change_resource_type IN ('CAMPAIGN_BUDGET', 'CAMPAIGN') ORDER BY change_event.change_date_time DESC LIMIT 10000`, errors);
+    const budgetChanges = new Map<string, { date: string; before: number }[]>(); // orçamento → alterações
+    const targetChanges = new Map<string, { date: string; before: number }[]>(); // campanha → alterações
+    for (const r of events) {
+      const ev = r.changeEvent || {};
+      const date = String(ev.changeDateTime || '').slice(0, 10);
+      const raw = ev.changedFields;
+      const fields: string[] = !raw ? [] : typeof raw === 'string' ? raw.split(',') : (raw.paths || raw);
+      const has = (path: string) => fields.some(f => String(f).trim().replace(/[A-Z]/g, m => '_' + m.toLowerCase()) === path);
+      if (ev.changeResourceType === 'CAMPAIGN_BUDGET' && has('amount_micros')) {
+        const before = valueAt(ev.oldResource, 'amount_micros');
+        if (before === undefined) continue;
+        const list = budgetChanges.get(ev.changeResourceName) || [];
+        list.push({ date, before: n(before) });
+        budgetChanges.set(ev.changeResourceName, list);
+      }
+      if (ev.changeResourceType === 'CAMPAIGN') {
+        const cid = String(ev.campaign || ev.changeResourceName || '').split('/').pop() || '';
+        for (const [path, div] of TARGET_PATHS) {
+          if (!has(path)) continue;
+          const list = targetChanges.get(cid) || [];
+          list.push({ date, before: n(valueAt(ev.oldResource, path)) / div });
+          targetChanges.set(cid, list);
+          break;
+        }
+      }
+    }
+    let filled = 0;
+    for (const [cid, days] of missing) {
+      const c = campaigns.get(cid);
+      const pid = productByCampaign.get(cid)!;
+      const budgets = reconstructDaily(n(c?.campaignBudget?.amountMicros), budgetChanges.get(c?.campaign?.campaignBudget) || [], days);
+      const targets = reconstructDaily(campaignTarget(c?.campaign), targetChanges.get(cid) || [], days);
+      for (const date of days) {
+        const prev = stored.get(`${pid}|${date}`)!;
+        const patch: Record<string, number> = {};
+        if (!prev.budget && budgets.get(date)) patch.budget_micros = budgets.get(date)!;
+        if (!prev.target && targets.get(date)) patch.target_cpa = targets.get(date)!;
+        if (!Object.keys(patch).length) continue;
+        const { error } = await db.from('daily_metrics').update(patch).eq('product_id', pid).eq('date', date);
+        if (!error) filled++;
+      }
+    }
+    summary.backfilled_days = filled;
+  };
 
   if (deep) {
     // Campanhas que ganharam produto agora, no ingest acima.
@@ -570,6 +671,7 @@ export async function syncAccount(
     const fullEntities = !account.entities_synced_at
       || Date.now() - new Date(account.entities_synced_at).getTime() >= 24 * 60 * 60 * 1000;
     summary.entities_full = fullEntities;
+    if (fullEntities) await backfillBudgetAndTarget();
     summary.entities = await syncEntities(q, {
       start: fullEntities ? start : deepStart,
       end: today,

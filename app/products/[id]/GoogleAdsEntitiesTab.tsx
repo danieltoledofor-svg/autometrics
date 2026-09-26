@@ -33,8 +33,12 @@ interface Props {
   adGroupFilter: string;
   onAdGroupFilter: (id: string) => void;
   onOpenAdGroup: (id: string, target: 'ad' | 'keyword') => void;
+  /** Estratégia e meta atuais da campanha (em lance automático o grupo herda). */
+  campaignBid?: { strategy: string | null; target: number };
   ui: Ui;
 }
+
+const MANUAL_BIDDING = new Set(['MANUAL_CPC', 'ENHANCED_CPC', 'MANUAL_CPM', 'MANUAL_CPV']);
 
 interface Entity {
   level: EntityLevel;
@@ -189,9 +193,18 @@ export function GoogleAdsEntitiesTab(props: Props) {
     key: 'bid', label: 'Lance / meta', align: 'right',
     render: i => {
       const d = i.details || {};
-      return <span className={`text-xs ${textMuted}`}>
-        {d.target_cpa ? `CPA ${formatMoney(d.target_cpa * fx)}` : d.target_roas ? `ROAS ${(d.target_roas * 100).toFixed(0)}%` : d.cpc_bid ? `CPC ${formatMoney(d.cpc_bid * fx)}` : '—'}
-      </span>;
+      if (d.target_cpa) return <span className="text-xs">CPA {formatMoney(d.target_cpa * fx)}</span>;
+      if (d.target_roas) return <span className="text-xs">ROAS {(d.target_roas * 100).toFixed(0)}%</span>;
+      // Lance automático da campanha: o CPC do grupo é resíduo e não vale.
+      const cb = props.campaignBid;
+      if (cb?.strategy && !MANUAL_BIDDING.has(cb.strategy)) {
+        const isRoas = /ROAS|VALUE/.test(cb.strategy);
+        return <span className="text-xs" title="Herdado da campanha">
+          {cb.target ? (isRoas ? `ROAS ${(cb.target * 100).toFixed(0)}%` : `CPA ${formatMoney(cb.target * fx)}`) : 'Automático'}
+          <span className={`ml-1 ${textMuted}`}>(campanha)</span>
+        </span>;
+      }
+      return <span className="text-xs">{d.cpc_bid ? `CPC ${formatMoney(d.cpc_bid * fx)}` : '—'}</span>;
     },
   });
   if (level === 'ad') {

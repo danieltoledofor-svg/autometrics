@@ -94,6 +94,11 @@ export interface IngestOptions {
   keepExistingMcc?: boolean;
   /** Conta do Google Ads dona da campanha — necessária para pausar/ativar. */
   customerId?: string;
+  /**
+   * O dia de hoje no fuso da conta (coleta pela API). Sem ele vale o dia UTC
+   * do servidor, que depois das 21h de Brasília já é amanhã.
+   */
+  today?: string;
 }
 
 /**
@@ -371,7 +376,7 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
   //
   // Por isso só são gravados no dia corrente. Dias anteriores mantêm o que foi
   // registrado quando eles próprios eram "hoje".
-  const hojeStr = new Date().toISOString().slice(0, 10);
+  const hojeStr = opts.today || new Date().toISOString().slice(0, 10);
   if (date === hojeStr) {
     payload.budget_micros = num(metrics.budget_micros);
     payload.target_cpa = num(metrics.target_value);
