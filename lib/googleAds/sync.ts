@@ -712,7 +712,7 @@ export async function usageToday(): Promise<number> {
   return n(data?.api_calls);
 }
 
-async function addUsage(calls: number) {
+export async function addUsage(calls: number) {
   if (!calls) return;
   await supabaseAdmin().rpc('gads_add_usage', { p_day: quotaDay(), p_calls: calls });
 }

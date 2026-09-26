@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { syncAccountRecord, isDue, usageToday, DAILY_QUOTA } from '@/lib/googleAds/sync';
 import { refreshConnectionAccounts } from '@/lib/googleAds/accounts';
+import { isReconcileDue, reconcileAccountRecord, reconcileReady } from '@/lib/googleAds/reconcile';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -70,6 +71,22 @@ async function runCron() {
     report.synced.push(result);
     used += 'api_calls' in result ? result.api_calls : 2;
   }
+  // Conferência diária com o Google (Etapa 0): no tempo que sobrou, as contas
+  // que não foram conferidas nas últimas 24h. Duas consultas cada.
+  report.reconciled = [];
+  const canReconcile = await reconcileReady();
+  for (const acc of canReconcile ? accounts || [] : []) {
+    if (!okConnections.has(acc.connection_id)) continue;
+    const status = String(acc.status || '').toUpperCase();
+    if (status && status !== 'ENABLED' && status !== 'UNKNOWN') continue;
+    if (!isReconcileDue(acc)) continue;
+    if (Date.now() - started > TIME_BUDGET_MS) break;
+    if (used >= DAILY_QUOTA * 0.8) break;
+    const result = await reconcileAccountRecord(acc);
+    report.reconciled.push({ account: acc.name, ...result });
+    used += 'api_calls' in result ? result.api_calls : 2;
+  }
+
   report.quota.used = used;
   report.elapsed_ms = Date.now() - started;
   return report;

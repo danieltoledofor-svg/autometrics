@@ -348,6 +348,10 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
     // Se a linha for nova (criada pelo script), o banco usará o DEFAULT 0.
   };
 
+  // Quem gravou por último — enquanto script e API convivem, é o que explica
+  // uma divergência na conferência com o Google.
+  payload.last_source = script_version === 'api' ? 'api' : 'script';
+
   // Campanha sem anuncios ativos nao retorna final_url. Omitir a coluna
   // preserva o valor ja gravado em vez de apaga-lo.
   if (metrics.final_url) payload.final_url = metrics.final_url;
@@ -429,6 +433,13 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
 
     // As colunas de revisão só existem após a migration. Até lá o Postgres
     // recusa a linha inteira; sem este resguardo, a coleta pararia de gravar.
+    if (error && /last_source/.test(error.message || '')) {
+      // Antes de migration_conferencia.sql.
+      delete payload.last_source;
+      ({ error } = await supabase
+        .from('daily_metrics')
+        .upsert(payload, { onConflict: 'product_id, date' }));
+    }
     if (error && /google_conversion_actions/.test(error.message || '')) {
       delete payload.google_conversion_actions;
       ({ error } = await supabase

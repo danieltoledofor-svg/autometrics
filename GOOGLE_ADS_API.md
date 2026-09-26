@@ -54,6 +54,13 @@ Depois, na ordem:
 - `migration_colunas_filtros.sql` — bloco completo de métricas do Google em grupos, anúncios, palavras-chave, termos, públicos e locais; conversões fracionadas nessas tabelas; e a tabela `custom_columns` das colunas personalizadas.
 - `migration_termos_conversoes.sql` — palavra-chave, grupo e status em cada termo de pesquisa (a chave única passa a incluir a palavra-chave) e conversões por ação de conversão (Checkout, Compra…) em campanha, grupos, anúncios, palavras-chave e termos.
 - `migration_preferencias_tabelas.sql` — preferências das tabelas por usuário (largura das colunas, densidade e colunas visíveis), valendo em qualquer computador.
+- `migration_conferencia.sql` — conferência diária com o Google (Etapa 0) e `daily_metrics.last_source` (quem gravou o dia por último: api ou script).
+
+## Conferência diária (Etapa 0)
+
+Uma vez por dia, no tempo que sobra de cada chamada do agendador, cada conta é comparada com o Google nos últimos 7 dias fechados: impressões, cliques, custo e conversões, no total da conta e campanha por campanha (2 consultas). O resultado fica em `google_ads_reconciliations`. `POST /api/google-ads/reconcile { account_id }` (ou `{ all: true }`) confere na hora.
+
+Como a coleta de hora em hora já regrava o que mudou, divergência aqui aponta para outra coisa: o script da MCC sobrescrevendo o dia, gravação que falhou, ou campanha do Google que não chegou ao painel.
 
 ## Consultas por conta
 
