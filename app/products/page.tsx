@@ -44,8 +44,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Logo } from '@/app/components/Logo';
 import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
-import { useTablePrefs } from '@/app/components/table/useTablePrefs';
-import { cellPad, TableControls, tableTone, Th, widthStyle } from '@/app/components/table/tableUi';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { isValidDay } from '@/lib/useDayInput';
@@ -93,8 +91,6 @@ export default function ProductsPage() {
 
   // Novos Estados (Enhancements)
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
-  // Larguras e densidade da tabela ficam salvas no usuário.
-  const listPrefs = useTablePrefs('products_list');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [copiedPostback, setCopiedPostback] = useState<string | null>(null);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
@@ -788,7 +784,6 @@ export default function ProductsPage() {
                 <button onClick={() => handleViewModeChange('table')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'table' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Table View"><List size={16}/></button>
              </div>
 
-             {viewMode === 'table' && <div className="hidden md:block px-1"><TableControls prefs={listPrefs} isDark={isDark} /></div>}
              <button onClick={handleReload} className={`p-2 rounded-lg transition-colors hidden md:block mr-1 ${hoverItem}`} title="Recarregar"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
            
@@ -859,54 +854,45 @@ export default function ProductsPage() {
                        })}
                      </div>
                    ) : (
-                     <div className={`border rounded-xl overflow-x-auto ${bgCard}`}>
-                       {(() => {
-                         const tone = tableTone(isDark);
-                         const pad = cellPad(listPrefs.density);
-                         const w = (k: string) => widthStyle(listPrefs.widths[k]);
-                         const head = `${pad} border-b ${tone.line} ${tone.headerBg} font-medium whitespace-nowrap`;
-                         return (
-                       <table className="w-max min-w-0 text-[13px] text-left border-collapse whitespace-nowrap tabular-nums">
+                     <div className={`border rounded-xl flex overflow-hidden overflow-x-auto ${bgCard}`}>
+                       <table className="w-full text-left border-collapse min-w-[800px] whitespace-nowrap">
                          <thead>
-                           <tr className={`text-xs ${tone.head}`}>
-                             <th className={`${head} w-10 text-center`}><button onClick={() => handleSelectAll(groupProds.map(p=>p.id))} className="text-slate-400 hover:text-indigo-500">{groupProds.length > 0 && groupProds.every(p => selectedProducts.includes(p.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}</button></th>
-                             <th className={`${head} w-12 text-center`}>Plat.</th>
-                             <Th colKey="name" prefs={listPrefs} className={head}>Campanha</Th>
-                             <Th colKey="revenue" prefs={listPrefs} className={`${head} text-right`}>Receita ({periodLabel})</Th>
-                             <Th colKey="cost" prefs={listPrefs} className={`${head} text-right`}>Custo ({periodLabel})</Th>
-                             <Th colKey="profit" prefs={listPrefs} className={`${head} text-right`}>Lucro ({periodLabel})</Th>
-                             <th className={`${head} text-right`}>Ações</th>
+                           <tr className={`text-xs uppercase tracking-wider ${isDark ? 'bg-slate-900/50 text-slate-500' : 'bg-slate-50 text-slate-500'} border-b ${borderCol}`}>
+                             <th className="p-3 w-10 text-center"><button onClick={() => handleSelectAll(groupProds.map(p=>p.id))} className="text-slate-400 hover:text-indigo-500">{groupProds.length > 0 && groupProds.every(p => selectedProducts.includes(p.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}</button></th>
+                             <th className="p-3 w-12 text-center">Plat.</th>
+                             <th className="p-3">Campanha</th>
+                             <th className="p-3">{periodLabel} Receita</th>
+                             <th className="p-3">{periodLabel} Custo</th>
+                             <th className="p-3">{periodLabel} Lucro</th>
+                             <th className="p-3 text-right">Ações</th>
                            </tr>
                          </thead>
-                         <tbody>
-                           {groupProds.map((product, idx) => {
+                         <tbody className="divide-y divide-inherit">
+                           {groupProds.map(product => {
                              const isSelected = selectedProducts.includes(product.id);
                              const m7d = product.metrics7d || {cost:0, revenue:0, roi:0};
-                             const profit = m7d.revenue - m7d.cost;
-                             const bg = isSelected ? (isDark ? 'bg-indigo-500/10' : 'bg-indigo-50') : `${tone.rowBg(idx)} ${tone.rowHover}`;
-                             const cell = `${pad} border-b ${tone.line} ${bg}`;
                              return (
-                               <tr key={product.id} className="group cursor-pointer" onClick={() => router.push(`/products/${product.id}`)}>
-                                 <td className={`${cell} text-center`} onClick={e=>e.stopPropagation()}><button onClick={(e)=>toggleSelectProduct(product.id, e)} className={`${isSelected ? 'text-indigo-500' : 'text-slate-400 hover:text-slate-300'}`}>{isSelected ? <CheckSquare size={16}/> : <Square size={16}/>}</button></td>
-                                 <td className={cell}><div className="flex justify-center">{renderPlatformBadge(product)}</div></td>
-                                 <td className={cell} style={w('name')}>
+                               <tr key={product.id} className={`transition-colors cursor-pointer ${isSelected ? (isDark?'bg-indigo-500/10':'bg-indigo-50') : hoverItem}`} onClick={() => router.push(`/products/${product.id}`)}>
+                                 <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={(e)=>toggleSelectProduct(product.id, e)} className={`${isSelected ? 'text-indigo-500' : 'text-slate-300 hover:text-slate-400'}`}>{isSelected ? <CheckSquare size={16}/> : <Square size={16}/>}</button></td>
+                                 <td className="p-3 py-2 flex justify-center">{renderPlatformBadge(product)}</td>
+                                 <td className="p-3">
                                    <div className="flex items-center gap-2">
                                      {(() => {
                                        const st = resolveProductStatus(product);
                                        const Icon = st.key === 'ativo' ? PlayCircle : st.key === 'suspenso' ? AlertTriangle : PauseCircle;
                                        return <Icon size={14} className={`${st.text} shrink-0`} aria-label={st.label} />;
                                      })()}
-                                     <span className={`font-semibold text-sm ${tone.text} truncate`} title={product.name}>{product.name}</span>
+                                     <span className={`font-bold text-sm ${textHead} break-words`} title={product.name}>{product.name}</span>
                                      {product.is_hidden && <EyeOff size={12} className="text-amber-500 shrink-0"/>}
                                    </div>
-                                   <div className={`flex items-center gap-1 text-[11px] ${tone.muted} font-mono mt-0.5`} title={product.campaign_id}>
+                                   <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono mt-0.5 break-all" title={product.campaign_id}>
                                       <Hash size={10} /> {product.campaign_id}
                                    </div>
                                  </td>
-                                 <td className={`${cell} text-right font-medium ${tone.revenue}`} style={w('revenue')}>{formatMoney(m7d.revenue, product.currency)}</td>
-                                 <td className={`${cell} text-right font-medium ${tone.cost}`} style={w('cost')}>{formatMoney(m7d.cost, product.currency)}</td>
-                                 <td className={`${cell} text-right font-semibold ${profit >= 0 ? tone.pos : tone.neg}`} style={w('profit')}>{formatMoney(profit, product.currency)}</td>
-                                 <td className={`${cell} text-right`} onClick={e=>e.stopPropagation()}>
+                                 <td className={`p-3 font-mono text-xs ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.revenue, product.currency)}</td>
+                                 <td className={`p-3 font-mono text-xs ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.cost, product.currency)}</td>
+                                 <td className="p-3"><span className={`font-mono text-xs font-bold ${(m7d.revenue - m7d.cost) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(m7d.revenue - m7d.cost, product.currency)}</span></td>
+                                 <td className="p-3 text-right" onClick={e=>e.stopPropagation()}>
                                    <div className="flex justify-end gap-1">
                                       <CampaignStatusToggle product={product} isDark={isDark} onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
                                       <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'text-emerald-500 bg-emerald-500/10' : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200')}`} title="Copiar Postback">{copiedPostback === product.id ? <Check size={14}/> : <Copy size={14}/>}</button>
@@ -918,8 +904,6 @@ export default function ProductsPage() {
                            })}
                          </tbody>
                        </table>
-                         );
-                       })()}
                      </div>
                    )}
                 </div>

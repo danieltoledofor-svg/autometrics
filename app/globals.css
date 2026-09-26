@@ -71,8 +71,9 @@ select optgroup {
 
    slate-500 e slate-600 foram usados como "texto de apoio" em todo o painel,
    mas sobre o fundo preto/slate-900 ficam apagados demais para ler números e
-   rótulos. No escuro, sobem um tom (500 → 400, 600 → 500). O tema claro não
-   muda: lá esses tons têm contraste de sobra.
+   rótulos. No escuro, sobem um tom (500 → 400, 600 → 500) dentro de .legivel —
+   por ora só a página da campanha; as outras telas ficaram como eram, a pedido.
+   O tema claro não muda: lá esses tons têm contraste de sobra.
    ───────────────────────────────────────────────────────────────────────────── */
-:root:not([data-theme="light"]) .text-slate-500 { color: #94a3b8; } /* slate-400 */
-:root:not([data-theme="light"]) .text-slate-600 { color: #64748b; } /* slate-500 */
+:root:not([data-theme="light"]) .legivel .text-slate-500 { color: #94a3b8; } /* slate-400 */
+:root:not([data-theme="light"]) .legivel .text-slate-600 { color: #64748b; } /* slate-500 */

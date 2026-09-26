@@ -697,7 +697,7 @@ export default function ProductDetailPage() {
   })();
 
   return (
-    <div className={`min-h-screen font-sans flex ${bgMain}`}>
+    <div className={`legivel min-h-screen font-sans flex ${bgMain}`}>
 
       {/* ── SIDEBAR DESKTOP ── */}
       <aside className={`hidden md:flex flex-col w-64 shrink-0 border-r ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} fixed top-0 left-0 h-screen z-50`}>
