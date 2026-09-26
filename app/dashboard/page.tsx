@@ -820,12 +820,13 @@ export default function DashboardPage() {
                         <React.Fragment key={acc.name}>
                           <tr className={`${isDark ? 'bg-slate-950/50' : 'bg-slate-100/50'}`}>
                             <td></td>
-                            <td className="px-6 py-2 text-xs font-bold text-indigo-400 pl-10 flex items-center gap-2">
-                              <Settings size={12}/> <span className="text-xs">Conta: {acc.name}</span>
+                            {/* Conta: valores com cor cheia (sem transparência), em 13px. */}
+                            <td className={`px-6 py-2 text-[13px] font-bold pl-10 flex items-center gap-2 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>
+                              <Settings size={12}/> <span>Conta: {acc.name}</span>
                             </td>
-                            <td className="px-6 py-2 text-right text-xs text-blue-400/70">{formatMoney(acc.revenue)}</td>
-                            <td className="px-6 py-2 text-right text-xs text-orange-400/70">{formatMoney(acc.cost)}</td>
-                            <td className={`px-6 py-2 text-right text-xs font-medium ${acc.profit >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{formatMoney(acc.profit)}</td>
+                            <td className={`px-6 py-2 text-right text-[13px] font-medium tabular-nums ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatMoney(acc.revenue)}</td>
+                            <td className={`px-6 py-2 text-right text-[13px] font-medium tabular-nums ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>{formatMoney(acc.cost)}</td>
+                            <td className={`px-6 py-2 text-right text-[13px] font-medium tabular-nums ${acc.profit >= 0 ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-rose-400' : 'text-rose-600')}`}>{formatMoney(acc.profit)}</td>
                             <td></td>
                           </tr>
                           {(acc.campaignList || []).map((cmp: any) => (
@@ -850,9 +851,10 @@ export default function DashboardPage() {
                                   )}
                                 </div>
                               </td>
-                              <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.revenue)}</td>
-                              <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(cmp.cost)}</td>
-                              <td className={`px-6 py-1 text-right text-[10px] font-medium ${cmp.profit >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(cmp.profit)}</td>
+                              {/* Campanha: receita e custo neutros, só o lucro com cor — legível sem competir com a conta. */}
+                              <td className={`px-6 py-1 text-right text-[13px] tabular-nums ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{formatMoney(cmp.revenue)}</td>
+                              <td className={`px-6 py-1 text-right text-[13px] tabular-nums ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{formatMoney(cmp.cost)}</td>
+                              <td className={`px-6 py-1 text-right text-[13px] font-medium tabular-nums ${cmp.profit >= 0 ? (isDark ? 'text-emerald-300' : 'text-emerald-700') : (isDark ? 'text-rose-300' : 'text-rose-700')}`}>{formatMoney(cmp.profit)}</td>
                               <td className="px-6 py-1 text-right">
                                 {cmp.productId && (
                                   <button
