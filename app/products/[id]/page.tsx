@@ -22,6 +22,8 @@ import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
 import { SegmentTab } from './SegmentTab';
 import { useCustomColumns } from '@/app/components/metrics/useCustomColumns';
 import { ColumnPicker } from '@/app/components/metrics/ColumnPicker';
+import { useTablePrefs } from '@/app/components/table/useTablePrefs';
+import { cellPad, TableControls, tableTone, Th, widthStyle } from '@/app/components/table/tableUi';
 import { GOOGLE_METRICS_CATALOG, GOOGLE_COLUMN_KEY } from '@/lib/metrics/catalog';
 import { actionColumns, actionNames, actionSlug } from '@/lib/metrics/dimension';
 import type { CampaignDay } from '@/lib/metrics/dimension';
@@ -155,9 +157,10 @@ export default function ProductDetailPage() {
   // carregados pelo próprio QuickEntryModal, o mesmo usado no dashboard.
   const [manualEntryDate, setManualEntryDate] = useState(getLocalYYYYMMDD(new Date()));
 
-  const [visibleColumns, setVisibleColumns] = useState(
-    ALL_COLUMNS.filter(c => c.default).map(c => c.key)
-  );
+  // Colunas, larguras e densidade da tabela ficam salvas no usuário.
+  const overviewPrefs = useTablePrefs('overview', { legacyColumnsKey: 'autometrics_visible_columns' });
+  const visibleColumns = overviewPrefs.columns || ALL_COLUMNS.filter(c => c.default).map(c => c.key);
+  const setVisibleColumns = overviewPrefs.setColumns;
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
@@ -202,8 +205,6 @@ export default function ProductDetailPage() {
     if (savedTheme) { setTheme(savedTheme); }
     applyTheme(savedTheme || 'dark');
 
-    const savedColumns = localStorage.getItem('autometrics_visible_columns');
-    if (savedColumns) try { setVisibleColumns(JSON.parse(savedColumns)); } catch (e) { }
 
     const savedDollar = localStorage.getItem('autometrics_manual_dollar');
     if (savedDollar) setManualDollar(parseFloat(savedDollar));
@@ -560,7 +561,10 @@ export default function ProductDetailPage() {
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
   const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const textMuted = 'text-slate-500';
+  // Texto de apoio: legível no escuro (slate-500 sumia no fundo preto).
+  const textMuted = isDark ? 'text-slate-400' : 'text-slate-500';
+  const tone = tableTone(isDark);
+  const pad = cellPad(overviewPrefs.density);
   const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
 
   // Render nothing until auth is confirmed — prevents any HTML leaking to unauthenticated users
@@ -988,9 +992,12 @@ export default function ProductDetailPage() {
               <h3 className={`font-semibold ${textHead}`}>Histórico Detalhado</h3>
               <span className={`text-xs ${textMuted} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} px-2 py-1 rounded border ${borderCol}`}>{rows.length} registros</span>
             </div>
+            <div className="flex items-center gap-2">
+            <TableControls prefs={overviewPrefs} isDark={isDark} />
             <button onClick={() => setShowColumnModal(true)} className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded transition-colors border ${isDark ? 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700' : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border-slate-300'}`}>
               <Columns size={14} /> Personalizar Colunas
             </button>
+            </div>
           </div>
           {revisoes && (
             <div className={`px-4 py-2.5 border-b flex items-center gap-2 flex-wrap text-xs ${borderCol} ${isDark ? 'bg-sky-500/10' : 'bg-sky-50'}`}>
@@ -1007,33 +1014,39 @@ export default function ProductDetailPage() {
             </div>
           )}
           <div className="overflow-auto custom-scrollbar flex-1">
-            <table className="w-full text-sm text-left border-collapse">
-              <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0 z-20 shadow-lg`}>
-                <tr>{shownColumns.map(col => (<th key={col.key} className={`px-4 py-4 whitespace-nowrap border-b ${borderCol} ${col.key === 'date' || col.key === 'notes' ? 'text-left' : 'text-right'} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} first:text-left first:sticky first:left-0 first:z-30`}>{col.label}</th>))}</tr>
+            {/* Largura do conteúdo, não da tela: colunas juntas e ajustáveis. */}
+            <table className="w-max min-w-0 text-[13px] text-left border-collapse tabular-nums">
+              <thead className={`text-xs font-medium ${tone.head} sticky top-0 z-20`}>
+                <tr>{shownColumns.map((col, i) => (
+                  <Th key={col.key} colKey={col.key} prefs={overviewPrefs}
+                    className={`${pad} whitespace-nowrap font-medium border-b ${tone.line} ${tone.headerBg} ${col.key === 'date' || col.key === 'notes' ? 'text-left' : 'text-right'} ${i === 0 ? 'sticky left-0 z-30 text-left' : ''}`}>
+                    {col.label}
+                  </Th>
+                ))}</tr>
               </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+              <tbody>
 
                 {/* ── LINHA DE TOTAIS/MÉDIAS ── */}
                 {summaryRow && (
-                  <tr className={`font-bold text-xs border-b-2 ${isDark ? 'bg-indigo-950/40 border-indigo-800' : 'bg-indigo-50 border-indigo-200'}`}>
+                  <tr className={`font-semibold border-b-2 ${isDark ? 'bg-indigo-950 border-indigo-800' : 'bg-indigo-50 border-indigo-200'}`}>
                     {shownColumns.map((col, i) => {
                       if (i === 0) return (
-                        <td key={col.key} className={`px-4 py-3 sticky left-0 border-r ${borderCol} text-xs font-bold uppercase tracking-wider ${isDark ? 'bg-indigo-950 text-indigo-300' : 'bg-indigo-50 text-indigo-600'}`}>
+                        <td key={col.key} className={`${pad} sticky left-0 z-[1] text-xs font-semibold ${isDark ? 'bg-indigo-950 text-indigo-200' : 'bg-indigo-50 text-indigo-700'}`} style={widthStyle(overviewPrefs.widths[col.key])}>
                           Σ Total / Ø Média
                         </td>
                       );
                       const val = summaryRow[col.key];
-                      if (val === null || val === undefined) return <td key={col.key} className="px-4 py-3 text-right text-slate-500">—</td>;
+                      if (val === null || val === undefined) return <td key={col.key} className={`${pad} text-right ${tone.muted}`}>—</td>;
                       const isAvg = AVERAGE_COLS.has(col.key);
                       const isLatest = LATEST_COLS.has(col.key);
 
                       let textClass = '';
-                      if (col.key === 'profit') textClass = val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold';
-                      else if (col.key === 'revenue') textClass = 'text-blue-500 font-bold';
-                      else if (col.key === 'cost') textClass = 'text-orange-500 font-bold';
-                      else if (isAvg) textClass = isDark ? 'text-indigo-400 font-extrabold' : 'text-indigo-600 font-extrabold';
-                      else if (isLatest) textClass = isDark ? 'text-fuchsia-400 font-extrabold' : 'text-fuchsia-600 font-extrabold';
-                      else textClass = isDark ? 'text-slate-300 font-bold' : 'text-slate-700 font-bold';
+                      if (col.key === 'profit' || col.key === 'roi') textClass = val >= 0 ? tone.pos : tone.neg;
+                      else if (col.key === 'revenue') textClass = tone.revenue;
+                      else if (col.key === 'cost') textClass = tone.cost;
+                      else if (isAvg) textClass = isDark ? 'text-indigo-200' : 'text-indigo-700';
+                      else if (isLatest) textClass = isDark ? 'text-fuchsia-300' : 'text-fuchsia-700';
+                      else textClass = tone.text;
 
                       let content;
                       if (col.format === 'currency') {
@@ -1050,13 +1063,13 @@ export default function ProductDetailPage() {
                         const displayVal = typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(0)) : val;
                         content = <span className={textClass}>{displayVal}</span>;
                       }
-                      return <td key={col.key} className="px-4 py-3 text-right whitespace-nowrap">{content}</td>;
+                      return <td key={col.key} className={`${pad} text-right whitespace-nowrap`} style={widthStyle(overviewPrefs.widths[col.key])}>{content}</td>;
                     })}
                   </tr>
                 )}
 
                 {/* ── LINHAS DE DADOS ── */}
-                {tableRows.map((row: any) => {
+                {tableRows.map((row: any, rowIdx: number) => {
                   // Converter data de display (DD/MM/YYYY) de volta para chave (YYYY-MM-DD)
                   const dateParts = row.date.split('/');
                   const dateKey = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : row.id;
@@ -1065,12 +1078,13 @@ export default function ProductDetailPage() {
 
                   return (
                     <React.Fragment key={row.id}>
-                      <tr className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
+                      <tr className="group">
                         {shownColumns.map(col => {
                           const val = row[col.key];
+                          const bg = `${tone.rowBg(rowIdx)} ${tone.rowHover} border-b ${tone.line}`;
                           let content;
                           if (col.key === 'date') return (
-                            <td key={col.key} className={`px-4 py-4 font-medium sticky left-0 border-r ${borderCol} ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
+                            <td key={col.key} className={`${pad} font-medium sticky left-0 z-[1] ${bg} ${tone.text}`} style={widthStyle(overviewPrefs.widths[col.key])}>
                               <div className="flex items-center gap-2">
                                 <span>{val}</span>
                                 <button
@@ -1088,7 +1102,7 @@ export default function ProductDetailPage() {
                             </td>
                           );
                           if (col.key === 'notes') return (
-                            <td key={col.key} className="px-4 py-4 max-w-[200px]">
+                            <td key={col.key} className={`${pad} ${bg} max-w-[200px]`} style={widthStyle(overviewPrefs.widths[col.key])}>
                               {hasNote
                                 ? <span className={`text-xs italic truncate block max-w-[180px] text-amber-400/80 cursor-pointer hover:text-amber-300`} title={notes[dateKey]} onClick={() => openNoteByKey(dateKey)}>{notes[dateKey]}</span>
                                 : <button onClick={() => openNoteByKey(dateKey)} className={`text-xs ${textMuted} hover:text-indigo-400 transition-colors`}>+ nota</button>
@@ -1113,7 +1127,7 @@ export default function ProductDetailPage() {
                             const revisado = col.key === 'cost' && row.revised_at && row.cost_previous != null;
                             const diff = revisado ? Number(row.cost) - Number(row.cost_previous) : 0;
                             content = (
-                              <span className={`inline-flex items-center gap-1 ${col.key === 'profit' ? (val >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold') : (col.key === 'revenue' ? 'text-blue-500 font-bold' : (col.key === 'cost' ? 'text-orange-500 font-medium' : 'text-slate-400'))}`}>
+                              <span className={`inline-flex items-center gap-1 ${col.key === 'profit' ? `${val >= 0 ? tone.pos : tone.neg} font-medium` : col.key === 'revenue' ? `${tone.revenue} font-medium` : col.key === 'cost' ? `${tone.cost} font-medium` : tone.text}`}>
                                 {formatMoney(val)}
                                 {revisado && (
                                   <span
@@ -1126,12 +1140,12 @@ export default function ProductDetailPage() {
                               </span>
                             );
                           }
-                          else if (col.format === 'percentage') content = <span>{formatPercent(val)}</span>;
-                          else if (col.format === 'percentage_share') content = <span>{formatShare(val)}</span>;
-                          else if (col.format === 'percentage_red') content = <span className={`${val > 50 ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>{formatPercent(val)}</span>;
-                          else if (col.format === 'decimal') content = <span className={textMuted}>{val === null || val === undefined ? '—' : Number(val).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</span>;
-                          else content = <span className={textMuted}>{val}</span>;
-                          return <td key={col.key} className="px-4 py-4 whitespace-nowrap text-right">{content}</td>;
+                          else if (col.format === 'percentage') content = <span className={col.key === 'roi' ? `${val >= 0 ? tone.pos : tone.neg} font-medium` : tone.text}>{formatPercent(val)}</span>;
+                          else if (col.format === 'percentage_share') content = <span className={tone.text}>{formatShare(val)}</span>;
+                          else if (col.format === 'percentage_red') content = <span className={val > 50 ? `${tone.neg} font-medium` : tone.text}>{formatPercent(val)}</span>;
+                          else if (col.format === 'decimal') content = <span className={val === null || val === undefined ? tone.muted : tone.text}>{val === null || val === undefined ? '—' : Number(val).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</span>;
+                          else content = <span className={col.key === 'conversions' && Number(val) > 0 ? `${tone.pos} font-medium` : tone.text}>{val}</span>;
+                          return <td key={col.key} className={`${pad} ${bg} whitespace-nowrap text-right`} style={widthStyle(overviewPrefs.widths[col.key])}>{content}</td>;
                         })}
                       </tr>
 
@@ -1204,15 +1218,8 @@ export default function ProductDetailPage() {
           <ColumnPicker
             columns={[...ALL_COLUMNS, ...actionDefs]}
             visible={visibleColumns}
-            onChange={v => {
-              setVisibleColumns(v);
-              try { localStorage.setItem('autometrics_visible_columns', JSON.stringify(v)); } catch { /* sem armazenamento */ }
-            }}
-            onReset={() => {
-              const v = ALL_COLUMNS.filter(c => c.default).map(c => c.key);
-              setVisibleColumns(v);
-              try { localStorage.setItem('autometrics_visible_columns', JSON.stringify(v)); } catch { /* sem armazenamento */ }
-            }}
+            onChange={v => setVisibleColumns(v)}
+            onReset={() => setVisibleColumns(undefined)}
             onClose={() => setShowColumnModal(false)}
             custom={customColumns}
             ui={{ isDark, bgCard, borderCol, textHead, textMuted }}
@@ -1411,14 +1418,9 @@ export default function ProductDetailPage() {
                     <span className={`text-xs ${textMuted} px-2 py-0.5 rounded ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>{vturbRows.length} dias</span>
                   </div>
                   
-                  {/* DEBUG BLOCK - REMOVE LATER */}
-                  <div className="p-4 bg-slate-900 text-green-400 font-mono text-xs overflow-auto">
-                    <pre>DEBUG RAW DATA: {JSON.stringify(vturbRows[0], null, 2)}</pre>
-                  </div>
-
                   <div className="overflow-auto">
-                    <table className="w-full text-xs text-left border-collapse">
-                      <thead className={`text-[10px] uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-500'} sticky top-0`}>
+                    <table className="w-max min-w-0 text-[13px] text-left border-collapse tabular-nums">
+                      <thead className={`text-xs font-medium ${tone.head} ${tone.headerBg} sticky top-0`}>
                         <tr>
                           {['Data', 'Views', 'Únicos', 'Plays Únicos', 'Play Rate', 'Engajamento', 'Pitch', 'Ret. Pitch', 'Cliques', 'Conversões', 'Receita (BRL)'].map(h => (
                             <th key={h} className={`px-4 py-3 whitespace-nowrap text-right first:text-left border-b ${borderCol}`}>{h}</th>
@@ -1434,8 +1436,8 @@ export default function ProductDetailPage() {
                             <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}`}>
                               <td className={`px-4 py-3 sticky left-0 font-medium border-r ${borderCol} ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>{dateLabel}</td>
                               <td className="px-4 py-3 text-right text-purple-400 font-medium">{Number(r.views || r.impressions || 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.unique_views || r.unique_impressions || 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-slate-400">{Number(r.unique_plays || r.plays || 0).toLocaleString()}</td>
+                              <td className={`px-4 py-3 text-right ${tone.text}`}>{Number(r.unique_views || r.unique_impressions || 0).toLocaleString()}</td>
+                              <td className={`px-4 py-3 text-right ${tone.text}`}>{Number(r.unique_plays || r.plays || 0).toLocaleString()}</td>
                               <td className="px-4 py-3 text-right text-cyan-400">{pct(Number(r.play_rate ?? 0))}</td>
                               <td className="px-4 py-3 text-right text-blue-400">{pct(Number(r.engagement_rate ?? 0))}</td>
                               <td className="px-4 py-3 text-right text-amber-400 font-medium">{Number(r.pitch_viewers ?? 0).toLocaleString()}</td>
@@ -1461,8 +1463,8 @@ export default function ProductDetailPage() {
                           <TrendingUp size={15} className="text-cyan-400" />
                           <h4 className={`text-sm font-bold ${textHead}`}>Por Dispositivo</h4>
                         </div>
-                        <table className="w-full text-xs">
-                          <thead className={`text-[10px] uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-500'}`}>
+                        <table className="w-full text-[13px] tabular-nums">
+                          <thead className={`text-xs font-medium ${tone.head} ${tone.headerBg}`}>
                             <tr>
                               <th className="px-4 py-2 text-left">Dispositivo</th>
                               <th className="px-4 py-2 text-right">Views</th>
@@ -1491,8 +1493,8 @@ export default function ProductDetailPage() {
                           <TrendingUp size={15} className="text-emerald-400" />
                           <h4 className={`text-sm font-bold ${textHead}`}>Por País (top 10)</h4>
                         </div>
-                        <table className="w-full text-xs">
-                          <thead className={`text-[10px] uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-500'}`}>
+                        <table className="w-full text-[13px] tabular-nums">
+                          <thead className={`text-xs font-medium ${tone.head} ${tone.headerBg}`}>
                             <tr>
                               <th className="px-4 py-2 text-left">País</th>
                               <th className="px-4 py-2 text-right">Views</th>

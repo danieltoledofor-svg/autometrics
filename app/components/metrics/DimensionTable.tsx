@@ -10,6 +10,8 @@ import { customValue } from '@/lib/metrics/formula';
 import { ColumnPicker, Ui } from './ColumnPicker';
 import { ActiveFilter, FilterBar, FilterField, matchesFilters } from './FilterBar';
 import type { CustomColumnsApi } from './useCustomColumns';
+import { useTablePrefs } from '@/app/components/table/useTablePrefs';
+import { cellPad, TableControls, tableTone, Th, valueClass, widthStyle } from '@/app/components/table/tableUi';
 
 /**
  * Tabela por item com as colunas do Google, vendas reais rateadas, colunas
@@ -73,15 +75,17 @@ export function DimensionTable(props: Props) {
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
   const dims = props.dimensionColumns || [];
 
-  const storeKey = `autometrics_cols_${tableId}`;
+  // Colunas visíveis, larguras e densidade ficam salvas no usuário.
+  const prefs = useTablePrefs(`dim_${tableId}`, { legacyColumnsKey: `autometrics_cols_${tableId}` });
+  const tone = tableTone(isDark);
+  const pad = cellPad(prefs.density);
   const filterKey = `autometrics_filters_${tableId}`;
-  const [visible, setVisible] = useState<string[]>(DEFAULT_VISIBLE);
   const [filters, setFilters] = useState<ActiveFilter[]>([]);
   useEffect(() => {
-    setVisible(readStore(storeKey, DEFAULT_VISIBLE));
     setFilters(readStore(filterKey, []));
-  }, [storeKey, filterKey]);
-  const changeVisible = (v: string[]) => { setVisible(v); writeStore(storeKey, v); };
+  }, [filterKey]);
+  const visible = prefs.columns || DEFAULT_VISIBLE;
+  const changeVisible = (v: string[]) => prefs.setColumns(v);
   const changeFilters = (f: ActiveFilter[]) => { setFilters(f); writeStore(filterKey, f); };
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -166,22 +170,17 @@ export function DimensionTable(props: Props) {
     ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' }
     : { key, dir: key === 'name' ? 'asc' : 'desc' });
 
-  const th = (key: string, label: React.ReactNode, align: 'left' | 'right' = 'right', title?: string) => (
-    <th key={key} title={title} className={`px-3 py-3 border-b ${borderCol} whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'} ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>
-      <button onClick={() => toggleSort(key)} className="inline-flex items-center gap-1 uppercase hover:text-indigo-400">
-        {label}
-        {sort.key === key && (sort.dir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
-      </button>
-    </th>
+  const th = (key: string, label: React.ReactNode, align: 'left' | 'right' = 'right', title?: string, sortable = true) => (
+    <Th key={key} colKey={key} prefs={prefs} title={title}
+      className={`${pad} border-b ${tone.line} ${tone.headerBg} whitespace-nowrap font-medium ${align === 'right' ? 'text-right' : 'text-left'} ${key === 'name' ? 'sticky left-0 z-20' : ''}`}>
+      {sortable ? (
+        <button onClick={() => toggleSort(key)} className={`inline-flex items-center gap-1 hover:text-indigo-400 ${sort.key === key ? tone.text : ''}`}>
+          {label}
+          {sort.key === key && (sort.dir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
+        </button>
+      ) : label}
+    </Th>
   );
-
-  const cellClass = (key: string, v: number | null | undefined) => {
-    if (key === 'cost') return 'text-orange-400';
-    if (key === 'revenue') return 'text-blue-400';
-    if (key === 'profit' || key === 'roi') return v === null || v === undefined ? textMuted : v >= 0 ? 'text-emerald-400' : 'text-rose-400';
-    if ((key === 'conversions' || key === 'g_conversions') && v) return 'text-emerald-400 font-bold';
-    return textMuted;
-  };
 
   const selectCls = `rounded-lg px-3 py-1.5 border ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-white'}`;
   const colSpan = 1 + dims.length + metricCols.length;
@@ -205,6 +204,7 @@ export function DimensionTable(props: Props) {
               <button onClick={() => setPickerOpen(true)} className={`inline-flex items-center gap-2 text-sm font-semibold ${selectCls} ${textHead} hover:border-indigo-500`}>
                 <Columns size={14} className="text-indigo-400" /> Colunas
               </button>
+              <TableControls prefs={prefs} isDark={isDark} />
             </div>
           </div>
           <FilterBar fields={filterFields} filters={filters} onChange={changeFilters} ui={ui} />
@@ -216,31 +216,31 @@ export function DimensionTable(props: Props) {
           </div>
         ) : (
           <div className="overflow-auto custom-scrollbar max-h-[70vh]">
-            <table className="w-full text-sm text-left border-collapse">
-              <thead className={`text-xs font-bold ${isDark ? 'text-slate-500' : 'text-slate-600'} sticky top-0 z-10`}>
+            {/* Largura do conteúdo, não da tela: as colunas ficam juntas e cada uma ajustável. */}
+            <table className="w-max min-w-0 text-[13px] text-left border-collapse tabular-nums">
+              <thead className={`text-xs ${tone.head} sticky top-0 z-10`}>
                 <tr>
                   {th('name', props.nameLabel, 'left')}
-                  {dims.map(d => d.value
-                    ? th(d.key, d.label, d.align || 'left')
-                    : <th key={d.key} className={`px-3 py-3 border-b ${borderCol} uppercase whitespace-nowrap ${d.align === 'right' ? 'text-right' : ''} ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>{d.label}</th>)}
+                  {dims.map(d => th(d.key, d.label, d.align || 'left', undefined, !!d.value))}
                   {metricCols.map(c => th(c.key, `${c.estimate ? '≈ ' : ''}${c.label}`, 'right', c.estimate ? 'Estimativa: vendas reais do dia distribuídas pelas conversões do Google (ou pelos cliques quando o Google ainda não contou)' : undefined))}
                 </tr>
               </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                {rows.slice(0, limit).map(r => {
+              <tbody>
+                {rows.slice(0, limit).map((r, idx) => {
                   const open = expanded === r.item.key;
                   const toggle = () => setExpanded(open ? null : r.item.key);
+                  const bg = `${tone.rowBg(idx)} ${tone.rowHover}`;
                   return (
                     <React.Fragment key={r.item.key}>
-                      <tr className={`align-top transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} ${props.rowClassName?.(r.item) || ''}`}>
-                        <td className={`px-3 py-3 ${textHead} max-w-[380px]`}>
+                      <tr className={`group align-top ${props.rowClassName?.(r.item) || ''}`}>
+                        <td className={`${pad} ${tone.text} ${bg} border-b ${tone.line} sticky left-0 z-[1] max-w-[380px]`} style={widthStyle(prefs.widths.name)}>
                           {props.renderName ? props.renderName(r.item, open, toggle) : <span className="font-medium">{r.item.name}</span>}
                         </td>
                         {dims.map(d => (
-                          <td key={d.key} className={`px-3 py-3 whitespace-nowrap ${d.align === 'right' ? 'text-right' : ''}`}>{d.render(r.item)}</td>
+                          <td key={d.key} className={`${pad} ${bg} border-b ${tone.line} whitespace-nowrap ${d.align === 'right' ? 'text-right' : ''}`} style={widthStyle(prefs.widths[d.key])}>{d.render(r.item)}</td>
                         ))}
                         {metricCols.map(c => (
-                          <td key={c.key} className={`px-3 py-3 text-right whitespace-nowrap ${cellClass(c.key, r.v[c.key])}`}>
+                          <td key={c.key} className={`${pad} ${bg} border-b ${tone.line} text-right whitespace-nowrap ${valueClass(c.key, r.v[c.key], tone)}`} style={widthStyle(prefs.widths[c.key])}>
                             {formatMetric(r.v[c.key], c.format, formatMoney)}
                           </td>
                         ))}
@@ -263,12 +263,12 @@ export function DimensionTable(props: Props) {
                   </tr>
                 )}
               </tbody>
-              <tfoot className={`sticky bottom-0 text-xs font-bold ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>
-                <tr>
-                  <td className={`px-3 py-3 ${textHead}`}>Total ({rows.length})</td>
-                  {dims.map(d => <td key={d.key} />)}
+              <tfoot className="sticky bottom-0 z-10">
+                <tr className="font-semibold">
+                  <td className={`${pad} ${tone.text} ${tone.totalBg} sticky left-0 z-[1] border-t ${tone.line}`}>Total ({rows.length})</td>
+                  {dims.map(d => <td key={d.key} className={`${tone.totalBg} border-t ${tone.line}`} />)}
                   {metricCols.map(c => (
-                    <td key={c.key} className={`px-3 py-3 text-right whitespace-nowrap ${c.key === 'cost' ? 'text-orange-400' : textHead}`}>
+                    <td key={c.key} className={`${pad} ${tone.totalBg} border-t ${tone.line} text-right whitespace-nowrap ${valueClass(c.key, total[c.key], tone)}`} style={widthStyle(prefs.widths[c.key])}>
                       {formatMetric(total[c.key], c.format, formatMoney)}
                     </td>
                   ))}

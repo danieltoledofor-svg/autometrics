@@ -53,6 +53,7 @@ Depois, na ordem:
 - `migration_google_ads_estrutura.sql` — grupos de anúncios, anúncios e palavras-chave (`google_ads_entities` e `google_ads_entity_metrics`). Sem ela a coleta segue normal e só pula este nível.
 - `migration_colunas_filtros.sql` — bloco completo de métricas do Google em grupos, anúncios, palavras-chave, termos, públicos e locais; conversões fracionadas nessas tabelas; e a tabela `custom_columns` das colunas personalizadas.
 - `migration_termos_conversoes.sql` — palavra-chave, grupo e status em cada termo de pesquisa (a chave única passa a incluir a palavra-chave) e conversões por ação de conversão (Checkout, Compra…) em campanha, grupos, anúncios, palavras-chave e termos.
+- `migration_preferencias_tabelas.sql` — preferências das tabelas por usuário (largura das colunas, densidade e colunas visíveis), valendo em qualquer computador.
 
 ## Consultas por conta
 

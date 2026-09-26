@@ -17,6 +17,8 @@ import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { useDayInput, isValidDay, safeDay } from '@/lib/useDayInput';
 import { Logo } from '@/app/components/Logo';
+import { useTablePrefs } from '@/app/components/table/useTablePrefs';
+import { cellPad, TableControls, tableTone, Th, widthStyle } from '@/app/components/table/tableUi';
 
 // Configuração Supabase
 const supabase = createClient(
@@ -76,6 +78,8 @@ function getLocalYYYYMMDD(date: Date) {
 }
 
 export default function PlanningPage() {
+  // Larguras e densidade da tabela do DRE ficam salvas no usuário.
+  const drePrefs = useTablePrefs('planning_dre');
   const router = useRouter();
   const { authChecked } = useAuthGuard();
   const [loading, setLoading] = useState(true);
@@ -1286,28 +1290,40 @@ export default function PlanningPage() {
       </div>
 
       {/* TABELA DE DRE (EXPANSÍVEL) — desktop only */}
+      {(() => {
+        const tone = tableTone(isDark);
+        const pad = cellPad(drePrefs.density);
+        const w = (k: string) => widthStyle(drePrefs.widths[k]);
+        const head = `${pad} border-b ${tone.line} ${tone.headerBg} font-medium whitespace-nowrap`;
+        const sub = `${pad} border-b ${tone.line}`;
+        const pl = (v: number) => (v >= 0 ? tone.pos : tone.neg);
+        return (
       <div className={`hidden md:block ${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
          <div className={`p-4 border-b ${borderCol} flex justify-between items-center`}>
             <h3 className={`font-bold ${textHead}`}>Detalhamento Diário (DRE)</h3>
+            <div className="flex items-center gap-2">
+            <TableControls prefs={drePrefs} isDark={isDark} />
             <button onClick={() => setIsCostModalOpen(true)} className="flex items-center gap-2 text-xs font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition-colors">
                <Plus size={14}/> Lançar Extras
             </button>
+            </div>
          </div>
          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-               <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
+            <table className="w-max min-w-0 text-[13px] text-left border-collapse tabular-nums">
+               <thead className={`text-xs ${tone.head}`}>
                   <tr>
-                     <th className="px-6 py-4 w-10"></th>
-                     <th className="px-6 py-4">Data</th>
-                     <th className="px-6 py-4 text-right text-blue-600">Receita</th>
-                     <th className="px-6 py-4 text-right text-orange-600">Ads Cost</th>
-                     <th className="px-6 py-4 text-right text-emerald-500">Extras</th>
-                     <th className="px-6 py-4 text-right text-rose-400">Reembolso</th>
-                     <th className="px-6 py-4 text-right text-emerald-600">Lucro</th>
+                     <th className={`${head} w-10`}></th>
+                     <Th colKey="date" prefs={drePrefs} className={head}>Data</Th>
+                     <Th colKey="revenue" prefs={drePrefs} className={`${head} text-right`}>Receita</Th>
+                     <Th colKey="ads_cost" prefs={drePrefs} className={`${head} text-right`}>Custo Ads</Th>
+                     <Th colKey="extras" prefs={drePrefs} className={`${head} text-right`}>Extras</Th>
+                     <Th colKey="refunds" prefs={drePrefs} className={`${head} text-right`}>Reembolso</Th>
+                     <Th colKey="profit" prefs={drePrefs} className={`${head} text-right`}>Lucro</Th>
                   </tr>
                </thead>
-               <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                  {processedData.daysArray.map((day: any) => {
+               <tbody>
+                  {processedData.daysArray.map((day: any, idx: number) => {
+                     const cell = `${pad} border-b ${tone.line} ${tone.rowBg(idx)} ${tone.rowHover}`;
                      const isExpanded = expandedRows[day.date];
                      const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds;
                      const dateParts = day.date.split('-');
@@ -1315,24 +1331,24 @@ export default function PlanningPage() {
                      return (
                         <React.Fragment key={day.date}>
                            {/* LINHA PRINCIPAL (DIA) */}
-                           <tr className={`transition-colors cursor-pointer ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} ${isExpanded ? (isDark ? 'bg-slate-900' : 'bg-slate-50') : ''}`} onClick={() => toggleExpand(day.date)}>
-                              <td className="px-6 py-4 text-center">
-                                 {Object.keys(day.mccs).length > 0 && (isExpanded ? <ChevronDown size={16} className="text-slate-500"/> : <ChevronRight size={16} className="text-slate-500"/>)}
+                           <tr className="group cursor-pointer" onClick={() => toggleExpand(day.date)}>
+                              <td className={`${cell} text-center`}>
+                                 {Object.keys(day.mccs).length > 0 && (isExpanded ? <ChevronDown size={16} className={tone.muted}/> : <ChevronRight size={16} className={tone.muted}/>)}
                               </td>
-                              <td className={`px-6 py-4 font-bold ${textHead}`}>{`${dateParts[2]}/${dateParts[1]}`}</td>
-                              <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(day.revenue)}</td>
-                              <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(day.ads_cost)}</td>
+                              <td className={`${cell} font-semibold ${tone.text}`} style={w('date')}>{`${dateParts[2]}/${dateParts[1]}`}</td>
+                              <td className={`${cell} text-right font-semibold ${tone.revenue}`} style={w('revenue')}>{formatMoney(day.revenue)}</td>
+                              <td className={`${cell} text-right font-semibold ${tone.cost}`} style={w('ads_cost')}>{formatMoney(day.ads_cost)}</td>
                               
                               {/* EXTRAS */}
-                              <td className="px-6 py-4 text-right relative align-top" onClick={(e) => e.stopPropagation()}>
+                              <td className={`${cell} text-right relative align-top`} style={w('extras')} onClick={(e) => e.stopPropagation()}>
                                  {day.details.length > 0 ? (
                                     <div className="flex flex-col items-end gap-1">
-                                       <span className={`font-bold ${day.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(day.net_extra)}</span>
+                                       <span className={`font-semibold ${day.net_extra >= 0 ? tone.pos : tone.warn}`}>{formatMoney(day.net_extra)}</span>
                                        <div className="flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed border-slate-700 pt-1">
                                           {day.details.map((d: any) => (
                                              <div key={d.id} className="flex items-center gap-2 group/item">
-                                                <span className={`text-[10px] ${textMuted} break-words min-w-0`} title={d.desc}>{d.desc}</span>
-                                                <span className={`text-[10px] font-bold ${d.val < 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(Math.abs(d.val))}</span>
+                                                <span className={`text-xs ${tone.muted} break-words min-w-0`} title={d.desc}>{d.desc}</span>
+                                                <span className={`text-xs font-semibold ${d.val < 0 ? tone.pos : tone.warn}`}>{formatMoney(Math.abs(d.val))}</span>
                                                 {/* Botão Excluir (Só com Modo Edição) */}
                                                 {editMode && (
                                                    <button 
@@ -1347,48 +1363,48 @@ export default function PlanningPage() {
                                           ))}
                                        </div>
                                     </div>
-                                 ) : <span className="text-slate-600">-</span>}
+                                 ) : <span className={tone.muted}>—</span>}
                               </td>
 
-                              <td className="px-6 py-4 text-right text-rose-400">{day.refunds > 0 ? formatMoney(day.refunds) : '-'}</td>
-                              <td className={`px-6 py-4 text-right font-bold ${profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(profit)}</td>
+                              <td className={`${cell} text-right ${day.refunds > 0 ? tone.neg : tone.muted}`} style={w('refunds')}>{day.refunds > 0 ? formatMoney(day.refunds) : '—'}</td>
+                              <td className={`${cell} text-right font-semibold ${pl(profit)}`} style={w('profit')}>{formatMoney(profit)}</td>
                            </tr>
 
                            {/* LINHAS EXPANDIDAS (DETALHE MCC/CONTA) */}
                            {isExpanded && Object.values(day.mccs).map((mcc: any) => (
                               <React.Fragment key={mcc.name}>
-                                 <tr className={`${isDark ? 'bg-slate-950/50' : 'bg-slate-100/50'}`}>
-                                    <td></td>
-                                    <td className="px-6 py-2 text-xs font-bold text-indigo-400 pl-10 flex items-center gap-2">
-                                       <Globe size={12}/> MCC: {mcc.name}
+                                 <tr className={isDark ? 'bg-slate-950' : 'bg-slate-100'}>
+                                    <td className={`border-b ${tone.line}`}></td>
+                                    <td className={`${sub} pl-8 font-semibold ${tone.accent}`} style={w('date')}>
+                                       <span className="inline-flex items-center gap-2"><Globe size={12}/> MCC: {mcc.name}</span>
                                     </td>
-                                    <td className="px-6 py-2 text-right text-xs text-blue-400/70">{formatMoney(mcc.revenue)}</td>
-                                    <td className="px-6 py-2 text-right text-xs text-orange-400/70">{formatMoney(mcc.ads_cost)}</td>
-                                    <td colSpan={2}></td>
-                                    <td className={`px-6 py-2 text-right text-xs font-medium ${(mcc.revenue - mcc.ads_cost - mcc.refunds) >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{formatMoney(mcc.revenue - mcc.ads_cost - mcc.refunds)}</td>
+                                    <td className={`${sub} text-right font-medium ${tone.revenue}`}>{formatMoney(mcc.revenue)}</td>
+                                    <td className={`${sub} text-right font-medium ${tone.cost}`}>{formatMoney(mcc.ads_cost)}</td>
+                                    <td colSpan={2} className={`border-b ${tone.line}`}></td>
+                                    <td className={`${sub} text-right font-medium ${pl(mcc.revenue - mcc.ads_cost - mcc.refunds)}`}>{formatMoney(mcc.revenue - mcc.ads_cost - mcc.refunds)}</td>
                                  </tr>
                                  {Object.values(mcc.accounts).map((acc: any) => (
                                     <React.Fragment key={acc.name}>
-                                       <tr className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
-                                          <td></td>
-                                          <td className="px-6 py-1 text-[10px] text-slate-500 pl-16 flex items-center gap-2 border-l-2 border-slate-800 ml-10">
-                                             <Briefcase size={10}/> {acc.name}
+                                       <tr className={isDark ? 'bg-slate-950/70' : 'bg-slate-50'}>
+                                          <td className={`border-b ${tone.line}`}></td>
+                                          <td className={`${sub} pl-14 ${tone.text}`} style={w('date')}>
+                                             <span className="inline-flex items-center gap-2"><Briefcase size={12} className={tone.muted}/> {acc.name}</span>
                                           </td>
-                                          <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(acc.revenue)}</td>
-                                          <td className="px-6 py-1 text-right text-[10px] text-slate-600">{formatMoney(acc.ads_cost)}</td>
-                                          <td colSpan={2}></td>
-                                          <td className={`px-6 py-1 text-right text-[10px] font-medium ${(acc.revenue - acc.ads_cost - acc.refunds) >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds)}</td>
+                                          <td className={`${sub} text-right ${tone.revenue}`}>{formatMoney(acc.revenue)}</td>
+                                          <td className={`${sub} text-right ${tone.cost}`}>{formatMoney(acc.ads_cost)}</td>
+                                          <td colSpan={2} className={`border-b ${tone.line}`}></td>
+                                          <td className={`${sub} text-right font-medium ${pl(acc.revenue - acc.ads_cost - acc.refunds)}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds)}</td>
                                        </tr>
                                        {Object.values(acc.campaigns).map((cmp: any) => (
-                                          <tr key={cmp.name} className={`${isDark ? 'bg-slate-950/20' : 'bg-slate-50/50'}`}>
-                                             <td></td>
-                                             <td className="px-6 py-1 text-[10px] text-slate-400 pl-20 flex items-center gap-2 border-l-2 border-slate-800 ml-16">
-                                                <Package size={10}/> {cmp.name}
+                                          <tr key={cmp.name} className={isDark ? 'bg-slate-950/40' : 'bg-white'}>
+                                             <td className={`border-b ${tone.line}`}></td>
+                                             <td className={`${sub} pl-20 ${tone.text}`} style={w('date')}>
+                                                <span className="inline-flex items-center gap-2"><Package size={12} className={tone.muted}/> {cmp.name}</span>
                                              </td>
-                                             <td className="px-6 py-1 text-right text-[10px] text-slate-500">{formatMoney(cmp.revenue)}</td>
-                                             <td className="px-6 py-1 text-right text-[10px] text-slate-500">{formatMoney(cmp.ads_cost)}</td>
-                                             <td colSpan={2}></td>
-                                             <td className={`px-6 py-1 text-right text-[10px] font-medium ${(cmp.revenue - cmp.ads_cost - cmp.refunds) >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>{formatMoney(cmp.revenue - cmp.ads_cost - cmp.refunds)}</td>
+                                             <td className={`${sub} text-right ${tone.revenue}`}>{formatMoney(cmp.revenue)}</td>
+                                             <td className={`${sub} text-right ${tone.cost}`}>{formatMoney(cmp.ads_cost)}</td>
+                                             <td colSpan={2} className={`border-b ${tone.line}`}></td>
+                                             <td className={`${sub} text-right font-medium ${pl(cmp.revenue - cmp.ads_cost - cmp.refunds)}`}>{formatMoney(cmp.revenue - cmp.ads_cost - cmp.refunds)}</td>
                                           </tr>
                                        ))}
                                     </React.Fragment>
@@ -1399,20 +1415,22 @@ export default function PlanningPage() {
                      );
                   })}
                </tbody>
-               <tfoot className={`text-xs uppercase font-bold border-t-2 ${isDark ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-100 border-slate-300 text-black'}`}>
+               <tfoot className={`font-semibold border-t-2 ${isDark ? 'bg-slate-950 border-slate-700' : 'bg-slate-100 border-slate-300'}`}>
                   <tr>
-                     <td className="px-6 py-4">TOTAIS</td>
-                     <td className="px-6 py-4"></td>
-                     <td className="px-6 py-4 text-right text-blue-500">{formatMoney(processedData.totals.revenue)}</td>
-                     <td className="px-6 py-4 text-right text-orange-500">{formatMoney(processedData.totals.ads_cost)}</td>
-                     <td className={`px-6 py-4 text-right ${processedData.totals.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(processedData.totals.net_extra)}</td>
-                     <td className="px-6 py-4 text-right text-rose-400">{formatMoney(processedData.totals.refunds)}</td>
-                     <td className={`px-6 py-4 text-right ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</td>
+                     <td className={`${pad} ${tone.text}`}>Totais</td>
+                     <td className={pad}></td>
+                     <td className={`${pad} text-right ${tone.revenue}`}>{formatMoney(processedData.totals.revenue)}</td>
+                     <td className={`${pad} text-right ${tone.cost}`}>{formatMoney(processedData.totals.ads_cost)}</td>
+                     <td className={`${pad} text-right ${processedData.totals.net_extra >= 0 ? tone.pos : tone.warn}`}>{formatMoney(processedData.totals.net_extra)}</td>
+                     <td className={`${pad} text-right ${tone.neg}`}>{formatMoney(processedData.totals.refunds)}</td>
+                     <td className={`${pad} text-right ${pl(processedData.totals.profit)}`}>{formatMoney(processedData.totals.profit)}</td>
                   </tr>
                </tfoot>
             </table>
          </div>
       </div>
+        );
+      })()}
 
       </main>
 
