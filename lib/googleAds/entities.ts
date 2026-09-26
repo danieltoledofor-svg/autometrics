@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './server';
+import { normalizeMetrics } from './fields';
 
 /**
  * Grupos de anúncios, anúncios e palavras-chave.
@@ -17,7 +18,7 @@ import { supabaseAdmin } from './server';
 
 export type EntityLevel = 'ad_group' | 'ad' | 'keyword';
 
-const METRICS = 'metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value';
+const BASE_METRICS = ['metrics.impressions', 'metrics.clicks', 'metrics.cost_micros', 'metrics.conversions', 'metrics.conversions_value'];
 
 const FIELDS: Record<EntityLevel, { from: string; fields: string[]; where: string }> = {
   ad_group: {
@@ -191,6 +192,8 @@ export async function syncEntities(
     productIdFor: (campaignId: string) => string | undefined;
     /** Quais dos campos existem nesta versão da API (ver selectableFields). */
     selectable: (fields: string[]) => Promise<Set<string>>;
+    /** Métricas que vão no bloco google_metrics, conforme o recurso aceita. */
+    metricsFor: (resource: string) => Promise<string[]>;
     errors: string[];
   },
 ): Promise<EntitySyncResult> {
@@ -204,22 +207,32 @@ export async function syncEntities(
   const fetched = await Promise.all(levels.map(async level => {
     const f = FIELDS[level];
     const fields = f.fields.filter(x => available.has(x)).join(', ');
+    const metricList = [...new Set([...BASE_METRICS, ...(await opts.metricsFor(f.from))])];
+    const metrics = metricList.join(', ');
+    const dailyQuery = (list: string) => q(`SELECT ${fields}, segments.date, ${list} FROM ${f.from}
+         WHERE segments.date BETWEEN '${opts.start}' AND '${opts.end}'
+           AND metrics.impressions > 0`);
+    let usedMetrics = metricList;
     const [config, daily] = await Promise.all([
       q(`SELECT ${fields} FROM ${f.from} WHERE ${f.where}`),
-      q(`SELECT ${fields}, segments.date, ${METRICS} FROM ${f.from}
-         WHERE segments.date BETWEEN '${opts.start}' AND '${opts.end}'
-           AND metrics.impressions > 0`),
+      // Métrica extra recusada pelo Google: refaz com o básico em vez de perder o nível.
+      dailyQuery(metrics).catch((e: any) => {
+        if (metricList.length === BASE_METRICS.length) throw e;
+        console.warn(`[google-ads] ${level}: métricas extras recusadas, seguiu com o básico — ${e.message}`);
+        usedMetrics = BASE_METRICS;
+        return dailyQuery(BASE_METRICS.join(', '));
+      }),
     ]).catch((e: any) => {
       opts.errors.push(`${level}: ${e.message}`);
       return [null, null] as const;
     });
-    return { level, config, daily };
+    return { level, config, daily, metricList: usedMetrics };
   }));
 
   const db = supabaseAdmin();
   const now = new Date().toISOString();
 
-  for (const { level, config, daily } of fetched) {
+  for (const { level, config, daily, metricList } of fetched) {
     if (!config || !daily) continue;
 
     const entities = new Map<string, Entity>();
@@ -245,6 +258,7 @@ export async function syncEntities(
         cost: n(r.metrics?.costMicros) / 1e6,
         conversions: n(r.metrics?.conversions),
         conversions_value: n(r.metrics?.conversionsValue),
+        google_metrics: normalizeMetrics(r.metrics, metricList),
         updated_at: now,
       });
     }
@@ -266,7 +280,12 @@ export async function syncEntities(
       if (error) opts.errors.push(`${level} (itens): ${error.message}`);
     });
     await inChunks(metricRows, 500, async chunk => {
-      const { error } = await db.from('google_ads_entity_metrics').upsert(chunk, { onConflict: 'product_id, level, entity_id, date' });
+      let { error } = await db.from('google_ads_entity_metrics').upsert(chunk, { onConflict: 'product_id, level, entity_id, date' });
+      // Coluna google_metrics só existe depois de migration_colunas_filtros.sql.
+      if (error && /google_metrics/.test(error.message || '')) {
+        ({ error } = await db.from('google_ads_entity_metrics').upsert(
+          chunk.map(({ google_metrics, ...rest }) => rest), { onConflict: 'product_id, level, entity_id, date' }));
+      }
       if (error) opts.errors.push(`${level} (métricas): ${error.message}`);
     });
 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Columns, X, ArrowDownRight, ExternalLink, Calendar, Link as LinkIcon,
+  ArrowLeft, Columns, X, ExternalLink, Calendar, Link as LinkIcon,
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon,
   Video, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
   SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound
@@ -19,6 +19,12 @@ import { Logo } from '@/app/components/Logo';
 import { resolveCampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal } from '@/app/components/QuickEntryModal';
 import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
+import { SegmentTab } from './SegmentTab';
+import { useCustomColumns } from '@/app/components/metrics/useCustomColumns';
+import { ColumnPicker } from '@/app/components/metrics/ColumnPicker';
+import { GOOGLE_METRICS_CATALOG, GOOGLE_COLUMN_KEY } from '@/lib/metrics/catalog';
+import type { CampaignDay } from '@/lib/metrics/dimension';
+import { customValue } from '@/lib/metrics/formula';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,69 +38,6 @@ function getLocalYYYYMMDD(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-
-/**
- * Métricas que o Google devolve na mesma consulta diária e que antes eram
- * descartadas. Ficam desligadas por padrão — quem quiser liga no seletor de
- * colunas, do mesmo jeito que faria na interface do Google Ads.
- *
- * agg: 'sum' soma o período (contagens e dinheiro acumulado);
- *      'avg' tira a média (taxas, parcelas e custos por conversão).
- * money: converte junto com o custo quando a moeda de exibição muda.
- * rate: vem como fração (0,45) e é exibida como 45,00%.
- */
-const GOOGLE_METRICS_CATALOG: {
-  m: string; label: string; cat: string; agg: 'sum' | 'avg'; money?: boolean; rate?: boolean;
-}[] = [
-  // Conversões medidas pelo Google
-  { m: 'conversions', label: 'Conversões (Google)', cat: 'Google · Conversões', agg: 'sum' },
-  { m: 'conversions_value', label: 'Valor de conversão', cat: 'Google · Conversões', agg: 'sum', money: true },
-  { m: 'conversions_from_interactions_rate', label: 'Taxa de conversão', cat: 'Google · Conversões', agg: 'avg', rate: true },
-  { m: 'cost_per_conversion', label: 'Custo por conversão', cat: 'Google · Conversões', agg: 'avg', money: true },
-  { m: 'value_per_conversion', label: 'Valor por conversão', cat: 'Google · Conversões', agg: 'avg', money: true },
-  { m: 'all_conversions', label: 'Todas as conversões', cat: 'Google · Conversões', agg: 'sum' },
-  { m: 'all_conversions_value', label: 'Valor de todas as conv.', cat: 'Google · Conversões', agg: 'sum', money: true },
-  { m: 'all_conversions_from_interactions_rate', label: 'Taxa de todas as conv.', cat: 'Google · Conversões', agg: 'avg', rate: true },
-  { m: 'cost_per_all_conversions', label: 'Custo por todas as conv.', cat: 'Google · Conversões', agg: 'avg', money: true },
-  { m: 'view_through_conversions', label: 'Conversões por visualização', cat: 'Google · Conversões', agg: 'sum' },
-
-  // Tráfego e custo
-  { m: 'interactions', label: 'Interações', cat: 'Google · Tráfego', agg: 'sum' },
-  { m: 'interaction_rate', label: 'Taxa de interação', cat: 'Google · Tráfego', agg: 'avg', rate: true },
-  { m: 'average_cpm', label: 'CPM médio', cat: 'Google · Tráfego', agg: 'avg', money: true },
-  { m: 'average_cost', label: 'Custo médio', cat: 'Google · Tráfego', agg: 'avg', money: true },
-  { m: 'invalid_clicks', label: 'Cliques inválidos', cat: 'Google · Tráfego', agg: 'sum' },
-  { m: 'invalid_click_rate', label: 'Taxa de cliques inválidos', cat: 'Google · Tráfego', agg: 'avg', rate: true },
-
-  // Leilão — o que existe na API (o relatório de insights de leilão não é exposto)
-  { m: 'search_impression_share', label: 'Parcela de impressões', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_top_impression_share', label: 'Parcela no topo', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_absolute_top_impression_share', label: 'Parcela no topo absoluto', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_budget_lost_impression_share', label: 'Perdida por orçamento', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_budget_lost_top_impression_share', label: 'Perdida no topo (orçamento)', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_budget_lost_absolute_top_impression_share', label: 'Perdida no topo abs. (orçamento)', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_rank_lost_impression_share', label: 'Perdida por classificação', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_rank_lost_top_impression_share', label: 'Perdida no topo (classificação)', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_rank_lost_absolute_top_impression_share', label: 'Perdida no topo abs. (classificação)', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_exact_match_impression_share', label: 'Parcela em correspondência exata', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'search_click_share', label: 'Parcela de cliques', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'absolute_top_impression_percentage', label: '% no topo absoluto', cat: 'Google · Leilão', agg: 'avg', rate: true },
-  { m: 'top_impression_percentage', label: '% no topo', cat: 'Google · Leilão', agg: 'avg', rate: true },
-
-  // Display e vídeo
-  { m: 'content_impression_share', label: 'Parcela na rede de display', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
-  { m: 'content_budget_lost_impression_share', label: 'Display perdida (orçamento)', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
-  { m: 'content_rank_lost_impression_share', label: 'Display perdida (classificação)', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
-  { m: 'video_views', label: 'Visualizações de vídeo', cat: 'Google · Display e vídeo', agg: 'sum' },
-  { m: 'video_view_rate', label: 'Taxa de visualização', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
-  { m: 'average_cpv', label: 'CPV médio', cat: 'Google · Display e vídeo', agg: 'avg', money: true },
-  { m: 'engagements', label: 'Engajamentos', cat: 'Google · Display e vídeo', agg: 'sum' },
-  { m: 'engagement_rate', label: 'Taxa de engajamento', cat: 'Google · Display e vídeo', agg: 'avg', rate: true },
-];
-
-/** Prefixo g_ separa a métrica do Google da coluna de mesmo nome do painel. */
-const GOOGLE_COLUMN_KEY = (m: string) => `g_${m}`;
-const GOOGLE_MONEY_KEYS = new Set(GOOGLE_METRICS_CATALOG.filter(c => c.money).map(c => GOOGLE_COLUMN_KEY(c.m)));
 const GOOGLE_AVG_KEYS = new Set(GOOGLE_METRICS_CATALOG.filter(c => c.agg === 'avg').map(c => GOOGLE_COLUMN_KEY(c.m)));
 
 interface ColumnDef {
@@ -226,9 +169,6 @@ export default function ProductDetailPage() {
   const [isSavingStrategy, setIsSavingStrategy] = useState(false);
 
   // --- DEEP METRICS (Search Terms, Audiences, Locations) ---
-  const [searchTerms, setSearchTerms] = useState<any[]>([]);
-  const [audiences, setAudiences] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
 
   // --- ABA VTURB ---
   const [activeTab, setActiveTab] = useState<'ads' | 'ad_groups' | 'ad_list' | 'keywords' | 'search_terms' | 'audiences' | 'locations' | 'strategy' | 'vturb'>('ads');
@@ -242,6 +182,7 @@ export default function ProductDetailPage() {
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const customColumns = useCustomColumns(supabase);
 
   // --- INICIALIZAÇÃO ---
   useEffect(() => {
@@ -325,16 +266,6 @@ export default function ProductDetailPage() {
       const notesMap: Record<string, string> = {};
       (metricsData || []).forEach((m: any) => { if (m.notes) notesMap[m.date] = m.notes; });
       setNotes(notesMap);
-
-      // Carregar Deep Metrics
-      const { data: stData } = await supabase.from('search_terms').select('*').eq('product_id', productId);
-      setSearchTerms(stData || []);
-      
-      const { data: audData } = await supabase.from('audiences').select('*').eq('product_id', productId);
-      setAudiences(audData || []);
-
-      const { data: locData } = await supabase.from('locations').select('*').eq('product_id', productId);
-      setLocations(locData || []);
 
       const { data: stratData } = await supabase.from('campaign_strategies').select('strategy_text').eq('product_id', productId).maybeSingle();
       if (stratData) setCampaignStrategy(stratData.strategy_text || '');
@@ -452,14 +383,6 @@ export default function ProductDetailPage() {
       setNotes(prev => text ? { ...prev, [dateKey]: text } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== dateKey)));
     }
     setEditingNote(null);
-  };
-
-  const toggleColumn = (key: string) => {
-    setVisibleColumns(prev => {
-      const updatedColumns = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      localStorage.setItem('autometrics_visible_columns', JSON.stringify(updatedColumns));
-      return updatedColumns;
-    });
   };
 
   // --- LÓGICA DE DATAS ---
@@ -586,6 +509,29 @@ export default function ProductDetailPage() {
     return { rows: rows.reverse(), chart: chartData, stats };
   }, [metrics, viewCurrency, startDate, endDate, liveDollar, manualDollar]);
 
+  // Vendas reais do dia (postback e lançamento manual) e o total do Google,
+  // para ratear entre grupos, anúncios, palavras-chave, termos, públicos e
+  // locais. Mesma conversão de moeda da Visão Geral: receita pelo dólar manual.
+  const campaignDays = useMemo(() => {
+    const out = new Map<string, CampaignDay>();
+    for (const row of metrics) {
+      if (row.date < startDate || row.date > endDate) continue;
+      let revenue = Number(row.conversion_value || 0);
+      let refunds = Number(row.refunds || 0);
+      const rowCurrency = row.currency || 'BRL';
+      if (viewCurrency === 'BRL' && rowCurrency === 'USD') { revenue *= manualDollar; refunds *= manualDollar; }
+      else if (viewCurrency !== 'BRL' && rowCurrency === 'BRL') { revenue /= manualDollar; refunds /= manualDollar; }
+      out.set(row.date, {
+        conversions: Number(row.conversions || 0),
+        revenue,
+        refunds,
+        g_conversions: Number(row.google_conversions ?? row.google_metrics?.conversions ?? 0),
+        clicks: Number(row.clicks || 0),
+      });
+    }
+    return out;
+  }, [metrics, viewCurrency, startDate, endDate, manualDollar]);
+
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
   const formatPercent = (val: number) => `${val.toFixed(2)}%`;
   // Grupos/anúncios/palavras-chave vêm na moeda da conta: mesma conversão do custo.
@@ -636,6 +582,58 @@ export default function ProductDetailPage() {
   });
   const globalCpa = stats.conversions > 0 ? stats.cost / stats.conversions : 0;
 
+  // Colunas personalizadas entram na Visão Geral como mais uma categoria.
+  const OVERVIEW_COLUMNS: ColumnDef[] = [
+    ...ALL_COLUMNS,
+    ...customColumns.compiled.map(c => ({
+      key: c.key, label: c.name, category: 'Colunas personalizadas', default: false,
+      format: c.format === 'money' ? 'currency' : c.format === 'percent' ? 'percentage' : 'decimal',
+    })),
+  ];
+  const shownColumns = OVERVIEW_COLUMNS.filter(c => visibleColumns.includes(c.key));
+  const overviewVar = (r: any) => (name: string): number | null => {
+    if (name === 'roas') return r.cost ? r.revenue / r.cost : null;
+    if (name === 'conv_rate') return r.clicks ? (r.conversions / r.clicks) * 100 : null;
+    const v = r[name];
+    return v === undefined || v === null || v === '' ? null : Number(v);
+  };
+  const tableRows = customColumns.compiled.length
+    ? rows.map((r: any) => {
+        const out = { ...r };
+        for (const c of customColumns.compiled) out[c.key] = customValue(c, overviewVar(r));
+        return out;
+      })
+    : rows;
+  // Total do período para as fórmulas: soma o que é somável e recalcula as taxas.
+  const customTotals = (() => {
+    const t: Record<string, number> = {};
+    const SUM_KEYS = ['impressions', 'clicks', 'cost', 'conversions', 'revenue', 'refunds', 'profit', 'visits', 'checkouts', 'vsl_clicks', 'vsl_checkouts'];
+    for (const r of rows as any[]) {
+      for (const k of SUM_KEYS) t[k] = (t[k] || 0) + Number(r[k] || 0);
+      for (const c of GOOGLE_METRICS_CATALOG) {
+        const k = GOOGLE_COLUMN_KEY(c.m);
+        if (r[k] === undefined) continue;
+        t[k] = (t[k] || 0) + Number(r[k]);
+        t[`__n_${k}`] = (t[`__n_${k}`] || 0) + 1;
+      }
+    }
+    for (const c of GOOGLE_METRICS_CATALOG) {
+      const k = GOOGLE_COLUMN_KEY(c.m);
+      if (c.agg === 'avg' && t[`__n_${k}`]) t[k] = t[k] / t[`__n_${k}`];
+    }
+    const totals: any = {
+      ...t,
+      ctr: t.impressions ? (t.clicks / t.impressions) * 100 : 0,
+      avg_cpc: t.clicks ? t.cost / t.clicks : 0,
+      cpa: t.conversions ? t.cost / t.conversions : 0,
+      roi: t.cost ? (t.profit / t.cost) * 100 : 0,
+      budget: (rows as any[])[0]?.budget,
+    };
+    const out: Record<string, number | null> = {};
+    for (const c of customColumns.compiled) out[c.key] = customValue(c, overviewVar(totals));
+    return out;
+  })();
+
   // --- LINHA DE TOTAIS/MÉDIAS (Atualizada conforme regras) ---
   const AVERAGE_COLS = new Set(['ctr', 'avg_cpc', 'fuga_pagina', 'fuga_bridge', 'fuga_vsl', 'cpa', 'roi', 'search_impr_share', 'search_top_share', 'search_abs_share', ...GOOGLE_AVG_KEYS]);
   const LATEST_COLS = new Set(['target_cpa', 'strategy', 'budget', 'account_name']);
@@ -644,8 +642,9 @@ export default function ProductDetailPage() {
   const summaryRow = (() => {
     if (!rows.length) return null;
     const result: Record<string, any> = {};
-    ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).forEach(col => {
+    shownColumns.forEach(col => {
       if (SKIP_COLS.has(col.key)) { result[col.key] = null; return; }
+      if (col.key in customTotals) { result[col.key] = customTotals[col.key]; return; }
       
       // Valores Atuais (Latest, pegamos da row[0])
       if (LATEST_COLS.has(col.key)) {
@@ -978,14 +977,14 @@ export default function ProductDetailPage() {
           <div className="overflow-auto custom-scrollbar flex-1">
             <table className="w-full text-sm text-left border-collapse">
               <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0 z-20 shadow-lg`}>
-                <tr>{ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => (<th key={col.key} className={`px-4 py-4 whitespace-nowrap border-b ${borderCol} ${col.key === 'date' || col.key === 'notes' ? 'text-left' : 'text-right'} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} first:text-left first:sticky first:left-0 first:z-30`}>{col.label}</th>))}</tr>
+                <tr>{shownColumns.map(col => (<th key={col.key} className={`px-4 py-4 whitespace-nowrap border-b ${borderCol} ${col.key === 'date' || col.key === 'notes' ? 'text-left' : 'text-right'} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} first:text-left first:sticky first:left-0 first:z-30`}>{col.label}</th>))}</tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
 
                 {/* ── LINHA DE TOTAIS/MÉDIAS ── */}
                 {summaryRow && (
                   <tr className={`font-bold text-xs border-b-2 ${isDark ? 'bg-indigo-950/40 border-indigo-800' : 'bg-indigo-50 border-indigo-200'}`}>
-                    {ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map((col, i) => {
+                    {shownColumns.map((col, i) => {
                       if (i === 0) return (
                         <td key={col.key} className={`px-4 py-3 sticky left-0 border-r ${borderCol} text-xs font-bold uppercase tracking-wider ${isDark ? 'bg-indigo-950 text-indigo-300' : 'bg-indigo-50 text-indigo-600'}`}>
                           Σ Total / Ø Média
@@ -1012,6 +1011,9 @@ export default function ProductDetailPage() {
                         const formatted = col.format === 'percentage_share' ? formatShare(val) : formatPercent(val);
                         content = <span className={textClass}>{formatted}</span>;
                       }
+                      else if (col.format === 'decimal') {
+                        content = <span className={textClass}>{Number(val).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</span>;
+                      }
                       else {
                         const displayVal = typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(0)) : val;
                         content = <span className={textClass}>{displayVal}</span>;
@@ -1022,7 +1024,7 @@ export default function ProductDetailPage() {
                 )}
 
                 {/* ── LINHAS DE DADOS ── */}
-                {rows.map(row => {
+                {tableRows.map((row: any) => {
                   // Converter data de display (DD/MM/YYYY) de volta para chave (YYYY-MM-DD)
                   const dateParts = row.date.split('/');
                   const dateKey = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : row.id;
@@ -1032,7 +1034,7 @@ export default function ProductDetailPage() {
                   return (
                     <React.Fragment key={row.id}>
                       <tr className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                        {ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(col => {
+                        {shownColumns.map(col => {
                           const val = row[col.key];
                           let content;
                           if (col.key === 'date') return (
@@ -1095,6 +1097,7 @@ export default function ProductDetailPage() {
                           else if (col.format === 'percentage') content = <span>{formatPercent(val)}</span>;
                           else if (col.format === 'percentage_share') content = <span>{formatShare(val)}</span>;
                           else if (col.format === 'percentage_red') content = <span className={`${val > 50 ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>{formatPercent(val)}</span>;
+                          else if (col.format === 'decimal') content = <span className={textMuted}>{val === null || val === undefined ? '—' : Number(val).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</span>;
                           else content = <span className={textMuted}>{val}</span>;
                           return <td key={col.key} className="px-4 py-4 whitespace-nowrap text-right">{content}</td>;
                         })}
@@ -1103,7 +1106,7 @@ export default function ProductDetailPage() {
                       {/* ── EDITOR INLINE DE NOTA ── */}
                       {isEditingThisNote && (
                         <tr className={`${isDark ? 'bg-amber-950/20' : 'bg-amber-50'}`}>
-                          <td colSpan={ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).length} className="p-0">
+                          <td colSpan={shownColumns.length} className="p-0">
                             {/* A célula acompanha a largura TOTAL da tabela, que rola na
                                 horizontal. Sem o sticky, a caixa nascia fora da área visível
                                 e era preciso rolar para encontrá-la. Presa à esquerda, ela
@@ -1166,37 +1169,22 @@ export default function ProductDetailPage() {
         />
 
         {showColumnModal && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className={`${bgCard} rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]`}>
-              <div className={`p-6 border-b flex justify-between items-center ${borderCol}`}><h2 className={`text-xl font-bold ${textHead} flex items-center gap-2`}><Columns size={20} className="text-indigo-500" /> Personalizar Colunas</h2><button onClick={() => setShowColumnModal(false)} className="text-slate-400 hover:text-white"><X size={24} /></button></div>
-              <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* As categorias saem da própria lista de colunas: métrica nova
-                      do Google aparece aqui sem precisar editar esta tela. */}
-                  {[...new Set(ALL_COLUMNS.map(c => c.category))].map(category => (
-                    <div key={category}>
-                      {ALL_COLUMNS.some(c => c.category === category) && (
-                        <>
-                          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 border-b border-slate-800 pb-2">{category}</h3>
-                          <div className="space-y-2">
-                            {ALL_COLUMNS.filter(c => c.category === category).map(col => (
-                              <div key={col.key} onClick={() => toggleColumn(col.key)} className={`flex items-center gap-3 p-2 rounded cursor-pointer group transition-colors ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}>
-                                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${visibleColumns.includes(col.key) ? 'bg-indigo-600 border-indigo-600' : 'bg-transparent border-slate-600'}`}>
-                                  {visibleColumns.includes(col.key) && <ArrowDownRight size={14} className="text-white" />}
-                                </div>
-                                <span className={visibleColumns.includes(col.key) ? `${textHead} font-medium` : 'text-slate-400'}>{col.label}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className={`p-4 border-t flex justify-end rounded-b-xl ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}><button onClick={() => setShowColumnModal(false)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">Confirmar</button></div>
-            </div>
-          </div>
+          <ColumnPicker
+            columns={ALL_COLUMNS}
+            visible={visibleColumns}
+            onChange={v => {
+              setVisibleColumns(v);
+              try { localStorage.setItem('autometrics_visible_columns', JSON.stringify(v)); } catch { /* sem armazenamento */ }
+            }}
+            onReset={() => {
+              const v = ALL_COLUMNS.filter(c => c.default).map(c => c.key);
+              setVisibleColumns(v);
+              try { localStorage.setItem('autometrics_visible_columns', JSON.stringify(v)); } catch { /* sem armazenamento */ }
+            }}
+            onClose={() => setShowColumnModal(false)}
+            custom={customColumns}
+            ui={{ isDark, bgCard, borderCol, textHead, textMuted }}
+          />
         )}
 
       </>)}
@@ -1210,7 +1198,9 @@ export default function ProductDetailPage() {
           startDate={startDate}
           endDate={endDate}
           fx={entityFx}
+          campaignDays={campaignDays}
           formatMoney={formatMoney}
+          custom={customColumns}
           channelType={product?.google_channel_type}
           adGroupFilter={entityAdGroup}
           onAdGroupFilter={setEntityAdGroup}
@@ -1219,247 +1209,20 @@ export default function ProductDetailPage() {
         />
       )}
 
-      {/* ══════════════════════════ ABA TERMOS DE PESQUISA ══════════════════════════ */}
-      {activeTab === 'search_terms' && (
-        <div className="space-y-6">
-          <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
-            <div className={`p-4 border-b ${borderCol} flex flex-col md:flex-row justify-between items-center gap-4`}>
-              <div className="flex items-center gap-3">
-                <FileText size={18} className="text-indigo-400" />
-                <h3 className={`font-semibold ${textHead}`}>Termos de Pesquisa (Últimos 30 dias)</h3>
-                <span className={`text-xs ${textMuted} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} px-2 py-1 rounded border ${borderCol}`}>{searchTerms.length} termos</span>
-              </div>
-            </div>
-            {searchTerms.length > 0 ? (
-              <div className="overflow-auto custom-scrollbar max-h-[600px]">
-                <table className="w-full text-sm text-left border-collapse">
-                  <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0 z-10`}>
-                    <tr>
-                      <th className={`px-4 py-3 border-b ${borderCol}`}>Termo de Pesquisa</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Campanha</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Impressões</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Cliques</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Custo</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Conversões Ads</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                    {searchTerms.sort((a,b) => b.cost - a.cost).map(st => (
-                      <tr key={st.id} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                        <td className={`px-4 py-3 font-medium ${textHead}`}>{st.search_term}</td>
-                        <td className={`px-4 py-3 text-right ${textMuted} text-xs truncate max-w-[150px]`} title={st.campaign_name}>{st.campaign_name}</td>
-                        <td className={`px-4 py-3 text-right ${textMuted}`}>{st.impressions}</td>
-                        <td className={`px-4 py-3 text-right ${textMuted}`}>{st.clicks}</td>
-                        <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(st.cost)}</td>
-                        <td className={`px-4 py-3 text-right ${st.conversions > 0 ? 'text-emerald-400 font-bold' : textMuted}`}>{st.conversions}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className={`p-10 text-center ${textMuted}`}>Nenhum termo de pesquisa coletado ainda. Garanta que o Script Google Ads esteja rodando.</div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════ ABA PÚBLICOS ══════════════════════════ */}
-      {activeTab === 'audiences' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* IDADE */}
-            <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
-              <div className={`p-4 border-b ${borderCol} flex items-center gap-3`}>
-                <BarChart size={18} className="text-cyan-400" />
-                <h3 className={`font-semibold ${textHead}`}>Por Idade</h3>
-              </div>
-              {audiences.filter(a => a.audience_type === 'Age').length > 0 ? (
-                <div className="overflow-auto custom-scrollbar max-h-[400px]">
-                  <table className="w-full text-sm text-left border-collapse">
-                    <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0`}>
-                      <tr>
-                        <th className={`px-4 py-3 border-b ${borderCol}`}>Faixa Etária</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Impr.</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Cliques</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Custo</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                      {audiences.filter(a => a.audience_type === 'Age').sort((a,b) => b.cost - a.cost).map(aud => (
-                        <tr key={aud.id} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                          <td className={`px-4 py-3 font-medium ${textHead}`}>{aud.audience_name.replace('AGE_RANGE_', '')}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.impressions}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.clicks}</td>
-                          <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(aud.cost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : <div className={`p-6 text-center ${textMuted} text-xs`}>Sem dados de idade.</div>}
-            </div>
-
-            {/* GÊNERO */}
-            <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
-              <div className={`p-4 border-b ${borderCol} flex items-center gap-3`}>
-                <BarChart size={18} className="text-pink-400" />
-                <h3 className={`font-semibold ${textHead}`}>Por Gênero</h3>
-              </div>
-              {audiences.filter(a => a.audience_type === 'Gender').length > 0 ? (
-                <div className="overflow-auto custom-scrollbar max-h-[400px]">
-                  <table className="w-full text-sm text-left border-collapse">
-                    <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0`}>
-                      <tr>
-                        <th className={`px-4 py-3 border-b ${borderCol}`}>Gênero</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Impr.</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Cliques</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Custo</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                      {Object.values(audiences.filter(a => a.audience_type === 'Gender').reduce((acc: any, aud: any) => {
-                        if (!acc[aud.audience_name]) acc[aud.audience_name] = { ...aud, impressions: 0, clicks: 0, cost: 0 };
-                        acc[aud.audience_name].impressions += aud.impressions;
-                        acc[aud.audience_name].clicks += aud.clicks;
-                        acc[aud.audience_name].cost += aud.cost;
-                        return acc;
-                      }, {})).sort((a: any, b: any) => b.impressions - a.impressions).map((aud: any, i: number) => (
-                        <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                          <td className={`px-4 py-3 font-medium ${textHead}`}>{aud.audience_name}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.impressions.toLocaleString('pt-BR')}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.clicks.toLocaleString('pt-BR')}</td>
-                          <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(aud.cost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : <div className={`p-6 text-center ${textMuted} text-xs`}>Sem dados de gênero.</div>}
-            </div>
-
-            {/* DISPOSITIVOS */}
-            <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
-              <div className={`p-4 border-b ${borderCol} flex items-center gap-3`}>
-                <Hash size={18} className="text-violet-400" />
-                <h3 className={`font-semibold ${textHead}`}>Por Dispositivo</h3>
-              </div>
-              {audiences.filter(a => a.audience_type === 'Device').length > 0 ? (
-                <div className="overflow-auto custom-scrollbar max-h-[400px]">
-                  <table className="w-full text-sm text-left border-collapse">
-                    <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0`}>
-                      <tr>
-                        <th className={`px-4 py-3 border-b ${borderCol}`}>Dispositivo</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Impr.</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Cliques</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Custo</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                      {Object.values(audiences.filter(a => a.audience_type === 'Device').reduce((acc: any, aud: any) => {
-                        if (!acc[aud.audience_name]) acc[aud.audience_name] = { ...aud, impressions: 0, clicks: 0, cost: 0 };
-                        acc[aud.audience_name].impressions += aud.impressions;
-                        acc[aud.audience_name].clicks += aud.clicks;
-                        acc[aud.audience_name].cost += aud.cost;
-                        return acc;
-                      }, {})).sort((a: any, b: any) => b.impressions - a.impressions).map((aud: any, i: number) => (
-                        <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                          <td className={`px-4 py-3 font-medium ${textHead}`}>{aud.audience_name.replace('MOBILE', '📱 Mobile').replace('DESKTOP', '🖥 Desktop').replace('TABLET', '📋 Tablet').replace('CONNECTED_TV', '📺 TV')}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.impressions.toLocaleString('pt-BR')}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.clicks.toLocaleString('pt-BR')}</td>
-                          <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(aud.cost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : <div className={`p-6 text-center ${textMuted} text-xs`}>Sem dados de dispositivo.</div>}
-            </div>
-
-            {/* RENDA FAMILIAR */}
-            <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
-              <div className={`p-4 border-b ${borderCol} flex items-center gap-3`}>
-                <TrendingUp size={18} className="text-green-400" />
-                <h3 className={`font-semibold ${textHead}`}>Por Renda Familiar</h3>
-              </div>
-              {audiences.filter(a => a.audience_type === 'Income').length > 0 ? (
-                <div className="overflow-auto custom-scrollbar max-h-[400px]">
-                  <table className="w-full text-sm text-left border-collapse">
-                    <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0`}>
-                      <tr>
-                        <th className={`px-4 py-3 border-b ${borderCol}`}>Faixa de Renda</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Impr.</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Cliques</th>
-                        <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Custo</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                      {Object.values(audiences.filter(a => a.audience_type === 'Income').reduce((acc: any, aud: any) => {
-                        if (!acc[aud.audience_name]) acc[aud.audience_name] = { ...aud, impressions: 0, clicks: 0, cost: 0 };
-                        acc[aud.audience_name].impressions += aud.impressions;
-                        acc[aud.audience_name].clicks += aud.clicks;
-                        acc[aud.audience_name].cost += aud.cost;
-                        return acc;
-                      }, {})).sort((a: any, b: any) => b.impressions - a.impressions).map((aud: any, i: number) => (
-                        <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                          <td className={`px-4 py-3 font-medium ${textHead}`}>{aud.audience_name.replace('INCOME_RANGE_', 'Renda: ').replace(/_/g, '-').replace('0-50', 'Top 10%').replace('50-60', 'Top 11-20%').replace('60-70', 'Top 21-30%').replace('70-80', '30-40%').replace('80-90', '40-50%').replace('90-100', 'Menor 50%')}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.impressions.toLocaleString('pt-BR')}</td>
-                          <td className={`px-4 py-3 text-right ${textMuted}`}>{aud.clicks.toLocaleString('pt-BR')}</td>
-                          <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(aud.cost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : <div className={`p-6 text-center ${textMuted} text-xs`}>Sem dados de renda familiar.</div>}
-            </div>
-          </div>
-        </div>
-      )}
-
-
-      {/* ══════════════════════════ ABA LOCAIS ══════════════════════════ */}
-      {activeTab === 'locations' && (
-        <div className="space-y-6">
-          <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol} max-w-4xl`}>
-            <div className={`p-4 border-b ${borderCol} flex items-center gap-3`}>
-              <Globe size={18} className="text-emerald-400" />
-              <h3 className={`font-semibold ${textHead}`}>Performance por Região/País</h3>
-            </div>
-            {locations.length > 0 ? (
-              <div className="overflow-auto custom-scrollbar max-h-[500px]">
-                <table className="w-full text-sm text-left border-collapse">
-                  <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'} sticky top-0`}>
-                    <tr>
-                      <th className={`px-4 py-3 border-b ${borderCol}`}>Local / Região</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Campanha</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Impr.</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Cliques</th>
-                      <th className={`px-4 py-3 border-b ${borderCol} text-right`}>Custo</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                    {Object.values(locations.reduce((acc: any, loc: any) => {
-                        if (!acc[loc.location_name]) acc[loc.location_name] = { ...loc, impressions: 0, clicks: 0, cost: 0 };
-                        acc[loc.location_name].impressions += loc.impressions;
-                        acc[loc.location_name].clicks += loc.clicks;
-                        acc[loc.location_name].cost += loc.cost;
-                        return acc;
-                      }, {})).sort((a: any, b: any) => b.impressions - a.impressions).map((loc: any, i: number) => (
-                      <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}>
-                        <td className={`px-4 py-3 font-medium ${textHead}`}>{loc.location_name}</td>
-                        <td className={`px-4 py-3 text-right text-xs ${textMuted} truncate max-w-[120px]`} title={loc.campaign_name}>{loc.campaign_name}</td>
-                        <td className={`px-4 py-3 text-right ${textMuted}`}>{loc.impressions.toLocaleString('pt-BR')}</td>
-                        <td className={`px-4 py-3 text-right ${textMuted}`}>{loc.clicks.toLocaleString('pt-BR')}</td>
-                        <td className={`px-4 py-3 text-right text-orange-400`}>{formatMoney(loc.cost)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : <div className={`p-10 text-center ${textMuted}`}>Nenhum dado de região coletado.</div>}
-          </div>
-        </div>
+      {/* ══════════════════════ TERMOS, PÚBLICOS E LOCAIS ══════════════════════ */}
+      {(activeTab === 'search_terms' || activeTab === 'audiences' || activeTab === 'locations') && (
+        <SegmentTab
+          supabase={supabase}
+          productId={productId}
+          kind={activeTab}
+          startDate={startDate}
+          endDate={endDate}
+          fx={entityFx}
+          campaignDays={campaignDays}
+          formatMoney={formatMoney}
+          custom={customColumns}
+          ui={{ isDark, bgCard, borderCol, textHead, textMuted }}
+        />
       )}
 
       {/* ══════════════════════════ ABA ESTRATÉGIA ══════════════════════════ */}

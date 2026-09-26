@@ -51,6 +51,7 @@ Rode `migration_google_ads_api.sql` no SQL Editor. Cria `google_ads_connections`
 Depois, na ordem:
 - `migration_google_ads_metricas.sql` — todas as métricas do Google por dia na campanha.
 - `migration_google_ads_estrutura.sql` — grupos de anúncios, anúncios e palavras-chave (`google_ads_entities` e `google_ads_entity_metrics`). Sem ela a coleta segue normal e só pula este nível.
+- `migration_colunas_filtros.sql` — bloco completo de métricas do Google em grupos, anúncios, palavras-chave, termos, públicos e locais; conversões fracionadas nessas tabelas; e a tabela `custom_columns` das colunas personalizadas.
 
 ## Consultas por conta
 

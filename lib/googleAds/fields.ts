@@ -70,22 +70,43 @@ const MICROS = new Set([
 ]);
 
 const CACHE_MS = 24 * 60 * 60 * 1000;
-let cache: { fields: Set<string>; at: number } | null = null;
+const metricCache = new Map<string, { fields: Set<string>; at: number }>();
 
-/** Métricas que o recurso `campaign` aceita nesta versão da API. */
-export async function campaignMetricFields(refreshToken: string, usage?: { calls: number }): Promise<string[]> {
-  if (!cache || Date.now() - cache.at > CACHE_MS) {
-    if (usage) usage.calls++;
-    try {
-      const [row] = await searchFields(refreshToken, "SELECT metrics WHERE name = 'campaign'");
-      const disponiveis: string[] = row?.metrics || [];
-      cache = { fields: new Set(disponiveis), at: Date.now() };
-    } catch {
-      // Sem a lista, fica no básico que existe desde sempre.
-      cache = { fields: new Set(['metrics.impressions', 'metrics.clicks', 'metrics.ctr', 'metrics.average_cpc', 'metrics.cost_micros']), at: Date.now() };
-    }
+/** Métricas que um recurso (campaign, keyword_view…) aceita nesta versão da API. */
+async function availableMetrics(refreshToken: string, resource: string, usage?: { calls: number }): Promise<Set<string>> {
+  const hit = metricCache.get(resource);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.fields;
+  if (usage) usage.calls++;
+  let fields: Set<string>;
+  try {
+    const [row] = await searchFields(refreshToken, `SELECT metrics WHERE name = '${resource}'`);
+    fields = new Set(row?.metrics || []);
+  } catch {
+    // Sem a lista, fica no básico que existe desde sempre.
+    fields = new Set(['metrics.impressions', 'metrics.clicks', 'metrics.ctr', 'metrics.average_cpc', 'metrics.cost_micros', 'metrics.conversions']);
   }
-  return WANTED_CAMPAIGN_METRICS.filter(f => cache!.fields.has(f));
+  metricCache.set(resource, { fields, at: Date.now() });
+  return fields;
+}
+
+/** Métricas de campanha que o recurso `campaign` aceita nesta versão da API. */
+export async function campaignMetricFields(refreshToken: string, usage?: { calls: number }): Promise<string[]> {
+  const fields = await availableMetrics(refreshToken, 'campaign', usage);
+  return WANTED_CAMPAIGN_METRICS.filter(f => fields.has(f));
+}
+
+/**
+ * Das métricas pedidas, as que o recurso aceita — cada visão do Google tem a
+ * sua lista (search_term_view não tem parcela de impressões, por exemplo).
+ */
+export async function metricFieldsFor(
+  refreshToken: string,
+  resource: string,
+  wanted: readonly string[],
+  usage?: { calls: number },
+): Promise<string[]> {
+  const fields = await availableMetrics(refreshToken, resource, usage);
+  return wanted.filter(f => fields.has(f));
 }
 
 /**

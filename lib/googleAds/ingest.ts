@@ -461,6 +461,16 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
 
   const diagTasks: Promise<any>[] = [];
 
+  // google_metrics só existe depois de migration_colunas_filtros.sql; até lá
+  // grava sem o bloco em vez de perder o dia.
+  const upsertDeep = async (table: string, rows: any[], onConflict: string) => {
+    let { error } = await supabase.from(table).upsert(rows, { onConflict });
+    if (error && /google_metrics/.test(error.message || '')) {
+      ({ error } = await supabase.from(table).upsert(rows.map(({ google_metrics, ...rest }) => rest), { onConflict }));
+    }
+    if (error) taskErrors.push(`${table}: ${error.message}`);
+  };
+
   if (search_terms && search_terms.length > 0) {
     const stPayload = search_terms.map((st: any) => ({
       product_id: product.id, date: date, 
@@ -470,15 +480,10 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
       clicks: st.cl ?? st.clicks ?? 0,
       cost: (st.c ?? st.cost_micros ?? 0) / 1000000,
       conversions: st.cv ?? st.conversions ?? 0,
+      ...(st.g ? { google_metrics: st.g } : {}),
       updated_at: new Date().toISOString()
     }));
-    diagTasks.push(
-      safeTask(
-        Promise.resolve(supabase.from('search_terms').upsert(stPayload, { onConflict: 'product_id, date, search_term' }))
-          .then(({ error }) => { if (error) taskErrors.push('search_terms: ' + error.message); }),
-        'search_terms_catch'
-      )
-    );
+    diagTasks.push(safeTask(upsertDeep('search_terms', stPayload, 'product_id, date, search_term'), 'search_terms_catch'));
   }
 
   if (audiences && audiences.length > 0) {
@@ -491,15 +496,10 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
       clicks: aud.cl ?? aud.clicks ?? 0,
       cost: (aud.c ?? aud.cost_micros ?? 0) / 1000000, 
       conversions: aud.cv ?? aud.conversions ?? 0,
+      ...(aud.g ? { google_metrics: aud.g } : {}),
       updated_at: new Date().toISOString()
     }));
-    diagTasks.push(
-      safeTask(
-        Promise.resolve(supabase.from('audiences').upsert(audPayload, { onConflict: 'product_id, date, audience_name, audience_type' }))
-          .then(({ error }) => { if (error) taskErrors.push('audiences: ' + error.message); }),
-        'audiences_catch'
-      )
-    );
+    diagTasks.push(safeTask(upsertDeep('audiences', audPayload, 'product_id, date, audience_name, audience_type'), 'audiences_catch'));
   }
 
   if (locations && locations.length > 0) {
@@ -512,15 +512,10 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
       clicks: loc.cl ?? loc.clicks ?? 0,
       cost: (loc.c ?? loc.cost_micros ?? 0) / 1000, // script pre-divides by 1000, so /1000 = dollars
       conversions: loc.cv ?? loc.conversions ?? 0,
+      ...(loc.g ? { google_metrics: loc.g } : {}),
       updated_at: new Date().toISOString()
     }));
-    diagTasks.push(
-      safeTask(
-        Promise.resolve(supabase.from('locations').upsert(locPayload, { onConflict: 'product_id, date, location_name' }))
-          .then(({ error }) => { if (error) taskErrors.push('locations: ' + error.message); }),
-        'locations_catch'
-      )
-    );
+    diagTasks.push(safeTask(upsertDeep('locations', locPayload, 'product_id, date, location_name'), 'locations_catch'));
   }
 
   if (history && history.length > 0) {

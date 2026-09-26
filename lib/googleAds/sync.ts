@@ -1,7 +1,8 @@
 import { search, AdsContext, GoogleAdsError } from './client';
 import { supabaseAdmin, decryptSecret } from './server';
 import { ingestCampaignDay } from './ingest';
-import { campaignMetricFields, normalizeMetrics, selectableFields } from './fields';
+import { campaignMetricFields, normalizeMetrics, selectableFields, metricFieldsFor } from './fields';
+import { DIMENSION_STORED_METRICS, mergeGoogleMetrics } from '@/lib/metrics/catalog';
 import { syncEntities, EntitySyncResult } from './entities';
 
 /**
@@ -53,7 +54,7 @@ export interface SyncSummary {
 const LOOKBACK_DAYS = Math.max(1, Number(process.env.GOOGLE_ADS_LOOKBACK_DAYS) || 30);
 /** Termos, públicos, locais e histórico: hoje e os 3 dias anteriores, como o script. */
 const DEEP_DAYS_BACK = 3;
-const TOP_SEARCH_TERMS = 50;
+const TOP_SEARCH_TERMS = 200;
 const INGEST_CONCURRENCY = 4;
 
 const GEO_NAMES: Record<string, string> = {
@@ -205,18 +206,42 @@ export async function syncAccount(
 
   // 3. Diagnóstico profundo, só dos últimos dias e só quando for a vez.
   const range = `segments.date BETWEEN '${deepStart}' AND '${today}'`;
+  // Cada visão do Google aceita um conjunto de métricas; pede-se o bloco
+  // completo que ela tiver, para as colunas e filtros do painel.
+  const BASE = ['metrics.impressions', 'metrics.clicks', 'metrics.cost_micros', 'metrics.conversions'];
+  const metricsFor = async (resource: string) =>
+    [...new Set([...BASE, ...(await metricFieldsFor(refreshToken, resource, DIMENSION_STORED_METRICS, usage))])];
+  const bags: Record<string, string[]> = {};
+  if (deep) {
+    for (const r of ['search_term_view', 'age_range_view', 'gender_view', 'income_range_view', 'campaign', 'geographic_view']) {
+      bags[r] = await metricsFor(r);
+    }
+  }
+  const m = (resource: string) => (bags[resource] || BASE).join(', ');
+  // Algumas métricas não combinam com certos segmentos (dispositivo, por
+  // exemplo). Se o Google recusar a consulta completa, refaz só com o básico
+  // e o dado não se perde.
+  const rich = async (label: string, resource: string, build: (metrics: string) => string) => {
+    try { return await q(build(m(resource))); } catch (e: any) {
+      if (!bags[resource] || bags[resource].length === BASE.length) { errors.push(`${label}: ${e.message}`); return []; }
+      console.warn(`[google-ads] ${label}: métricas extras recusadas, seguiu com o básico — ${e.message}`);
+      bags[resource] = BASE;
+      return optional(label, build(BASE.join(', ')), errors);
+    }
+  };
   const [adRows, stRows, ageRows, genderRows, incomeRows, deviceRows, geoRows, changeRows] = deep
     ? await Promise.all([
         optional('url', `SELECT campaign.id, ad_group_ad.ad.final_urls FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'`, errors),
-        optional('termos', `SELECT campaign.id, segments.date, search_term_view.search_term, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM search_term_view WHERE ${range} AND metrics.impressions > 0`, errors),
-        optional('idade', `SELECT campaign.id, segments.date, ad_group_criterion.age_range.type, metrics.impressions, metrics.clicks, metrics.cost_micros FROM age_range_view WHERE ${range} AND metrics.impressions > 0`, errors),
-        optional('gênero', `SELECT campaign.id, segments.date, ad_group_criterion.gender.type, metrics.impressions, metrics.clicks, metrics.cost_micros FROM gender_view WHERE ${range} AND metrics.impressions > 0`, errors),
-        optional('renda', `SELECT campaign.id, segments.date, ad_group_criterion.income_range.type, metrics.impressions, metrics.clicks, metrics.cost_micros FROM income_range_view WHERE ${range} AND metrics.impressions > 0`, errors),
-        optional('dispositivo', `SELECT campaign.id, segments.date, segments.device, metrics.impressions, metrics.clicks, metrics.cost_micros FROM campaign WHERE ${range} AND metrics.impressions > 0`, errors),
-        optional('local', `SELECT campaign.id, segments.date, geographic_view.country_criterion_id, geographic_view.location_type, metrics.impressions, metrics.clicks, metrics.cost_micros FROM geographic_view WHERE ${range} AND metrics.impressions > 0`, errors),
+        rich('termos', 'search_term_view', mt => `SELECT campaign.id, segments.date, search_term_view.search_term, ${mt} FROM search_term_view WHERE ${range} AND metrics.impressions > 0`),
+        rich('idade', 'age_range_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.age_range.type, ${mt} FROM age_range_view WHERE ${range} AND metrics.impressions > 0`),
+        rich('gênero', 'gender_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.gender.type, ${mt} FROM gender_view WHERE ${range} AND metrics.impressions > 0`),
+        rich('renda', 'income_range_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.income_range.type, ${mt} FROM income_range_view WHERE ${range} AND metrics.impressions > 0`),
+        rich('dispositivo', 'campaign', mt => `SELECT campaign.id, segments.date, segments.device, ${mt} FROM campaign WHERE ${range} AND metrics.impressions > 0`),
+        rich('local', 'geographic_view', mt => `SELECT campaign.id, segments.date, geographic_view.country_criterion_id, geographic_view.location_type, ${mt} FROM geographic_view WHERE ${range} AND metrics.impressions > 0`),
         optional('histórico', `SELECT change_event.change_date_time, change_event.change_resource_type, change_event.resource_change_operation, change_event.user_email, change_event.changed_fields, change_event.old_resource, change_event.new_resource, change_event.campaign FROM change_event WHERE change_event.change_date_time >= '${deepStart} 00:00:00' AND change_event.change_date_time <= '${today} 23:59:59' ORDER BY change_event.change_date_time DESC LIMIT 2000`, errors),
       ])
     : [[], [], [], [], [], [], [], []];
+  const bagOf = (resource: string, r: any) => normalizeMetrics(r.metrics, bags[resource] || BASE);
 
   // Nome dos países que não estão no dicionário local.
   const unknownGeo = [...new Set(geoRows.map((r: any) => String(r.geographicView?.countryCriterionId || '')))]
@@ -253,30 +278,35 @@ export async function syncAccount(
     if (!term) continue;
     if (!searchTerms.has(k)) searchTerms.set(k, new Map());
     const m = searchTerms.get(k)!;
-    const cur = m.get(term) || { t: term, i: 0, cl: 0, c: 0, cv: 0 };
+    const cur = m.get(term) || { t: term, i: 0, cl: 0, c: 0, cv: 0, g: null };
     cur.i += n(r.metrics?.impressions);
     cur.cl += n(r.metrics?.clicks);
     cur.c += n(r.metrics?.costMicros);
     cur.cv += n(r.metrics?.conversions);
+    const g = bagOf('search_term_view', r);
+    cur.g = cur.g ? mergeGoogleMetrics(cur.g, g) : g;
     m.set(term, cur);
   }
 
   const audiences = new Map<string, Map<string, any>>();
-  const addAudience = (r: any, tp: string, name: string | undefined) => {
+  const addAudience = (r: any, tp: string, name: string | undefined, resource: string) => {
     if (!name) return;
     const k = key(r.campaign.id, r.segments.date);
     if (!audiences.has(k)) audiences.set(k, new Map());
     const m = audiences.get(k)!;
-    const cur = m.get(`${tp}|${name}`) || { tp, n: name, i: 0, cl: 0, c: 0 };
+    const cur = m.get(`${tp}|${name}`) || { tp, n: name, i: 0, cl: 0, c: 0, cv: 0, g: null };
     cur.i += n(r.metrics?.impressions);
     cur.cl += n(r.metrics?.clicks);
     cur.c += n(r.metrics?.costMicros);
+    cur.cv += n(r.metrics?.conversions);
+    const g = bagOf(resource, r);
+    cur.g = cur.g ? mergeGoogleMetrics(cur.g, g) : g;
     m.set(`${tp}|${name}`, cur);
   };
-  for (const r of ageRows) addAudience(r, 'Age', r.adGroupCriterion?.ageRange?.type);
-  for (const r of genderRows) addAudience(r, 'Gender', r.adGroupCriterion?.gender?.type);
-  for (const r of incomeRows) addAudience(r, 'Income', r.adGroupCriterion?.incomeRange?.type);
-  for (const r of deviceRows) addAudience(r, 'Device', r.segments?.device);
+  for (const r of ageRows) addAudience(r, 'Age', r.adGroupCriterion?.ageRange?.type, 'age_range_view');
+  for (const r of genderRows) addAudience(r, 'Gender', r.adGroupCriterion?.gender?.type, 'gender_view');
+  for (const r of incomeRows) addAudience(r, 'Income', r.adGroupCriterion?.incomeRange?.type, 'income_range_view');
+  for (const r of deviceRows) addAudience(r, 'Device', r.segments?.device, 'campaign');
 
   // Por país fica só a linha com mais impressões: o Google repete o país por
   // tipo de localização (presença / interesse) e somar duplicaria.
@@ -295,6 +325,8 @@ export async function syncAccount(
         i: impr,
         cl: n(r.metrics?.clicks),
         c: Math.round(n(r.metrics?.costMicros) / 1000), // mesma unidade do script
+        cv: n(r.metrics?.conversions),
+        g: bagOf('geographic_view', r),
       });
     }
   }
@@ -473,6 +505,7 @@ export async function syncAccount(
       end: today,
       productIdFor: cid => productByCampaign.get(cid),
       selectable: fields => selectableFields(refreshToken, fields, usage),
+      metricsFor: resource => metricFieldsFor(refreshToken, resource, DIMENSION_STORED_METRICS, usage),
       errors,
     });
   }
