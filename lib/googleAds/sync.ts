@@ -6,6 +6,7 @@ import { DIMENSION_STORED_METRICS, mergeGoogleMetrics } from '@/lib/metrics/cata
 import { ACTION_SELECT, ACTION_WHERE, addActionRow, stableActions } from './conversionActions';
 import type { ActionCounts } from '@/lib/metrics/dimension';
 import { syncEntities, EntitySyncResult } from './entities';
+import { syncAssets } from './assets';
 
 /**
  * Coleta direta pela Google Ads API.
@@ -51,6 +52,8 @@ export interface SyncSummary {
   /** Grupos, anúncios e palavras-chave — só na coleta profunda. */
   entities?: EntitySyncResult;
   entities_full?: boolean;
+  /** Sitelinks, frases de destaque e promoções gravados. */
+  assets?: number;
   /** Dias passados que ganharam orçamento/meta pelo histórico de alterações. */
   backfilled_days?: number;
   errors: string[];
@@ -181,6 +184,39 @@ function describeChanges(ev: any) {
   return out;
 }
 
+/**
+ * Guarda cada alteração do histórico de forma estruturada. É por ela que a
+ * análise sabe quando uma sugestão foi aplicada no Google (lib/analysis/track.ts)
+ * — a anotação em daily_metrics.notes é só texto.
+ */
+async function saveChanges(rows: any[], productIdFor: (cid: string) => string | undefined, errors: string[]) {
+  const out = new Map<string, any>();
+  for (const r of rows) {
+    const ev = r.changeEvent || {};
+    const cid = String(ev.campaign || '').split('/').pop() || '';
+    const pid = productIdFor(cid);
+    const at = String(ev.changeDateTime || '').split('.')[0];
+    if (!pid || !at || !ev.changeResourceName) continue;
+    const row = {
+      product_id: pid, changed_at: at,
+      resource_type: ev.changeResourceType || null,
+      operation: ev.resourceChangeOperation || null,
+      resource_name: ev.changeResourceName,
+      fields: describeChanges(ev),
+      new_resource: ev.newResource || null,
+    };
+    out.set(`${pid}|${row.resource_name}|${at}`, row);
+  }
+  if (!out.size) return;
+  const list = [...out.values()];
+  for (let i = 0; i < list.length; i += 500) {
+    const { error } = await supabaseAdmin().from('google_ads_changes')
+      .upsert(list.slice(i, i + 500), { onConflict: 'product_id, resource_name, changed_at', ignoreDuplicates: true });
+    // Antes de migration_analise_ia.sql a tabela não existe; a coleta segue.
+    if (error) { if (!/google_ads_changes/.test(error.message)) errors.push(`alterações: ${error.message}`); return; }
+  }
+}
+
 // ── coleta ──────────────────────────────────────────────────────────────────
 
 async function runPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
@@ -303,7 +339,7 @@ export async function syncAccount(
         rich('renda', 'income_range_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.income_range.type, ${mt} FROM income_range_view WHERE ${range} AND metrics.impressions > 0`),
         rich('dispositivo', 'campaign', mt => `SELECT campaign.id, segments.date, segments.device, ${mt} FROM campaign WHERE ${range} AND metrics.impressions > 0`),
         rich('local', 'geographic_view', mt => `SELECT campaign.id, segments.date, geographic_view.country_criterion_id, geographic_view.location_type, ${mt} FROM geographic_view WHERE ${range} AND metrics.impressions > 0`),
-        optional('histórico', `SELECT change_event.change_date_time, change_event.change_resource_type, change_event.resource_change_operation, change_event.user_email, change_event.changed_fields, change_event.old_resource, change_event.new_resource, change_event.campaign FROM change_event WHERE change_event.change_date_time >= '${deepStart} 00:00:00' AND change_event.change_date_time <= '${today} 23:59:59' ORDER BY change_event.change_date_time DESC LIMIT 2000`, errors),
+        optional('histórico', `SELECT change_event.change_date_time, change_event.change_resource_type, change_event.change_resource_name, change_event.resource_change_operation, change_event.user_email, change_event.changed_fields, change_event.old_resource, change_event.new_resource, change_event.campaign FROM change_event WHERE change_event.change_date_time >= '${deepStart} 00:00:00' AND change_event.change_date_time <= '${today} 23:59:59' ORDER BY change_event.change_date_time DESC LIMIT 2000`, errors),
       ])
     : [[], [], [], [], [], [], [], []];
   const bagOf = (resource: string, r: any) => normalizeMetrics(r.metrics, bags[resource] || BASE);
@@ -672,6 +708,7 @@ export async function syncAccount(
       || Date.now() - new Date(account.entities_synced_at).getTime() >= 24 * 60 * 60 * 1000;
     summary.entities_full = fullEntities;
     if (fullEntities) await backfillBudgetAndTarget();
+    await saveChanges(changeRows, cid => productByCampaign.get(cid), errors);
     summary.entities = await syncEntities(q, {
       start: fullEntities ? start : deepStart,
       end: today,
@@ -680,6 +717,15 @@ export async function syncAccount(
       metricsFor: resource => metricFieldsFor(refreshToken, resource, DIMENSION_STORED_METRICS, usage),
       errors,
     });
+    if (summary.entities.ran) {
+      summary.assets = await syncAssets(q, {
+        start: fullEntities ? start : deepStart,
+        end: today,
+        productIdFor: cid => productByCampaign.get(cid),
+        selectable: fields => selectableFields(refreshToken, fields, usage),
+        errors,
+      });
+    }
   }
 
   summary.api_calls = apiCalls;

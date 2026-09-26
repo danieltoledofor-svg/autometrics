@@ -6,7 +6,7 @@ import {
   ArrowLeft, Columns, X, ExternalLink, Calendar, Link as LinkIcon,
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon,
   Video, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
-  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound
+  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound, ListChecks
 } from 'lucide-react';
 import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
@@ -20,6 +20,7 @@ import { resolveCampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal } from '@/app/components/QuickEntryModal';
 import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
 import { SegmentTab } from './SegmentTab';
+import { AnalysisTab } from './AnalysisTab';
 import { useCustomColumns } from '@/app/components/metrics/useCustomColumns';
 import { ColumnPicker } from '@/app/components/metrics/ColumnPicker';
 import { useTablePrefs } from '@/app/components/table/useTablePrefs';
@@ -175,7 +176,7 @@ export default function ProductDetailPage() {
   // --- DEEP METRICS (Search Terms, Audiences, Locations) ---
 
   // --- ABA VTURB ---
-  const [activeTab, setActiveTab] = useState<'ads' | 'ad_groups' | 'ad_list' | 'keywords' | 'search_terms' | 'audiences' | 'locations' | 'strategy' | 'vturb'>('ads');
+  const [activeTab, setActiveTab] = useState<'ads' | 'ad_groups' | 'ad_list' | 'keywords' | 'search_terms' | 'audiences' | 'locations' | 'analysis' | 'strategy' | 'vturb'>('ads');
   const [entityAdGroup, setEntityAdGroup] = useState('');
   const [vturbRows, setVturbRows] = useState<any[]>([]);
   const [vturbLoading, setVturbLoading] = useState(false);
@@ -829,6 +830,7 @@ export default function ProductDetailPage() {
           { id: 'search_terms', label: 'Termos' },
           { id: 'audiences', label: 'Públicos' },
           { id: 'locations', label: 'Locais' },
+          { id: 'analysis', label: 'Análise' },
           { id: 'strategy', label: 'Estratégia' },
           { id: 'vturb', label: 'VTurb' },
         ].map(tab => (
@@ -851,6 +853,7 @@ export default function ProductDetailPage() {
           { id: 'search_terms', icon: <FileText size={15} />, label: 'Termos de Pesquisa' },
           { id: 'audiences', icon: <BarChart size={15} />, label: 'Públicos' },
           { id: 'locations', icon: <Globe size={15} />, label: 'Locais' },
+          { id: 'analysis', icon: <ListChecks size={15} />, label: 'Análise' },
           { id: 'strategy', icon: <NotebookPen size={15} />, label: 'Estratégia' },
           { id: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb Analytics' },
         ].map(tab => (
@@ -1266,6 +1269,11 @@ export default function ProductDetailPage() {
           custom={customColumns}
           ui={{ isDark, bgCard, borderCol, textHead, textMuted }}
         />
+      )}
+
+      {/* ══════════════════════════ ABA ANÁLISE ══════════════════════════ */}
+      {activeTab === 'analysis' && (
+        <AnalysisTab productId={productId} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} />
       )}
 
       {/* ══════════════════════════ ABA ESTRATÉGIA ══════════════════════════ */}

@@ -55,6 +55,7 @@ Depois, na ordem:
 - `migration_termos_conversoes.sql` — palavra-chave, grupo e status em cada termo de pesquisa (a chave única passa a incluir a palavra-chave) e conversões por ação de conversão (Checkout, Compra…) em campanha, grupos, anúncios, palavras-chave e termos.
 - `migration_preferencias_tabelas.sql` — preferências das tabelas por usuário (largura das colunas, densidade e colunas visíveis), valendo em qualquer computador.
 - `migration_conferencia.sql` — conferência diária com o Google (Etapa 0) e `daily_metrics.last_source` (quem gravou o dia por último: api ou script).
+- `migration_analise_ia.sql` — aba Análise (Etapa 5): leitura da campanha, sugestões e o resultado delas, memória geral da IA, consumo da IA, alterações feitas no Google (`google_ads_changes`) e a transcrição da VSL.
 
 ## Conferência diária (Etapa 0)
 
@@ -69,12 +70,29 @@ O que ela faz com o que acha:
 
 Dia gravado pela API não é mais sobrescrito pelo script da MCC (`last_source`); o script segue valendo para contas que não estão conectadas pela API.
 
+## Análise da campanha (Etapa 5)
+
+Aba **Análise** em cada campanha: checklist fixo de 8 itens (termos, palavras-chave, dispositivos, públicos, locais, anúncios, sitelinks e anúncio × página × VSL — este só com a transcrição da VSL salva). Regras das skills `analisador-campanha-dados` e `auditor-congruencia-funil`, em `lib/analysis/`.
+
+- **Números** (`compute.ts`): 3 dias fechados × 7 dias fechados. Referência = valor médio da venda dos últimos 30 dias (alerta ≥ 80%, urgente > 90% ou gasto sem venda > 50%); sem venda, meta de CPA da campanha (ou CPA de 7 dias): alerta a partir de +15%, urgente a partir de +25%. Com venda real, os itens recebem as vendas rateadas (≈), como no resto do painel.
+- **Quando roda**: no agendador, depois da coleta, para campanhas com gasto nos últimos 7 dias, no máximo 1 vez por hora (`ANALYSIS_INTERVAL_MIN`). E no link "reanalisar".
+- **IA** (`OPENROUTER_API_KEY`): escreve o resumo e o "Ponto de alteração" só quando surge item novo fora do limite, quando algum item muda de status, ou 1 vez por dia. A página e a VSL são relidas quando mudam, ou 1 vez por semana. Texto com verbo de ordem ou nome técnico é recusado e cai no texto padrão. Sem a chave, tudo funciona com textos padrão.
+- **Acompanhamento** (`track.ts`): cada sugestão guarda os números do momento. A alteração é encontrada sozinha no histórico do Google (`google_ads_changes`, gravado na coleta a partir do `change_event` que ela já lê). O resultado sai 3 e 7 dias depois, comparando com os 7 dias antes.
+- **Memória geral** (`ai_learnings`): o resultado de 7 dias de toda sugestão, de todos os usuários, sem nome de campanha, termo, conta ou usuário. Volta para a IA só como contagem por situação.
+- **Consumo** (`/ia`): só para os e-mails em `AUTOMETRICS_OWNER_EMAILS`. Modelo de cada função e gasto do mês por usuário.
+
+| Variável | Valor |
+|---|---|
+| `OPENROUTER_API_KEY` | Chave do OpenRouter |
+| `AUTOMETRICS_OWNER_EMAILS` | E-mail(s) do dono, separados por vírgula |
+| `AI_MODEL_LEITURA` / `AI_MODEL_PAGINA` | Opcionais. Padrão: `deepseek/deepseek-v4.1-flash` e `google/gemini-3.5-flash-lite`. O que for escolhido em `/ia` vale por cima. |
+
 ## Consultas por conta
 
 | Quando | Consultas |
 |---|---|
 | Toda rodada | status das campanhas + métricas de 30 dias (2) |
-| Rodada completa (de hora em hora) | + termos, públicos, dispositivo, local, histórico, URLs (8) + grupos, anúncios e palavras-chave (6: configuração atual e métricas por dia de cada nível) |
+| Rodada completa (de hora em hora) | + termos, públicos, dispositivo, local, histórico, URLs (8) + grupos, anúncios e palavras-chave (6: configuração atual e métricas por dia de cada nível) + sitelinks e frases de destaque (1) |
 
 A primeira coleta completa de uma conta traz 30 dias de grupos, anúncios e palavras-chave; as seguintes, só os últimos 4 dias, que são os que ainda mudam.
 

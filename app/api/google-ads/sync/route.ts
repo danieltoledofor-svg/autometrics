@@ -4,6 +4,7 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { syncAccountRecord, isDue, usageToday, DAILY_QUOTA } from '@/lib/googleAds/sync';
 import { refreshConnectionAccounts } from '@/lib/googleAds/accounts';
 import { isReconcileDue, reconcileAccountRecord, reconcileReady } from '@/lib/googleAds/reconcile';
+import { runDueAnalyses } from '@/lib/analysis/run';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -86,6 +87,10 @@ async function runCron() {
     report.reconciled.push({ account: acc.name, ...result });
     used += 'api_calls' in result ? result.api_calls : 2;
   }
+
+  // Análise das campanhas (Etapa 5): no tempo que ainda sobrou. Não usa a
+  // cota do Google — lê o que a coleta gravou.
+  report.analyses = await runDueAnalyses(started + TIME_BUDGET_MS);
 
   report.quota.used = used;
   report.elapsed_ms = Date.now() - started;

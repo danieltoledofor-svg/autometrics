@@ -27,6 +27,15 @@ export default function IntegrationPage() {
   const [userEmail, setUserEmail] = useState('');
   const [startDate, setStartDate] = useState('');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  // Dono do Autometrics vê o link do painel de consumo da IA.
+  const [isOwner, setIsOwner] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
+      const res = await fetch('/api/ai-admin?check=1', { headers: { Authorization: `Bearer ${session.access_token}` } }).catch(() => null);
+      setIsOwner(!!res?.ok);
+    });
+  }, []);
 
   const [accountType, setAccountType] = useState<'mcc' | 'single'>('mcc');
   const [identifierName, setIdentifierName] = useState('');
@@ -809,6 +818,12 @@ ${commonFunctions}`;
             </button>
           ))}
         </div>
+
+        {isOwner && (
+          <div className="-mt-4 mb-6 text-right">
+            <Link href="/ia" className="text-xs text-indigo-400 hover:underline">Consumo da IA →</Link>
+          </div>
+        )}
 
         {/* ── ABA 1: GOOGLE ADS ────────────────────────────────── */}
         {activeTab === 'google' && (
