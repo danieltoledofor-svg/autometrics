@@ -106,3 +106,36 @@ export function normalizeMetrics(metrics: any, fields: string[]): Record<string,
   }
   return out;
 }
+
+/**
+ * Campos de atributo (campaign.*, ad_group.*…) que existem nesta versão.
+ *
+ * O Google renomeia campos entre versões — campaign.start_date virou
+ * campaign.start_date_time — e um único nome desconhecido derruba a consulta
+ * inteira. Pergunta-se ao googleAdsFields só pelos nomes ainda não vistos; a
+ * resposta fica guardada por um dia.
+ */
+const attrCache = new Map<string, boolean>();
+let attrCacheAt = 0;
+
+export async function selectableFields(
+  refreshToken: string,
+  fields: string[],
+  usage?: { calls: number },
+): Promise<Set<string>> {
+  if (Date.now() - attrCacheAt > CACHE_MS) { attrCache.clear(); attrCacheAt = Date.now(); }
+  const unknown = [...new Set(fields)].filter(f => !attrCache.has(f));
+  if (unknown.length) {
+    if (usage) usage.calls++;
+    try {
+      const list = unknown.map(f => `'${f}'`).join(', ');
+      const rows = await searchFields(refreshToken, `SELECT name, selectable WHERE name IN (${list})`);
+      const found = new Map(rows.map((r: any) => [r.googleAdsField?.name ?? r.name, !!(r.googleAdsField?.selectable ?? r.selectable)]));
+      for (const f of unknown) attrCache.set(f, found.get(f) === true);
+    } catch {
+      // Sem a lista, tenta com tudo — o erro, se houver, aparece na conta.
+      return new Set(fields.filter(f => attrCache.get(f) !== false));
+    }
+  }
+  return new Set(fields.filter(f => attrCache.get(f)));
+}

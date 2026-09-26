@@ -1,7 +1,7 @@
 import { search, AdsContext, GoogleAdsError } from './client';
 import { supabaseAdmin, decryptSecret } from './server';
 import { ingestCampaignDay } from './ingest';
-import { campaignMetricFields, normalizeMetrics } from './fields';
+import { campaignMetricFields, normalizeMetrics, selectableFields } from './fields';
 import { syncEntities, EntitySyncResult } from './entities';
 
 /**
@@ -176,15 +176,21 @@ export async function syncAccount(
 
   // 1. Estado atual de cada campanha. Sem segments.date, então vem também a
   //    campanha pausada que não gastou nada — é assim que o status dela chega.
+  // O essencial vai sempre; o resto só se existir nesta versão da API — as
+  // datas, por exemplo, mudaram de nome (start_date → start_date_time).
+  const optionalCampaignFields = [
+    'campaign.target_cpa.target_cpa_micros', 'campaign.target_roas.target_roas',
+    'campaign.maximize_conversions.target_cpa_micros', 'campaign.maximize_conversion_value.target_roas',
+    'campaign.advertising_channel_type', 'campaign.advertising_channel_sub_type',
+    'campaign.start_date', 'campaign.end_date', 'campaign.start_date_time', 'campaign.end_date_time',
+    'campaign.optimization_score',
+  ];
+  const available = await selectableFields(refreshToken, optionalCampaignFields, usage);
   const statusRows = await q(`
     SELECT campaign.id, campaign.name, campaign.status, campaign.serving_status,
            campaign.primary_status, campaign.primary_status_reasons,
            campaign.bidding_strategy_type, campaign_budget.amount_micros,
-           campaign.target_cpa.target_cpa_micros, campaign.target_roas.target_roas,
-           campaign.maximize_conversions.target_cpa_micros,
-           campaign.maximize_conversion_value.target_roas,
-           campaign.advertising_channel_type, campaign.advertising_channel_sub_type,
-           campaign.start_date, campaign.end_date, campaign.optimization_score,
+           ${optionalCampaignFields.filter(f => available.has(f)).map(f => `${f}, `).join('')}
            customer.currency_code, customer.status
     FROM campaign`);
 
@@ -378,8 +384,8 @@ export async function syncAccount(
       campaign_settings: {
         channel_type: camp.advertisingChannelType || null,
         channel_sub_type: camp.advertisingChannelSubType || null,
-        start_date: camp.startDate || null,
-        end_date: camp.endDate || null,
+        start_date: camp.startDate || String(camp.startDateTime || '').slice(0, 10) || null,
+        end_date: camp.endDate || String(camp.endDateTime || '').slice(0, 10) || null,
         optimization_score: n(camp.optimizationScore) || null,
       },
       search_terms: recent && searchTerms.has(k)
@@ -466,6 +472,7 @@ export async function syncAccount(
       start: account.entities_synced_at ? deepStart : start,
       end: today,
       productIdFor: cid => productByCampaign.get(cid),
+      selectable: fields => selectableFields(refreshToken, fields, usage),
       errors,
     });
   }

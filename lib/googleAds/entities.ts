@@ -19,31 +19,57 @@ export type EntityLevel = 'ad_group' | 'ad' | 'keyword';
 
 const METRICS = 'metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.conversions_value';
 
-const FIELDS: Record<EntityLevel, { from: string; fields: string; where: string }> = {
+const FIELDS: Record<EntityLevel, { from: string; fields: string[]; where: string }> = {
   ad_group: {
     from: 'ad_group',
-    fields: `campaign.id, ad_group.id, ad_group.name, ad_group.status, ad_group.type,
-             ad_group.cpc_bid_micros, ad_group.target_cpa_micros, ad_group.target_roas`,
+    fields: [
+      'campaign.id',
+      'ad_group.id',
+      'ad_group.name',
+      'ad_group.status',
+      'ad_group.type',
+      'ad_group.cpc_bid_micros',
+      'ad_group.target_cpa_micros',
+      'ad_group.target_roas',
+    ],
     where: `ad_group.status != 'REMOVED' AND campaign.status != 'REMOVED'`,
   },
   ad: {
     from: 'ad_group_ad',
-    fields: `campaign.id, ad_group.id, ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type,
-             ad_group_ad.status, ad_group_ad.ad_strength, ad_group_ad.policy_summary.approval_status,
-             ad_group_ad.ad.final_urls, ad_group_ad.ad.responsive_search_ad.headlines,
-             ad_group_ad.ad.responsive_search_ad.descriptions, ad_group_ad.ad.responsive_search_ad.path1,
-             ad_group_ad.ad.responsive_search_ad.path2`,
+    fields: [
+      'campaign.id',
+      'ad_group.id',
+      'ad_group_ad.ad.id',
+      'ad_group_ad.ad.name',
+      'ad_group_ad.ad.type',
+      'ad_group_ad.status',
+      'ad_group_ad.ad_strength',
+      'ad_group_ad.policy_summary.approval_status',
+      'ad_group_ad.ad.final_urls',
+      'ad_group_ad.ad.responsive_search_ad.headlines',
+      'ad_group_ad.ad.responsive_search_ad.descriptions',
+      'ad_group_ad.ad.responsive_search_ad.path1',
+      'ad_group_ad.ad.responsive_search_ad.path2',
+    ],
     where: `ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'`,
   },
   keyword: {
     from: 'keyword_view',
-    fields: `campaign.id, ad_group.id, ad_group_criterion.criterion_id, ad_group_criterion.keyword.text,
-             ad_group_criterion.keyword.match_type, ad_group_criterion.status,
-             ad_group_criterion.approval_status, ad_group_criterion.cpc_bid_micros,
-             ad_group_criterion.effective_cpc_bid_micros, ad_group_criterion.quality_info.quality_score,
-             ad_group_criterion.quality_info.creative_quality_score,
-             ad_group_criterion.quality_info.post_click_quality_score,
-             ad_group_criterion.quality_info.search_predicted_ctr`,
+    fields: [
+      'campaign.id',
+      'ad_group.id',
+      'ad_group_criterion.criterion_id',
+      'ad_group_criterion.keyword.text',
+      'ad_group_criterion.keyword.match_type',
+      'ad_group_criterion.status',
+      'ad_group_criterion.approval_status',
+      'ad_group_criterion.cpc_bid_micros',
+      'ad_group_criterion.effective_cpc_bid_micros',
+      'ad_group_criterion.quality_info.quality_score',
+      'ad_group_criterion.quality_info.creative_quality_score',
+      'ad_group_criterion.quality_info.post_click_quality_score',
+      'ad_group_criterion.quality_info.search_predicted_ctr',
+    ],
     where: `ad_group_criterion.status != 'REMOVED' AND ad_group.status != 'REMOVED' AND campaign.status != 'REMOVED'`,
   },
 };
@@ -163,6 +189,8 @@ export async function syncEntities(
     start: string;
     end: string;
     productIdFor: (campaignId: string) => string | undefined;
+    /** Quais dos campos existem nesta versão da API (ver selectableFields). */
+    selectable: (fields: string[]) => Promise<Set<string>>;
     errors: string[];
   },
 ): Promise<EntitySyncResult> {
@@ -171,11 +199,14 @@ export async function syncEntities(
   result.ran = true;
 
   const levels: EntityLevel[] = ['ad_group', 'ad', 'keyword'];
+  // Um campo renomeado pelo Google derrubaria a consulta do nível inteiro.
+  const available = await opts.selectable(levels.flatMap(l => FIELDS[l].fields));
   const fetched = await Promise.all(levels.map(async level => {
     const f = FIELDS[level];
+    const fields = f.fields.filter(x => available.has(x)).join(', ');
     const [config, daily] = await Promise.all([
-      q(`SELECT ${f.fields} FROM ${f.from} WHERE ${f.where}`),
-      q(`SELECT ${f.fields}, segments.date, ${METRICS} FROM ${f.from}
+      q(`SELECT ${fields} FROM ${f.from} WHERE ${f.where}`),
+      q(`SELECT ${fields}, segments.date, ${METRICS} FROM ${f.from}
          WHERE segments.date BETWEEN '${opts.start}' AND '${opts.end}'
            AND metrics.impressions > 0`),
     ]).catch((e: any) => {
