@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar, Sun, Moon, LayoutGrid, Package, Settings,
   LogOut, Target, ArrowUpRight, ArrowDownRight,
-  ChevronUp, ChevronDown, SlidersHorizontal, X, FileText
+  ChevronUp, ChevronDown, SlidersHorizontal, X, FileText, AlertTriangle
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -72,6 +72,24 @@ const DATE_PRESET_LABELS: Record<string, string> = {
   this_month: 'Este Mês', '30d': '30 Dias', last_month: 'Mês Passado',
 };
 const DATE_PRESETS = ['today', 'yesterday', '7d', 'this_month', '30d', 'last_month'] as const;
+
+/**
+ * Texto da marca de problema da conferência com o Google. Só existe para o
+ * que a correção automática não resolveu — o que foi corrigido não aparece.
+ */
+function reconcileProblemText(note: any, currency: string): string {
+  const m = (v: any) => `${currency} ${Number(v || 0).toFixed(2)}`;
+  if (note.kind === 'sobrando') {
+    return `Gasto que o Google não tem: o painel mostra ${m(note.panel?.cost)} neste dia, mas o Google não registra gasto para esta campanha. Pode ser campanha duplicada no painel. Nada foi alterado.`;
+  }
+  const g = note.google || {}, p = note.panel || {};
+  const linhas = (note.fields || []).map((f: string) =>
+    f === 'custo' ? `Custo: painel ${m(p.cost)} · Google ${m(g.cost)}`
+    : f === 'cliques' ? `Cliques: painel ${p.clicks} · Google ${g.clicks}`
+    : f === 'impressões' ? `Impressões: painel ${p.impressions} · Google ${g.impressions}`
+    : `Conversões: painel ${p.conversions} · Google ${g.conversions}`);
+  return ['Não confere com o Google e a correção automática não resolveu.', ...linhas, note.source ? `Gravado por: ${note.source}.` : ''].filter(Boolean).join('\n');
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -425,6 +443,13 @@ export default function DashboardPage() {
       }
       const cmp = acc.campaigns[campaignName];
       cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds;
+
+      // Problema que a conferência com o Google não conseguiu corrigir.
+      const note = row.reconcile_note;
+      if (note && (note.kind === 'sobrando' || note.kind === 'divergente') && !cmp.problem) {
+        cmp.problem = { text: reconcileProblemText(note, product?.currency || 'BRL') };
+        day.problems = (day.problems || 0) + 1;
+      }
 
       // O badge mostra o estado ATUAL da campanha, não o daquele dia: quando uma
       // conta é suspensa hoje, o que importa é ver isso ao lado de qualquer data,
@@ -810,7 +835,15 @@ export default function DashboardPage() {
                             isExpanded ? <ArrowDownRight size={16} className="text-slate-500"/> : <ArrowUpRight size={16} className="text-slate-500"/>
                           )}
                         </td>
-                        <td className={`px-6 py-4 font-bold ${textHead}`}>{formattedDate}</td>
+                        <td className={`px-6 py-4 font-bold ${textHead}`}>
+                          {formattedDate}
+                          {row.problems > 0 && (
+                            <span title={`${row.problems} campanha(s) com valor que não confere com o Google. Abra o dia para ver.`}
+                              className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-400 align-middle cursor-help">
+                              <AlertTriangle size={11} /> {row.problems}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(row.revenue)}</td>
                         <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(row.cost)}</td>
                         <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
@@ -847,6 +880,12 @@ export default function DashboardPage() {
                                     >
                                       <span className={`w-1.5 h-1.5 rounded-full ${cmp.status.dot}`} />
                                       {cmp.status.label}
+                                    </span>
+                                  )}
+                                  {cmp.problem && (
+                                    <span title={cmp.problem.text}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-400 shrink-0 cursor-help">
+                                      <AlertTriangle size={11} /> não confere
                                     </span>
                                   )}
                                 </div>
@@ -934,6 +973,11 @@ export default function DashboardPage() {
                                       {cmp.name}
                                     </Link>
                                   ) : cmp.name}
+                                  {cmp.problem && (
+                                    <span title={cmp.problem.text} className="ml-1.5 inline-flex align-middle text-amber-400">
+                                      <AlertTriangle size={12} />
+                                    </span>
+                                  )}
                                 </span>
                                 <span className={`text-[11px] font-bold font-mono shrink-0 ${cmp.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                                   {formatMoney(cmp.profit)}

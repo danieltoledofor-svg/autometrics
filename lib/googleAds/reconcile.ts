@@ -302,10 +302,25 @@ export async function reconcileAccountRecord(acc: any): Promise<ReconcileSummary
         run = await reconcileAccount(acc, token, usage);
       }
     }
+    // Problemas que continuam depois da correção: o Dashboard só marca estes.
+    // Primeiro limpa as marcas de problema da janela — o que se resolveu some.
+    const allProducts = [...run.productsByCampaign.values()].flat();
+    for (let k = 0; k < allProducts.length; k += 100) {
+      await db.from('daily_metrics').update({ reconcile_note: null })
+        .in('product_id', allProducts.slice(k, k + 100))
+        .gte('date', run.summary.start).lte('date', run.summary.end)
+        .filter('reconcile_note->>kind', 'in', '(sobrando,divergente)');
+    }
     const extra: string[] = [];
-    for (const i of run.issues.filter(x => x.type === 'sobrando')) {
-      await noteDay(run.productsByCampaign.get(i.campaign_id || '') || [], i.date, { kind: 'sobrando', source: i.source || null });
-      if (!extra.includes(i.campaign)) extra.push(i.campaign);
+    for (const i of run.issues) {
+      if (!i.campaign_id) continue;
+      const ids = run.productsByCampaign.get(i.campaign_id) || [];
+      if (i.type === 'sobrando') {
+        await noteDay(ids, i.date, { kind: 'sobrando', source: i.source || null, panel: i.panel });
+        if (!extra.includes(i.campaign)) extra.push(i.campaign);
+      } else if (i.type === 'diferente') {
+        await noteDay(ids, i.date, { kind: 'divergente', fields: i.fields, google: i.google, panel: i.panel, source: i.source || null });
+      }
     }
     const summary: ReconcileSummary = { ...run.summary, corrected, created, extra, api_calls: usage.calls };
     await db.from('google_ads_accounts').update({

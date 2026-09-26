@@ -18,9 +18,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: missing ? 'Tabelas da integração ainda não criadas — rode migration_google_ads_api.sql no Supabase.' : error.message, setup_required: missing }, { status: 500 });
   }
 
-  const { data: accounts } = await db.from('google_ads_accounts')
-    .select('id, connection_id, customer_id, login_customer_id, name, mcc_name, currency_code, time_zone, status, sync_enabled, last_sync_at, last_sync_status, last_sync_error, last_sync_summary')
+  const cols = 'id, connection_id, customer_id, login_customer_id, name, mcc_name, currency_code, time_zone, status, sync_enabled, last_sync_at, last_sync_status, last_sync_error, last_sync_summary';
+  let { data: accounts, error: accError } = await db.from('google_ads_accounts')
+    .select(`${cols}, last_reconciled_at, last_reconcile_status, last_reconcile_summary`)
     .eq('user_id', user.id).order('mcc_name').order('name');
+  // Antes de migration_conferencia.sql as colunas da conferência não existem.
+  if (accError) {
+    ({ data: accounts } = await db.from('google_ads_accounts').select(cols)
+      .eq('user_id', user.id).order('mcc_name').order('name') as any);
+  }
 
   // Cota é do projeto do Google Cloud, não do usuário — mas quem vê esta tela
   // é quem administra o Autometrics.

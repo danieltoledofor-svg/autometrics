@@ -28,6 +28,25 @@ interface Account {
   last_sync_status: string | null;
   last_sync_error: string | null;
   last_sync_summary: any;
+  last_reconciled_at?: string | null;
+  last_reconcile_status?: string | null;
+  last_reconcile_summary?: any;
+}
+
+/** Linha da conferência diária com o Google, embaixo de cada conta. */
+function reconcileLine(a: Account): { text: string; tone: string } | null {
+  if (!a.last_reconciled_at) return null;
+  const s = a.last_reconcile_summary || {};
+  const when = `Conferido com o Google ${timeAgo(a.last_reconciled_at)}`;
+  if (a.last_reconcile_status === 'erro') return { text: `${when} · falhou: ${s.error || 'erro'}`, tone: 'text-rose-500' };
+  const parts = [when];
+  if (a.last_reconcile_status === 'divergente') {
+    parts.push(`${s.divergent_days} dia(s) ainda não conferem`);
+    if (s.extra?.length) parts.push(`gasto que o Google não tem em ${s.extra.join(', ')}`);
+  } else parts.push(`${s.days || 0} dia(s) batendo`);
+  if (s.corrected) parts.push(`${s.corrected} correção(ões) com o valor do Google`);
+  if (s.created?.length) parts.push(`${s.created.length} campanha(s) trazida(s) (${s.created.join(', ')})`);
+  return { text: parts.join(' · '), tone: a.last_reconcile_status === 'divergente' ? 'text-amber-500' : 'text-indigo-400' };
 }
 
 async function api(path: string, init: RequestInit = {}) {
@@ -351,6 +370,10 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
                         <button onClick={() => syncAccount(a)} disabled={!!busy || !!syncAll || closed} className={btnGhost} title="Sincronizar agora">
                           <RefreshCw size={14} className={busy === `sync-${a.id}` ? 'animate-spin' : ''} />
                         </button>
+                        {(() => {
+                          const r = reconcileLine(a);
+                          return r && !closed ? <p className={`w-full text-[11px] ${r.tone}`}>{r.text}</p> : null;
+                        })()}
                         {a.last_sync_error && (
                           <p className={`w-full text-[11px] break-words ${a.last_sync_status === 'erro' ? 'text-rose-500' : 'text-amber-500'}`}>{a.last_sync_error}</p>
                         )}
