@@ -62,6 +62,13 @@ Uma vez por dia, no tempo que sobra de cada chamada do agendador, cada conta é 
 
 Como a coleta de hora em hora já regrava o que mudou, divergência aqui aponta para outra coisa: o script da MCC sobrescrevendo o dia, gravação que falhou, ou campanha do Google que não chegou ao painel.
 
+O que ela faz com o que acha:
+- **Valor diferente:** regrava o dia com o valor do Google e anota em `daily_metrics.reconcile_note` o que era e o que ficou. O Dashboard mostra a marca.
+- **Campanha faltando** (gasto no Google, nada no painel): traz a campanha e os dias na hora.
+- **Gasto no painel que o Google não tem:** só marca — costuma ser campanha duplicada no painel.
+
+Dia gravado pela API não é mais sobrescrito pelo script da MCC (`last_source`); o script segue valendo para contas que não estão conectadas pela API.
+
 ## Consultas por conta
 
 | Quando | Consultas |

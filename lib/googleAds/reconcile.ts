@@ -1,6 +1,6 @@
 import { search, AdsContext } from './client';
 import { supabaseAdmin, decryptSecret } from './server';
-import { addUsage } from './sync';
+import { addUsage, syncAccountRecord } from './sync';
 
 /**
  * Etapa 0 — conferência diária com o Google.
@@ -45,6 +45,19 @@ export interface ReconcileSummary {
   google_cost: number;
   panel_cost: number;
   api_calls: number;
+  /** Dias de campanha regravados com o valor do Google. */
+  corrected?: number;
+  /** Campanhas que existiam no Google com gasto e foram trazidas agora. */
+  created?: string[];
+  /** Gasto no painel que o Google não tem — não dá para corrigir sozinho. */
+  extra?: string[];
+}
+
+interface ReconcileRun {
+  summary: ReconcileSummary;
+  issues: ReconcileIssue[];
+  /** Produtos do painel por campanha do Google. */
+  productsByCampaign: Map<string, string[]>;
 }
 
 const n = (v: any) => {
@@ -69,7 +82,7 @@ function addDays(date: string, delta: number): string {
 /** Um centavo, ou 0,2% em dias de gasto alto — o arredondamento do Google. */
 const costDiffers = (a: number, b: number) => Math.abs(a - b) > Math.max(0.01, Math.abs(a) * 0.002);
 
-export async function reconcileAccount(acc: any, refreshToken: string, usage: { calls: number }): Promise<ReconcileSummary> {
+export async function reconcileAccount(acc: any, refreshToken: string, usage: { calls: number }): Promise<ReconcileRun> {
   const ctx: AdsContext = { refreshToken, customerId: acc.customer_id, loginCustomerId: acc.login_customer_id };
   const q = async (gaql: string) => { usage.calls++; return search(ctx, gaql); };
   const today = todayIn(acc.time_zone);
@@ -214,8 +227,25 @@ export async function reconcileAccount(acc: any, refreshToken: string, usage: { 
     const { error } = await db.from('google_ads_reconciliations').upsert(rows, { onConflict: 'account_id, date' });
     if (error) throw new Error(`Gravação da conferência: ${error.message}`);
   }
-  return summary;
+  const productsByCampaign = new Map<string, string[]>();
+  for (const [pid, p] of products) {
+    if (!productsByCampaign.has(p.cid)) productsByCampaign.set(p.cid, []);
+    productsByCampaign.get(p.cid)!.push(pid);
+  }
+  return { summary, issues, productsByCampaign };
 }
+
+/**
+ * Anota no dia o que a conferência fez — é o que o Dashboard mostra na marca.
+ * { kind: corrigido | criado | sobrando, fields: [{ f, de, para }], source, at }
+ */
+async function noteDay(productIds: string[], date: string, note: Record<string, any>) {
+  if (!productIds.length) return;
+  await supabaseAdmin().from('daily_metrics').update({ reconcile_note: { ...note, at: new Date().toISOString() } })
+    .in('product_id', productIds).eq('date', date);
+}
+
+const money = (v: number) => Math.round(v * 100) / 100;
 
 /** Sem migration_conferencia.sql a conferência fica desligada — e não gasta cota. */
 let tablesChecked: { ok: boolean; at: number } | null = null;
@@ -238,7 +268,46 @@ export async function reconcileAccountRecord(acc: any): Promise<ReconcileSummary
   try {
     const { data: conn } = await db.from('google_ads_connections').select('refresh_token_enc').eq('id', acc.connection_id).single();
     if (!conn) throw new Error('Conexão não encontrada');
-    const summary = await reconcileAccount(acc, decryptSecret(conn.refresh_token_enc), usage);
+    const token = decryptSecret(conn.refresh_token_enc);
+    let run = await reconcileAccount(acc, token, usage);
+
+    // Corrige: a coleta regrava com o valor do Google tudo o que difere do que
+    // está gravado e cria a campanha que faltar. Depois anota o que mudou e
+    // confere de novo, para o resultado final refletir a correção.
+    const fixable = run.issues.filter(i => i.type === 'diferente' || i.type === 'faltando');
+    let corrected = 0;
+    const created: string[] = [];
+    if (fixable.length) {
+      const sync = await syncAccountRecord(acc, { allowDeep: false });
+      if (!('error' in sync)) {
+        for (const i of fixable) {
+          if (!i.campaign_id) continue;
+          if (i.type === 'faltando') {
+            const { data } = await db.from('products').select('id')
+              .eq('user_id', acc.user_id).eq('google_ads_campaign_id', i.campaign_id);
+            const ids = (data || []).map(p => p.id);
+            if (ids.length && !created.includes(i.campaign)) created.push(i.campaign);
+            await noteDay(ids, i.date, { kind: 'criado', campaign: i.campaign });
+          } else {
+            const g = i.google!, p = i.panel!;
+            const fields = (i.fields || []).map(f => ({
+              f,
+              de: f === 'custo' ? money(p.cost) : f === 'cliques' ? p.clicks : f === 'impressões' ? p.impressions : p.conversions,
+              para: f === 'custo' ? money(g.cost) : f === 'cliques' ? g.clicks : f === 'impressões' ? g.impressions : g.conversions,
+            }));
+            await noteDay(run.productsByCampaign.get(i.campaign_id) || [], i.date, { kind: 'corrigido', fields, source: i.source || null });
+            corrected++;
+          }
+        }
+        run = await reconcileAccount(acc, token, usage);
+      }
+    }
+    const extra: string[] = [];
+    for (const i of run.issues.filter(x => x.type === 'sobrando')) {
+      await noteDay(run.productsByCampaign.get(i.campaign_id || '') || [], i.date, { kind: 'sobrando', source: i.source || null });
+      if (!extra.includes(i.campaign)) extra.push(i.campaign);
+    }
+    const summary: ReconcileSummary = { ...run.summary, corrected, created, extra, api_calls: usage.calls };
     await db.from('google_ads_accounts').update({
       last_reconciled_at: now,
       last_reconcile_status: summary.divergent_days ? 'divergente' : 'ok',

@@ -8,7 +8,12 @@
 --
 -- google_ads_reconciliations: uma linha por conta e por dia conferido.
 -- daily_metrics.last_source: quem gravou o dia por último (api ou script) —
--- enquanto os dois convivem, é o que explica uma divergência.
+-- enquanto os dois convivem, é o que explica uma divergência. Dia gravado
+-- pela API não é mais sobrescrito pelo script.
+-- daily_metrics.reconcile_note: o que a conferência corrigiu no dia.
+--
+-- Divergência encontrada é corrigida com o valor do Google e anotada; campanha
+-- que falta no painel é criada.
 --
 -- Rode no SQL Editor do Supabase. Seguro para reexecutar.
 
@@ -39,7 +44,10 @@ ALTER TABLE public.google_ads_accounts
   ADD COLUMN IF NOT EXISTS last_reconcile_summary  JSONB;
 
 ALTER TABLE public.daily_metrics
-  ADD COLUMN IF NOT EXISTS last_source TEXT;                    -- api | script
+  ADD COLUMN IF NOT EXISTS last_source TEXT,                    -- api | script
+  -- O que a conferência fez neste dia (o Dashboard mostra como marca):
+  -- { "kind": "corrigido" | "criado" | "sobrando", "fields": [{ "f": "custo", "de": 656.46, "para": 688.76 }], "source": "script", "at": "..." }
+  ADD COLUMN IF NOT EXISTS reconcile_note JSONB;
 
 -- Leitura pelo painel, só das próprias contas. A gravação é do servidor.
 ALTER TABLE public.google_ads_reconciliations ENABLE ROW LEVEL SECURITY;

@@ -395,7 +395,24 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
   // nada quando não há linha) e não grava mais nada. Com atividade: upsert
   // normal. O status atual da campanha já foi gravado em products acima, e não
   // depende deste trecho.
-  const hasAdsActivity = payload.impressions > 0 || payload.clicks > 0 || payload.cost > 0;
+  let hasAdsActivity = payload.impressions > 0 || payload.clicks > 0 || payload.cost > 0;
+
+  // A API tem prioridade: dia que ela já gravou não é sobrescrito pelo script
+  // da MCC. Sem isso, os dois se alternavam — o script regravava com o valor
+  // dele, a coleta da API corrigia na hora seguinte, e a conferência com o
+  // Google achava divergência que se desfazia sozinha. O script segue valendo
+  // para contas que não estão conectadas pela API.
+  let apiOwnsDay = false;
+  if (script_version !== 'api' && hasAdsActivity) {
+    const { data: dono, error: donoErro } = await supabase
+      .from('daily_metrics').select('last_source')
+      .eq('product_id', product.id).eq('date', date).limit(1);
+    // Antes de migration_conferencia.sql a coluna não existe: segue como antes.
+    if (!donoErro && dono?.[0]?.last_source === 'api') {
+      apiOwnsDay = true;
+      hasAdsActivity = false; // grava só o status, pelo caminho de baixo
+    }
+  }
 
   let upsertError = null;
   if (hasAdsActivity) {
@@ -603,6 +620,7 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
     diag: {
       // Aparece no log do script: confirma, sem abrir o banco, se o script
       // colado no gerenciador é o atual.
+      api_owns_day: apiOwnsDay,
       status_src: hasRawStatus
         ? `${script_version} servidor->${googleStatus}`
         : `${script_version} SEM CAMPOS CRUS (script desatualizado)`,
