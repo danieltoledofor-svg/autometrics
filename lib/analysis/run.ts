@@ -89,7 +89,7 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
   if (transcript) items.push(pageItem(page, money));
 
   // ── Sugestões: novas, mantidas e resolvidas ─────────────────────────────
-  const { data: existing } = await db.from('analysis_suggestions').select('id, item, target_key, status, created_at')
+  const { data: existing } = await db.from('analysis_suggestions').select('id, item, target_key, status, created_at, action, text, baseline')
     .eq('product_id', productId).in('status', ['aberta', 'aplicada']);
   const active = new Set((existing || []).map(s => `${s.item}|${s.target_key}`));
   const flaggedKeys = new Set<string>();
@@ -113,6 +113,21 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
       taken++;
     }
   }
+  // Sugestão aberta que ficou com o texto padrão (a IA estava desligada ou
+  // falhou quando ela nasceu): a IA reescreve junto com os outros textos.
+  const rowsNow = new Map(c.items.flatMap(it => it.rows.map(r => [`${it.key}|${r.key}`, r] as const)));
+  const retext: (Candidate & { suggestionId: string; text: string })[] = [];
+  for (const s of existing || []) {
+    if (s.status !== 'aberta' || s.item === 'pagina' || !s.baseline?.row) continue;
+    if (s.text !== templateText(s.item as ItemKey, s.action, s.baseline.row, s.baseline.keyword || null)) continue;
+    const item = s.item as ItemKey;
+    retext.push({
+      id: `r${retext.length + 1}`, suggestionId: s.id, text: s.text, item,
+      row: rowsNow.get(`${item}|${s.target_key}`) || s.baseline.row,
+      keyword: item === 'termos' ? c.keywordByTerm.get(s.target_key) || null : null,
+    });
+  }
+
   // Voltou ao normal sem ninguém mexer: sai da lista depois de 3 dias.
   const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
   const solved = (existing || []).filter(s => s.status === 'aberta' && s.item !== 'pagina'
@@ -132,7 +147,7 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
     summary = templateSummary(c, items, money);
     if (aiEnabled() && c.reference.mode !== 'nenhuma') {
       try {
-        const ai = await writeTexts(c, items, candidates, userId, money);
+        const ai = await writeTexts(c, items, [...candidates, ...retext], userId, money);
         if (ai.resumo) summary = { ...summary, ...ai.resumo, source: 'ia' };
         for (const [id, t] of ai.pontos) texts.set(id, t);
       } catch (e: any) {
@@ -174,6 +189,13 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
       });
     }
   }
+  for (const r of retext) {
+    const t = texts.get(r.id);
+    if (!t || t.text === r.text) continue;
+    await db.from('analysis_suggestions').update({ action: t.action, text: t.text, updated_at: new Date().toISOString() })
+      .eq('id', r.suggestionId).eq('status', 'aberta');
+  }
+
   // Uma a uma: se outra rodada gravou o mesmo alvo antes, só aquela falha.
   for (const row of rows) {
     const { error } = await db.from('analysis_suggestions').insert(row);

@@ -164,18 +164,22 @@ function addTo(acc: Acc, date: string, d3start: string, r: { cost?: any; convers
  * Troca as conversões do Google de um grupo de itens pelas vendas reais da
  * campanha, rateadas. Cada janela (3 e 7 dias) é rateada à parte.
  */
+/** Devolve se os 3 dias foram rateados pelos cliques (sem conversão do Google). */
 function attribute(accs: Acc[], real: { d3: number; d7: number }) {
+  let byClicks3 = false;
   for (const w of ['3', '7'] as const) {
     const convKey = `conv${w}` as 'conv3' | 'conv7';
     const clickKey = `clicks${w}` as 'clicks3' | 'clicks7';
     const sales = w === '3' ? real.d3 : real.d7;
     const g = accs.reduce((s, a) => s + a[convKey], 0);
     const c = accs.reduce((s, a) => s + a[clickKey], 0);
+    if (w === '3') byClicks3 = g <= 0 && c > 0;
     for (const a of accs) {
       const weight = g > 0 ? a[convKey] / g : c > 0 ? a[clickKey] / c : 0;
       a[convKey] = Math.round(sales * weight * 100) / 100;
     }
   }
+  return { byClicks3 };
 }
 
 function toRow(ref: Reference, key: string, label: string, a: Acc, tag?: string | null, extra?: Record<string, any>, approx = false): Row {
@@ -367,7 +371,7 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
 
   const approx = salesSource === 'real';
   const real = { d3: num(numbers.d3.sales), d7: num(numbers.d7.sales) };
-  const share = (accs: Acc[]) => { if (approx) attribute(accs, real); };
+  const share = (accs: Acc[]) => (approx ? attribute(accs, real) : { byClicks3: false });
   const row = (key: string, label: string, a: Acc, tag?: string | null, extra?: Record<string, any>) =>
     toRow(reference, key, label, a, tag, extra, approx);
 
@@ -452,7 +456,11 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
     if (!audAcc.has(k)) audAcc.set(k, newAcc());
     addTo(audAcc.get(k)!, a.date, d3start, a);
   }
-  for (const type of ['Device', 'Age', 'Gender']) share([...audAcc].filter(([k]) => k.startsWith(`${type}|`)).map(([, a]) => a));
+  let devicesByClicks = false;
+  for (const type of ['Device', 'Age', 'Gender']) {
+    const r = share([...audAcc].filter(([k]) => k.startsWith(`${type}|`)).map(([, a]) => a));
+    if (type === 'Device') devicesByClicks = r.byClicks3;
+  }
   const deviceClicks = { d3: 0, d7: 0 };
   for (const [k, acc] of audAcc) if (k.startsWith('Device|')) { deviceClicks.d3 += acc.clicks3; deviceClicks.d7 += acc.clicks7; }
   const deviceRows: Row[] = [];
@@ -463,7 +471,8 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
       deviceRows.push(row(code, deviceLabel(code), acc, null, {
         share7: deviceClicks.d7 > 0 ? acc.clicks7 / deviceClicks.d7 : null,
         share3: deviceClicks.d3 > 0 ? acc.clicks3 / deviceClicks.d3 : null,
-        convRate3: acc.clicks3 > 0 ? acc.conv3 / acc.clicks3 : null,
+        // Rateio pelos cliques dá a mesma taxa para todos: não diz nada.
+        convRate3: acc.clicks3 > 0 && !devicesByClicks ? acc.conv3 / acc.clicks3 : null,
       }));
     } else {
       audienceRows.push(row(k, audienceLabel(type, code), acc, null, { type, code }));
