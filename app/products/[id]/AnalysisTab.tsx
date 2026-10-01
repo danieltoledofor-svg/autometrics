@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabaseClient';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { ACTIONS } from '@/lib/analysis/actions';
 import { formatMoney } from '@/lib/analysis/labels';
-import { TranscriptBanner } from './TranscriptBanner';
 
 /**
  * Aba "Análise": checklist fixo de 8 itens, sempre na mesma ordem.
@@ -83,12 +82,6 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
     await load();
   };
 
-  const saveTranscript = async (text: string) => {
-    const { ok, body } = await api('/api/analysis', { method: 'PUT', body: JSON.stringify({ product_id: productId, vsl_transcript: text }) });
-    if (!ok) return body.error || 'Não foi possível salvar a transcrição.';
-    await rerun();
-    return null;
-  };
 
   // ── cores ────────────────────────────────────────────────────────────────
   const tone = {
@@ -126,7 +119,6 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
   if (!a) {
     return (
       <div className="space-y-5 max-w-6xl">
-      {data?.ready && <TranscriptBanner chars={data.transcript?.chars || null} onSave={saveTranscript} ui={ui} />}
       <div className={`${bgCard} border ${borderCol} rounded-xl p-6 space-y-3`}>
         <div className={`font-bold ${textHead}`}>Esta campanha ainda não foi analisada</div>
         <div className={`text-sm ${textMuted}`}>A análise roda sozinha depois de cada coleta, para campanhas com gasto nos últimos 7 dias.</div>
@@ -402,7 +394,6 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
 
   return (
     <div className="space-y-5 max-w-6xl">
-      <TranscriptBanner chars={data.transcript?.chars || null} onSave={saveTranscript} ui={ui} />
       {error && <div className="text-sm text-rose-500">{error}</div>}
       {!data.ai && <div className={`text-xs ${textMuted}`}>IA desligada no servidor (OPENROUTER_API_KEY). Números e checklist funcionam; os textos usam o modelo padrão.</div>}
 
