@@ -918,7 +918,7 @@ ${commonFunctions}`;
           // cada página visitada e a saída para o checkout. Numa página sem a
           // FlowTracking, também leva o identificador no link de compra (inclusive
           // no botão do player da VTurb); com ela na página, só lê.
-          const flowScript = `<!-- AutoMetrics — Rastreamento v3 (o mesmo script em todas as páginas) -->
+          const flowScript = `<!-- AutoMetrics — Rastreamento v3.1 (o mesmo script em todas as páginas) -->
 <script>
 (function () {
   try {
@@ -972,6 +972,12 @@ ${commonFunctions}`;
     // Com a FlowTracking na página, é ela que escreve no link de compra.
     function other() { return !!document.querySelector('script[src*="flow-tracking"],script[src*="flowtracking"]'); }
     var sent = {};
+    // Registra a saída (uma vez por destino), sem mexer no link.
+    function note(u) {
+      if (!platform(u)) return;
+      var key = String(u).split('?')[0];
+      if (!sent[key]) { sent[key] = 1; send({ v: 3, c: cur.id, p: cur.p, e: 'out', u: key }); }
+    }
     function out(u) {
       var pf = platform(u), next = u;
       if (!pf) return u;
@@ -983,18 +989,27 @@ ${commonFunctions}`;
           next = d.toString();
         } catch (e) {}
       }
-      var key = next.split('?')[0];
-      if (!sent[key]) { sent[key] = 1; send({ v: 3, c: cur.id, p: cur.p, e: 'out', u: key }); }
+      note(next);
       return next;
     }
     document.addEventListener('click', function (ev) {
       try {
-        var a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+        // composedPath alcança o link dentro do player (shadow DOM).
+        var path = ev.composedPath ? ev.composedPath() : [ev.target], a = null;
+        for (var i = 0; i < path.length && !a; i++) if (path[i] && path[i].tagName === 'A' && path[i].href) a = path[i];
         if (!a) return;
         var n = out(a.href);
         if (n !== a.href) a.href = n;
       } catch (e) {}
     }, true);
+    // Saídas que não passam por um link clicado (botão do player, redirecionamento): só registra.
+    try {
+      if (window.navigation && window.navigation.addEventListener) {
+        window.navigation.addEventListener('navigate', function (e) { try { if (e.destination && e.destination.url) note(e.destination.url); } catch (x) {} });
+      }
+      var open = window.open;
+      window.open = function (u) { try { if (u) note(new URL(String(u), location.href).href); } catch (x) {} return open.apply(window, arguments); };
+    } catch (e) {}
     // Botão dentro do player da VTurb: o player deixa ajustar o link antes de sair.
     var bound = [];
     function hook(el) {
