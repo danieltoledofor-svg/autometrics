@@ -80,8 +80,9 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
   } as Record<Status, string>;
   const ring = {
     ok: borderCol, sem_dado: borderCol,
-    alerta: isDark ? 'border-orange-500/60' : 'border-orange-300',
-    urgente: isDark ? 'border-rose-500/60' : 'border-rose-300',
+    // "!": o bgCard já traz a cor da borda.
+    alerta: isDark ? '!border-orange-500/60' : '!border-orange-300',
+    urgente: isDark ? '!border-rose-500/60' : '!border-rose-300',
   } as Record<Status, string>;
   const soft = isDark ? 'bg-slate-950' : 'bg-slate-50';
   const label = `text-[11px] font-semibold tracking-wide uppercase ${textMuted}`;
@@ -255,8 +256,9 @@ function Keywords({ kw, money, ui }: { kw: any; money: (v: number | null) => str
         : 'Nenhuma visita chegou com utm_term ou gclid.';
   const warn = kw.source !== 'gclid';
   const dash = <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>—</span>;
-  const th = `text-[11px] font-semibold uppercase tracking-wide ${textMuted} text-right px-3 py-2.5 border-b ${borderCol} whitespace-nowrap`;
-  const td = `text-[13px] text-right px-3 py-2.5 border-b ${borderCol} tabular-nums whitespace-nowrap`;
+  const thBase = `text-[11px] font-semibold uppercase tracking-wide ${textMuted} px-3 py-2.5 border-b ${borderCol} whitespace-nowrap`;
+  const tdBase = `text-[13px] px-3 py-2.5 border-b ${borderCol} tabular-nums whitespace-nowrap`;
+  const th = `${thBase} text-right`, td = `${tdBase} text-right`;
   return (
     <div className={`${bgCard} border rounded-xl px-5 py-4 space-y-3`}>
       <div className="flex justify-between items-baseline gap-3 flex-wrap">
@@ -271,14 +273,14 @@ function Keywords({ kw, money, ui }: { kw: any; money: (v: number | null) => str
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead><tr>
-                <th className={`${th} text-left`}>Palavra-chave</th><th className={th}>Cliques</th><th className={th}>Custo</th>
+                <th className={`${thBase} text-left`}>Palavra-chave</th><th className={th}>Cliques</th><th className={th}>Custo</th>
                 <th className={th}>Carregaram</th><th className={th}>Fuga</th><th className={th}>Play</th>
                 <th className={th}>Chegaram ao pitch</th><th className={th}>Vendas</th><th className={th}>CPA</th>
               </tr></thead>
               <tbody>
                 {kw.rows.map((r: any) => (
                   <tr key={r.label} className={r.small ? (isDark ? 'text-slate-500' : 'text-slate-400') : textHead}>
-                    <td className={`${td} text-left`}>{r.label}</td>
+                    <td className={`${tdBase} text-left`}>{r.label}</td>
                     <td className={td}>{r.clicks === null ? dash : int(r.clicks)}</td>
                     <td className={td}>{r.cost === null ? dash : money(r.cost)}</td>
                     <td className={td}>{int(r.viewed)}</td>
