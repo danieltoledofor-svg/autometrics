@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     ready: true,
     ai: aiEnabled(),
     analysis,
-    suggestions: (open || []).map(s => ({ ...s, baseline: { keyword: s.baseline?.keyword ?? null, cpa3: s.baseline?.row?.cpa3 ?? null, cost3: s.baseline?.row?.cost3 ?? null } })),
+    suggestions: (open || []).map(s => ({ ...s, baseline: { keyword: s.baseline?.keyword ?? null, cpa3: s.baseline?.row?.cpa3 ?? null, cost3: s.baseline?.row?.cost3 ?? null, vturb: s.baseline?.vturb ? { metric: s.baseline.vturb.metric ?? null, d3: s.baseline.vturb.d3 ?? null } : null } })),
     history: history.filter(h => h.status === 'avaliada' || h.status === 'nao_faz_sentido').map(h => ({
       id: h.id, item: h.item, target_label: h.target_label, action: h.action, text: h.text, status: h.status,
       outcome: h.outcome, change_at: h.change_at, eval: h.eval_7d || h.eval_3d || null, created_at: h.created_at,
