@@ -92,6 +92,11 @@ async function handleV2(userId: string, body: any, request: Request) {
     // Antes de migration_rastreamento.sql as tabelas não existem: o postback segue pelo click_sessions.
     if (error) { console.error('[TrackClick] Erro ao gravar clique:', error.message); return ok(); }
 
+    // A sessão da FlowTracking costuma aparecer só na página seguinte.
+    if (p.ft_sid) {
+        await supabase.from('tracking_clicks').update({ ft_sid: p.ft_sid }).eq('user_id', userId).eq('click_id', clickId).is('ft_sid', null);
+    }
+
     if (page) {
         const { error: pvError } = await supabase.from('tracking_pageviews').insert({ user_id: userId, click_id: clickId, url: page });
         if (pvError) console.error('[TrackClick] Erro ao gravar página:', pvError.message);

@@ -145,6 +145,29 @@ async function handleRequest(
             }
         }
 
+        // Clique que gerou a venda (script de rastreamento): pelo gclid ou pela
+        // sessão da FlowTracking. Também resolve a campanha quando nada acima achou.
+        let clickId: string | null = null;
+        if (candidateIds.length) {
+            const pickClick = async (column: 'click_id' | 'ft_sid', values: string[]) => {
+                if (!values.length) return null;
+                const { data } = await supabase.from('tracking_clicks').select('click_id, product_id')
+                    .eq('user_id', userId).in(column, values).order('created_at', { ascending: false }).limit(1);
+                return data?.[0] || null;
+            };
+            const click = await pickClick('click_id', candidateIds)
+                || await pickClick('ft_sid', candidateIds.filter(i => i.startsWith('ftsession_')).map(i => i.slice('ftsession_'.length)));
+            if (click) {
+                clickId = click.click_id;
+                trace.push(`clique rastreado: ${clickId}`);
+                if (!product && click.product_id) {
+                    const { data } = await supabase.from('products').select('id, currency').eq('id', click.product_id).eq('user_id', userId).maybeSingle();
+                    product = data;
+                    trace.push(`  → campanha do clique: ${data ? 'encontrada' : 'não'}`);
+                }
+            }
+        }
+
         // 1c. Fallback: busca pelo nome da campanha (utm_campaign)
         if (!product && campaignName) {
             const { data } = await supabase
@@ -159,7 +182,7 @@ async function handleRequest(
 
         if (dryRun) {
             return Response.json(
-                { dry_run: true, event: rawEvent, mapped_event: event, amount, currency, orderid: tid, candidates: candidateIds, trace, product_id: product?.id ?? null },
+                { dry_run: true, event: rawEvent, mapped_event: event, amount, currency, orderid: tid, candidates: candidateIds, trace, click_id: clickId, product_id: product?.id ?? null },
                 { headers: corsHeaders }
             );
         }
@@ -192,9 +215,13 @@ async function handleRequest(
             'Plataforma');
 
         if (tid) {
-            const { error: dupError } = await supabase
-                .from('postback_events')
-                .insert({ product_id: product.id, transaction_id: tid, event_type: event, amount, currency, source });
+            const row = { product_id: product.id, transaction_id: tid, event_type: event, amount, currency, source };
+            // click_id e ref_ids ligam a venda ao clique; antes de
+            // migration_rastreamento_vendas.sql as colunas não existem.
+            let { error: dupError } = await supabase.from('postback_events').insert({ ...row, click_id: clickId, ref_ids: candidateIds });
+            if (dupError && dupError.code !== '23505' && /click_id|ref_ids/.test(dupError.message || '')) {
+                ({ error: dupError } = await supabase.from('postback_events').insert(row));
+            }
 
             if (dupError) {
                 if (dupError.code === '23505') return new Response('OK', { status: 200, headers: corsHeaders }); // duplicata
