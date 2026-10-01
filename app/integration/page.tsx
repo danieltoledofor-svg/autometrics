@@ -912,29 +912,39 @@ ${commonFunctions}`;
           // A FlowTracking ocupa todos os subids da plataforma: SUBID/SUBID4 = ftsession_<ft_sid>,
           // SUBID2 = gclid. O script guarda gclid e ftsession ligados à campanha do clique,
           // e o postback resolve a campanha por qualquer um dos subids.
-          const flowScript = `<!-- AutoMetrics — Conversão Automática (FlowTracking) -->
+          //
+          // Script único (v2): o mesmo em todas as páginas. Guarda tudo o que vier
+          // na URL, lembra o clique no navegador para as páginas seguintes e marca
+          // cada página visitada. Só lê: não mexe em link de compra.
+          const flowScript = `<!-- AutoMetrics — Rastreamento v2 (o mesmo script em todas as páginas) -->
 <script>
 (function () {
-  var uid = '${userId}';
-  var p = new URLSearchParams(window.location.search);
-  var utmId       = p.get('utm_id') || '';
-  var gadId       = p.get('gad_campaignid') || '';
-  var utmCampaign = p.get('utm_campaign') || '';
-  var utmSource   = p.get('utm_source') || '';
-  var utmMedium   = p.get('utm_medium') || '';
-  if (!utmId && !gadId && !utmCampaign) return;
-  var base   = 'https://autometrics.cloud/api/track-click/' + uid;
-  var common = '&utm_id='         + encodeURIComponent(utmId)
-             + '&gad_campaignid=' + encodeURIComponent(gadId)
-             + '&utm_campaign='   + encodeURIComponent(utmCampaign)
-             + '&utm_source='     + encodeURIComponent(utmSource)
-             + '&utm_medium='     + encodeURIComponent(utmMedium);
-  var ids = [];
-  ['gclid','gbraid','wbraid'].forEach(function (k) { if (p.get(k)) ids.push(p.get(k)); });
-  if (p.get('ft_sid')) ids.push('ftsession_' + p.get('ft_sid'));
-  ids.forEach(function (v) {
-    new Image().src = base + '?session_id=' + encodeURIComponent(v) + common;
-  });
+  try {
+    var uid = '${userId}';
+    var url = 'https://autometrics.cloud/api/track-click/' + uid;
+    var KEY = 'am_click', now = Date.now();
+    var q = new URLSearchParams(window.location.search), params = {}, n = 0;
+    q.forEach(function (v, k) { if (v && n < 40) { params[k.slice(0, 40)] = String(v).slice(0, 300); n++; } });
+    var clickId = q.get('gclid') || q.get('gbraid') || q.get('wbraid') || '';
+    var hasCampaign = q.get('utm_id') || q.get('gad_campaignid') || q.get('utm_campaign') || q.get('utm_source');
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+    if (saved && now - saved.t > 30 * 864e5) saved = null;       // clique vale 30 dias
+    var cur = null;
+    if (clickId) cur = saved && saved.id === clickId ? saved : null;
+    else if (saved && (!hasCampaign || now - saved.s < 30 * 6e4)) cur = saved; // página seguinte do mesmo clique
+    if (!cur) {
+      if (!clickId && !hasCampaign) return;                       // visita sem nenhum dado de campanha
+      cur = { id: clickId || 'am_' + now.toString(36) + Math.random().toString(36).slice(2, 10), p: {}, t: now };
+    }
+    for (var k in params) if (!(k in cur.p)) cur.p[k] = params[k]; // soma o que aparecer depois (ex.: ft_sid)
+    cur.s = now;
+    try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch (e) {}
+    var body = JSON.stringify({ v: 2, c: cur.id, p: cur.p, u: location.origin + location.pathname, r: document.referrer || '' });
+    if (!(navigator.sendBeacon && navigator.sendBeacon(url, body))) {
+      fetch(url, { method: 'POST', body: body, keepalive: true, mode: 'no-cors' });
+    }
+  } catch (e) {}
 })();
 </script>`;
 
