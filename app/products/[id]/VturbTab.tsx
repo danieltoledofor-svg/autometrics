@@ -5,6 +5,7 @@ import { RefreshCw, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { formatMoney } from '@/lib/analysis/labels';
+import { TranscriptBanner } from './TranscriptBanner';
 
 /**
  * Aba "VTurb": do clique à venda, retenção do vídeo e palavras-chave.
@@ -72,6 +73,18 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
     setRunning(false);
   };
 
+  // Transcrição: salva e já pede a análise (a leitura da página usa a VSL).
+  const saveTranscript = async (text: string) => {
+    const { ok, body } = await api('/api/analysis', { method: 'PUT', body: JSON.stringify({ product_id: productId, vsl_transcript: text }) });
+    if (!ok) return body.error || 'Não foi possível salvar a transcrição.';
+    api('/api/analysis', { method: 'POST', body: JSON.stringify({ product_id: productId }) });
+    await load();
+    return null;
+  };
+  const banner = data && data.ready !== false || data?.player
+    ? <TranscriptBanner chars={data?.transcript_chars || null} onSave={saveTranscript} ui={ui} />
+    : null;
+
   const tone = {
     ok: isDark ? 'text-emerald-400' : 'text-emerald-600',
     alerta: isDark ? 'text-orange-400' : 'text-orange-600',
@@ -106,11 +119,14 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
 
   if (!player) {
     return (
+      <div className="space-y-5">
+      {banner}
       <div className={`${bgCard} border rounded-xl p-5`}>
         <p className={`text-sm font-bold ${textHead}`}>Player da VTurb</p>
         <p className={`text-xs ${textMuted} mt-1`}>Vincule o player do vídeo desta campanha. Os números passam a ser guardados a cada hora e cruzados com os cliques do Google.</p>
         {linkForm}
         {error && <p className={`text-xs mt-2 ${tone.urgente}`}>{error}</p>}
+      </div>
       </div>
     );
   }
@@ -130,6 +146,7 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
 
   return (
     <div className="space-y-5">
+      {banner}
       <div className={`${bgCard} border rounded-xl px-5 py-4 flex justify-between items-center gap-4 flex-wrap`}>
         <div className="min-w-0">
           <div className={`text-sm font-semibold ${textHead} truncate`}>{player.name || player.id}</div>

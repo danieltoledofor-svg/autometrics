@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, RefreshCw, Check, X, AlertTriangle, Minus, FileText, Loader2 } from 'lucide-react';
+import { ChevronRight, RefreshCw, Check, X, AlertTriangle, Minus, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { ACTIONS } from '@/lib/analysis/actions';
 import { formatMoney } from '@/lib/analysis/labels';
+import { TranscriptBanner } from './TranscriptBanner';
 
 /**
  * Aba "Análise": checklist fixo de 8 itens, sempre na mesma ordem.
@@ -52,9 +53,6 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [savingTranscript, setSavingTranscript] = useState(false);
 
   const load = useCallback(async () => {
     const { ok, body } = await api(`/api/analysis?product_id=${productId}`);
@@ -62,7 +60,6 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
     else {
       setError(null);
       setData(body);
-      setTranscript(body.transcript?.text || '');
       // Abre sozinho o primeiro item com problema.
       const items: any[] = body.analysis?.checklist || [];
       const first = items.find(i => i.status === 'urgente') || items.find(i => i.status === 'alerta');
@@ -86,12 +83,11 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
     await load();
   };
 
-  const saveTranscript = async () => {
-    setSavingTranscript(true);
-    const { ok, body } = await api('/api/analysis', { method: 'PUT', body: JSON.stringify({ product_id: productId, vsl_transcript: transcript }) });
-    if (!ok) setError(body.error || 'Não foi possível salvar a transcrição.');
-    else { setTranscriptOpen(false); await rerun(); }
-    setSavingTranscript(false);
+  const saveTranscript = async (text: string) => {
+    const { ok, body } = await api('/api/analysis', { method: 'PUT', body: JSON.stringify({ product_id: productId, vsl_transcript: text }) });
+    if (!ok) return body.error || 'Não foi possível salvar a transcrição.';
+    await rerun();
+    return null;
   };
 
   // ── cores ────────────────────────────────────────────────────────────────
@@ -129,6 +125,8 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
 
   if (!a) {
     return (
+      <div className="space-y-5 max-w-6xl">
+      {data?.ready && <TranscriptBanner chars={data.transcript?.chars || null} onSave={saveTranscript} ui={ui} />}
       <div className={`${bgCard} border ${borderCol} rounded-xl p-6 space-y-3`}>
         <div className={`font-bold ${textHead}`}>Esta campanha ainda não foi analisada</div>
         <div className={`text-sm ${textMuted}`}>A análise roda sozinha depois de cada coleta, para campanhas com gasto nos últimos 7 dias.</div>
@@ -136,6 +134,7 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
         <button onClick={rerun} disabled={running} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-60">
           {running ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Analisar agora
         </button>
+      </div>
       </div>
     );
   }
@@ -362,14 +361,7 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
 
   const PageDetail = () => {
     const p = a.page;
-    if (!p) {
-      return hasTranscript ? null : (
-        <div className={`mt-3 rounded-lg border border-dashed ${borderCol} px-3 py-2 text-[12.5px] ${textMuted}`}>
-          Anúncio × página × VSL: aparece aqui embaixo quando a transcrição da VSL está salva ·{' '}
-          <button onClick={() => setTranscriptOpen(true)} className="text-indigo-400 hover:underline">colar a transcrição</button>
-        </div>
-      );
-    }
+    if (!p) return null;
     const conversa: Record<string, [Status, string]> = { sim: ['ok', 'sim'], nao: ['urgente', 'não'], em_parte: ['alerta', 'em parte'] };
     return (
       <div className="space-y-3">
@@ -407,10 +399,10 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
     );
   };
 
-  const hasTranscript = !!data.transcript;
 
   return (
     <div className="space-y-5 max-w-6xl">
+      <TranscriptBanner chars={data.transcript?.chars || null} onSave={saveTranscript} ui={ui} />
       {error && <div className="text-sm text-rose-500">{error}</div>}
       {!data.ai && <div className={`text-xs ${textMuted}`}>IA desligada no servidor (OPENROUTER_API_KEY). Números e checklist funcionam; os textos usam o modelo padrão.</div>}
 
@@ -483,27 +475,6 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
           })}
         </div>
 
-        {/* Transcrição da VSL: liga o item 8 */}
-        <div className="mt-2">
-          {!transcriptOpen ? (
-            <button onClick={() => setTranscriptOpen(true)} className={`text-xs ${textMuted} hover:text-indigo-400 inline-flex items-center gap-1.5`}>
-              <FileText size={13} /> {hasTranscript ? `Transcrição da VSL salva (${data.transcript.chars.toLocaleString('pt-BR')} caracteres) · trocar` : (items.some(i => i.key === 'pagina') ? 'Cole a transcrição da VSL para incluir anúncio × página × VSL no item 8' : 'Campanha com VSL? Cole a transcrição ou vincule o player na aba VTurb para ativar o item 8')}
-            </button>
-          ) : (
-            <div className={`${bgCard} border ${borderCol} rounded-xl p-4 space-y-2`}>
-              <div className={`text-sm font-bold ${textHead}`}>Transcrição da VSL</div>
-              <textarea value={transcript} onChange={e => setTranscript(e.target.value)} rows={8}
-                placeholder="Cole aqui a transcrição completa da VSL desta campanha. Troque quando a VSL mudar."
-                className={`w-full rounded-lg border ${borderCol} ${soft} ${textHead} p-3 text-[13px] outline-none focus:border-indigo-500`} />
-              <div className="flex gap-2">
-                <button onClick={saveTranscript} disabled={savingTranscript} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-60 inline-flex items-center gap-1.5">
-                  {savingTranscript && <Loader2 size={12} className="animate-spin" />} Salvar e analisar
-                </button>
-                <button onClick={() => { setTranscriptOpen(false); setTranscript(data.transcript?.text || ''); }} className={`px-3 py-2 text-xs ${textMuted}`}>Cancelar</button>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* 4. Resultado das sugestões anteriores */}

@@ -66,6 +66,7 @@ export async function computeFunnel(productId: string) {
   const base = {
     player: playerId ? { id: playerId, name: product.vturb_player_name || null, duration: product.vturb_duration || null, pitch_time: product.vturb_pitch_time || null } : null,
     synced_at: product.vturb_synced_at || null, sync_error: product.vturb_sync_error || null,
+    transcript_chars: product.vsl_transcript ? String(product.vsl_transcript).length : null,
     period: { d3: [d3start, end], d7: [d7start, end] },
   };
   if (!playerId) return { ...base, ready: false };
