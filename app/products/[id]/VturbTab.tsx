@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { formatMoney } from '@/lib/analysis/labels';
 import { TranscriptBanner } from './TranscriptBanner';
+import { TopoAnalysis } from './TopoAnalysis';
 
 /**
  * Aba "VTurb": do clique à venda, retenção do vídeo e palavras-chave.
@@ -81,6 +82,10 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
     await load();
     return null;
   };
+  const mark = async (id: string, status: 'ignorada' | 'nao_faz_sentido') => {
+    await api('/api/analysis', { method: 'PATCH', body: JSON.stringify({ id, status }) });
+    await load();
+  };
   const banner = data && data.ready !== false || data?.player
     ? <TranscriptBanner chars={data?.transcript_chars || null} onSave={saveTranscript} ui={ui} />
     : null;
@@ -147,6 +152,12 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
   return (
     <div className="space-y-5">
       {banner}
+      {data?.topo && d3 && (
+        <TopoAnalysis data={data} ui={ui} money={money} running={running} onAnalyze={() => post({ action: 'analyze' })} onMark={mark} />
+      )}
+      <div className={`flex items-center gap-2 text-[11px] uppercase tracking-wider font-extrabold ${textMuted}`}>
+        Números da VTurb <span className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+      </div>
       <div className={`${bgCard} border rounded-xl px-5 py-4 flex justify-between items-center gap-4 flex-wrap`}>
         <div className="min-w-0">
           <div className={`text-sm font-semibold ${textHead} truncate`}>{player.name || player.id}</div>
@@ -167,14 +178,6 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
 
       {d3 && (
         <>
-          <div className={`${bgCard} border rounded-xl px-5 py-4`}>
-            <div className={`text-base font-bold ${textHead}`}>
-              {data.overall !== 'ok' && data.overall !== 'sem_dado' && <span className={tone[data.overall as Status]}>✦ </span>}
-              {data.summary.title}
-            </div>
-            <div className={`text-sm ${textMuted} mt-1`}>{data.summary.text}</div>
-          </div>
-
           <div className="space-y-2.5">
             <div className={label}>Do clique à venda · 3 dias</div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">

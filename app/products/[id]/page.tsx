@@ -1191,7 +1191,7 @@ export default function ProductDetailPage() {
 
       {/* ══════════════════════════ ABA ANÁLISE ══════════════════════════ */}
       {activeTab === 'analysis' && (
-        <AnalysisTab productId={productId} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} />
+        <AnalysisTab productId={productId} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} onOpenVturb={() => setActiveTab('vturb')} />
       )}
 
       {/* ══════════════════════════ ABA ESTRATÉGIA ══════════════════════════ */}

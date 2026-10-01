@@ -1,12 +1,12 @@
 import { createHash } from 'crypto';
 import { supabaseAdmin } from '@/lib/googleAds/server';
-import { worst, type Computed, type Item, type Status } from './compute';
-import { landingUrl, fetchPageText, pageStatus, type PageResult } from './page';
+import { type Computed } from './compute';
+import { landingUrl, fetchPageText } from './page';
 import { computeFunnel, pct, mmss, MIN_VIEWS } from '@/lib/vturb/funnel';
 import { playerIdFrom } from '@/lib/vturb/client';
 
 /**
- * Item 8 da Análise, "Página e vídeo": a VTurb (fuga da página, play, chegada
+ * Topo de funil (aba VTurb): sugestões e acompanhamento da VTurb (fuga, play, chegada
  * ao pitch, palavras-chave) junto com a leitura anúncio × página × VSL quando
  * a transcrição está salva.
  *
@@ -25,7 +25,6 @@ export type Funnel = Extract<NonNullable<Awaited<ReturnType<typeof computeFunnel
 
 const PAGE_CHECK_MS = 20 * 60 * 60 * 1000;
 const sha = (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 32);
-const known = (list: Status[]) => list.filter(s => s !== 'sem_dado');
 
 export async function funnelFor(productId: string, product: any): Promise<Funnel | null> {
   if (!playerIdFrom(product.vturb_player_id)) return null;
@@ -52,43 +51,6 @@ function vturbSummary(f: Funnel) {
       rows: kws.slice(0, 15).map((r: any) => ({ key: r.key, label: r.label, viewed: r.viewed, leak: r.leak, pitch: r.pitch, pitchVs: r.pitchVs, leakVs: r.leakVs, sales: r.sales, status: r.status })),
       small: { count: smallRows.length, viewed: smallRows.reduce((s: number, r: any) => s + r.viewed, 0), sales: smallRows.reduce((s: number, r: any) => s + r.sales, 0) },
     },
-  };
-}
-
-export function pageVideoItem(page: PageResult | null, hasTranscript: boolean, f: Funnel | null, money: (v: number) => string): Item {
-  const v = f ? vturbSummary(f) : null;
-  const kwBad = v?.keywords.rows.filter(r => r.status === 'alerta' || r.status === 'urgente') || [];
-  const funnelStatuses: Status[] = v && v.enough ? [v.status.leak, v.status.pitch] : [];
-  const pageS: Status = hasTranscript ? pageStatus(page) : 'sem_dado';
-  const all = known([...funnelStatuses, ...kwBad.map(r => r.status as Status), pageS]);
-  const status: Status = all.length ? worst(all) : 'sem_dado';
-
-  const count = (s: Status) => funnelStatuses.filter(x => x === s).length + kwBad.filter(r => r.status === s).length
-    + (hasTranscript ? page?.achados.filter(a => a.nivel === s).length || 0 : 0);
-
-  let headline = 'Aguardando os primeiros números da VTurb';
-  const badPage = hasTranscript && page && !page.error ? page.grupos.filter(g => g.conversa !== 'sim') : [];
-  const alertOf = (s: Status) => s === 'alerta' || s === 'urgente';
-  if (v && v.enough && alertOf(v.status.leak)) headline = `Fuga da página em ${pct(v.d3.leak)} em 3 dias (7d ${pct(v.d7.leak)})`;
-  else if (v && v.enough && alertOf(v.status.pitch)) headline = `Chegada ao pitch em ${pct(v.d3.pitch)} em 3 dias (7d ${pct(v.d7.pitch)})`;
-  else if (kwBad.length) {
-    const k = kwBad[0];
-    headline = k.pitchVs !== null && k.pitchVs <= -0.15
-      ? `${k.label}: chegada ao pitch em ${pct(k.pitch)}, ${Math.round(-k.pitchVs * 100)}% abaixo da campanha`
-      : `${k.label}: fuga da página em ${pct(k.leak)}`;
-  } else if (badPage.length) {
-    const g = badPage[0];
-    headline = `Quem busca "${g.nome.toLowerCase()}" (${money(g.gasto3)} em 3 dias) ${g.conversa === 'nao' ? 'não encontra o assunto no começo da página' : 'encontra o assunto só em parte'}`;
-  } else if (v && v.enough) headline = `Fuga da página ${pct(v.d3.leak)}, play ${pct(v.d3.play)}, pitch ${pct(v.d3.pitch)}: iguais à média`;
-  else if (v) headline = `Só ${v.d3.viewed} vídeos carregados em 3 dias: menos de ${MIN_VIEWS}, sem semáforo`;
-  else if (hasTranscript && page?.error) headline = page.error;
-  else if (hasTranscript && page) headline = 'Os grupos de busca principais encontram o assunto na página e na VSL';
-  else if (hasTranscript) headline = 'Aguardando a primeira leitura da página';
-
-  return {
-    key: 'pagina', title: 'Página e vídeo', status, headline, rows: [], others: null,
-    counts: { urgente: count('urgente'), alerta: count('alerta'), ok: count('ok') },
-    vturb: v,
   };
 }
 
@@ -202,12 +164,4 @@ export async function detectVturbApplied(c: Computed, f: Funnel | null) {
     applied++;
   }
   return applied;
-}
-
-/** Linhas da VTurb para o pedido da IA (resumo da campanha). */
-export function vturbPromptLines(item: Item | undefined): string {
-  const v = item?.vturb;
-  if (!v || !v.enough) return '';
-  return `PÁGINA E VÍDEO (VTurb, 3 dias × média de 7 dias):
-fuga da página ${pct(v.d3.leak)} × ${pct(v.d7.leak)} (${v.status.leak}) · play ${pct(v.d3.play)} × ${pct(v.d7.play)} · chegada ao pitch ${pct(v.d3.pitch)} × ${pct(v.d7.pitch)} (${v.status.pitch}) · vendas de quem chegou ao pitch ${pct(v.d3.salesPerPitch)} × ${pct(v.d7.salesPerPitch)}${v.retention ? `\nretenção: ${v.retention}` : ''}`;
 }

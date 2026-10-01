@@ -45,7 +45,7 @@ const FIELD_PT: Record<string, string> = {
   amount_micros: 'orçamento', target_cpa_micros: 'meta de CPA',
 };
 
-export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
+export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string; ui: Ui; onOpenVturb?: () => void }) {
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -131,7 +131,9 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
     );
   }
 
-  const items: any[] = a.checklist || [];
+  // Item 8 antigo (página e vídeo) agora é a análise da aba VTurb.
+  const items: any[] = (a.checklist || []).filter((i: any) => i.key !== 'pagina');
+  const topo = a.summary?.topo;
   const suggestions: any[] = data.suggestions || [];
   const history: any[] = data.history || [];
   const counts = items.reduce((acc, i) => {
@@ -279,119 +281,6 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
     </div>
   );
 
-  const VturbDetail = ({ item }: { item: any }) => {
-    const v = item.vturb;
-    if (!v) return null;
-    const diff = (a: number | null, b: number | null, rel = false) => {
-      if (a === null || a === undefined || b === null || b === undefined) return '—';
-      if (rel) { if (!b) return '—'; const d = ((a - b) / b) * 100; return Math.abs(d) < 0.5 ? '=' : `${d > 0 ? '▲' : '▼'} ${Math.round(Math.abs(d))}%`; }
-      const d = (a - b) * 100; return Math.abs(d) < 0.05 ? '=' : `${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1).replace('.', ',')} pp`;
-    };
-    const alertTone = (s: Status) => (v.enough && (s === 'alerta' || s === 'urgente') ? tone[s] : undefined);
-    const st = (s: Status) => (v.enough ? <Pill s={s}>{statusLabel(s)}</Pill> : <span className={textMuted}>—</span>);
-    const rows: [string, string, number | null, number | null, string, React.ReactNode, string?][] = [
-      ['Fuga da página', 'clicou e não carregou o vídeo', v.d3.leak, v.d7.leak, diff(v.d3.leak, v.d7.leak), st(v.status.leak), alertTone(v.status.leak)],
-      ['Play', 'de quem carregou', v.d3.play, v.d7.play, diff(v.d3.play, v.d7.play), st('ok')],
-      ['Chegada ao pitch', `${v.pitch_time ? `${Math.floor(v.pitch_time / 60)}:${String(v.pitch_time % 60).padStart(2, '0')}, ` : ''}de quem deu play`, v.d3.pitch, v.d7.pitch, diff(v.d3.pitch, v.d7.pitch, true), st(v.status.pitch), alertTone(v.status.pitch)],
-      ['Vendas', 'de quem chegou ao pitch', v.d3.salesPerPitch, v.d7.salesPerPitch, diff(v.d3.salesPerPitch, v.d7.salesPerPitch), <span key="x" className={textMuted}>—</span>],
-    ];
-    const kw = v.keywords;
-    return (
-      <div className="space-y-3">
-        <div className={`text-[11.5px] ${textMuted}`}>
-          Player: {v.player?.name || v.player?.id} · dados da VTurb guardados a cada hora{!v.enough ? ` · só ${v.d3.viewed} vídeos carregados em 3 dias, sem semáforo` : ''}
-        </div>
-        <div className={`overflow-x-auto rounded-lg border ${borderCol}`}>
-          <table className="w-full border-collapse tabular-nums">
-            <thead><tr>{['Do clique à venda', '3 dias', '7 dias', 'Diferença', 'Status'].map((h, i) =>
-              <th key={h} className={`${th} ${i === 0 ? 'text-left' : i === 4 ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr></thead>
-            <tbody>{rows.map(([name, hint, a3, a7, d, status, dTone]) => (
-              <tr key={name}>
-                <td className={td}><span className={textHead}>{name}</span> <span className={`text-[11px] ${textMuted}`}>{hint}</span></td>
-                <td className={`${td} text-right`}>{pctText(a3)}</td>
-                <td className={`${td} text-right ${textMuted}`}>{pctText(a7)}</td>
-                <td className={`${td} text-right ${dTone || textMuted}`}>{d}</td>
-                <td className={td}>{status}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-        {v.retention && <div className={`text-[12.5px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Retenção dos 7 dias: {v.retention}</div>}
-        {kw.source !== 'nenhuma' && (kw.rows.length > 0 || kw.small.count > 0) && (
-          <div className="space-y-1.5">
-            <div className={`text-[11px] uppercase tracking-wider font-bold ${textMuted}`}>Palavras-chave com 30 visitas ou mais · 7 dias</div>
-            <div className={`overflow-x-auto rounded-lg border ${borderCol}`}>
-              <table className="w-full border-collapse tabular-nums">
-                <thead><tr>{['Palavra-chave', 'Carregaram', 'Fuga', 'Chegada ao pitch', '× campanha', 'Vendas', 'Status'].map((h, i) =>
-                  <th key={h} className={`${th} ${i === 0 || i === 6 ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr></thead>
-                <tbody>
-                  {kw.rows.map((r: any) => (
-                    <tr key={r.key}>
-                      <td className={td}><span className={textHead}>{r.label}</span></td>
-                      <td className={`${td} text-right`}>{r.viewed.toLocaleString('pt-BR')}</td>
-                      <td className={`${td} text-right`}>{r.leak === null ? <span className={textMuted}>—</span> : pctText(r.leak)}</td>
-                      <td className={`${td} text-right`}>{pctText(r.pitch)}</td>
-                      <td className={`${td} text-right ${textMuted}`}>{r.pitchVs === null ? '—' : `${r.pitchVs > 0 ? '▲' : '▼'} ${Math.round(Math.abs(r.pitchVs) * 100)}%`}</td>
-                      <td className={`${td} text-right`}>{r.sales}</td>
-                      <td className={td}><Pill s={r.status}>{statusLabel(r.status)}</Pill></td>
-                    </tr>
-                  ))}
-                  {kw.small.count > 0 && (
-                    <tr><td colSpan={7} className={`${td} ${textMuted}`}>{kw.small.count} {kw.small.count === 1 ? 'palavra-chave' : 'palavras-chave'} com menos de 30 visitas {kw.small.count === 1 ? 'fica' : 'ficam'} fora · {kw.small.viewed} visitas, {kw.small.sales} {kw.small.sales === 1 ? 'venda' : 'vendas'}</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className={`text-[11.5px] ${textMuted}`}>
-              {kw.source === 'gclid' ? `Ligação pelo gclid de cada clique (${kw.visits.matched.toLocaleString('pt-BR')} visitas).` : `Ligação pelo utm_term (${kw.visits.utm_term.toLocaleString('pt-BR')} visitas). Com a conta pela API do Google, pelo gclid de cada clique.`}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const PageDetail = () => {
-    const p = a.page;
-    if (!p) return null;
-    const conversa: Record<string, [Status, string]> = { sim: ['ok', 'sim'], nao: ['urgente', 'não'], em_parte: ['alerta', 'em parte'] };
-    return (
-      <div className="space-y-3">
-        <div className={`text-[11.5px] ${textMuted}`}>
-          {p.url && <>Página lida: <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline break-all">{p.url}</a> · </>}
-          {p.checked_at && `em ${ddmm(p.checked_at.slice(0, 10))} · `}relida quando a página, a VSL ou os termos principais mudam, e no mínimo 1 vez por semana
-        </div>
-        {p.error && <div className="text-sm text-rose-500">{p.error}</div>}
-        {p.resumo && <div className={`rounded-lg ${soft} border ${borderCol} px-3 py-2 text-[13px] ${textHead}`}><b>Resumo:</b> {p.resumo}</div>}
-        {p.grupos?.length > 0 && (
-          <div className={`overflow-x-auto rounded-lg border ${borderCol}`}>
-            <table className="w-full border-collapse tabular-nums">
-              <thead><tr>{['Grupo de buscas', 'Gasto 3d', 'Vendas 3d', 'Página abre com', 'Na VSL', 'Conversa?'].map((h, i) =>
-                <th key={h} className={`${th} ${i === 1 || i === 2 ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
-              <tbody>{p.grupos.map((g: any) => (
-                <tr key={g.nome}>
-                  <td className={td} title={g.termos?.join('\n')}><span className={`font-medium ${textHead}`}>{g.nome}</span> <span className={`text-[11px] ${textMuted}`}>{g.termos?.length} termos</span></td>
-                  <td className={`${td} text-right`}>{money(g.gasto3)}</td>
-                  <td className={`${td} text-right`}>{conv(g.vendas3)}</td>
-                  <td className={`${td} whitespace-normal min-w-[160px]`}>{g.abre}</td>
-                  <td className={`${td} whitespace-normal min-w-[120px]`}>{g.vsl}</td>
-                  <td className={td}><Pill s={(conversa[g.conversa] || conversa.em_parte)[0]}>{(conversa[g.conversa] || conversa.em_parte)[1]}</Pill></td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
-        {p.achados?.filter((f: any) => f.nivel !== 'ok').map((f: any, i: number) => (
-          <div key={i} className="flex gap-2 text-[13px]">
-            <Icon s={f.nivel} />
-            <div><b className={textHead}>{f.titulo}.</b> <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>{f.texto}</span></div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-
   return (
     <div className="space-y-5 max-w-6xl">
       {error && <div className="text-sm text-rose-500">{error}</div>}
@@ -457,7 +346,7 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
                 </button>
                 {isOpen && (
                   <div className="px-4 pb-4 md:pl-[52px]">
-                    {item.key === 'pagina' ? <><VturbDetail item={item} /><PageDetail /></> : <Table item={item} />}
+                    <Table item={item} />
                     {points.length > 0 && <Points list={points} />}
                   </div>
                 )}
@@ -466,6 +355,14 @@ export function AnalysisTab({ productId, ui }: { productId: string; ui: Ui }) {
           })}
         </div>
 
+        {/* Topo de funil em alerta: só a ligação, a análise fica na aba VTurb. */}
+        {topo && (topo.status === 'alerta' || topo.status === 'urgente') && (
+          <div className={`mt-2 ${bgCard} border ${borderCol} rounded-xl px-4 py-2.5 flex items-center gap-2.5 flex-wrap text-[13px]`}>
+            <Icon s={topo.status} />
+            <span className={textHead}>Página e vídeo: {topo.headline || topo.title}</span>
+            {onOpenVturb && <button onClick={onOpenVturb} className="ml-auto text-xs text-indigo-400 hover:underline">ver na aba VTurb</button>}
+          </div>
+        )}
       </div>
 
       {/* 4. Resultado das sugestões anteriores */}

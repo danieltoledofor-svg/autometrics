@@ -7,7 +7,8 @@ import { situationFor, learningsFor, campaignHistory } from './memory';
 import { detectApplied, evaluateApplied, markPageApplied } from './track';
 import { analyzePage, fetchPageText, landingUrl, pageHash, pageStatus, type PageResult } from './page';
 import { formatMoney } from './labels';
-import { funnelFor, pageVideoItem, vturbSuggestions, vturbFlagged, detectVturbApplied, pageHashNow as currentPageHash, vturbPromptLines } from './vturbItem';
+import { funnelFor, vturbSuggestions, vturbFlagged, detectVturbApplied, pageHashNow as currentPageHash } from './vturbItem';
+import { buildTopo, topoHash, writeTopoText } from '@/lib/vturb/topo';
 
 /**
  * Análise de uma campanha, do começo ao fim:
@@ -86,11 +87,12 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
     page = null;
   }
 
-  // ── Item 8: página e vídeo (VTurb + leitura da página) ─────────────────
+  // Topo de funil (VTurb + página + VSL) fica na aba VTurb; aqui só os
+  // dados da campanha. As sugestões do topo continuam sendo criadas e
+  // acompanhadas aqui, com item = 'pagina'.
   const funnel = await funnelFor(productId, c.product);
   const appliedVturb = await detectVturbApplied(c, funnel);
   const items: Item[] = [...c.items];
-  if (transcript || funnel) items.push(pageVideoItem(page, !!transcript, funnel, money));
 
   // ── Sugestões: novas, mantidas e resolvidas ─────────────────────────────
   const { data: existing } = await db.from('analysis_suggestions').select('id, item, target_key, status, created_at, action, text, baseline')
@@ -161,6 +163,24 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
     }
     summary.generated_at = new Date().toISOString();
   }
+
+  // ── Resumo do topo de funil (aba VTurb) ─────────────────────────────────
+  let topo: any = previous?.summary?.topo || null;
+  if (funnel) {
+    const h = topoHash(funnel, page, transcript);
+    const age = topo?.generated_at ? Date.now() - new Date(topo.generated_at).getTime() : Infinity;
+    if (opts.force || !topo || topo.hash !== h || age > SUMMARY_MAX_AGE_MS) {
+      let t: { title: string; text: string } | null = null;
+      if (aiEnabled() && funnel.d3.viewed > 0) {
+        try { t = await writeTopoText(funnel, page, transcript, { userId, productId }); } catch { t = null; }
+      }
+      topo = { ...(t || funnel.summary), source: t ? 'ia' : 'modelo', generated_at: new Date().toISOString(), hash: h };
+    }
+    const b = buildTopo(funnel, page, transcript);
+    const worstItem = b.items.find(i => i.status === b.status);
+    topo = { ...topo, status: b.status, headline: worstItem ? `${worstItem.title.toLowerCase()} · ${worstItem.headline}` : null };
+  } else topo = null;
+  summary = { ...(summary || {}), topo };
 
   // Grava as sugestões novas com os números do momento.
   const campaignCost3 = Number(c.numbers.d3.cost) || 0;
@@ -310,7 +330,6 @@ CPA ${n(d3.cpa, money)} × ${n(d7.cpa, money)} · gasto/dia ${n(d3.cost_day, mon
 
 CHECKLIST:
 ${items.map(i => `- ${i.title}: ${i.status} · ${i.headline}`).join('\n')}
-${vturbPromptLines(items.find(i => i.key === 'pagina'))}
 
 PONTOS (escreva um para cada):
 ${pontos || '(nenhum novo)'}
