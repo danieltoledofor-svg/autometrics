@@ -18,6 +18,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // O script de rastreamento roda nas páginas dos anúncios, em qualquer
+  // domínio: a rota é pública e responde com os próprios cabeçalhos de CORS.
+  if (pathname.startsWith('/api/track-click/')) {
+    return NextResponse.next();
+  }
+
   const origin = request.headers.get('origin') ?? '';
 
   if (origin && !allowedOrigins.includes(origin)) {
