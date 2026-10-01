@@ -913,20 +913,38 @@ ${commonFunctions}`;
           // SUBID2 = gclid. O script guarda gclid e ftsession ligados à campanha do clique,
           // e o postback resolve a campanha por qualquer um dos subids.
           //
-          // Script único (v2): o mesmo em todas as páginas. Guarda tudo o que vier
-          // na URL, lembra o clique no navegador para as páginas seguintes e marca
-          // cada página visitada. Só lê: não mexe em link de compra.
-          const flowScript = `<!-- AutoMetrics — Rastreamento v2 (o mesmo script em todas as páginas) -->
+          // Script único (v3): o mesmo em todas as páginas. Guarda tudo o que vier
+          // na URL, lembra o clique no navegador para as páginas seguintes, marca
+          // cada página visitada e a saída para o checkout. Numa página sem a
+          // FlowTracking, também leva o identificador no link de compra (inclusive
+          // no botão do player da VTurb); com ela na página, só lê.
+          const flowScript = `<!-- AutoMetrics — Rastreamento v3 (o mesmo script em todas as páginas) -->
 <script>
 (function () {
   try {
     var uid = '${userId}';
     var url = 'https://autometrics.cloud/api/track-click/' + uid;
     var KEY = 'am_click', now = Date.now();
-    var q = new URLSearchParams(window.location.search), params = {}, n = 0;
-    q.forEach(function (v, k) { if (v && n < 40) { params[k.slice(0, 40)] = String(v).slice(0, 300); n++; } });
-    var clickId = q.get('gclid') || q.get('gbraid') || q.get('wbraid') || '';
-    var hasCampaign = q.get('utm_id') || q.get('gad_campaignid') || q.get('utm_campaign') || q.get('utm_source');
+    function read() {
+      var o = {}, n = 0;
+      new URLSearchParams(window.location.search).forEach(function (v, k) { if (v && n < 40) { o[k.slice(0, 40)] = String(v).slice(0, 300); n++; } });
+      return o;
+    }
+    function send(o) {
+      try {
+        var b = JSON.stringify(o);
+        if (navigator.sendBeacon && navigator.sendBeacon(url, b)) return;
+        fetch(url, { method: 'POST', body: b, keepalive: true, mode: 'no-cors' });
+      } catch (e) {}
+    }
+    // gclid: o do Google ou o que vem em ftgid=ftgid_{gclid}_ftgid
+    function gclidOf(p) {
+      var f = p.ftgid || '';
+      return p.gclid || (f.indexOf('ftgid_') === 0 && f.slice(-6) === '_ftgid' && f.indexOf('{') < 0 ? f.slice(6, -6) : '');
+    }
+    var params = read();
+    var clickId = gclidOf(params) || params.gbraid || params.wbraid || '';
+    var hasCampaign = params.utm_id || params.gad_campaignid || params.utm_campaign || params.utm_source;
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
     if (saved && now - saved.t > 30 * 864e5) saved = null;       // clique vale 30 dias
@@ -937,13 +955,71 @@ ${commonFunctions}`;
       if (!clickId && !hasCampaign) return;                       // visita sem nenhum dado de campanha
       cur = { id: clickId || 'am_' + now.toString(36) + Math.random().toString(36).slice(2, 10), p: {}, t: now };
     }
-    for (var k in params) if (!(k in cur.p)) cur.p[k] = params[k]; // soma o que aparecer depois (ex.: ft_sid)
-    cur.s = now;
-    try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch (e) {}
-    var body = JSON.stringify({ v: 2, c: cur.id, p: cur.p, u: location.origin + location.pathname, r: document.referrer || '' });
-    if (!(navigator.sendBeacon && navigator.sendBeacon(url, body))) {
-      fetch(url, { method: 'POST', body: body, keepalive: true, mode: 'no-cors' });
+    function merge(p) { var added = false; for (var k in p) if (!(k in cur.p)) { cur.p[k] = p[k]; added = true; } return added; }
+    function save() { try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch (e) {} }
+    merge(params); cur.s = now; save();
+    send({ v: 3, c: cur.id, p: cur.p, u: location.origin + location.pathname, r: document.referrer || '' });
+
+    // ── Saída para o checkout ──────────────────────────────────────────────
+    var HOSTS = ['buygoods', 'clickbank', 'digistore24', 'cartpanda', 'maxweb', 'hotmart', 'kiwify'];
+    function platform(u) {
+      try {
+        var h = new URL(u, location.href).hostname.toLowerCase();
+        for (var i = 0; i < HOSTS.length; i++) if (h.indexOf(HOSTS[i]) >= 0) return HOSTS[i];
+      } catch (e) {}
+      return '';
     }
+    // Com a FlowTracking na página, é ela que escreve no link de compra.
+    function other() { return !!document.querySelector('script[src*="flow-tracking"],script[src*="flowtracking"]'); }
+    var sent = {};
+    function out(u) {
+      var pf = platform(u), next = u;
+      if (!pf) return u;
+      if (pf === 'buygoods' && !other()) {
+        try {
+          var d = new URL(u, location.href), s = d.searchParams, g = gclidOf(cur.p);
+          if (!s.get('subid') && !s.get('SUBID')) s.set('subid', cur.id);
+          if (g && !s.get('subid2') && !s.get('SUBID2')) s.set('subid2', g);
+          next = d.toString();
+        } catch (e) {}
+      }
+      var key = next.split('?')[0];
+      if (!sent[key]) { sent[key] = 1; send({ v: 3, c: cur.id, p: cur.p, e: 'out', u: key }); }
+      return next;
+    }
+    document.addEventListener('click', function (ev) {
+      try {
+        var a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+        if (!a) return;
+        var n = out(a.href);
+        if (n !== a.href) a.href = n;
+      } catch (e) {}
+    }, true);
+    // Botão dentro do player da VTurb: o player deixa ajustar o link antes de sair.
+    var bound = [];
+    function hook(el) {
+      try {
+        if (el.__am || other() || typeof el.injectUrlUpdater !== 'function') return;
+        el.__am = 1;
+        el.injectUrlUpdater(function (u) { try { return out(String(u || '')); } catch (e) { return u; } });
+      } catch (e) {}
+    }
+    function bind() {
+      var list = document.querySelectorAll('vturb-smartplayer');
+      for (var i = 0; i < list.length; i++) (function (el) {
+        hook(el);
+        if (bound.indexOf(el) < 0) { bound.push(el); el.addEventListener('player:ready', function () { hook(el); }); }
+      })(list[i]);
+    }
+    // Dados que aparecem na URL depois do carregamento (ex.: ft_sid) e players que entram depois.
+    function late() {
+      if (merge(read())) { save(); send({ v: 3, c: cur.id, p: cur.p, e: 'u' }); }
+      bind();
+    }
+    bind();
+    document.addEventListener('DOMContentLoaded', bind);
+    setTimeout(late, 1500);
+    setTimeout(late, 4000);
   } catch (e) {}
 })();
 </script>`;

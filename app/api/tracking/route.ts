@@ -33,16 +33,18 @@ export async function GET(request: Request) {
   }
 
   const ids = clicks.map(c => c.click_id);
-  const pages = new Map<string, { url: string; at: string }[]>();
+  const pages = new Map<string, { url: string; at: string; kind: string }[]>();
   const sales = new Map<string, any[]>();
   for (let i = 0; i < ids.length; i += 200) {
     const chunk = ids.slice(i, i + 200);
     const [pv, ev] = await Promise.all([
-      fetchAll((a, b) => db.from('tracking_pageviews').select('click_id, url, created_at').eq('user_id', user.id).in('click_id', chunk).order('created_at').range(a, b)),
+      // Antes de migration_rastreamento_saida.sql a coluna kind não existe.
+      fetchAll((a, b) => db.from('tracking_pageviews').select('click_id, url, kind, created_at').eq('user_id', user.id).in('click_id', chunk).order('created_at').range(a, b))
+        .catch(() => fetchAll((a, b) => db.from('tracking_pageviews').select('click_id, url, created_at').eq('user_id', user.id).in('click_id', chunk).order('created_at').range(a, b))),
       // Antes de migration_rastreamento_vendas.sql a coluna click_id não existe.
       db.from('postback_events').select('click_id, event_type, amount, currency, source, transaction_id, created_at').eq('product_id', productId).in('click_id', chunk).then(r => r.data || []),
     ]);
-    for (const p of pv) { if (!pages.has(p.click_id)) pages.set(p.click_id, []); pages.get(p.click_id)!.push({ url: p.url, at: p.created_at }); }
+    for (const p of pv) { if (!pages.has(p.click_id)) pages.set(p.click_id, []); pages.get(p.click_id)!.push({ url: p.url, at: p.created_at, kind: p.kind || 'page' }); }
     for (const e of ev) { if (!sales.has(e.click_id)) sales.set(e.click_id, []); sales.get(e.click_id)!.push(e); }
   }
 
@@ -51,9 +53,10 @@ export async function GET(request: Request) {
     const path = pages.get(c.click_id) || [];
     return {
       ...c, pages: path, events,
-      distinct_pages: new Set(path.map(p => p.url)).size,
+      distinct_pages: new Set(path.filter(p => p.kind === 'page').map(p => p.url)).size,
       sale: events.some(e => e.event_type === 'sale'),
-      checkout: events.some(e => e.event_type === 'checkout'),
+      // Saída para o checkout vista pelo script, ou checkout avisado pela plataforma.
+      checkout: path.some(p => p.kind === 'checkout') || events.some(e => e.event_type === 'checkout'),
     };
   });
 

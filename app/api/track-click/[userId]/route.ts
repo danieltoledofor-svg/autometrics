@@ -92,7 +92,7 @@ async function handleV2(userId: string, body: any, request: Request) {
         ad_id: pick('creative', 'ad_id', 'adid') || digits(pick('utm_content')) || null,
         network: pick('network') || null,
         device: deviceOf(pick('device'), userAgent) || null,
-        landing_url: page || null, referrer: cut(body.r, 500) || null,
+        landing_url: (body.e ? '' : page) || null, referrer: cut(body.r, 500) || null,
         user_agent: userAgent || null, params: p,
     }, { onConflict: 'user_id, click_id', ignoreDuplicates: true });
     // Antes de migration_rastreamento.sql as tabelas não existem: o postback segue pelo click_sessions.
@@ -103,8 +103,14 @@ async function handleV2(userId: string, body: any, request: Request) {
         await supabase.from('tracking_clicks').update({ ft_sid: p.ft_sid }).eq('user_id', userId).eq('click_id', clickId).is('ft_sid', null);
     }
 
-    if (page) {
-        const { error: pvError } = await supabase.from('tracking_pageviews').insert({ user_id: userId, click_id: clickId, url: page });
+    // e: 'u' = só dados que apareceram depois (sem nova página); 'out' = saída para o checkout.
+    if (page && body.e !== 'u') {
+        const row = { user_id: userId, click_id: clickId, url: page };
+        let { error: pvError } = await supabase.from('tracking_pageviews').insert({ ...row, kind: body.e === 'out' ? 'checkout' : 'page' });
+        // Antes de migration_rastreamento_saida.sql não há a coluna kind: a página entra sem ela e a saída fica de fora.
+        if (pvError && /kind/.test(pvError.message || '')) {
+            pvError = body.e === 'out' ? null : (await supabase.from('tracking_pageviews').insert(row)).error;
+        }
         if (pvError) console.error('[TrackClick] Erro ao gravar página:', pvError.message);
     }
     return ok();
