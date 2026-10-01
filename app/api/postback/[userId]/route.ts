@@ -149,13 +149,14 @@ async function handleRequest(
         // sessão da FlowTracking. Também resolve a campanha quando nada acima achou.
         let clickId: string | null = null;
         if (candidateIds.length) {
-            const pickClick = async (column: 'click_id' | 'ft_sid', values: string[]) => {
+            const pickClick = async (column: 'click_id' | 'gclid' | 'ft_sid', values: string[]) => {
                 if (!values.length) return null;
                 const { data } = await supabase.from('tracking_clicks').select('click_id, product_id')
                     .eq('user_id', userId).in(column, values).order('created_at', { ascending: false }).limit(1);
                 return data?.[0] || null;
             };
             const click = await pickClick('click_id', candidateIds)
+                || await pickClick('gclid', candidateIds)
                 || await pickClick('ft_sid', candidateIds.filter(i => i.startsWith('ftsession_')).map(i => i.slice('ftsession_'.length)));
             if (click) {
                 clickId = click.click_id;

@@ -61,9 +61,15 @@ async function handleV2(userId: string, body: any, request: Request) {
     const pick = (...keys: string[]) => keys.map(k => p[k]).find(Boolean) || '';
 
     const utmId = pick('utm_id'), gadId = pick('gad_campaignid', 'campaignid', 'campaign_id');
-    const utmCampaign = pick('utm_campaign'), utmSource = pick('utm_source'), utmMedium = pick('utm_medium');
+    // "nomeCampanha" é o texto de exemplo do modelo de URL da FlowTracking.
+    const utmCampaign = pick('utm_campaign') === 'nomeCampanha' ? '' : pick('utm_campaign');
+    const utmSource = pick('utm_source'), utmMedium = pick('utm_medium');
     const campaignId = [utmId, gadId].find(v => /^\d+$/.test(v)) || utmId || gadId;
-    const ids = [p.gclid, p.gbraid, p.wbraid, p.ft_sid ? `ftsession_${p.ft_sid}` : ''].filter(Boolean);
+    // O modelo da FlowTracking manda o gclid em ftgid=ftgid_{gclid}_ftgid, o
+    // grupo em utm_medium e o anúncio em utm_content.
+    const gclid = p.gclid || clean(/^ftgid_(.+)_ftgid$/.exec(p.ftgid || '')?.[1]);
+    const digits = (v: string) => (/^\d{6,}$/.test(v) ? v : '');
+    const ids = [gclid, p.gbraid, p.wbraid, p.ft_sid ? `ftsession_${p.ft_sid}` : ''].filter(Boolean);
     await saveSessions(userId, ids, { utmId, gadId, utmCampaign, utmSource, utmMedium });
 
     let productId: string | null = null;
@@ -77,13 +83,13 @@ async function handleV2(userId: string, body: any, request: Request) {
     // O clique é gravado uma vez: a página seguinte não troca os dados da entrada.
     const { error } = await supabase.from('tracking_clicks').upsert({
         user_id: userId, click_id: clickId, product_id: productId, campaign_id: campaignId || null,
-        gclid: p.gclid || null, gbraid: p.gbraid || null, wbraid: p.wbraid || null, ft_sid: p.ft_sid || null,
+        gclid: gclid || null, gbraid: p.gbraid || null, wbraid: p.wbraid || null, ft_sid: p.ft_sid || null,
         utm_source: utmSource || null, utm_medium: utmMedium || null, utm_campaign: utmCampaign || null,
         utm_term: pick('utm_term') || null, utm_content: pick('utm_content') || null,
         keyword: pick('keyword', 'kw', 'utm_term') || null,
         match_type: pick('matchtype', 'match_type', 'mt') || null,
-        ad_group_id: pick('adgroupid', 'adgroup_id', 'ad_group_id') || null,
-        ad_id: pick('creative', 'ad_id', 'adid') || null,
+        ad_group_id: pick('adgroupid', 'adgroup_id', 'ad_group_id') || digits(utmMedium) || null,
+        ad_id: pick('creative', 'ad_id', 'adid') || digits(pick('utm_content')) || null,
         network: pick('network') || null,
         device: deviceOf(pick('device'), userAgent) || null,
         landing_url: page || null, referrer: cut(body.r, 500) || null,
