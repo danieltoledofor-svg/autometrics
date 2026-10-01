@@ -73,7 +73,7 @@ function matches(s: any, ch: any): boolean {
 export async function detectApplied(productId: string, timeZone: string | null) {
   const db = supabaseAdmin();
   const { data: open } = await db.from('analysis_suggestions').select('*')
-    .eq('product_id', productId).eq('status', 'aberta').neq('action', 'ajuste_pagina');
+    .eq('product_id', productId).eq('status', 'aberta').not('action', 'in', '(ajuste_pagina,ajuste_vsl)');
   if (!open?.length) return 0;
   const since = open.map(s => localDate(s.created_at, timeZone)).sort()[0];
   const { data: changes, error } = await db.from('google_ads_changes')
@@ -177,6 +177,44 @@ function judge(s: any, before: any, after: any, itemBefore: any, itemAfter: any)
   };
 }
 
+// Página e VSL (item 8): o resultado é a própria fuga ou chegada ao pitch.
+// Fuga: funcionou se caiu 3 pontos ou mais, piorou se subiu 3 ou mais.
+// Pitch: funcionou se subiu 10% ou mais, piorou se caiu 10% ou mais.
+const isVturbPage = (s: any) => String(s.target_key || '').startsWith('vturb:') && ['ajuste_pagina', 'ajuste_vsl'].includes(s.action);
+
+async function vturbWindow(productId: string, playerId: string | null, from: string, to: string) {
+  const db = supabaseAdmin();
+  let q = db.from('vturb_daily').select('viewed, over_pitch, under_pitch').eq('product_id', productId).gte('date', from).lte('date', to);
+  if (playerId) q = q.eq('player_id', playerId);
+  const [{ data: v }, { data: g }] = await Promise.all([
+    q, db.from('daily_metrics').select('clicks').eq('product_id', productId).gte('date', from).lte('date', to),
+  ]);
+  const viewed = (v || []).reduce((a, r) => a + num(r.viewed), 0);
+  const over = (v || []).reduce((a, r) => a + num(r.over_pitch), 0);
+  const base = (v || []).reduce((a, r) => a + num(r.over_pitch) + num(r.under_pitch), 0);
+  const clicks = (g || []).reduce((a, r) => a + num(r.clicks), 0);
+  return { leak: clicks > 0 ? Math.max(0, 1 - viewed / clicks) : null, pitch: base > 0 ? over / base : null };
+}
+
+function judgeVturb(s: any, before: any, after: any, cBefore: any, cAfter: any) {
+  const metric = s.baseline?.vturb?.metric === 'pitch' ? 'pitch' : 'fuga';
+  const b = metric === 'pitch' ? before.pitch : before.leak;
+  const a = metric === 'pitch' ? after.pitch : after.leak;
+  let outcome: 'funcionou' | 'piorou' | 'sem_efeito' = 'sem_efeito';
+  if (a !== null && b !== null) {
+    if (metric === 'fuga') outcome = a - b <= -0.03 ? 'funcionou' : a - b >= 0.03 ? 'piorou' : 'sem_efeito';
+    else if (b > 0) outcome = (a - b) / b >= 0.1 ? 'funcionou' : (a - b) / b <= -0.1 ? 'piorou' : 'sem_efeito';
+  }
+  const r = (x: number | null) => (x === null ? null : Math.round(x * 1000) / 1000);
+  const cpaChange = change(cBefore.cpa, cAfter.cpa);
+  return {
+    outcome, metric, metric_before: r(b), metric_after: r(a),
+    cpa_before: cBefore.cpa === null ? null : Math.round(cBefore.cpa * 100) / 100,
+    cpa_after: cAfter.cpa === null ? null : Math.round(cAfter.cpa * 100) / 100,
+    cpa_change: cpaChange === null ? null : Math.round(cpaChange * 10) / 10, sales_change: null, waste_change: null,
+  };
+}
+
 /** Avalia as aplicadas que já completaram 3 ou 7 dias. */
 export async function evaluateApplied(productId: string, today: string) {
   const db = supabaseAdmin();
@@ -188,6 +226,24 @@ export async function evaluateApplied(productId: string, today: string) {
     if (!d) continue;
     const source = s.baseline?.sales_source || 'real';
     const before = await campaignWindow(productId, addDays(d, -7), addDays(d, -1), source);
+    if (isVturbPage(s)) {
+      // Player trocado: o "antes" é do player antigo, o "depois" do atual.
+      const oldPlayer = s.baseline?.vturb?.player_id || null;
+      const vBefore = await vturbWindow(productId, oldPlayer, addDays(d, -7), addDays(d, -1));
+      const patch: any = { updated_at: new Date().toISOString() };
+      if (!s.eval_3d && today > addDays(d, 3)) {
+        const to = addDays(d, 3);
+        patch.eval_3d = judgeVturb(s, vBefore, await vturbWindow(productId, null, addDays(d, 1), to), before, await campaignWindow(productId, addDays(d, 1), to, source));
+      }
+      if (today > addDays(d, 7)) {
+        const to = addDays(d, 7);
+        const ev = judgeVturb(s, vBefore, await vturbWindow(productId, null, addDays(d, 1), to), before, await campaignWindow(productId, addDays(d, 1), to, source));
+        patch.eval_7d = ev; patch.outcome = ev.outcome; patch.status = 'avaliada';
+        await recordLearning({ id: s.id, item: s.item, action: s.action, situation: s.situation, outcome: ev.outcome, cpa_change: ev.cpa_change, waste_change: null });
+      }
+      if (Object.keys(patch).length > 1) { await db.from('analysis_suggestions').update(patch).eq('id', s.id); evaluated++; }
+      continue;
+    }
     const itemBefore = await itemWindow(s, addDays(d, -7), addDays(d, -1));
     const patch: any = { updated_at: new Date().toISOString() };
     if (!s.eval_3d && today > addDays(d, 3)) {

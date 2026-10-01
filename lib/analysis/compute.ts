@@ -32,7 +32,7 @@ export const ITEMS: { key: ItemKey; title: string; one: string; many: string }[]
   { key: 'locais', title: 'Locais', one: 'local', many: 'locais' },
   { key: 'anuncios', title: 'Anúncios', one: 'anúncio', many: 'anúncios' },
   { key: 'sitelinks', title: 'Sitelinks e frases de destaque', one: 'recurso', many: 'recursos' },
-  { key: 'pagina', title: 'Anúncio × página × VSL', one: 'ponto', many: 'pontos' },
+  { key: 'pagina', title: 'Página e vídeo', one: 'ponto', many: 'pontos' },
 ];
 
 export interface Reference {
@@ -71,6 +71,8 @@ export interface Item {
   headline: string;
   rows: Row[];
   others?: { count: number; cost3: number; conv3: number } | null;
+  /** Item 8: do clique à venda pela VTurb (lib/vturb/funnel.ts). */
+  vturb?: any;
 }
 
 export interface Numbers {

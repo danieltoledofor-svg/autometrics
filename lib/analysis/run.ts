@@ -7,6 +7,7 @@ import { situationFor, learningsFor, campaignHistory } from './memory';
 import { detectApplied, evaluateApplied, markPageApplied } from './track';
 import { analyzePage, fetchPageText, landingUrl, pageHash, pageStatus, type PageResult } from './page';
 import { formatMoney } from './labels';
+import { funnelFor, pageVideoItem, vturbSuggestions, vturbFlagged, detectVturbApplied, pageHashNow as currentPageHash, vturbPromptLines } from './vturbItem';
 
 /**
  * Análise de uma campanha, do começo ao fim:
@@ -85,8 +86,11 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
     page = null;
   }
 
+  // ── Item 8: página e vídeo (VTurb + leitura da página) ─────────────────
+  const funnel = await funnelFor(productId, c.product);
+  const appliedVturb = await detectVturbApplied(c, funnel);
   const items: Item[] = [...c.items];
-  if (transcript) items.push(pageItem(page, money));
+  if (transcript || funnel) items.push(pageVideoItem(page, !!transcript, funnel, money));
 
   // ── Sugestões: novas, mantidas e resolvidas ─────────────────────────────
   const { data: existing } = await db.from('analysis_suggestions').select('id, item, target_key, status, created_at, action, text, baseline')
@@ -130,7 +134,8 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
 
   // Voltou ao normal sem ninguém mexer: sai da lista depois de 3 dias.
   const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
-  const solved = (existing || []).filter(s => s.status === 'aberta' && s.item !== 'pagina'
+  for (const k of vturbFlagged(funnel)) flaggedKeys.add(k);
+  const solved = (existing || []).filter(s => s.status === 'aberta' && (s.item !== 'pagina' || String(s.target_key).startsWith('vturb:'))
     && !flaggedKeys.has(`${s.item}|${s.target_key}`) && new Date(s.created_at).getTime() < threeDaysAgo);
   if (solved.length) {
     await db.from('analysis_suggestions').update({ status: 'resolvida_sozinha', updated_at: new Date().toISOString() }).in('id', solved.map(s => s.id));
@@ -196,6 +201,15 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
       .eq('id', r.suggestionId).eq('status', 'aberta');
   }
 
+  if (funnel) {
+    let extra = vturbSuggestions(funnel, c, userId, active, null);
+    if (extra.some(r => r.action === 'ajuste_pagina')) {
+      const h = await currentPageHash(c);
+      extra = extra.map(r => (r.action === 'ajuste_pagina' ? { ...r, baseline: { ...r.baseline, vturb: { ...r.baseline.vturb, page_hash: h } } } : r));
+    }
+    rows.push(...extra);
+  }
+
   // Uma a uma: se outra rodada gravou o mesmo alvo antes, só aquela falha.
   for (const row of rows) {
     const { error } = await db.from('analysis_suggestions').insert(row);
@@ -218,31 +232,11 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
   };
   const { error } = await db.from('campaign_analyses').upsert(record, { onConflict: 'product_id' });
   if (error) return { error: error.message };
-  return { ok: true, new_suggestions: rows.length, applied, evaluated, ai_text: needsText, page_checked: newPage };
+  return { ok: true, new_suggestions: rows.length, applied: applied + appliedVturb, evaluated, ai_text: needsText, page_checked: newPage };
 }
 
 function keywordText(k: { text: string; match: string }) {
   return k.match === 'EXACT' ? `[${k.text}]` : k.match === 'PHRASE' ? `"${k.text}"` : k.text;
-}
-
-function pageItem(page: PageResult | null, money: (v: number) => string): Item {
-  const status: Status = pageStatus(page);
-  const bad = page?.grupos.filter(g => g.conversa !== 'sim') || [];
-  let headline = 'Aguardando a primeira leitura da página';
-  if (page?.error) headline = page.error;
-  else if (page && bad.length) {
-    const g = bad[0];
-    headline = `Quem busca "${g.nome.toLowerCase()}" (${money(g.gasto3)} em 3 dias) ${g.conversa === 'nao' ? 'não encontra o assunto no começo da página' : 'encontra o assunto só em parte'}`;
-  } else if (page) headline = 'Os grupos de busca principais encontram o assunto na página e na VSL';
-  return {
-    key: 'pagina', title: ITEMS.find(i => i.key === 'pagina')!.title, status,
-    counts: {
-      urgente: page?.achados.filter(a => a.nivel === 'urgente').length || 0,
-      alerta: page?.achados.filter(a => a.nivel === 'alerta').length || 0,
-      ok: page?.achados.filter(a => a.nivel === 'ok').length || 0,
-    },
-    headline, rows: [], others: null,
-  };
 }
 
 function pct(a: number | null | undefined, b: number | null | undefined) {
@@ -316,6 +310,7 @@ CPA ${n(d3.cpa, money)} × ${n(d7.cpa, money)} · gasto/dia ${n(d3.cost_day, mon
 
 CHECKLIST:
 ${items.map(i => `- ${i.title}: ${i.status} · ${i.headline}`).join('\n')}
+${vturbPromptLines(items.find(i => i.key === 'pagina'))}
 
 PONTOS (escreva um para cada):
 ${pontos || '(nenhum novo)'}

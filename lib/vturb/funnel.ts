@@ -51,9 +51,9 @@ function pitchStatus(d3: Rates, d7: Rates): Status {
   return drop >= 0.25 ? 'urgente' : drop >= 0.15 ? 'alerta' : 'ok';
 }
 
-const pct = (x: number | null) => (x === null ? '—' : `${(x * 100).toFixed(1).replace('.', ',')}%`);
+export const pct = (x: number | null) => (x === null ? '—' : `${(x * 100).toFixed(1).replace('.', ',')}%`);
 const int = (x: number) => Math.round(x).toLocaleString('pt-BR');
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+export const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 
 export async function computeFunnel(productId: string) {
   const db = supabaseAdmin();
@@ -127,7 +127,7 @@ export async function computeFunnel(productId: string) {
     if (pitchT) notes.push(`${Math.round(at(pitchT))}% chegam ao pitch · ${Math.round(at(pitchT + 60))}% seguem 1 minuto depois dele`);
     const marks = [60, 300, ...(drop ? [drop.from, drop.to] : []), ...(pitchT ? [pitchT + 60] : [])]
       .filter((s, i, all) => s <= retention.duration && all.indexOf(s) === i).map(s => ({ t: s, pct: at(s), label: `${s % 60 ? mmss(s) : `${s / 60} min`} · ${Math.round(at(s))}%` }));
-    curve = { points: pts, duration: retention.duration, pitch_time: pitchT, pitch_pct: pitchT ? at(pitchT) : null, marks, notes, period: [retention.start_date, retention.end_date], updated_at: retention.updated_at };
+    curve = { drop: drop && drop.a - drop.b >= 2 ? drop : null, points: pts, duration: retention.duration, pitch_time: pitchT, pitch_pct: pitchT ? at(pitchT) : null, marks, notes, period: [retention.start_date, retention.end_date], updated_at: retention.updated_at };
   }
 
   // ── Por palavra-chave ────────────────────────────────────────────────────
@@ -186,11 +186,22 @@ export async function computeFunnel(productId: string) {
     }
   }
 
-  const keywords = [...rows.values()].map(r => {
+  // Palavra-chave × campanha (7 dias): mesmos limites, só com 30 visitas ou mais.
+  const kwStatus = (x: Rates): { status: Status; pitchVs: number | null; leakVs: number | null } => {
+    const pitchVs = x.pitch !== null && d7.pitch ? (x.pitch - d7.pitch) / d7.pitch : null;
+    const leakVs = x.leak !== null && d7.leak !== null ? (x.leak - d7.leak) * 100 : null;
+    if (x.viewed < MIN_VIEWS) return { status: 'sem_dado', pitchVs, leakVs };
+    const p: Status = pitchVs === null ? 'sem_dado' : pitchVs <= -0.25 ? 'urgente' : pitchVs <= -0.15 ? 'alerta' : 'ok';
+    const l: Status = leakVs === null ? 'sem_dado' : leakVs >= 10 ? 'urgente' : leakVs >= 5 ? 'alerta' : 'ok';
+    const known = [p, l].filter(s => s !== 'sem_dado') as Status[];
+    return { status: known.length ? worst(known) : 'sem_dado', pitchVs, leakVs };
+  };
+
+  const keywords = [...rows.entries()].map(([key, r]) => {
     const t = { ...r.t, clicks: r.google?.clicks || 0, cost: r.google?.cost || 0, sales: r.t.vturbSales };
-    const x = rates(t);
+    const x = rates(r.google ? t : { ...t, clicks: 0 });
     return {
-      label: r.label, small: r.t.viewed < MIN_VIEWS,
+      key, label: r.label, small: r.t.viewed < MIN_VIEWS, ...kwStatus(x),
       clicks: r.google ? r.google.clicks : null, cost: r.google ? r.google.cost : null,
       viewed: x.viewed, leak: r.google ? x.leak : null, play: x.play, over: x.over, pitch: x.pitch,
       sales: x.vturbSales, cpa: r.google && x.vturbSales > 0 ? r.google.cost / x.vturbSales : null,

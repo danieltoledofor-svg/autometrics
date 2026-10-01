@@ -20,6 +20,7 @@ export const ACTIONS: Record<string, string> = {
   trocar_sitelink: 'troca do texto do recurso',
   remover_sitelink: 'remoção do recurso',
   ajuste_pagina: 'mudança na página ou na VSL',
+  ajuste_vsl: 'mudança na VSL',
 };
 
 export const ACTIONS_BY_ITEM: Record<ItemKey, string[]> = {
