@@ -7,6 +7,7 @@ import { ACTION_SELECT, ACTION_WHERE, addActionRow, stableActions } from './conv
 import type { ActionCounts } from '@/lib/metrics/dimension';
 import { syncEntities, EntitySyncResult } from './entities';
 import { syncAssets } from './assets';
+import { syncClicks } from './clicks';
 
 /**
  * Coleta direta pela Google Ads API.
@@ -56,6 +57,8 @@ export interface SyncSummary {
   assets?: number;
   /** Dias passados que ganharam orçamento/meta pelo histórico de alterações. */
   backfilled_days?: number;
+  /** Cliques com gclid gravados (campanhas com player da VTurb). */
+  gclid_clicks?: number;
   errors: string[];
 }
 
@@ -727,6 +730,11 @@ export async function syncAccount(
       });
     }
   }
+
+  // gclid → palavra-chave, só nas campanhas com player da VTurb.
+  const callsBefore = usage.calls;
+  summary.gclid_clicks = await syncClicks(account, refreshToken, usage, errors);
+  apiCalls += usage.calls - callsBefore;
 
   summary.api_calls = apiCalls;
   summary.cost_today = Math.round(summary.cost_today * 100) / 100;

@@ -21,6 +21,7 @@ import { QuickEntryModal } from '@/app/components/QuickEntryModal';
 import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
 import { SegmentTab } from './SegmentTab';
 import { AnalysisTab } from './AnalysisTab';
+import { VturbTab } from './VturbTab';
 import { useCustomColumns } from '@/app/components/metrics/useCustomColumns';
 import { ColumnPicker } from '@/app/components/metrics/ColumnPicker';
 import { useTablePrefs } from '@/app/components/table/useTablePrefs';
@@ -175,15 +176,9 @@ export default function ProductDetailPage() {
 
   // --- DEEP METRICS (Search Terms, Audiences, Locations) ---
 
-  // --- ABA VTURB ---
+  // --- ABAS ---
   const [activeTab, setActiveTab] = useState<'ads' | 'ad_groups' | 'ad_list' | 'keywords' | 'search_terms' | 'audiences' | 'locations' | 'analysis' | 'strategy' | 'vturb'>('ads');
   const [entityAdGroup, setEntityAdGroup] = useState('');
-  const [vturbRows, setVturbRows] = useState<any[]>([]);
-  const [vturbLoading, setVturbLoading] = useState(false);
-  const [vturbError, setVturbError] = useState<string | null>(null);
-  const [editingPlayerId, setEditingPlayerId] = useState(false);
-  const [playerIdInput, setPlayerIdInput] = useState('');
-  const [vturbBreakdown, setVturbBreakdown] = useState<{ device: any[]; country: any[] }>({ device: [], country: [] });
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -277,89 +272,12 @@ export default function ProductDetailPage() {
     finally { setLoading(false); }
   };
 
-  // --- VTurb: busca dados por dia ---
-  const fetchVturb = async (playerId?: string) => {
-    const pid = playerId || product?.vturb_player_id;
-    if (!pid || !startDate || !endDate) return;
-    setVturbLoading(true);
-    setVturbError(null);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const currentUserId = user?.id || product?.user_id;
-
-      const startDateTime = `${startDate} 00:00:00`;
-      const endDateTime = `${endDate} 23:59:59`;
-
-      // 1. Dados diários de sessões
-      const res = await fetch('/api/vturb', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          endpoint: 'sessions/stats_by_day',
-          body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, timezone: 'America/Sao_Paulo' },
-          userId: currentUserId
-        }),
-      });
-      const data = await res.json();
-      if (data?.error) { setVturbError(data.error); setVturbRows([]); }
-      else setVturbRows(Array.isArray(data) ? [...data].reverse() : []);
-
-      // 2. Breakdown por dispositivo (Sequencial para não sobrecarregar a API da Vturb)
-      const devRes = await fetch('/api/vturb', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          endpoint: 'sessions/stats_by_field',
-          body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, field: 'device_type', timezone: 'America/Sao_Paulo' },
-          userId: currentUserId
-        })
-      });
-
-      const cntRes = await fetch('/api/vturb', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          endpoint: 'sessions/stats_by_field',
-          body: { player_id: pid, start_date: startDateTime, end_date: endDateTime, field: 'country', timezone: 'America/Sao_Paulo' },
-          userId: currentUserId
-        })
-      });
-      const devData = await devRes.json();
-      const cntData = await cntRes.json();
-      setVturbBreakdown({
-        device: Array.isArray(devData) ? devData : [],
-        country: Array.isArray(cntData) ? cntData.slice(0, 10) : [],
-      });
-    } catch (e: any) {
-      setVturbError(e.message);
-    } finally {
-      setVturbLoading(false);
-    }
-  };
-
-  const savePlayerId = async () => {
-    if (!playerIdInput.trim()) return;
-    // Extrai o MongoID do VTurb (24 caracteres hexadecimais, ex: 69bbefccd54d8d20f100c9bc)
-    const mongoIdMatch = playerIdInput.match(/[0-9a-f]{24}/i);
-    const pid = mongoIdMatch ? mongoIdMatch[0] : playerIdInput.trim();
-    await supabase.from('products').update({ vturb_player_id: pid }).eq('id', productId);
-    const updated = { ...product, vturb_player_id: pid };
-    setProduct(updated);
-    setEditingPlayerId(false);
-    fetchVturb(pid);
-  };
-
   useEffect(() => {
     if (!productId) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) fetchData();
     });
   }, [productId]);
-
-  // Dispara fetch VTurb ao mudar aba ou intervalo de datas
-  useEffect(() => {
-    if (activeTab === 'vturb' && product?.vturb_player_id && startDate && endDate) {
-      fetchVturb();
-    }
-  }, [activeTab, startDate, endDate, product?.vturb_player_id]);
 
   // --- ANOTAÇÕES ---
   const openNote = (rawDate: string, displayDate: string) => {
@@ -1316,236 +1234,7 @@ export default function ProductDetailPage() {
 
       {/* ══════════════════════════ ABA VTURB ══════════════════════════ */}
       {activeTab === 'vturb' && (
-        <div className="space-y-6">
-
-          {/* CONFIGURAÇÃO DO PLAYER */}
-          <div className={`rounded-xl p-5 border ${bgCard} flex flex-wrap items-center gap-4`}>
-            <Tv2 size={20} className="text-purple-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-bold ${textHead}`}>Player VTurb vinculado</p>
-              {editingPlayerId ? (
-                <div className="flex items-center gap-2 mt-2">
-                  <input
-                    autoFocus
-                    value={playerIdInput}
-                    onChange={e => setPlayerIdInput(e.target.value)}
-                    placeholder="Cole a URL ou o ID do player VTurb..."
-                    className={`flex-1 rounded-lg px-3 py-2 text-sm border outline-none font-mono ${isDark ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-300 text-black'}`}
-                  />
-                  <button onClick={savePlayerId} className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1"><Check size={12} /> Salvar</button>
-                  <button onClick={() => setEditingPlayerId(false)} className={`px-3 py-2 rounded-lg text-xs font-bold ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}><X size={12} /></button>
-                </div>
-              ) : product?.vturb_player_id ? (
-                <div className="flex items-center gap-2 mt-1">
-                  <code className={`text-xs font-mono px-2 py-0.5 rounded ${isDark ? 'bg-slate-950 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>{product.vturb_player_id}</code>
-                  <button onClick={() => { setPlayerIdInput(product.vturb_player_id); setEditingPlayerId(true); }} className={`text-xs ${textMuted} hover:text-purple-400`}>← alterar</button>
-                </div>
-              ) : (
-                <p className={`text-xs ${textMuted} mt-0.5`}>Nenhum player configurado. Vincule um player para ver os dados do VTurb.</p>
-              )}
-            </div>
-            {!editingPlayerId && !product?.vturb_player_id && (
-              <button onClick={() => setEditingPlayerId(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shrink-0">
-                <Settings2 size={14} /> Vincular Player
-              </button>
-            )}
-            {product?.vturb_player_id && (
-              <button onClick={() => fetchVturb()} disabled={vturbLoading} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'}`}>
-                <RefreshCw size={13} className={vturbLoading ? 'animate-spin' : ''} /> {vturbLoading ? 'Buscando...' : 'Atualizar'}
-              </button>
-            )}
-          </div>
-
-          {/* ERRO */}
-          {vturbError && (
-            <div className="rounded-xl p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
-              ⚠️ {vturbError}
-            </div>
-          )}
-
-          {/* SEM PLAYER */}
-          {!product?.vturb_player_id && !vturbError && (
-            <div className={`rounded-xl p-10 border ${bgCard} flex flex-col items-center gap-4 text-center`}>
-              <Tv2 size={40} className="text-purple-400/40" />
-              <p className={`font-bold ${textHead}`}>Configure um Player VTurb</p>
-              <p className={`text-sm ${textMuted} max-w-md`}>
-                Vincule o ID do player VTurb ao produto para visualizar automaticamente visualizações, engajamento, retenção ao pitch, cliques e conversões por dia.
-              </p>
-              <button onClick={() => setEditingPlayerId(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 mt-2">
-                <Settings2 size={15} /> Vincular Player
-              </button>
-            </div>
-          )}
-
-          {/* DADOS VTURB */}
-          {product?.vturb_player_id && !vturbLoading && vturbRows.length > 0 && (() => {
-            // KPI aggregates
-            const total = vturbRows.reduce((acc: any, r: any) => {
-              acc.views += Number(r.views ?? 0);
-              acc.unique_views += Number(r.unique_views ?? 0);
-              acc.unique_plays += Number(r.unique_plays ?? 0);
-              acc.pitch_viewers += Number(r.pitch_viewers ?? 0);
-              acc.clicks += Number(r.clicks ?? 0);
-              acc.conversions += Number(r.conversions ?? 0);
-              acc.conversions_brl += Number(r.conversions_brl ?? 0);
-              return acc;
-            }, { views: 0, unique_views: 0, unique_plays: 0, pitch_viewers: 0, clicks: 0, conversions: 0, conversions_brl: 0 });
-
-            const avgPlayRate = vturbRows.reduce((s: number, r: any) => s + Number(r.play_rate ?? 0), 0) / vturbRows.length;
-            const avgEngagement = vturbRows.reduce((s: number, r: any) => s + Number(r.engagement_rate ?? 0), 0) / vturbRows.length;
-            const avgPitchRate = vturbRows.reduce((s: number, r: any) => s + Number(r.pitch_rate ?? 0), 0) / vturbRows.length;
-
-            const pct = (v: number) => `${Number(v).toFixed(1)}%`;
-            const moneyBRL = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-
-            const VKpi = ({ label, value, color }: { label: string; value: string; color: string }) => (
-              <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-${color}`}>
-                <p className="text-slate-500 text-xs font-bold uppercase mb-1">{label}</p>
-                <p className={`text-xl font-bold text-${color}`}>{value}</p>
-              </div>
-            );
-
-            return (
-              <div className="space-y-6">
-                {/* KPI CARDS */}
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                  <VKpi label="Visualizações" value={total.views.toLocaleString()} color="purple-400" />
-                  <VKpi label="Únicos" value={total.unique_views.toLocaleString()} color="indigo-400" />
-                  <VKpi label="Play Rate" value={pct(avgPlayRate)} color="cyan-400" />
-                  <VKpi label="Engajamento" value={pct(avgEngagement)} color="blue-400" />
-                  <VKpi label="Audiência Pitch" value={total.pitch_viewers.toLocaleString()} color="amber-400" />
-                  <VKpi label="Cliques CTA" value={total.clicks.toLocaleString()} color="emerald-400" />
-                  <VKpi label="Receita VTurb" value={moneyBRL(total.conversions_brl)} color="green-400" />
-                </div>
-
-                {/* TABELA DIÁRIA */}
-                <div className={`${bgCard} rounded-xl overflow-hidden border ${borderCol}`}>
-                  <div className={`p-4 border-b ${borderCol} flex items-center gap-3`}>
-                    <Tv2 size={16} className="text-purple-400" />
-                    <h3 className={`font-semibold ${textHead}`}>Dados Diários VTurb</h3>
-                    <span className={`text-xs ${textMuted} px-2 py-0.5 rounded ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>{vturbRows.length} dias</span>
-                  </div>
-                  
-                  <div className="overflow-auto">
-                    <table className="w-max min-w-0 text-[13px] text-left border-collapse tabular-nums">
-                      <thead className={`text-xs font-medium ${tone.head} ${tone.headerBg} sticky top-0`}>
-                        <tr>
-                          {['Data', 'Views', 'Únicos', 'Plays Únicos', 'Play Rate', 'Engajamento', 'Pitch', 'Ret. Pitch', 'Cliques', 'Conversões', 'Receita (BRL)'].map(h => (
-                            <th key={h} className={`px-4 py-3 whitespace-nowrap text-right first:text-left border-b ${borderCol}`}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                        {vturbRows.map((r: any, i: number) => {
-                          const rawDate = r.date || r.day || r.start_date || r.timestamp || '';
-                          const dp = rawDate.split('T')[0].split('-');
-                          const dateLabel = dp.length === 3 ? `${dp[2]}/${dp[1]}/${dp[0]}` : rawDate;
-                          return (
-                            <tr key={i} className={`transition-colors ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}`}>
-                              <td className={`px-4 py-3 sticky left-0 font-medium border-r ${borderCol} ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>{dateLabel}</td>
-                              <td className="px-4 py-3 text-right text-purple-400 font-medium">{Number(r.views || r.impressions || 0).toLocaleString()}</td>
-                              <td className={`px-4 py-3 text-right ${tone.text}`}>{Number(r.unique_views || r.unique_impressions || 0).toLocaleString()}</td>
-                              <td className={`px-4 py-3 text-right ${tone.text}`}>{Number(r.unique_plays || r.plays || 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-cyan-400">{pct(Number(r.play_rate ?? 0))}</td>
-                              <td className="px-4 py-3 text-right text-blue-400">{pct(Number(r.engagement_rate ?? 0))}</td>
-                              <td className="px-4 py-3 text-right text-amber-400 font-medium">{Number(r.pitch_viewers ?? 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-amber-300">{pct(Number(r.pitch_rate ?? 0))}</td>
-                              <td className="px-4 py-3 text-right text-emerald-400 font-medium">{Number(r.clicks ?? 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-green-400">{Number(r.conversions ?? 0)}</td>
-                              <td className="px-4 py-3 text-right text-green-300 font-bold">{moneyBRL(Number(r.conversions_brl ?? 0))}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* BREAKDOWN: DEVICE + PAÍS */}
-                {(vturbBreakdown.device.length > 0 || vturbBreakdown.country.length > 0) && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Por Dispositivo */}
-                    {vturbBreakdown.device.length > 0 && (
-                      <div className={`${bgCard} rounded-xl border ${borderCol} overflow-hidden`}>
-                        <div className={`p-4 border-b ${borderCol} flex items-center gap-2`}>
-                          <TrendingUp size={15} className="text-cyan-400" />
-                          <h4 className={`text-sm font-bold ${textHead}`}>Por Dispositivo</h4>
-                        </div>
-                        <table className="w-full text-[13px] tabular-nums">
-                          <thead className={`text-xs font-medium ${tone.head} ${tone.headerBg}`}>
-                            <tr>
-                              <th className="px-4 py-2 text-left">Dispositivo</th>
-                              <th className="px-4 py-2 text-right">Views</th>
-                              <th className="px-4 py-2 text-right">Play Rate</th>
-                              <th className="px-4 py-2 text-right">Engajamento</th>
-                            </tr>
-                          </thead>
-                          <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                            {vturbBreakdown.device.map((d: any, i: number) => (
-                              <tr key={i} className={`${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}`}>
-                                <td className={`px-4 py-2.5 font-medium capitalize ${textHead}`}>{d.field_value || d.device_type || '—'}</td>
-                                <td className="px-4 py-2.5 text-right text-purple-400">{Number(d.views ?? 0).toLocaleString()}</td>
-                                <td className="px-4 py-2.5 text-right text-cyan-400">{pct(Number(d.play_rate ?? 0))}</td>
-                                <td className="px-4 py-2.5 text-right text-blue-400">{pct(Number(d.engagement_rate ?? 0))}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    {/* Por País */}
-                    {vturbBreakdown.country.length > 0 && (
-                      <div className={`${bgCard} rounded-xl border ${borderCol} overflow-hidden`}>
-                        <div className={`p-4 border-b ${borderCol} flex items-center gap-2`}>
-                          <TrendingUp size={15} className="text-emerald-400" />
-                          <h4 className={`text-sm font-bold ${textHead}`}>Por País (top 10)</h4>
-                        </div>
-                        <table className="w-full text-[13px] tabular-nums">
-                          <thead className={`text-xs font-medium ${tone.head} ${tone.headerBg}`}>
-                            <tr>
-                              <th className="px-4 py-2 text-left">País</th>
-                              <th className="px-4 py-2 text-right">Views</th>
-                              <th className="px-4 py-2 text-right">Play Rate</th>
-                              <th className="px-4 py-2 text-right">Engajamento</th>
-                            </tr>
-                          </thead>
-                          <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-                            {vturbBreakdown.country.map((c: any, i: number) => (
-                              <tr key={i} className={`${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}`}>
-                                <td className={`px-4 py-2.5 font-medium ${textHead}`}>{c.field_value || c.country || '—'}</td>
-                                <td className="px-4 py-2.5 text-right text-purple-400">{Number(c.views ?? 0).toLocaleString()}</td>
-                                <td className="px-4 py-2.5 text-right text-cyan-400">{pct(Number(c.play_rate ?? 0))}</td>
-                                <td className="px-4 py-2.5 text-right text-blue-400">{pct(Number(c.engagement_rate ?? 0))}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* LOADING */}
-          {vturbLoading && (
-            <div className={`rounded-xl p-10 border ${bgCard} flex flex-col items-center gap-3 text-center`}>
-              <RefreshCw size={28} className="text-purple-400 animate-spin" />
-              <p className={`text-sm ${textMuted}`}>Buscando dados do VTurb...</p>
-            </div>
-          )}
-
-          {/* SEM DADOS */}
-          {product?.vturb_player_id && !vturbLoading && !vturbError && vturbRows.length === 0 && (
-            <div className={`rounded-xl p-10 border ${bgCard} flex flex-col items-center gap-3 text-center`}>
-              <Tv2 size={36} className="text-purple-400/30" />
-              <p className={`font-bold ${textHead}`}>Nenhum dado no período</p>
-              <p className={`text-sm ${textMuted}`}>Tente ampliar o intervalo de datas.</p>
-            </div>
-          )}
-        </div>
+        <VturbTab productId={productId} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} />
       )}
 
         </div>{/* end p-4 md:p-6 */}

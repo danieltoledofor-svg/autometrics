@@ -126,7 +126,7 @@ function shareOf(v: any): number | null {
 }
 
 /** Todas as linhas, página a página (o Supabase devolve no máximo 1000). */
-async function fetchAll(build: (from: number, to: number) => any): Promise<any[]> {
+export async function fetchAll(build: (from: number, to: number) => any): Promise<any[]> {
   const out: any[] = [];
   for (let page = 0; ; page++) {
     const { data, error } = await build(page * 1000, page * 1000 + 999);

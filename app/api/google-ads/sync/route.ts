@@ -5,6 +5,7 @@ import { syncAccountRecord, isDue, usageToday, DAILY_QUOTA } from '@/lib/googleA
 import { refreshConnectionAccounts } from '@/lib/googleAds/accounts';
 import { isReconcileDue, reconcileAccountRecord, reconcileReady } from '@/lib/googleAds/reconcile';
 import { runDueAnalyses } from '@/lib/analysis/run';
+import { runDueVturb } from '@/lib/vturb/sync';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -90,6 +91,8 @@ async function runCron() {
 
   // Análise das campanhas (Etapa 5): no tempo que ainda sobrou. Não usa a
   // cota do Google — lê o que a coleta gravou.
+  // VTurb antes da análise, para a leitura já usar os números novos.
+  report.vturb = await runDueVturb(started + TIME_BUDGET_MS);
   report.analyses = await runDueAnalyses(started + TIME_BUDGET_MS);
 
   report.quota.used = used;

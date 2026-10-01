@@ -1,108 +1,58 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
+import { computeFunnel } from '@/lib/vturb/funnel';
+import { syncProductVturb } from '@/lib/vturb/sync';
+import { playerIdFrom } from '@/lib/vturb/client';
 
-const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-/**
- * Busca o VTURB_API_TOKEN do banco (user_settings) para o userId informado.
- * Fallback: variável de ambiente VTURB_API_TOKEN.
- */
-async function getToken(userId?: string | null): Promise<string | null> {
-    // Tenta .env primeiro (mais rápido, sem round-trip ao banco)
-    if (process.env.VTURB_API_TOKEN) return process.env.VTURB_API_TOKEN;
-
-    if (!userId) return null;
-
-    const { data } = await supabaseAdmin
-        .from('user_settings')
-        .select('vturb_api_token')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-    return data?.vturb_api_token ?? null;
-}
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/vturb
- * Proxy seguro para a API do VTurb Analytics.
+ * Aba VTurb da campanha. Lê do banco — a coleta grava de hora em hora — e
+ * nunca repassa o token para o navegador.
  *
- * Body: { endpoint: string, body: object, userId: string }
+ * GET  ?product_id=…                        do clique à venda, retenção e palavras-chave
+ * POST { product_id, action: 'sync' }       lê a VTurb agora
+ * POST { product_id, action: 'link', player } vincula o player (ID ou URL) e lê
  */
-export async function POST(request: Request) {
-    let body: { endpoint: string; body: Record<string, any>; userId?: string };
-    try {
-        body = await request.json();
-    } catch {
-        return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
-    }
 
-    const { endpoint, body: vturbBody, userId } = body;
-    if (!endpoint) {
-        return NextResponse.json({ error: 'endpoint é obrigatório' }, { status: 400 });
-    }
-
-    const apiToken = await getToken(userId);
-    if (!apiToken) {
-        return NextResponse.json(
-            { error: 'VTURB_API_TOKEN não configurado. Configure na página de Integração.' },
-            { status: 400 }
-        );
-    }
-
-    try {
-        const res = await fetch(`https://analytics.vturb.net/${endpoint}`, {
-            method: 'POST',
-            headers: {
-                'X-Api-Token': apiToken,
-                'X-Api-Version': 'v1',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(vturbBody || {}),
-        });
-
-        const data = await res.json();
-        return NextResponse.json(data, { status: res.status });
-    } catch (err: any) {
-        console.error('[VTurb Proxy] Erro:', err.message);
-        return NextResponse.json({ error: 'Erro ao contactar a API do VTurb' }, { status: 502 });
-    }
+async function ownProduct(request: Request, productId: string | null) {
+  const user = await getRequestUser(request);
+  if (!user) return { error: NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 }) };
+  if (!productId) return { error: NextResponse.json({ error: 'Informe a campanha.' }, { status: 400 }) };
+  const { data } = await supabaseAdmin().from('products').select('id').eq('id', productId).eq('user_id', user.id).maybeSingle();
+  if (!data) return { error: NextResponse.json({ error: 'Campanha não encontrada.' }, { status: 404 }) };
+  return { user };
 }
 
-/**
- * GET /api/vturb?endpoint=players/list&userId=xxx
- */
+async function tablesReady() {
+  const { error } = await supabaseAdmin().from('vturb_daily').select('product_id').limit(1);
+  return !error;
+}
+const NOT_READY = { ready: false, error: 'Rode migration_vturb.sql no Supabase.' };
+
 export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const endpoint = searchParams.get('endpoint');
-    const userId = searchParams.get('userId');
+  const productId = new URL(request.url).searchParams.get('product_id');
+  const own = await ownProduct(request, productId);
+  if ('error' in own) return own.error;
+  if (!(await tablesReady())) return NextResponse.json(NOT_READY);
+  return NextResponse.json(await computeFunnel(productId!));
+}
 
-    if (!endpoint) {
-        return NextResponse.json({ error: 'endpoint é obrigatório' }, { status: 400 });
-    }
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const own = await ownProduct(request, body.product_id || null);
+  if ('error' in own) return own.error;
+  if (!(await tablesReady())) return NextResponse.json(NOT_READY, { status: 409 });
 
-    const apiToken = await getToken(userId);
-    if (!apiToken) {
-        return NextResponse.json(
-            { error: 'VTURB_API_TOKEN não configurado. Configure na página de Integração.' },
-            { status: 400 }
-        );
-    }
-
-    try {
-        const res = await fetch(`https://analytics.vturb.net/${endpoint}`, {
-            headers: {
-                'X-Api-Token': apiToken,
-                'X-Api-Version': 'v1',
-            },
-        });
-
-        const data = await res.json();
-        return NextResponse.json(data, { status: res.status });
-    } catch (err: any) {
-        console.error('[VTurb Proxy GET] Erro:', err.message);
-        return NextResponse.json({ error: 'Erro ao contactar a API do VTurb' }, { status: 502 });
-    }
+  if (body.action === 'link') {
+    const pid = playerIdFrom(body.player);
+    if (!pid) return NextResponse.json({ error: 'Não achei o ID do player. Cole a URL do player ou o ID de 24 caracteres.' }, { status: 400 });
+    await supabaseAdmin().from('products').update({ vturb_player_id: pid, vturb_synced_at: null, vturb_sync_error: null }).eq('id', body.product_id);
+  } else if (body.action !== 'sync') {
+    return NextResponse.json({ error: 'Ação desconhecida.' }, { status: 400 });
+  }
+  const result = await syncProductVturb(body.product_id, { force: true });
+  const funnel = await computeFunnel(body.product_id);
+  return NextResponse.json({ ...funnel, sync: result }, { status: 'error' in result && body.action === 'link' ? 400 : 200 });
 }
