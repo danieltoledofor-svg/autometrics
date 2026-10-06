@@ -20,6 +20,9 @@ import { Logo } from '@/app/components/Logo';
 import { resolveCampaignStatus, resolveProductStatus, STATUS_SEVERITY, type CampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal, type QuickEntryTarget } from '@/app/components/QuickEntryModal';
 import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type MetricSort } from '@/lib/metricSort';
+import { MAIN_BLOCK, blockName, blockOf, passesFilters } from '@/lib/campaignGroups';
+import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
+import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
@@ -110,6 +113,7 @@ export default function DashboardPage() {
 
   const [selectedMcc, setSelectedMcc] = useState<string>('all');
   const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const { groups, setGroups } = useCampaignGroups();
 
   const [liveDollar, setLiveDollar] = useState(6.00);
   const [manualDollar, setManualDollar] = useState(5.60);
@@ -392,7 +396,7 @@ export default function DashboardPage() {
   }, [products]);
 
   const processedData = useMemo(() => {
-    if (loading || !metrics.length) return { chart: [], table: [], totals: null };
+    if (loading || !metrics.length) return { chart: [], table: [], totals: null, blocks: [] as any[] };
 
     const dailyMap = new Map();
 
@@ -403,11 +407,16 @@ export default function DashboardPage() {
       const mccName = product?.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
       if (selectedMcc !== 'all' && mccName !== selectedMcc) return;
 
+      // Grupos do usuário: filtro ligado e bloco desmarcado ficam fora de tudo.
+      const campaignName = product?.name || 'Venda Externa';
+      if (!passesFilters(campaignName, groups)) return;
+      const blockId = blockOf(campaignName, groups.list);
+      if (groups.hidden.includes(blockId)) return;
+
       const isUSD = product?.currency === 'USD';
       const isEUR = product?.currency === 'EUR';
 
       const accountName = row.account_name || product?.account_name || product?.mcc_name || 'Desconhecida';
-      const campaignName = product?.name || 'Venda Externa';
 
       let cost = Number(row.cost || 0);
       let revenue = Number(row.conversion_value || 0);
@@ -427,47 +436,77 @@ export default function DashboardPage() {
       const profit = revenue - cost - refunds;
 
       if (!dailyMap.has(row.date)) {
-        dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0, accounts: {} });
+        dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0, accounts: {}, blocks: {} });
       }
       const day = dailyMap.get(row.date);
       day.cost += cost; day.revenue += revenue; day.refunds += refunds; day.profit += profit;
 
-      if (!day.accounts[accountName]) {
-        day.accounts[accountName] = { name: accountName, cost: 0, revenue: 0, profit: 0, refunds: 0, campaigns: {} };
+      if (!day.blocks[blockId]) {
+        day.blocks[blockId] = { id: blockId, cost: 0, revenue: 0, profit: 0, refunds: 0, accounts: {} };
       }
-      const acc = day.accounts[accountName];
-      acc.cost += cost; acc.revenue += revenue; acc.profit += profit; acc.refunds += refunds;
-
-      if (!acc.campaigns[campaignName]) {
-        acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0, productId: product?.id, currency: product?.currency || 'BRL', status: null as CampaignStatus | null };
-      }
-      const cmp = acc.campaigns[campaignName];
-      cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds;
-
-      // Problema que a conferência com o Google não conseguiu corrigir.
-      const note = row.reconcile_note;
-      if (note && (note.kind === 'sobrando' || note.kind === 'divergente') && !cmp.problem) {
-        cmp.problem = { text: reconcileProblemText(note, product?.currency || 'BRL') };
-        day.problems = (day.problems || 0) + 1;
-      }
+      const block = day.blocks[blockId];
+      block.cost += cost; block.revenue += revenue; block.refunds += refunds; block.profit += profit;
 
       // O badge mostra o estado ATUAL da campanha, não o daquele dia: quando uma
       // conta é suspensa hoje, o que importa é ver isso ao lado de qualquer data,
       // e não descobrir que em 02/09 ela ainda rodava. É também o mesmo status
       // que a aba Campanhas exibe. Sem produto (venda externa), usa a linha.
       const rowStatus = product ? resolveProductStatus(product) : resolveCampaignStatus(row);
-      const prevStatus: CampaignStatus | null = cmp.status;
-      if (!prevStatus || STATUS_SEVERITY[rowStatus.key] > STATUS_SEVERITY[prevStatus.key]) {
-        cmp.status = rowStatus;
-      }
+      // Problema que a conferência com o Google não conseguiu corrigir.
+      const note = row.reconcile_note;
+      const hasProblem = note && (note.kind === 'sobrando' || note.kind === 'divergente');
+
+      // A mesma linha entra no dia inteiro e no bloco do grupo dela.
+      [day, block].forEach((holder: any) => {
+        if (!holder.accounts[accountName]) {
+          holder.accounts[accountName] = { name: accountName, cost: 0, revenue: 0, profit: 0, refunds: 0, campaigns: {} };
+        }
+        const acc = holder.accounts[accountName];
+        acc.cost += cost; acc.revenue += revenue; acc.profit += profit; acc.refunds += refunds;
+
+        if (!acc.campaigns[campaignName]) {
+          acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0, productId: product?.id, currency: product?.currency || 'BRL', status: null as CampaignStatus | null };
+        }
+        const cmp = acc.campaigns[campaignName];
+        cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds;
+
+        if (hasProblem && !cmp.problem) {
+          cmp.problem = { text: reconcileProblemText(note, product?.currency || 'BRL') };
+          if (holder === day) day.problems = (day.problems || 0) + 1;
+        }
+
+        const prevStatus: CampaignStatus | null = cmp.status;
+        if (!prevStatus || STATUS_SEVERITY[rowStatus.key] > STATUS_SEVERITY[prevStatus.key]) {
+          cmp.status = rowStatus;
+        }
+      });
     });
 
     // Dentro de cada dia, conta e campanha vêm ordenadas pela métrica escolhida.
+    // Os blocos seguem a ordem dos grupos, com "Principais" na frente.
+    const blockOrder = [MAIN_BLOCK, ...groups.list.filter(g => g.separate).map(g => g.id)];
+    const blockTotals = new Map<string, any>();
     dailyMap.forEach((day: any) => {
-      day.accountList = sortByMetric(Object.values(day.accounts) as any[], metricSort, (a: any) => a);
-      day.accountList.forEach((acc: any) => {
-        acc.campaignList = sortByMetric(Object.values(acc.campaigns) as any[], metricSort, (c: any) => c);
+      const sortAccounts = (holder: any) => {
+        holder.accountList = sortByMetric(Object.values(holder.accounts) as any[], metricSort, (a: any) => a);
+        holder.accountList.forEach((acc: any) => {
+          acc.campaignList = sortByMetric(Object.values(acc.campaigns) as any[], metricSort, (c: any) => c);
+        });
+      };
+      sortAccounts(day);
+      day.blockList = blockOrder.filter(id => day.blocks[id]).map(id => day.blocks[id]);
+      day.blockList.forEach((blk: any) => {
+        sortAccounts(blk);
+        blk.name = blockName(blk.id, groups.list);
+        blk.roi = blk.cost > 0 ? (blk.profit / blk.cost) * 100 : 0;
+        const t = blockTotals.get(blk.id) || { id: blk.id, name: blk.name, cost: 0, revenue: 0, profit: 0, refunds: 0, roi: 0 };
+        t.cost += blk.cost; t.revenue += blk.revenue; t.profit += blk.profit; t.refunds += blk.refunds;
+        blockTotals.set(blk.id, t);
       });
+    });
+    const blocks = blockOrder.filter(id => blockTotals.has(id)).map(id => {
+      const t = blockTotals.get(id);
+      return { ...t, roi: t.cost > 0 ? (t.profit / t.cost) * 100 : 0 };
     });
 
     const resultRows = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
@@ -483,8 +522,12 @@ export default function DashboardPage() {
       ...r, shortDate: r.date.split('-').slice(1).reverse().join('/')
     }));
 
-    return { chart: chartData, table: resultRows, totals };
-  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, liveEuro, manualEuro, viewCurrency, loading, selectedMcc, metricSort]);
+    return { chart: chartData, table: resultRows, totals, blocks };
+  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, liveEuro, manualEuro, viewCurrency, loading, selectedMcc, metricSort, groups]);
+
+  // Com mais de um bloco na tela, cada dia abre separado por grupo.
+  const showBlocks = processedData.blocks.length > 1;
+  const campaignNames = useMemo(() => products.map(p => p.name || ''), [products]);
 
   const sparklineData = useMemo(() => {
     const last7 = processedData.chart.slice(-7);
@@ -728,6 +771,8 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} />
+
         {/* ── MOBILE KPI GRID 2x2 (hidden on desktop) ── */}
         {processedData.totals && (
           <div className="md:hidden grid grid-cols-2 gap-3 px-1 pb-3">
@@ -787,6 +832,34 @@ export default function DashboardPage() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {/* Total de cada grupo no período, quando há mais de um bloco marcado. */}
+        {showBlocks && (
+          <div className={`${bgCard} rounded-xl overflow-x-auto border mb-4`}>
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
+                <tr>
+                  <th className="px-4 md:px-6 py-3">Grupo</th>
+                  <th className="px-4 md:px-6 py-3 text-right text-blue-600">Receita</th>
+                  <th className="px-4 md:px-6 py-3 text-right text-orange-600">Custo</th>
+                  <th className="px-4 md:px-6 py-3 text-right text-emerald-600">Lucro</th>
+                  <th className="px-4 md:px-6 py-3 text-right">ROI</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+                {processedData.blocks.map((blk: any) => (
+                  <tr key={blk.id}>
+                    <td className={`px-4 md:px-6 py-2.5 font-bold whitespace-nowrap ${textHead}`}>{blk.name}</td>
+                    <td className="px-4 md:px-6 py-2.5 text-right font-bold text-blue-500 tabular-nums whitespace-nowrap">{formatMoney(blk.revenue)}</td>
+                    <td className="px-4 md:px-6 py-2.5 text-right font-medium text-orange-500 tabular-nums whitespace-nowrap">{formatMoney(blk.cost)}</td>
+                    <td className={`px-4 md:px-6 py-2.5 text-right font-bold tabular-nums whitespace-nowrap ${blk.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(blk.profit)}</td>
+                    <td className={`px-4 md:px-6 py-2.5 text-right font-bold tabular-nums ${blk.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{blk.roi.toFixed(0)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Ordenação das campanhas dentro de cada data. */}
         <div className="flex items-center justify-end gap-2 mb-3 flex-wrap">
@@ -849,7 +922,19 @@ export default function DashboardPage() {
                         <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
                         <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{row.roi.toFixed(0)}%</td>
                       </tr>
-                      {isExpanded && (row.accountList || []).map((acc: any) => (
+                      {isExpanded && (showBlocks ? row.blockList : [{ id: 'all', accountList: row.accountList }]).map((blk: any) => (
+                      <React.Fragment key={blk.id}>
+                      {showBlocks && (
+                        <tr className={`${isDark ? 'bg-slate-900' : 'bg-slate-200/60'}`}>
+                          <td></td>
+                          <td className={`px-6 py-2 pl-8 text-[13px] font-extrabold uppercase tracking-wide ${textHead}`}>{blk.name}</td>
+                          <td className="px-6 py-2 text-right text-[13px] font-bold tabular-nums text-blue-500">{formatMoney(blk.revenue)}</td>
+                          <td className="px-6 py-2 text-right text-[13px] font-bold tabular-nums text-orange-500">{formatMoney(blk.cost)}</td>
+                          <td className={`px-6 py-2 text-right text-[13px] font-bold tabular-nums ${blk.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(blk.profit)}</td>
+                          <td className={`px-6 py-2 text-right text-[13px] font-bold tabular-nums ${blk.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{blk.roi.toFixed(0)}%</td>
+                        </tr>
+                      )}
+                      {(blk.accountList || []).map((acc: any) => (
                         <React.Fragment key={acc.name}>
                           <tr className={`${isDark ? 'bg-slate-950/50' : 'bg-slate-100/50'}`}>
                             <td></td>
@@ -909,6 +994,8 @@ export default function DashboardPage() {
                           ))}
                         </React.Fragment>
                       ))}
+                      </React.Fragment>
+                      ))}
                     </React.Fragment>
                   );
                 })}
@@ -958,7 +1045,15 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {isExpanded && (row.accountList || []).map((acc: any) => (
+                      {isExpanded && (showBlocks ? row.blockList : [{ id: 'all', accountList: row.accountList }]).map((blk: any) => (
+                      <React.Fragment key={blk.id}>
+                      {showBlocks && (
+                        <div className={`flex items-center justify-between px-4 py-2 border-b ${borderCol} ${isDark ? 'bg-slate-900' : 'bg-slate-200/60'}`}>
+                          <span className={`text-xs font-extrabold uppercase tracking-wide ${textHead}`}>{blk.name}</span>
+                          <span className={`text-xs font-mono font-bold ${blk.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(blk.profit)}</span>
+                        </div>
+                      )}
+                      {(blk.accountList || []).map((acc: any) => (
                         <React.Fragment key={acc.name}>
                           <div className={`flex items-center justify-between px-5 py-2 border-b ${borderCol} ${isDark ? 'bg-slate-950/60' : 'bg-indigo-50/60'}`}>
                             <span className="text-xs font-bold text-indigo-400 break-words min-w-0 mr-2">{acc.name}</span>
@@ -1002,6 +1097,8 @@ export default function DashboardPage() {
                             </div>
                           ))}
                         </React.Fragment>
+                      ))}
+                      </React.Fragment>
                       ))}
                     </React.Fragment>
                   );

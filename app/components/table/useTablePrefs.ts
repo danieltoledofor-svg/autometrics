@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { normalizeGroups, type CampaignGroupsState } from '@/lib/campaignGroups';
 
 /**
  * Preferências das tabelas, salvas no usuário (tabela user_ui_prefs): largura
@@ -20,6 +21,8 @@ interface TablePrefs {
 }
 interface Prefs {
   tables?: Record<string, TablePrefs>;
+  /** Grupos de campanhas do painel (lib/campaignGroups). */
+  campaignGroups?: CampaignGroupsState;
 }
 
 const LOCAL_KEY = 'autometrics_ui_prefs';
@@ -70,7 +73,7 @@ async function load() {
       if (error) dbAvailable = false;
       else if (data?.prefs) { state = data.prefs as Prefs; writeLocal(state); }
       // Primeira vez: leva para o banco o que já estava no navegador.
-      else if (Object.keys(state.tables || {}).length) scheduleSave();
+      else if (Object.keys(state.tables || {}).length || state.campaignGroups) scheduleSave();
     }
   } catch { dbAvailable = false; }
   loaded = true;
@@ -131,3 +134,16 @@ export function useTablePrefs(tableId: string, opts: { legacyColumnsKey?: string
 }
 
 export type TablePrefsApi = ReturnType<typeof useTablePrefs>;
+
+/** Grupos de campanhas do usuário, guardados junto das outras preferências. */
+export function useCampaignGroups() {
+  const prefs = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
+  useEffect(() => { load(); }, []);
+  const groups = useMemo(() => normalizeGroups(prefs.campaignGroups), [prefs.campaignGroups]);
+  const setGroups = useCallback((next: CampaignGroupsState) => {
+    state = { ...state, campaignGroups: next };
+    emit();
+    scheduleSave();
+  }, []);
+  return { groups, setGroups };
+}
