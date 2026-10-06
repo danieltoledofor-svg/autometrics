@@ -34,6 +34,12 @@ const nextConfig: NextConfig = {
         source: '/(.*)',
         headers: securityHeaders,
       },
+      // Script de rastreamento das páginas dos anúncios: o navegador guarda por
+      // 5 minutos, para uma correção chegar rápido a todas as páginas.
+      {
+        source: '/am.js',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=300' }],
+      },
     ];
   },
   async redirects() {
