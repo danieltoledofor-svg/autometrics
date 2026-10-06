@@ -1,11 +1,12 @@
 /**
- * AutoMetrics — Rastreamento (v4). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v4.1). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda tudo o que vier na URL de entrada, lembra o clique no navegador para
- * as páginas seguintes, marca cada página visitada e a saída para o checkout.
- * Numa página sem a FlowTracking, leva o identificador no link de compra da
- * BuyGoods (inclusive no botão do player da VTurb); com ela na página, só lê.
+ * as páginas seguintes, marca cada página visitada e a saída para o checkout
+ * (link de compra na página ou botão do player da VTurb, inclusive quando ele
+ * leva ao site do produtor). Numa página sem a FlowTracking, leva o
+ * identificador no link de compra da BuyGoods; com ela na página, só lê.
  *
  * Mudou aqui, mudou em todas as páginas: teste antes de publicar.
  */
@@ -55,61 +56,82 @@
 
     // ── Saída para o checkout ──────────────────────────────────────────────
     var HOSTS = ['buygoods', 'clickbank', 'digistore24', 'cartpanda', 'maxweb', 'hotmart', 'kiwify'];
+    var AFF = ['aff_id', 'affid', 'aff', 'affiliate', 'hop', 'a_aid'];
+    var cta = {};                                                 // destinos dos botões do player
+    function bare(u) { try { var d = new URL(u, location.href); return d.origin + d.pathname; } catch (e) { return ''; } }
+    // Link de compra: plataforma conhecida, link de afiliado no site do produtor
+    // (ex.: produtor.com/bg/?aff_id=…) ou destino de um botão do player.
     function platform(u) {
       try {
-        var h = new URL(u, location.href).hostname.toLowerCase();
-        for (var i = 0; i < HOSTS.length; i++) if (h.indexOf(HOSTS[i]) >= 0) return HOSTS[i];
+        var d = new URL(u, location.href), h = d.hostname.toLowerCase(), i;
+        if (d.protocol.indexOf('http') !== 0 || h === location.hostname) return '';
+        for (i = 0; i < HOSTS.length; i++) if (h.indexOf(HOSTS[i]) >= 0) return HOSTS[i];
+        if (d.searchParams.get('aff_id')) return 'buygoods';
+        for (i = 0; i < AFF.length; i++) if (d.searchParams.get(AFF[i])) return 'link';
+        if (cta[d.origin + d.pathname]) return 'link';
       } catch (e) {}
       return '';
     }
-    // Com a FlowTracking na página, é ela que escreve no link de compra.
     function other() { return !!document.querySelector('script[src*="flow-tracking"],script[src*="flowtracking"]'); }
     var sent = {};
-    // Registra a saída (uma vez por destino), sem mexer no link.
     function note(u) {
       if (!platform(u)) return;
-      var key = String(u).split('?')[0];
+      var key = bare(u);
       if (!sent[key]) { sent[key] = 1; send({ v: 3, c: cur.id, p: cur.p, e: 'out', u: key }); }
     }
-    function out(u) {
-      var pf = platform(u), next = u;
-      if (!pf) return u;
-      if (pf === 'buygoods' && !other()) {
-        try {
-          var d = new URL(u, location.href), s = d.searchParams, g = gclidOf(cur.p);
-          if (!s.get('subid') && !s.get('SUBID')) s.set('subid', cur.id);
-          if (g && !s.get('subid2') && !s.get('SUBID2')) s.set('subid2', g);
-          next = d.toString();
-        } catch (e) {}
-      }
-      note(next);
-      return next;
+    // Leva o identificador no link de compra; com a FlowTracking na página, não mexe.
+    function stamp(u) {
+      if (platform(u) !== 'buygoods' || other()) return u;
+      try {
+        var d = new URL(u, location.href), s = d.searchParams, g = gclidOf(cur.p);
+        if (!s.get('subid') && !s.get('SUBID')) s.set('subid', cur.id);
+        if (g && !s.get('subid2') && !s.get('SUBID2')) s.set('subid2', g);
+        return d.toString();
+      } catch (e) {}
+      return u;
     }
+    var last = '', playerClick = 0;
     document.addEventListener('click', function (ev) {
       try {
-        // composedPath alcança o link dentro do player (shadow DOM).
-        var path = ev.composedPath ? ev.composedPath() : [ev.target], a = null;
-        for (var i = 0; i < path.length && !a; i++) if (path[i] && path[i].tagName === 'A' && path[i].href) a = path[i];
-        if (!a) return;
-        var n = out(a.href);
-        if (n !== a.href) a.href = n;
+        var path = ev.composedPath ? ev.composedPath() : [ev.target], a = null, inPlayer = false;
+        for (var i = 0; i < path.length; i++) {
+          var el = path[i], name = el && el.tagName;
+          if (!a && name === 'A' && el.href) a = el;
+          if (name && name.indexOf('VTURB-') === 0) inPlayer = true;
+        }
+        if (a) {
+          var n = stamp(a.href);
+          if (n !== a.href) a.href = n;
+          note(n);
+        } else if (inPlayer) playerClick = Date.now();           // botão dentro do vídeo: o link fica escondido
       } catch (e) {}
     }, true);
-    // Saídas que não passam por um link clicado (botão do player, redirecionamento): só registra.
+    // Saídas que não passam por um link visível (botão dentro do vídeo, redirecionamento): só registra.
     try {
       if (window.navigation && window.navigation.addEventListener) {
         window.navigation.addEventListener('navigate', function (e) { try { if (e.destination && e.destination.url) note(e.destination.url); } catch (x) {} });
       }
       var open = window.open;
       window.open = function (u) { try { if (u) note(new URL(String(u), location.href).href); } catch (x) {} return open.apply(window, arguments); };
+      // Navegador sem aviso de navegação: saiu da página logo depois de tocar no player.
+      var leave = function () { if (last && Date.now() - playerClick < 3000) note(last); };
+      window.addEventListener('pagehide', leave);
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') leave(); });
     } catch (e) {}
-    // Botão dentro do player da VTurb: o player deixa ajustar o link antes de sair.
+    // Botões do player da VTurb: o player mostra o link antes de usar, e deixa ajustar.
     var bound = [];
     function hook(el) {
       try {
-        if (el.__am || other() || typeof el.injectUrlUpdater !== 'function') return;
+        if (el.__am || typeof el.injectUrlUpdater !== 'function') return;
         el.__am = 1;
-        el.injectUrlUpdater(function (u) { try { return out(String(u || '')); } catch (e) { return u; } });
+        el.injectUrlUpdater(function (u) {
+          try {
+            var d = new URL(String(u || ''), location.href);
+            if (d.protocol.indexOf('http') !== 0 || d.hostname === location.hostname) return u;
+            cta[d.origin + d.pathname] = 1; last = d.href;
+            return stamp(d.href);
+          } catch (e) { return u; }
+        });
       } catch (e) {}
     }
     function bind() {
@@ -119,7 +141,6 @@
         if (bound.indexOf(el) < 0) { bound.push(el); el.addEventListener('player:ready', function () { hook(el); }); }
       })(list[i]);
     }
-    // Dados que aparecem na URL depois do carregamento (ex.: ft_sid) e players que entram depois.
     function late() {
       if (merge(read())) { save(); send({ v: 3, c: cur.id, p: cur.p, e: 'u' }); }
       bind();
