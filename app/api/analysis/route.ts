@@ -3,6 +3,7 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { runAnalysis, analysisTablesReady } from '@/lib/analysis/run';
 import { campaignHistory, recordLearning } from '@/lib/analysis/memory';
 import { aiEnabled } from '@/lib/ai/openrouter';
+import { changeReview } from '@/lib/analysis/changes';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,7 @@ export const dynamic = 'force-dynamic';
  * Aba "Análise" da campanha.
  *
  * GET    ?product_id=   leitura gravada, sugestões e resultados desta campanha
+ * GET    ?product_id=&only=changes   só as alterações feitas e o que aconteceu depois
  * POST   { product_id } reanalisar agora
  * PATCH  { id, status } "Ignorar" ou "Não faz sentido" numa sugestão
  * PUT    { product_id, vsl_transcript } salvar a transcrição da VSL
@@ -32,22 +34,27 @@ export async function GET(request: Request) {
   const productId = new URL(request.url).searchParams.get('product_id');
   const own = await ownProduct(request, productId);
   if ('error' in own) return own.error;
+  if (new URL(request.url).searchParams.get('only') === 'changes') {
+    return NextResponse.json({ changes: await changeReview(productId!).catch(() => []) });
+  }
   if (!(await analysisTablesReady())) {
     return NextResponse.json({ ready: false, error: 'Rode migration_analise_ia.sql no Supabase.' });
   }
   const db = supabaseAdmin();
-  const [{ data: analysis }, { data: open }, history, { data: product }] = await Promise.all([
+  const [{ data: analysis }, { data: open }, history, { data: product }, changes] = await Promise.all([
     db.from('campaign_analyses').select('*').eq('product_id', productId).maybeSingle(),
     db.from('analysis_suggestions')
       .select('id, item, target_key, target_label, action, text, severity, status, change_at, change, eval_3d, baseline, created_at')
       .eq('product_id', productId).in('status', ['aberta', 'aplicada']).order('created_at', { ascending: false }),
     campaignHistory(productId!, 30),
     db.from('products').select('vsl_transcript').eq('id', productId).maybeSingle(),
+    changeReview(productId!).catch(() => []),
   ]);
   return NextResponse.json({
     ready: true,
     ai: aiEnabled(),
     analysis,
+    changes,
     suggestions: (open || []).filter(s => s.item !== 'pagina').map(s => ({ ...s, baseline: { keyword: s.baseline?.keyword ?? null, cpa3: s.baseline?.row?.cpa3 ?? null, cost3: s.baseline?.row?.cost3 ?? null, vturb: s.baseline?.vturb ? { metric: s.baseline.vturb.metric ?? null, d3: s.baseline.vturb.d3 ?? null } : null } })),
     // O topo de funil (item 'pagina') tem o histórico na aba VTurb.
     history: history.filter(h => h.item !== 'pagina' && (h.status === 'avaliada' || h.status === 'nao_faz_sentido')).map(h => ({

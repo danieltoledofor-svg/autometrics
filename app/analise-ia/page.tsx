@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { Logo } from '@/app/components/Logo';
+import { MemoryCard } from './MemoryCard';
 
 /**
  * Análise de IA: o que se repete nas campanhas parecidas do usuário (mesma
@@ -64,6 +65,8 @@ export default function PatternsPage() {
   const [chat, setChat] = useState<{ q: string; a: string; missing?: string }[]>([]);
   const [answering, setAnswering] = useState(false);
   const [askError, setAskError] = useState('');
+  const [memoryTick, setMemoryTick] = useState(0);
+  const [kept, setKept] = useState<number[]>([]);
   const request = useRef(0);
   const [email, setEmail] = useState('');
 
@@ -136,6 +139,14 @@ export default function PatternsPage() {
     if (!ok) setAskError(body.error || 'A IA não respondeu.');
     else { setChat(c => [...c, { q, a: body.answer.text, missing: body.answer.missing }]); setQuestion(''); }
     setAnswering(false);
+  };
+
+  // Resposta que vale guardar vira uma decisão na memória da IA.
+  const keep = async (i: number) => {
+    const c = chat[i];
+    const { ok, body } = await api('/api/memory', { method: 'POST', body: JSON.stringify({ kind: 'decisao', title: c.q.slice(0, 160), content: c.a, scope: (data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) ? tag.toUpperCase() : '' }) });
+    if (!ok) setAskError(body.error || 'Não foi possível guardar.');
+    else { setKept(k => [...k, i]); setMemoryTick(t => t + 1); }
   };
 
   const isDark = theme === 'dark';
@@ -385,6 +396,9 @@ export default function PatternsPage() {
                     <div className={`text-[13px] font-bold ${head}`}>{c.q}</div>
                     <div className={`rounded-lg border ${line} ${soft} p-3 text-[13px] leading-relaxed whitespace-pre-wrap`}>{c.a}</div>
                     {c.missing && <div className={`text-[11px] ${muted}`}>Faltou para responder melhor: {c.missing}</div>}
+                    {kept.includes(i)
+                      ? <div className="text-[11px] text-emerald-500">Guardado na memória da IA.</div>
+                      : <button onClick={() => keep(i)} className="text-[11px] text-indigo-400 hover:underline">Guardar esta resposta na memória da IA</button>}
                   </div>
                 ))}
                 {askError && <div className="text-xs text-rose-500">{askError}</div>}
@@ -403,6 +417,8 @@ export default function PatternsPage() {
                 </div>
               </div>
             )}
+
+            <MemoryCard api={api} tags={data.options?.tags || []} reloadKey={memoryTick} css={{ card, head, muted, line, soft, title }} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <TermTable best={d.terms_best} waste={d.terms_waste} label="Termos de pesquisa que mais vendem" first="Termo" />

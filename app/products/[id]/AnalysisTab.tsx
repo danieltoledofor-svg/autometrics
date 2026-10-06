@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { ACTIONS } from '@/lib/analysis/actions';
 import { formatMoney } from '@/lib/analysis/labels';
+import { ChangeNotes } from './ChangeNotes';
 
 /**
  * Aba "Análise": checklist fixo de 8 itens, sempre na mesma ordem.
@@ -365,6 +366,9 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
           </div>
         )}
       </div>
+
+      {/* Alterações feitas e o efeito delas */}
+      <ChangeNotes productId={productId} ui={ui} events={data.changes || []} />
 
       {/* 4. Resultado das sugestões anteriores */}
       <div>

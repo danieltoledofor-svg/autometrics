@@ -21,6 +21,7 @@ import { QuickEntryModal } from '@/app/components/QuickEntryModal';
 import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
 import { SegmentTab } from './SegmentTab';
 import { AnalysisTab } from './AnalysisTab';
+import { ChangeNotes, type ChangeArea } from './ChangeNotes';
 import { VturbTab } from './VturbTab';
 import { useCustomColumns } from '@/app/components/metrics/useCustomColumns';
 import { ColumnPicker } from '@/app/components/metrics/ColumnPicker';
@@ -133,6 +134,16 @@ function SparklineSVG({ data, color }: { data: number[]; color: string }) {
     </svg>
   );
 }
+
+// Quais alterações interessam a cada aba de dados.
+const CHANGE_AREAS: Record<string, ChangeArea[]> = {
+  ad_groups: ['grupos'],
+  ad_list: ['anuncios', 'recursos'],
+  keywords: ['palavras'],
+  search_terms: ['palavras'],
+  audiences: ['segmentacao'],
+  locations: ['segmentacao'],
+};
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -743,13 +754,13 @@ export default function ProductDetailPage() {
       <div className="md:hidden flex overflow-x-auto gap-2 mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>
         {[
           { id: 'ads', label: 'Visão Geral' },
+          { id: 'analysis', label: 'Análise' },
           { id: 'ad_groups', label: 'Grupos' },
           { id: 'ad_list', label: 'Anúncios' },
           { id: 'keywords', label: 'Palavras-chave' },
           { id: 'search_terms', label: 'Termos' },
           { id: 'audiences', label: 'Públicos' },
           { id: 'locations', label: 'Locais' },
-          { id: 'analysis', label: 'Análise' },
           { id: 'strategy', label: 'Estratégia' },
           { id: 'vturb', label: 'VTurb' },
         ].map(tab => (
@@ -766,13 +777,13 @@ export default function ProductDetailPage() {
       <div className={`hidden md:flex overflow-x-auto custom-scrollbar gap-0 border-b ${borderCol} mb-8`}>
         {[
           { id: 'ads', icon: <BarChart2 size={15} />, label: 'Visão Geral' },
+          { id: 'analysis', icon: <ListChecks size={15} />, label: 'Análise' },
           { id: 'ad_groups', icon: <Layers size={15} />, label: 'Grupos de Anúncios' },
           { id: 'ad_list', icon: <Megaphone size={15} />, label: 'Anúncios' },
           { id: 'keywords', icon: <KeyRound size={15} />, label: 'Palavras-chave' },
           { id: 'search_terms', icon: <FileText size={15} />, label: 'Termos de Pesquisa' },
           { id: 'audiences', icon: <BarChart size={15} />, label: 'Públicos' },
           { id: 'locations', icon: <Globe size={15} />, label: 'Locais' },
-          { id: 'analysis', icon: <ListChecks size={15} />, label: 'Análise' },
           { id: 'strategy', icon: <NotebookPen size={15} />, label: 'Estratégia' },
           { id: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb Analytics' },
         ].map(tab => (
@@ -1151,6 +1162,11 @@ export default function ProductDetailPage() {
       </>)}
 
       {/* ══════════════════════ GRUPOS, ANÚNCIOS E PALAVRAS-CHAVE ══════════════════════ */}
+      {/* O que mudou nesta área da campanha e o efeito depois (some quando não há alteração). */}
+      {CHANGE_AREAS[activeTab] && (
+        <ChangeNotes key={activeTab} productId={productId} areas={CHANGE_AREAS[activeTab]} limit={3} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} />
+      )}
+
       {(activeTab === 'ad_groups' || activeTab === 'ad_list' || activeTab === 'keywords') && (
         <GoogleAdsEntitiesTab
           supabase={supabase}

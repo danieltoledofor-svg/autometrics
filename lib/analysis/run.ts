@@ -9,6 +9,7 @@ import { analyzePage, fetchPageText, landingUrl, pageHash, pageStatus, type Page
 import { formatMoney } from './labels';
 import { funnelFor, vturbSuggestions, vturbFlagged, detectVturbApplied, pageHashNow as currentPageHash } from './vturbItem';
 import { buildTopo, topoHash, writeTopoText } from '@/lib/vturb/topo';
+import { memoryBlock, memoryFor } from './userMemory';
 
 /**
  * Análise de uma campanha, do começo ao fim:
@@ -304,6 +305,7 @@ async function writeTexts(c: Computed, items: Item[], candidates: Candidate[], u
   const pctf = (x: number) => `${(x * 100).toFixed(1).replace('.', ',')}%`;
   const history = await campaignHistory(c.product.id, 15);
   const learnings = await learningsFor([...new Set(candidates.map(cd => cd.item))]);
+  const notes = memoryBlock(await memoryFor(userId, { text: String(c.product.name || ''), productId: c.product.id }));
 
   const pontos = candidates.map(cd => {
     const r = cd.row;
@@ -338,7 +340,7 @@ HISTÓRICO DESTA CAMPANHA:
 ${hist || '(nenhum ainda)'}
 
 HISTÓRICO GERAL (contagens por situação; não citar a origem):
-${learnings.join('\n') || '(nenhum ainda)'}`;
+${learnings.join('\n') || '(nenhum ainda)'}${notes ? `\n\n${notes}` : ''}`;
 
   let raw: any = null;
   for (let attempt = 0; attempt < 2; attempt++) {

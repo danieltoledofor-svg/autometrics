@@ -4,6 +4,7 @@ import { computePatterns, PERIODS, type PeriodKey, type Patterns } from '@/lib/a
 import { aiEnabled, askJson } from '@/lib/ai/openrouter';
 import { languageProblems } from '@/lib/analysis/actions';
 import { formatMoney } from '@/lib/analysis/labels';
+import { memoryBlock, memoryFor } from '@/lib/analysis/userMemory';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -124,7 +125,8 @@ async function answer(userId: string, opts: ReturnType<typeof options>, question
   if (p.empty) return NextResponse.json({ error: 'Nenhuma campanha neste conjunto para a IA olhar.' }, { status: 400 });
   const past = (Array.isArray(history) ? history : []).slice(-3)
     .map((h: any) => `Pergunta: ${String(h?.q || '').slice(0, 500)}\nResposta: ${String(h?.a || '').slice(0, 1200)}`).join('\n\n');
-  const user = `${dataPack(p, opts.tag)}\n\n${past ? `CONVERSA ATÉ AQUI:\n${past}\n\n` : ''}PERGUNTA DO AFILIADO:\n${question}`;
+  const notes = memoryBlock(await memoryFor(userId, { text: opts.tag }));
+  const user = `${dataPack(p, opts.tag)}\n\n${notes ? `${notes}\n\n` : ''}${past ? `CONVERSA ATÉ AQUI:\n${past}\n\n` : ''}PERGUNTA DO AFILIADO:\n${question}`;
   let raw: any = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     raw = await askJson<any>({ fn: 'padroes', userId, system: ASK_SYSTEM, user: attempt ? `${user}\n\nATENÇÃO: a resposta anterior usou palavras proibidas. Reescreva em português simples.` : user, maxTokens: 2000 });
@@ -149,7 +151,8 @@ export async function POST(request: Request) {
   try {
     const p = await computePatterns(user.id, opts);
     if (p.empty || !p.totals.cost) return NextResponse.json({ error: 'Sem gasto neste período para a IA ler.' }, { status: 400 });
-    const raw = await askJson<any>({ fn: 'padroes', userId: user.id, system: SYSTEM, user: prompt(p, opts.tag), maxTokens: 1500 });
+    const notes = memoryBlock(await memoryFor(user.id, { text: opts.tag }));
+    const raw = await askJson<any>({ fn: 'padroes', userId: user.id, system: SYSTEM, user: `${prompt(p, opts.tag)}${notes ? `\n\n${notes}` : ''}`, maxTokens: 1500 });
     const points = (Array.isArray(raw?.pontos) ? raw.pontos : [])
       .map((x: any) => ({ mark: ['funciona', 'desperdicio', 'atencao'].includes(x?.tipo) ? x.tipo : 'atencao', text: String(x?.texto || '').trim().slice(0, 260) }))
       .filter((x: any) => x.text && !languageProblems(x.text).length).slice(0, 5);

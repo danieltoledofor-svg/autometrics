@@ -528,6 +528,66 @@ export default function DashboardPage() {
   const showBlocks = processedData.blocks.length > 1;
   const campaignNames = useMemo(() => products.map(p => p.name || ''), [products]);
 
+  // ── Alertas de gasto ──────────────────────────────────────────────────────
+  // Campanha que hoje já gastou bem mais que o normal dela. O normal é a média
+  // dos dias com gasto nos 7 dias anteriores (pelo menos 3). Dois gatilhos:
+  // já passou de 1,5× um dia inteiro normal, ou, com pelo menos 6 horas de
+  // dia, está no ritmo de fechar em 2× ou mais. Valores na moeda da conta.
+  const [seenAlerts, setSeenAlerts] = useState<string[]>([]);
+  const todayStr = getLocalYYYYMMDD(new Date());
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('autometrics_alerts_seen') || '{}');
+      if (saved.day === todayStr && Array.isArray(saved.ids)) setSeenAlerts(saved.ids);
+    } catch { /* primeira vez */ }
+  }, [todayStr]);
+  const markAlertSeen = (id: string) => {
+    const ids = [...seenAlerts, id];
+    setSeenAlerts(ids);
+    try { localStorage.setItem('autometrics_alerts_seen', JSON.stringify({ day: todayStr, ids })); } catch { /* sem armazenamento */ }
+  };
+
+  const spendAlerts = useMemo(() => {
+    if (loading || !metrics.length) return [];
+    const from = new Date(); from.setDate(from.getDate() - 7);
+    const fromStr = getLocalYYYYMMDD(from);
+    const now = new Date();
+    const dayPart = (now.getHours() * 60 + now.getMinutes()) / 1440;
+    const byProduct = new Map<string, { today: number; sales: number; past: number; days: number }>();
+    for (const row of metrics) {
+      if (row.date < fromStr || row.date > todayStr) continue;
+      const cost = Number(row.cost || 0);
+      if (!byProduct.has(row.product_id)) byProduct.set(row.product_id, { today: 0, sales: 0, past: 0, days: 0 });
+      const p = byProduct.get(row.product_id)!;
+      if (row.date === todayStr) { p.today += cost; p.sales += Number(row.conversions || 0); }
+      else if (cost > 0) { p.past += cost; p.days++; }
+    }
+    const out: any[] = [];
+    for (const [id, p] of byProduct) {
+      if (p.days < 3 || p.today < 10) continue;
+      const product = products.find(x => x.id === id);
+      if (!product) continue;
+      const mccName = product.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
+      if (selectedMcc !== 'all' && mccName !== selectedMcc) continue;
+      const normal = p.past / p.days;
+      const pace = dayPart >= 0.25 && dayPart < 0.9 ? p.today / dayPart : 0;
+      const passed = p.today >= normal * 1.5 && p.today - normal >= 10;
+      const fast = !passed && pace >= normal * 2 && p.today >= normal * 0.6;
+      if (!passed && !fast) continue;
+      out.push({ id, name: product.name, currency: product.currency || 'BRL', today: p.today, normal, sales: p.sales, passed, pace, over: (passed ? p.today : pace) / normal });
+    }
+    return out.sort((a, b) => b.over - a.over);
+  }, [metrics, products, loading, selectedMcc, todayStr]);
+  const openAlerts = spendAlerts.filter(a => !seenAlerts.includes(a.id));
+
+  // A coleta roda de hora em hora: o painel aberto relê os dados a cada 20
+  // minutos, para o alerta aparecer sem precisar recarregar a página.
+  useEffect(() => {
+    if (!user) return;
+    const timer = setInterval(() => { fetchInitialData(user.id, fetchedFrom || undefined); }, 20 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [user, fetchedFrom]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const sparklineData = useMemo(() => {
     const last7 = processedData.chart.slice(-7);
     return {
@@ -770,6 +830,36 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
+
+        {/* ── ALERTAS DE GASTO ── */}
+        {openAlerts.length > 0 && (
+          <div className={`rounded-xl border mb-4 overflow-hidden ${isDark ? 'bg-amber-500/5 border-amber-500/40' : 'bg-amber-50 border-amber-300'}`}>
+            <div className="flex items-center gap-2 px-4 pt-3 pb-1 text-amber-500">
+              <AlertTriangle size={15} />
+              <span className="text-[11px] font-extrabold uppercase tracking-wider">Gasto acima do normal hoje · {openAlerts.length} {openAlerts.length === 1 ? 'campanha' : 'campanhas'}</span>
+            </div>
+            {openAlerts.map(a => {
+              const m = (v: number) => new Intl.NumberFormat(a.currency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: a.currency }).format(v);
+              return (
+                <div key={a.id} className={`flex items-start gap-3 px-4 py-2 border-t ${isDark ? 'border-amber-500/20' : 'border-amber-200'}`}>
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/products/${a.id}`} target="_blank" rel="noopener noreferrer" className={`text-[13px] font-semibold break-words hover:underline ${textHead}`}>{a.name}</Link>
+                    <div className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {a.passed
+                        ? <>Já gastou {m(a.today)} hoje, {Math.round((a.over - 1) * 100)}% acima de um dia normal ({m(a.normal)}).</>
+                        : <>Gastou {m(a.today)} até agora: no ritmo de fechar o dia em {m(a.pace)}, contra {m(a.normal)} de um dia normal.</>}
+                      {' '}{a.sales > 0 ? `${String(a.sales).replace('.', ',')} ${a.sales === 1 ? 'venda' : 'vendas'} hoje.` : 'Nenhuma venda hoje.'}
+                    </div>
+                  </div>
+                  <button onClick={() => markAlertSeen(a.id)}
+                    className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-bold border ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-white'}`}>
+                    Visto
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── MOBILE KPI GRID 2x2 (hidden on desktop) ── */}
         {processedData.totals && (
