@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Check, LayoutGrid, Loader2, LogOut, Moon, Package, Send, Settings, Sparkles, Sun, Target } from 'lucide-react';
+import { Check, LayoutGrid, Loader2, LogOut, Moon, Package, Send, Settings, Sparkles, Sun, Target, Route } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
@@ -28,6 +28,7 @@ const NAV = [
   { href: '/planning', Icon: Target, label: 'Metas', short: 'Metas' },
   { href: '/products', Icon: Package, label: 'Campanhas', short: 'Campanhas' },
   { href: '/analise-ia', Icon: Sparkles, label: 'Análise de IA', short: 'Análise IA' },
+  { href: '/rastreamento', Icon: Route, label: 'Rastreamento', short: 'Rastreio' },
   { href: '/integration', Icon: Settings, label: 'Integração', short: 'Integração' },
 ];
 const MAIN = 'main';
