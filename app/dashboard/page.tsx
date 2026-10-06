@@ -23,6 +23,7 @@ import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type Metric
 import { MAIN_BLOCK, blockName, blockOf } from '@/lib/campaignGroups';
 import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
 import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
+import { spendAlert } from '@/lib/alerts/spendRule';
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
@@ -529,10 +530,8 @@ export default function DashboardPage() {
   const campaignNames = useMemo(() => products.map(p => p.name || ''), [products]);
 
   // ── Alertas de gasto ──────────────────────────────────────────────────────
-  // Campanha que hoje já gastou bem mais que o normal dela. O normal é a média
-  // dos dias com gasto nos 7 dias anteriores (pelo menos 3). Dois gatilhos:
-  // já passou de 1,5× um dia inteiro normal, ou, com pelo menos 6 horas de
-  // dia, está no ritmo de fechar em 2× ou mais. Valores na moeda da conta.
+  // Campanha que hoje já gastou bem mais que o normal dela. A regra é a mesma
+  // do alerta pelo Telegram (lib/alerts/spendRule). Valores na moeda da conta.
   const [seenAlerts, setSeenAlerts] = useState<string[]>([]);
   const todayStr = getLocalYYYYMMDD(new Date());
   useEffect(() => {
@@ -564,17 +563,13 @@ export default function DashboardPage() {
     }
     const out: any[] = [];
     for (const [id, p] of byProduct) {
-      if (p.days < 3 || p.today < 10) continue;
+      const alert = spendAlert(p.today, p.past, p.days, dayPart);
+      if (!alert) continue;
       const product = products.find(x => x.id === id);
       if (!product) continue;
       const mccName = product.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
       if (selectedMcc !== 'all' && mccName !== selectedMcc) continue;
-      const normal = p.past / p.days;
-      const pace = dayPart >= 0.25 && dayPart < 0.9 ? p.today / dayPart : 0;
-      const passed = p.today >= normal * 1.5 && p.today - normal >= 10;
-      const fast = !passed && pace >= normal * 2 && p.today >= normal * 0.6;
-      if (!passed && !fast) continue;
-      out.push({ id, name: product.name, currency: product.currency || 'BRL', today: p.today, normal, sales: p.sales, passed, pace, over: (passed ? p.today : pace) / normal });
+      out.push({ id, name: product.name, currency: product.currency || 'BRL', today: p.today, normal: alert.normal, sales: p.sales, passed: alert.kind === 'passou', pace: alert.pace, over: alert.over });
     }
     return out.sort((a, b) => b.over - a.over);
   }, [metrics, products, loading, selectedMcc, todayStr]);

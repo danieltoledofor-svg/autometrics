@@ -8,6 +8,7 @@ import {
   LayoutGrid, Target, Package, Settings, LogOut, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
+import { TelegramCard } from './TelegramCard';
 import { Logo } from '@/app/components/Logo';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
@@ -825,6 +826,8 @@ ${commonFunctions}`;
             <Link href="/ia" className="text-xs text-indigo-400 hover:underline">Consumo da IA →</Link>
           </div>
         )}
+
+        <TelegramCard isDark={isDark} />
 
         {/* ── ABA 1: GOOGLE ADS ────────────────────────────────── */}
         {activeTab === 'google' && (
