@@ -6,7 +6,7 @@ import {
   ArrowLeft, Columns, X, ExternalLink, Calendar, Link as LinkIcon,
   PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon,
   Video, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
-  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound, ListChecks
+  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound, ListChecks, Sparkles
 } from 'lucide-react';
 import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
@@ -628,6 +628,7 @@ export default function ProductDetailPage() {
             { href: '/dashboard', icon: <LayoutGrid size={18} />, label: 'Dashboard' },
             { href: '/planning', icon: <Target size={18} />, label: 'Metas' },
             { href: '/products', icon: <Package size={18} />, label: 'Campanhas', active: true },
+            { href: '/analise-ia', icon: <Sparkles size={18} />, label: 'Análise de IA' },
             { href: '/integration', icon: <Settings size={18} />, label: 'Integração' },
           ].map(item => (
             <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${(item as any).active ? 'bg-indigo-600 text-white' : (isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-100')}`}>
@@ -1256,6 +1257,7 @@ export default function ProductDetailPage() {
             { href: '/dashboard', icon: <LayoutGrid size={22} />, label: 'Dashboard' },
             { href: '/planning', icon: <Target size={22} />, label: 'Metas' },
             { href: '/products', icon: <Package size={22} />, label: 'Campanhas', active: true },
+            { href: '/analise-ia', icon: <Sparkles size={22} />, label: 'Análise IA' },
             { href: '/integration', icon: <Settings size={22} />, label: 'Integração' },
           ].map(item => (
             <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-0.5 px-3 py-1 ${(item as any).active ? 'text-indigo-500' : textMuted}`}>

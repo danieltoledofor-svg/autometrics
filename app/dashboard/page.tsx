@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar, Sun, Moon, LayoutGrid, Package, Settings,
   LogOut, Target, ArrowUpRight, ArrowDownRight,
-  ChevronUp, ChevronDown, SlidersHorizontal, X, FileText, AlertTriangle
+  ChevronUp, ChevronDown, SlidersHorizontal, X, FileText, AlertTriangle, Sparkles
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -579,6 +579,7 @@ export default function DashboardPage() {
           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
             <Package size={20} /> <span className="font-medium">Campanhas</span>
           </Link>
+          <Link href="/analise-ia" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Sparkles size={20} /> <span className="font-medium">Análise de IA</span></Link>
           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
             <Settings size={20} /> <span className="font-medium">Integração</span>
           </Link>
@@ -1124,6 +1125,7 @@ export default function DashboardPage() {
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: true },
             { href: '/planning', Icon: Target, label: 'Metas', active: false },
             { href: '/products', Icon: Package, label: 'Campanhas', active: false },
+            { href: '/analise-ia', Icon: Sparkles, label: 'Análise IA', active: false },
             { href: '/integration', Icon: Settings, label: 'Integração', active: false },
           ].map(({ href, Icon, label, active }) => (
             <Link

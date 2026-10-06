@@ -5,7 +5,7 @@ import {
   Target, TrendingUp, Calendar as CalIcon, Edit2, Plus, Trash2,
   Sun, Moon, ChevronDown, ChevronRight, Save, DollarSign, AlertCircle,
   Briefcase, Globe, LayoutGrid, LogOut, Package, FileText, Settings, ArrowLeft,
-  Calendar, ChevronUp, SlidersHorizontal, X
+  Calendar, ChevronUp, SlidersHorizontal, X, Sparkles
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line
@@ -709,6 +709,7 @@ export default function PlanningPage() {
           <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20}/> Dashboard</Link>
           <Link href="/planning" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Target size={20}/> Metas</Link>
           <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20}/> Campanhas</Link>
+          <Link href="/analise-ia" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Sparkles size={20} /> Análise de IA</Link>
           <Link href="/integration" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Settings size={20}/> Integração</Link>
         </nav>
         <div className="p-4 border-t border-inherit">
@@ -1441,6 +1442,7 @@ export default function PlanningPage() {
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
             { href: '/planning', Icon: Target, label: 'Metas', active: true },
             { href: '/products', Icon: Package, label: 'Campanhas', active: false },
+            { href: '/analise-ia', Icon: Sparkles, label: 'Análise IA', active: false },
             { href: '/integration', Icon: Settings, label: 'Integração', active: false },
           ].map(({ href, Icon, label, active }) => (
             <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>

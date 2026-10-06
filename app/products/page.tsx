@@ -36,7 +36,7 @@ import {
   Sun,
   Moon,
   Hash,
-  ChevronRight, ChevronDown, ArrowLeft, Package, FileText, CheckCircle2, XCircle, ArrowDownWideNarrow
+  ChevronRight, ChevronDown, ArrowLeft, Package, FileText, CheckCircle2, XCircle, ArrowDownWideNarrow, Sparkles
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { resolveProductStatus, type StatusKey } from '@/lib/campaignStatus';
@@ -647,6 +647,7 @@ export default function ProductsPage() {
              <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><LayoutGrid size={20} /> <span className="font-medium">Dashboard</span></Link>
              <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} /> <span className="font-medium">Metas</span></Link>
              <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><Briefcase size={20} /> <span className="font-medium">Campanhas</span></Link>
+             <Link href="/analise-ia" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Sparkles size={20} /> <span className="font-medium">Análise de IA</span></Link>
              <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} /> <span className="font-medium">Integração</span></Link>
           </nav>
           
@@ -985,6 +986,7 @@ export default function ProductsPage() {
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
             { href: '/planning', Icon: Target, label: 'Metas', active: false },
             { href: '/products', Icon: Package, label: 'Campanhas', active: true },
+            { href: '/analise-ia', Icon: Sparkles, label: 'Análise IA', active: false },
             { href: '/integration', Icon: Settings, label: 'Integração', active: false },
           ].map(({ href, Icon, label, active }) => (
             <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
