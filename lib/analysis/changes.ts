@@ -300,31 +300,44 @@ const summaryCache = new Map<string, { at: number; rows: AdjustmentRow[] }>();
  * próprio usuário faz — orçamento, meta de CPA e lance se comportam de forma
  * parecida de uma campanha para outra. Fica guardado por 30 minutos.
  */
-export async function adjustmentSummary(userId: string): Promise<AdjustmentRow[]> {
-  const hit = summaryCache.get(userId);
-  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.rows;
+const eventsCache = new Map<string, { at: number; list: { productId: string; name: string; events: ChangeEvent[] }[] }>();
+
+/** As alterações de todas as campanhas do usuário, já conferidas. Fica guardado por 30 minutos. */
+export async function userChangeEvents(userId: string) {
+  const hit = eventsCache.get(userId);
+  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.list;
   const db = supabaseAdmin();
-  const products = await fetchAll((a, b) => db.from('products').select('id, currency').eq('user_id', userId).range(a, b));
+  const products = await fetchAll((a, b) => db.from('products').select('id, name, currency').eq('user_id', userId).range(a, b));
   const ids = products.map(p => p.id);
   const today = todayIn('America/Sao_Paulo');
-  const chunked = async (build: (chunk: string[], a: number, b: number) => any) => {
-    const out: any[] = [];
-    for (let i = 0; i < ids.length; i += 150) out.push(...await fetchAll((a, b) => build(ids.slice(i, i + 150), a, b)));
-    return out;
-  };
-  const changes = await chunked((chunk, a, b) => db.from('google_ads_changes').select('product_id, changed_at, resource_type, operation, fields')
-    .in('product_id', chunk).order('changed_at', { ascending: false }).range(a, b)).catch(() => []);
+  const changes: any[] = [];
+  for (let i = 0; i < ids.length; i += 150) {
+    changes.push(...await fetchAll((a, b) => db.from('google_ads_changes').select('product_id, changed_at, resource_type, operation, fields')
+      .in('product_id', ids.slice(i, i + 150)).order('changed_at', { ascending: false }).range(a, b)).catch(() => []));
+  }
   const withChanges = [...new Set(changes.map(c => c.product_id))];
   const days: any[] = [];
   for (let i = 0; i < withChanges.length; i += 150) {
     days.push(...await fetchAll((a, b) => db.from('daily_metrics').select('product_id, date, cost, conversions, google_conversions, conversion_value, refunds')
       .in('product_id', withChanges.slice(i, i + 150)).gte('date', addDays(today, -120)).order('date').range(a, b)));
   }
+  const list = withChanges.map(id => {
+    const product = products.find(p => p.id === id);
+    return {
+      productId: id as string, name: String(product?.name || ''),
+      events: buildEvents(changes.filter(c => c.product_id === id), days.filter(d => d.product_id === id), String(product?.currency || 'USD').toUpperCase(), today, 200),
+    };
+  });
+  eventsCache.set(userId, { at: Date.now(), list });
+  return list;
+}
+
+export async function adjustmentSummary(userId: string): Promise<AdjustmentRow[]> {
+  const hit = summaryCache.get(userId);
+  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.rows;
 
   const rows = new Map<string, AdjustmentRow & { cpa: number[]; set: Set<string> }>();
-  for (const id of withChanges) {
-    const currency = String(products.find(p => p.id === id)?.currency || 'USD').toUpperCase();
-    const events = buildEvents(changes.filter(c => c.product_id === id), days.filter(d => d.product_id === id), currency, today, 200);
+  for (const { productId: id, events } of await userChangeEvents(userId)) {
     for (const e of events) {
       if (e.outcome === 'sem_base') continue;
       // Campanha pausada fica de fora: depois da pausa não há gasto para comparar.

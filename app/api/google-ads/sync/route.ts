@@ -6,7 +6,7 @@ import { refreshConnectionAccounts } from '@/lib/googleAds/accounts';
 import { isReconcileDue, reconcileAccountRecord, reconcileReady } from '@/lib/googleAds/reconcile';
 import { runDueAnalyses } from '@/lib/analysis/run';
 import { runDueVturb } from '@/lib/vturb/sync';
-import { runSpendAlerts } from '@/lib/alerts/spend';
+import { runAlerts } from '@/lib/alerts/run';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -52,7 +52,7 @@ async function runCron() {
 
   // Alertas pelo Telegram: antes de tudo, para saírem mesmo quando a cota do
   // Google acabou ou a coleta ocupa o tempo inteiro. Lê só o que já está gravado.
-  report.alerts = await runSpendAlerts().catch((e: any) => ({ error: e.message }));
+  report.alerts = await runAlerts().catch((e: any) => ({ error: e.message }));
 
   // Cota do dia: acima de 80% só custo e status; acima de 95% para tudo até
   // a virada (meia-noite do Pacífico). O botão "Sincronizar" continua valendo.

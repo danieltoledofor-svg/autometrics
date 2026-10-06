@@ -5,7 +5,7 @@ import {
   Copy, Check, Code, ArrowLeft, Zap, Calendar,
   Globe, Store, AlertCircle, Sun, Moon, Link2, MousePointerClick,
   Tv2, Key, Eye, EyeOff, Save, CheckCircle2, LinkIcon, ExternalLink, Plus, Trash2,
-  LayoutGrid, Target, Package, Settings, LogOut, Sparkles
+  LayoutGrid, Target, Package, Settings, LogOut, Sparkles, Send
 } from 'lucide-react';
 import Link from 'next/link';
 import { TelegramCard } from './TelegramCard';
@@ -53,7 +53,7 @@ export default function IntegrationPage() {
   const [vturbTokenVisible, setVturbTokenVisible] = useState(false);
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'google' | 'conversion' | 'pixel' | 'vturb' | 'url'>('google');
+  const [activeTab, setActiveTab] = useState<'google' | 'conversion' | 'pixel' | 'vturb' | 'url' | 'telegram'>('google');
 
   // Conversão Automática: tracker externo e plataforma de venda selecionados
   const [convTracker, setConvTracker] = useState<'flowtracking'>('flowtracking');
@@ -806,6 +806,7 @@ ${commonFunctions}`;
             { key: 'pixel', icon: <MousePointerClick size={15} />, label: 'Pixel' },
             { key: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb' },
             { key: 'url', icon: <LinkIcon size={15} />, label: 'URL Builder' },
+            { key: 'telegram', icon: <Send size={15} />, label: 'Telegram' },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -827,7 +828,8 @@ ${commonFunctions}`;
           </div>
         )}
 
-        <TelegramCard isDark={isDark} />
+        {/* ── ABA TELEGRAM: ligação com o bot e alertas ─────────── */}
+        {activeTab === 'telegram' && <TelegramCard isDark={isDark} />}
 
         {/* ── ABA 1: GOOGLE ADS ────────────────────────────────── */}
         {activeTab === 'google' && (

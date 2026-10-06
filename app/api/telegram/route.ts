@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { botUsername, sendTelegram, telegramEnabled, tg } from '@/lib/telegram';
+import { ALERTS, resolveSettings } from '@/lib/alerts/catalog';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
  *   test    manda uma mensagem de teste
  *   toggle  { enabled } liga ou desliga os alertas, sem desfazer a ligação
  *   unlink  desfaz a ligação
+ *   settings { settings } quais alertas estão ligados, os limites e o horário de silêncio
  */
 
 const MISSING = 'Falta rodar migration_telegram.sql no Supabase.';
@@ -30,6 +32,8 @@ async function status(userId: string) {
     ready: true as const, configured, bot,
     linked: !!data?.chat_id, chat_name: data?.chat_name || null, enabled: data?.enabled !== false,
     code: !data?.chat_id && fresh ? data.code : null,
+    // Alertas disponíveis e as escolhas do usuário (com o padrão no que ele não mexeu).
+    catalog: ALERTS, settings: resolveSettings(data?.settings),
   };
 }
 
@@ -71,6 +75,14 @@ export async function POST(request: Request) {
     const name = [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.title || chat.username || '';
     await db.from('telegram_links').update({ chat_id: String(chat.id), chat_name: name, code: null, linked_at: now, enabled: true, updated_at: now }).eq('user_id', user.id);
     await sendTelegram(String(chat.id), '✅ <b>Autometrics ligado.</b>\nOs alertas das suas campanhas chegam por aqui.').catch(() => {});
+    return NextResponse.json(await status(user.id));
+  }
+
+  if (body.action === 'settings') {
+    // Passa pelo mesmo filtro da leitura: só entram alertas e números válidos.
+    const settings = resolveSettings(body.settings);
+    const { error: saveError } = await db.from('telegram_links').upsert({ user_id: user.id, settings, updated_at: now }, { onConflict: 'user_id' });
+    if (saveError) return fail('Falta rodar migration_telegram_alertas.sql no Supabase.', 409);
     return NextResponse.json(await status(user.id));
   }
 
