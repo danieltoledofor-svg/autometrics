@@ -131,12 +131,51 @@ export function resolveCampaignStatus(row: StatusSource): CampaignStatus {
     else entry = MAP.DESCONHECIDO;
   }
 
-  const reasons = row.campaign_status_reasons;
+  const reasons = explainReasons(row.campaign_status_reasons);
   return {
     key: entry.key,
     ...TONE[entry.key],
-    hint: reasons ? `${entry.hint} — ${reasons}` : entry.hint,
+    hint: reasons.length ? `${entry.hint} — ${reasons.join('; ')}` : entry.hint,
   };
+}
+
+/**
+ * Motivos que o Google manda em código (BIDDING_STRATEGY_CONSTRAINED…), em
+ * português simples. Código sem tradução não aparece: sigla em inglês na tela
+ * não ajuda ninguém.
+ */
+const REASONS_PT: Record<string, string> = {
+  BIDDING_STRATEGY_CONSTRAINED: 'a meta de CPA ou o limite de lance está baixo demais para a campanha entrar nos leilões',
+  BIDDING_STRATEGY_LIMITED: 'a estratégia de lances está limitando a entrega',
+  BIDDING_STRATEGY_LEARNING: 'a estratégia de lances ainda está aprendendo',
+  BIDDING_STRATEGY_MISCONFIGURED: 'a estratégia de lances está configurada errado',
+  BUDGET_CONSTRAINED: 'o orçamento do dia acaba antes do fim do dia',
+  BUDGET_MISCONFIGURED: 'o orçamento está configurado errado',
+  SEARCH_VOLUME_LIMITED: 'pouca gente pesquisa as palavras-chave da campanha',
+  AD_GROUPS_PAUSED: 'todos os grupos de anúncios estão pausados',
+  NO_AD_GROUPS: 'a campanha não tem grupo de anúncios',
+  KEYWORDS_PAUSED: 'todas as palavras-chave estão pausadas',
+  NO_KEYWORDS: 'a campanha não tem palavra-chave',
+  AD_GROUP_ADS_PAUSED: 'todos os anúncios estão pausados',
+  NO_AD_GROUP_ADS: 'a campanha não tem anúncio',
+  HAS_ADS_DISAPPROVED: 'há anúncio reprovado pelo Google',
+  HAS_ADS_LIMITED_BY_POLICY: 'há anúncio limitado pelas políticas do Google',
+  MOST_ADS_UNDER_REVIEW: 'a maior parte dos anúncios ainda está em análise',
+  HAS_ASSET_GROUPS_DISAPPROVED: 'há grupo de recursos reprovado',
+  HAS_ASSET_GROUPS_LIMITED_BY_POLICY: 'há grupo de recursos limitado pelas políticas do Google',
+  MOST_ASSET_GROUPS_UNDER_REVIEW: 'a maior parte dos grupos de recursos ainda está em análise',
+  NO_ASSET_GROUPS: 'a campanha não tem grupo de recursos',
+  ASSET_GROUPS_PAUSED: 'todos os grupos de recursos estão pausados',
+  CAMPAIGN_PAUSED: 'a campanha está pausada',
+  CAMPAIGN_REMOVED: 'a campanha foi removida',
+  CAMPAIGN_PENDING: 'a campanha ainda não começou',
+  CAMPAIGN_ENDED: 'a data de término já passou',
+  CAMPAIGN_DRAFT: 'a campanha ainda é rascunho',
+  CAMPAIGN_GROUP_PAUSED: 'o grupo de campanhas está pausado',
+};
+
+export function explainReasons(raw?: string | null): string[] {
+  return [...new Set(String(raw || '').split(/[,;|]/).map(r => REASONS_PT[r.trim().toUpperCase()]).filter(Boolean))];
 }
 
 /**

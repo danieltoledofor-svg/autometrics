@@ -3,7 +3,7 @@ import { escapeHtml, sendTelegram, telegramEnabled } from '@/lib/telegram';
 import { formatMoney } from '@/lib/analysis/labels';
 import { addDays, fetchAll } from '@/lib/analysis/compute';
 import { userChangeEvents } from '@/lib/analysis/changes';
-import { resolveProductStatus } from '@/lib/campaignStatus';
+import { explainReasons, resolveProductStatus } from '@/lib/campaignStatus';
 import { spendAlert } from './spendRule';
 import { isQuiet, resolveSettings, type AlertSettings } from './catalog';
 
@@ -24,6 +24,25 @@ const num = (v: any) => {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
 };
+// O alerta de "suspensa" cobre tudo o que impede a campanha de aparecer; cada caso com o nome certo.
+const STOPPED: Record<string, { title: string; text: string }> = {
+  CONTA_SUSPENSA: { title: 'Conta do Google Ads suspensa', text: 'O Google suspendeu a conta. Nenhuma campanha dela aparece até a conta ser liberada.' },
+  CONTA_ENCERRADA: { title: 'Conta do Google Ads encerrada', text: 'A conta foi cancelada ou encerrada. As campanhas dela não aparecem mais.' },
+  SUSPENSA: { title: 'Campanha suspensa pelo Google', text: 'O Google parou de mostrar esta campanha.' },
+  COM_ERRO: { title: 'Campanha com erro de configuração', text: 'Alguma configuração impede a campanha de aparecer.' },
+  NAO_ELEGIVEL: { title: 'Campanha não está aparecendo', text: 'A campanha está ligada, mas o Google não está mostrando os anúncios. Ela não foi suspensa.' },
+};
+
+/** Erro da leitura do Google em português simples; o texto técnico não vai para o usuário. */
+function syncProblem(raw: string) {
+  if (/invalid_grant|expired|revoked/i.test(raw)) return 'A ligação com o Google venceu. Reconecte a conta em Integração.';
+  if (/NOT_ENABLED|SUSPENDED|CANCELED|CLOSED|deactivated/i.test(raw)) return 'A conta não está ativa no Google Ads (suspensa, cancelada ou encerrada).';
+  if (/PERMISSION|ACCESS|NOT_AUTHORIZED|authoriz/i.test(raw)) return 'O login ligado não tem mais acesso a esta conta no Google Ads.';
+  if (/quota|RESOURCE_EXHAUSTED|rate/i.test(raw)) return 'O limite diário de consultas ao Google foi atingido. A leitura volta sozinha depois.';
+  if (/timeout|timed out|ECONN|fetch failed|network/i.test(raw)) return 'O Google demorou demais para responder. A próxima leitura tenta de novo.';
+  return 'O Google recusou a leitura desta conta. Abra Integração para ver o detalhe.';
+}
+
 const OUTCOME_PT: Record<string, string> = { melhorou: '✅ Melhorou', piorou: '🔻 Piorou', igual: '➖ Ficou igual' };
 
 function nowIn(tz: string) {
@@ -125,7 +144,10 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
     }
 
     if (on.suspensa.on && status.key === 'suspenso' && (c.days7 > 0 || c.today > 0) && !warned('suspensa', id, 14)) {
-      await notify('suspensa', id, id, `⛔ <b>Campanha suspensa</b>\n${name}\n\n${escapeHtml(status.hint || 'O Google parou de veicular esta campanha.')}\n\n${link_(id)}`);
+      const stop = STOPPED[String(p.google_status || '').toUpperCase()] || STOPPED.SUSPENSA;
+      const reasons = explainReasons(p.google_status_reasons);
+      const why = reasons.length ? `\nMotivo informado pelo Google: ${reasons.join('; ')}.` : '';
+      await notify('suspensa', id, id, `⛔ <b>${stop.title}</b>\n${name}\n\n${stop.text}${escapeHtml(why)}\n\n${link_(id)}`);
     }
 
     if (on.sem_venda.on && c.sales <= 0) {
@@ -191,7 +213,7 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
   if (on.coleta.on) {
     const { data: accounts } = await db.from('google_ads_accounts').select('id, name, last_sync_error').eq('user_id', userId).eq('sync_enabled', true).eq('last_sync_status', 'erro');
     for (const acc of accounts || []) {
-      await notify('coleta', acc.id, null, `🔌 <b>Conta com erro na leitura do Google</b>\n${escapeHtml(String(acc.name || ''))}\n\n${escapeHtml(String(acc.last_sync_error || 'Erro sem descrição.').slice(0, 300))}\n\n<a href="${appUrl()}/integration">Abrir Integração</a>`);
+      await notify('coleta', acc.id, null, `🔌 <b>Conta com erro na leitura do Google</b>\n${escapeHtml(String(acc.name || ''))}\n\n${syncProblem(String(acc.last_sync_error || ''))}\n\n<a href="${appUrl()}/integration">Abrir Integração</a>`);
     }
   }
   return sent;
