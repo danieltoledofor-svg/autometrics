@@ -8,17 +8,19 @@ import { supabaseAdmin, appUrl } from '@/lib/googleAds/server';
  * Sem OPENROUTER_API_KEY a análise segue só com os números e os textos padrão.
  */
 
-export type AiFunction = 'leitura' | 'pagina';
+export type AiFunction = 'leitura' | 'pagina' | 'padroes';
 
 /** Padrão barato de cada função; o dono troca em /ia sem precisar publicar. */
 export const DEFAULT_MODELS: Record<AiFunction, string> = {
   leitura: process.env.AI_MODEL_LEITURA || 'deepseek/deepseek-v4.1-flash',
   pagina: process.env.AI_MODEL_PAGINA || 'google/gemini-3.5-flash-lite',
+  padroes: process.env.AI_MODEL_PADROES || 'deepseek/deepseek-v4.1-flash',
 };
 
 export const FUNCTION_LABELS: Record<AiFunction, { label: string; when: string }> = {
   leitura: { label: 'Texto da leitura (resumo e pontos de alteração)', when: 'quando algum item muda de status e 1 vez por dia' },
   pagina: { label: 'Anúncio × página × VSL', when: 'quando a página, a VSL ou os termos principais mudam, e 1 vez por semana' },
+  padroes: { label: 'Padrões entre campanhas parecidas', when: 'só quando o usuário pede a leitura na tela Padrões' },
 };
 
 export const aiEnabled = () => !!process.env.OPENROUTER_API_KEY;
