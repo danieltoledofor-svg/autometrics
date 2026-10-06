@@ -39,11 +39,16 @@ export function clearModelCache() {
   modelCache = null;
 }
 
-/** Dono do Autometrics: e-mails em AUTOMETRICS_OWNER_EMAILS, separados por vírgula. */
+/**
+ * Dono do Autometrics: uma conta só, fixa no código. É a única que abre o
+ * painel de consumo e troca o modelo de cada função — modelo caro escolhido
+ * por engano (ou por outra pessoa) vira gasto na hora. Não vem de variável
+ * de ambiente de propósito: ninguém mais entra na lista sem mudar o código.
+ */
+const OWNER_EMAIL = 'dcalmeida431@gmail.com';
+
 export function isOwner(email?: string | null): boolean {
-  if (!email) return false;
-  const list = (process.env.AUTOMETRICS_OWNER_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  return list.includes(email.toLowerCase());
+  return !!email && email.trim().toLowerCase() === OWNER_EMAIL;
 }
 
 export interface AiCall {

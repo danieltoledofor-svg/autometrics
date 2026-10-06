@@ -79,12 +79,11 @@ Aba **Análise** em cada campanha: checklist fixo de 8 itens (termos, palavras-c
 - **IA** (`OPENROUTER_API_KEY`): escreve o resumo e o "Ponto de alteração" só quando surge item novo fora do limite, quando algum item muda de status, ou 1 vez por dia. A página e a VSL são relidas quando mudam, ou 1 vez por semana. Texto com verbo de ordem ou nome técnico é recusado e cai no texto padrão. Sem a chave, tudo funciona com textos padrão.
 - **Acompanhamento** (`track.ts`): cada sugestão guarda os números do momento. A alteração é encontrada sozinha no histórico do Google (`google_ads_changes`, gravado na coleta a partir do `change_event` que ela já lê). O resultado sai 3 e 7 dias depois, comparando com os 7 dias antes.
 - **Memória geral** (`ai_learnings`): o resultado de 7 dias de toda sugestão, de todos os usuários, sem nome de campanha, termo, conta ou usuário. Volta para a IA só como contagem por situação.
-- **Consumo** (`/ia`): só para os e-mails em `AUTOMETRICS_OWNER_EMAILS`. Modelo de cada função e gasto do mês por usuário.
+- **Consumo** (`/ia`): só para a conta do dono, fixa em `lib/ai/openrouter.ts` (`OWNER_EMAIL`). Modelo de cada função e gasto do mês por usuário.
 
 | Variável | Valor |
 |---|---|
 | `OPENROUTER_API_KEY` | Chave do OpenRouter |
-| `AUTOMETRICS_OWNER_EMAILS` | E-mail(s) do dono, separados por vírgula |
 | `AI_MODEL_LEITURA` / `AI_MODEL_PAGINA` | Opcionais. Padrão: `deepseek/deepseek-v4.1-flash` e `google/gemini-3.5-flash-lite`. O que for escolhido em `/ia` vale por cima. |
 
 ## Consultas por conta

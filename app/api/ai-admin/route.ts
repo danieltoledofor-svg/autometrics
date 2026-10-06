@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Painel do dono do Autometrics: modelo de cada função e consumo da IA.
- * Só para os e-mails em AUTOMETRICS_OWNER_EMAILS.
+ * Só para a conta do dono (isOwner, em lib/ai/openrouter).
  *
  * GET  modelos em uso, lista do OpenRouter com preços e consumo do mês
  * PUT  { function, model } troca o modelo de uma função

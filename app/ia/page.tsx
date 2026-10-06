@@ -8,7 +8,7 @@ import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 
 /**
- * Consumo da IA — só para o dono do Autometrics (AUTOMETRICS_OWNER_EMAILS).
+ * Consumo da IA — só para a conta do dono do Autometrics.
  * Modelo de cada função (lista e preços vêm do OpenRouter) e gasto do mês por usuário.
  */
 
@@ -85,7 +85,7 @@ export default function AiAdminPage() {
         </div>
 
         {status === 'loading' && <div className={`flex items-center gap-2 text-sm ${textMuted}`}><Loader2 size={16} className="animate-spin" /> Carregando…</div>}
-        {status === 'forbidden' && <div className={`${bgCard} border rounded-xl p-6 text-sm ${textMuted}`}>Esta tela é só do dono do Autometrics. O e-mail do dono fica na variável AUTOMETRICS_OWNER_EMAILS do servidor.</div>}
+        {status === 'forbidden' && <div className={`${bgCard} border rounded-xl p-6 text-sm ${textMuted}`}>Esta tela é só da conta principal do Autometrics.</div>}
         {status === 'error' && <div className="text-sm text-rose-500">{message}</div>}
 
         {status === 'ok' && data && (<>
