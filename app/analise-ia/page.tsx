@@ -2,10 +2,11 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, Loader2, Moon, Send, Sparkles, Sun } from 'lucide-react';
+import { Check, LayoutGrid, Loader2, LogOut, Moon, Package, Send, Settings, Sparkles, Sun, Target } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
+import { Logo } from '@/app/components/Logo';
 
 /**
  * Análise de IA: o que se repete nas campanhas parecidas do usuário (mesma
@@ -21,6 +22,13 @@ const PERIODS = [
 ];
 const dayStr = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const validDay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+const NAV = [
+  { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', short: 'Dashboard' },
+  { href: '/planning', Icon: Target, label: 'Metas', short: 'Metas' },
+  { href: '/products', Icon: Package, label: 'Campanhas', short: 'Campanhas' },
+  { href: '/analise-ia', Icon: Sparkles, label: 'Análise de IA', short: 'Análise IA' },
+  { href: '/integration', Icon: Settings, label: 'Integração', short: 'Integração' },
+];
 const MAIN = 'main';
 const SAVED = 'autometrics_padroes';
 
@@ -57,6 +65,7 @@ export default function PatternsPage() {
   const [answering, setAnswering] = useState(false);
   const [askError, setAskError] = useState('');
   const request = useRef(0);
+  const [email, setEmail] = useState('');
 
   useEffect(() => {
     const t = localStorage.getItem('autometrics_theme') as 'dark' | 'light' | null;
@@ -70,6 +79,7 @@ export default function PatternsPage() {
       if (validDay(s.from) && validDay(s.to)) { setFrom(s.from); setTo(s.to); }
     } catch { /* primeira vez */ }
     setReady(true);
+    supabase.auth.getSession().then(({ data: { session } }) => setEmail(session?.user?.email || ''));
   }, []);
   useEffect(() => { applyTheme(theme); }, [theme]);
 
@@ -209,10 +219,34 @@ export default function PatternsPage() {
   });
 
   return (
-    <div className={`legivel min-h-screen font-sans ${bgMain}`}>
+    <div className={`legivel min-h-screen font-sans flex ${bgMain}`}>
+
+      {/* Menu lateral, igual ao do Dashboard */}
+      <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
+        <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
+          <Logo />
+        </div>
+        <nav className="flex-1 px-2 py-4 space-y-2">
+          {NAV.map(({ href, Icon, label }) => (
+            <Link key={href} href={href}
+              className={href === '/analise-ia'
+                ? 'w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20'
+                : `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
+              <Icon size={20} /> <span className="font-medium">{label}</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="p-4 border-t border-inherit">
+          <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/'; }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10">
+            <LogOut size={20} /> <span className="font-medium">Sair ({email.split('@')[0]})</span>
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 min-w-0 pb-24 md:pb-0">
       <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-5">
         <div className="flex items-center gap-3">
-          <Link href="/products" className={`p-2 rounded-lg border ${card} ${muted}`}><ArrowLeft size={18} /></Link>
           <div className="flex-1 min-w-0">
             <h1 className={`text-2xl font-bold ${head}`}>Análise de IA</h1>
             <div className={`text-sm ${muted}`}>O que se repete nas suas campanhas parecidas, e perguntas sobre elas</div>
@@ -467,6 +501,24 @@ export default function PatternsPage() {
           </div>
         )}
       </div>
+      </main>
+
+      {/* Menu do celular */}
+      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+        <div className="flex justify-around items-center px-2 pt-2 pb-5">
+          {NAV.map(({ href, Icon, short }) => {
+            const active = href === '/analise-ia';
+            return (
+              <Link key={href} href={href}
+                className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                <Icon size={22} />
+                <span className="text-[9px] font-bold tracking-wide">{short}</span>
+                {active && <div className="w-1 h-1 rounded-full bg-indigo-500" />}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }
