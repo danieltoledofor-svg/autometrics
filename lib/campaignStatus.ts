@@ -44,7 +44,9 @@ const TONE: Record<StatusKey, Omit<CampaignStatus, 'hint' | 'key'>> = {
 };
 
 /** Os 14 status do script agrupados nos 3 exibidos, com o detalhe preservado. */
-const MAP: Record<string, { key: StatusKey; hint: string }> = {
+// "label" troca a etiqueta do grupo quando o caso merece nome próprio: campanha
+// que o Google deixou de mostrar não é campanha suspensa.
+const MAP: Record<string, { key: StatusKey; hint: string; label?: string }> = {
   ATIVA:           { key: 'ativo',    hint: 'Veiculando normalmente' },
   APRENDENDO:      { key: 'ativo',    hint: 'Veiculando — estratégia de lances em aprendizado' },
   LIMITADA:        { key: 'ativo',    hint: 'Veiculando abaixo do potencial (orçamento ou lance)' },
@@ -57,8 +59,8 @@ const MAP: Record<string, { key: StatusKey; hint: string }> = {
   DESCONHECIDO:    { key: 'pausado',  hint: 'Status não informado pelo Google' },
 
   SUSPENSA:        { key: 'suspenso', hint: 'Suspensa pelo Google' },
-  COM_ERRO:        { key: 'suspenso', hint: 'Configuração impede a veiculação' },
-  NAO_ELEGIVEL:    { key: 'suspenso', hint: 'Não elegível para veicular' },
+  COM_ERRO:        { key: 'suspenso', label: 'Sem veicular', hint: 'Alguma configuração impede a campanha de aparecer' },
+  NAO_ELEGIVEL:    { key: 'suspenso', label: 'Sem veicular', hint: 'Ligada, mas o Google não está mostrando os anúncios' },
   CONTA_SUSPENSA:  { key: 'suspenso', hint: 'A conta do Google Ads está suspensa' },
   CONTA_ENCERRADA: { key: 'suspenso', hint: 'A conta foi cancelada ou encerrada' },
 };
@@ -120,7 +122,7 @@ export interface StatusSource {
 
 export function resolveCampaignStatus(row: StatusSource): CampaignStatus {
   const effective = (row.effective_status || '').toUpperCase();
-  let entry = MAP[effective];
+  let entry: { key: StatusKey; hint: string; label?: string } | undefined = MAP[effective];
 
   // Registros gravados antes da coluna existir: deriva do campaign_status cru.
   if (!entry) {
@@ -135,6 +137,7 @@ export function resolveCampaignStatus(row: StatusSource): CampaignStatus {
   return {
     key: entry.key,
     ...TONE[entry.key],
+    ...(entry.label ? { label: entry.label } : {}),
     hint: reasons.length ? `${entry.hint} — ${reasons.join('; ')}` : entry.hint,
   };
 }
