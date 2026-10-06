@@ -57,7 +57,7 @@ export default function IntegrationPage() {
 
   // Conversão Automática: tracker externo e plataforma de venda selecionados
   const [convTracker, setConvTracker] = useState<'flowtracking'>('flowtracking');
-  const [convPlatform, setConvPlatform] = useState<'buygoods' | 'digistore' | 'gurumedia' | 'jvzoo' | 'mediascalers' | 'smartadv'>('buygoods');
+  const [convPlatform, setConvPlatform] = useState<'buygoods' | 'clickbank' | 'digistore' | 'gurumedia' | 'jvzoo' | 'maxweb' | 'mediascalers' | 'smartadv'>('buygoods');
 
   // Aba de instalação do pixel
   const [installTab, setInstallTab] = useState<'html' | 'hfcm'>('html');
@@ -950,6 +950,24 @@ ${commonFunctions}`;
                 <>Cole a URL de postback do passo 2 e salve.</>,
               ],
             },
+            clickbank: {
+              name: 'ClickBank',
+              postback: pb('ClickBank', 'event={event_type}&cy=USD&amount={affiliate_earnings}&orderid={receipt_id}&product={vendor}&subid1={aff_sub1}&subid2={tid}&subid3={extclid}&subid4={aff_sub2}&subid5={aff_sub3}'),
+              note: <>A mesma URL recebe a compra e o upsell — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{event_type}'}</code> identifica o evento. O valor é a sua comissão, em dólar.</>,
+              details: [
+                { label: 'event', value: '{event_type} (Purchase / Upsell)' },
+                { label: 'subid1', value: '{aff_sub1} (gclid)' },
+                { label: 'subid2', value: '{tid}' },
+                { label: 'orderid', value: '{receipt_id}' },
+                { label: 'amount', value: '{affiliate_earnings}' },
+              ],
+              steps: [
+                <>Na ClickBank, abra <strong>Integrations → Postback/Pixels</strong> e clique em <strong>Add Integration</strong>.</>,
+                <>Escolha <strong>Custom Postback/Pixel</strong>, a sua conta, o papel <strong>Affiliate</strong> e o nível <strong>Global</strong>.</>,
+                <>Em eventos, marque <strong>Initial Purchase</strong> e <strong>Upsell Purchase</strong>. Não marque <strong>Combined Conversion</strong> junto, para a venda não entrar duas vezes.</>,
+                <>Cole a URL de postback do passo 2, salve e use o <strong>Test</strong> da própria ClickBank.</>,
+              ],
+            },
             digistore: {
               name: 'Digistore',
               postback: pb('Digistore', 'event={transaction_type}&cy={currency}&amount={amount_affiliate}&orderid={transaction_id}&product={product_name}&cid={cid}&subid1={sid1}&subid2={sid2}&subid3={sid3}&subid4={sid4}&subid5={sid5}'),
@@ -986,6 +1004,19 @@ ${commonFunctions}`;
                 { label: 'amount', value: '{affiliate_amount}' },
               ],
               steps: where('JVZoo'),
+            },
+            maxweb: {
+              name: 'MaxWeb',
+              postback: pb('MaxWeb', 'event={CONV_TYPE}&cy=USD&amount={COMMISSION_AMOUNT}&orderid={ORDERID}&product={PRODUCT_CODENAME}&subid1={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}'),
+              note: <>A mesma URL recebe venda frontend e upsell — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{CONV_TYPE}'}</code> identifica o evento.</>,
+              details: [
+                { label: 'event', value: '{CONV_TYPE}' },
+                { label: 'subid1', value: '{SUBID}' },
+                { label: 'subid2', value: '{SUBID2} (gclid)' },
+                { label: 'orderid', value: '{ORDERID}' },
+                { label: 'amount', value: '{COMMISSION_AMOUNT}' },
+              ],
+              steps: where('MaxWeb'),
             },
             mediascalers: {
               name: 'MediaScalers',
