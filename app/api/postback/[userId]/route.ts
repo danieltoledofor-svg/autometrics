@@ -41,10 +41,17 @@ async function handleRequest(
         // Mapeamento automático de eventos
         // Clickbank: Purchase, Upsell | Buygoods: Sale, InitiateCheckout | Genérico: chargeback
         // Buygoods: frontend, upsell, downsell (às vezes numerados, ex.: upsell1)
-        if (event === 'purchase' || event === 'combined conversion' || event === 'sale' || event === 'frontend' ||
+        // Digistore: payment, refund, chargeback (vêm em {transaction_type})
+        if (event === 'purchase' || event === 'combined conversion' || event === 'sale' || event === 'frontend' || event === 'payment' ||
             event.startsWith('upsell') || event.startsWith('downsell')) event = 'sale';
         if (event === 'order_impression' || event === 'initiatecheckout') event = 'checkout';
         if (event === 'chargeback' || event === 'refund') event = 'refund';
+
+        // Redes que avisam a situação da venda em {status} (SmartAdv, MediaScalers):
+        // recusada não entra; devolvida vira reembolso.
+        const status = param('status').toLowerCase();
+        const rejected = event === 'sale' && /reject|declin|cancel|invalid|fail/.test(status);
+        if (event === 'sale' && /refund|chargeback|revers/.test(status)) event = 'refund';
 
         // Resolução do campaign_id: várias plataformas usam nomes diferentes
         //   Buygoods/MaxWeb: campaign_id={SUBID1} no postback configurado
@@ -57,15 +64,16 @@ async function handleRequest(
             param('utm_id') ||
             param('gad_campaignid') ||
             '';
-        const subIds = ['subid1', 'subid2', 'subid3', 'subid4', 'subid5']
+        //   cid: onde a Digistore devolve o gclid
+        const subIds = ['subid1', 'subid2', 'subid3', 'subid4', 'subid5', 'cid']
             .map(k => param(k))
             .filter(Boolean);
         const candidateIds = [...new Set([campaignId, ...subIds].filter(Boolean))];
         const campaignName = param('utm_campaign');    // Nome da campanha (fallback)
         const amount = parseFloat(param('amount') || '0') || 0;
-        const currency = (param('cy') || 'BRL').toUpperCase();
+        const currency = (param('cy') || param('currency') || 'BRL').toUpperCase();
         // Aceita tid (Clickbank), orderid (Cartpanda/MaxWeb/Buygoods) ou transid como alias
-        const tid = param('tid') || param('orderid') || param('transid');
+        const tid = param('tid') || param('orderid') || param('order_id') || param('transid');
 
         // ── Validação básica ────────────────────────────────────────────
         // Nada aqui devolve erro: o teste de postback da plataforma exige 200,
@@ -86,6 +94,7 @@ async function handleRequest(
 
         const validEvents = ['sale', 'checkout', 'click', 'refund'];
         if (!validEvents.includes(event)) return ignore(`evento desconhecido: ${rawEvent}`);
+        if (rejected) return ignore(`venda recusada: ${status}`);
 
         // Precisa de pelo menos um identificador de campanha
         if (!candidateIds.length && !campaignName) return ignore('sem identificador de campanha');

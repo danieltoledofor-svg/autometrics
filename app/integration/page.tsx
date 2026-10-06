@@ -57,7 +57,7 @@ export default function IntegrationPage() {
 
   // Conversão Automática: tracker externo e plataforma de venda selecionados
   const [convTracker, setConvTracker] = useState<'flowtracking'>('flowtracking');
-  const [convPlatform, setConvPlatform] = useState<'buygoods'>('buygoods');
+  const [convPlatform, setConvPlatform] = useState<'buygoods' | 'digistore' | 'gurumedia' | 'jvzoo' | 'mediascalers' | 'smartadv'>('buygoods');
 
   // Aba de instalação do pixel
   const [installTab, setInstallTab] = useState<'html' | 'hfcm'>('html');
@@ -923,10 +923,20 @@ ${commonFunctions}`;
           // em public/am.js, então melhorias valem sem trocar nada nas páginas.
           const flowScript = `<script src="https://autometrics.cloud/am.js" data-uid="${userId}" async></script>`;
 
+          // Só a venda, por enquanto: o evento vai fixo em "sale", menos onde a
+          // própria plataforma diz o que aconteceu (BuyGoods e Digistore).
+          const pb = (source: string, query: string) => `${origin}/api/postback/${userId}?source=${source}&${query}`;
+          const where = (name: string) => [
+            <>Na {name}, abra a área de <strong>postback</strong> (onde está o postback da FlowTracking).</>,
+            <><strong>Mantenha</strong> o postback da FlowTracking como está e <strong>adicione um novo</strong> postback, para o evento de venda.</>,
+            <>Cole a URL de postback do passo 2 e salve.</>,
+          ];
+          const saleNote = <>Esta URL recebe só a <strong>venda</strong>. O valor é a sua comissão.</>;
           const platforms = {
             buygoods: {
               name: 'BuyGoods',
-              postback: `${origin}/api/postback/${userId}?source=BuyGoods&event={CONV_TYPE}&cy=USD&amount={COMMISSION_AMOUNT}&orderid={ORDERID}&product={PRODUCT_CODENAME}&subid1={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}`,
+              postback: pb('BuyGoods', 'event={CONV_TYPE}&cy=USD&amount={COMMISSION_AMOUNT}&orderid={ORDERID}&product={PRODUCT_CODENAME}&subid1={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}'),
+              note: <>A mesma URL recebe venda frontend e upsell — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{CONV_TYPE}'}</code> identifica o evento.</>,
               details: [
                 { label: 'event', value: '{CONV_TYPE} (frontend / upsell / sale)' },
                 { label: 'subid1', value: '{SUBID} (ftsession)' },
@@ -940,7 +950,71 @@ ${commonFunctions}`;
                 <>Cole a URL de postback do passo 2 e salve.</>,
               ],
             },
+            digistore: {
+              name: 'Digistore',
+              postback: pb('Digistore', 'event={transaction_type}&cy={currency}&amount={amount_affiliate}&orderid={transaction_id}&product={product_name}&cid={cid}&subid1={sid1}&subid2={sid2}&subid3={sid3}&subid4={sid4}&subid5={sid5}'),
+              note: <>A Digistore avisa o tipo em <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{transaction_type}'}</code>: pagamento entra como venda; os outros avisos são ignorados.</>,
+              details: [
+                { label: 'event', value: '{transaction_type}' },
+                { label: 'cid', value: '{cid} (gclid)' },
+                { label: 'subid1', value: '{sid1}' },
+                { label: 'orderid', value: '{transaction_id}' },
+                { label: 'amount', value: '{amount_affiliate}' },
+              ],
+              steps: where('Digistore'),
+            },
+            gurumedia: {
+              name: 'Gurumedia',
+              postback: pb('Gurumedia', 'event=sale&cy={offer_currency}&amount={payout_amount}&orderid={transaction_id}&product={offer_name}&subid1={sub1}&subid2={sub2}&subid3={sub3}&subid4={sub4}&subid5={sub5}'),
+              note: saleNote,
+              details: [
+                { label: 'subid1', value: '{sub1}' },
+                { label: 'subid2', value: '{sub2}' },
+                { label: 'orderid', value: '{transaction_id}' },
+                { label: 'amount', value: '{payout_amount}' },
+              ],
+              steps: where('Gurumedia'),
+            },
+            jvzoo: {
+              name: 'JVZoo',
+              postback: pb('JVZoo', 'event=sale&cy={currency}&amount={affiliate_amount}&orderid={transaction_id}&product={product_name}&subid1={gclid}&subid2={sub_id2}&subid3={sub_id3}&subid4={sub_id4}&subid5={sub_id5}'),
+              note: saleNote,
+              details: [
+                { label: 'subid1', value: '{gclid}' },
+                { label: 'subid2', value: '{sub_id2}' },
+                { label: 'orderid', value: '{transaction_id}' },
+                { label: 'amount', value: '{affiliate_amount}' },
+              ],
+              steps: where('JVZoo'),
+            },
+            mediascalers: {
+              name: 'MediaScalers',
+              postback: pb('MediaScalers', 'event=sale&status={status}&cy={offer_currency}&amount={payout_amount}&orderid={transaction_id}&product={offer_name}&subid1={sub1}&subid2={sub2}'),
+              note: <>{saleNote} Venda que a rede marcar como recusada não entra.</>,
+              details: [
+                { label: 'subid1', value: '{sub1}' },
+                { label: 'subid2', value: '{sub2}' },
+                { label: 'status', value: '{status}' },
+                { label: 'orderid', value: '{transaction_id}' },
+                { label: 'amount', value: '{payout_amount}' },
+              ],
+              steps: where('MediaScalers'),
+            },
+            smartadv: {
+              name: 'SmartAdv',
+              postback: pb('SmartAdv', 'event=sale&status={status}&cy={offer_currency}&amount={payout_amount}&orderid={transaction_id}&product={offer_name}&subid1={sub1}&subid2={sub2}&subid3={sub3}&subid4={sub4}&subid5={sub5}'),
+              note: <>{saleNote} Venda que a rede marcar como recusada não entra.</>,
+              details: [
+                { label: 'subid1', value: '{sub1} (gclid)' },
+                { label: 'subid2', value: '{sub2}' },
+                { label: 'status', value: '{status}' },
+                { label: 'orderid', value: '{transaction_id}' },
+                { label: 'amount', value: '{payout_amount}' },
+              ],
+              steps: where('SmartAdv'),
+            },
           } as const;
+          const platformKeys = Object.keys(platforms) as (keyof typeof platforms)[];
           const plat = platforms[convPlatform];
           const stepBadge = (n: number) => (
             <span className="bg-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white shrink-0">{n}</span>
@@ -973,7 +1047,9 @@ ${commonFunctions}`;
 
                 <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>Plataforma de venda</p>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => setConvPlatform('buygoods')} className={subTabClass(convPlatform === 'buygoods')}>BuyGoods</button>
+                  {platformKeys.map(k => (
+                    <button key={k} onClick={() => setConvPlatform(k)} className={subTabClass(convPlatform === k)}>{platforms[k].name}</button>
+                  ))}
                 </div>
               </div>
 
@@ -1005,7 +1081,7 @@ ${commonFunctions}`;
                   {copyBtn(plat.postback, `conv_pb_${convPlatform}`, 'Copiar URL')}
                 </div>
                 <p className={`text-xs mb-3 ${textMuted}`}>
-                  A mesma URL recebe venda frontend e upsell — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{CONV_TYPE}'}</code> identifica o evento.
+                  {plat.note}
                 </p>
                 <code className={`block text-[11px] font-mono break-all p-3 rounded border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'} ${textMuted}`}>{plat.postback}</code>
                 <div className="flex flex-wrap gap-2 mt-3">
