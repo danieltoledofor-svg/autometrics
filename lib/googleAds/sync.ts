@@ -57,6 +57,12 @@ export interface SyncSummary {
   assets?: number;
   /** Dias passados que ganharam orçamento/meta pelo histórico de alterações. */
   backfilled_days?: number;
+  /** Retrato do que o diagnóstico leu por último; igual = nada novo para ler. */
+  deep_mark?: string;
+  /** Última alteração da conta já vista; mudou = relê a lista de anúncios e palavras-chave. */
+  change_mark?: string;
+  /** Por que o diagnóstico não rodou nesta leitura. */
+  deep_skipped?: string;
   /** Cliques com gclid gravados (campanhas com player da VTurb). */
   gclid_clicks?: number;
   errors: string[];
@@ -222,6 +228,27 @@ async function saveChanges(rows: any[], productIdFor: (cid: string) => string | 
 
 // ── coleta ──────────────────────────────────────────────────────────────────
 
+/**
+ * Retrato do que o diagnóstico leria: o estado de cada campanha (status,
+ * orçamento, meta) e os números dos dias que ele cobre. Se nada disso mudou
+ * desde o último diagnóstico, repetir as consultas traria o mesmo resultado.
+ */
+function activityMark(statusRows: any[], metricRows: any[], from: string): string {
+  let clicks = 0, cost = 0, conv = 0, all = 0;
+  for (const r of metricRows) {
+    if (String(r.segments?.date) < from) continue;
+    const m = r.metrics || {};
+    clicks += n(m.clicks); cost += n(m.costMicros); conv += n(m.conversions); all += n(m.allConversions);
+  }
+  const state = statusRows.map(r => {
+    const c = r.campaign || {};
+    return [c.id, c.status, c.servingStatus, c.primaryStatus, n(r.campaignBudget?.amountMicros), campaignTarget(c)].join(':');
+  }).sort().join(',');
+  let h = 0;
+  for (let i = 0; i < state.length; i++) h = (h * 31 + state.charCodeAt(i)) | 0;
+  return `${clicks}|${cost}|${conv.toFixed(3)}|${all.toFixed(3)}|${h}`;
+}
+
 async function runPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
   let i = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -236,13 +263,22 @@ async function runPool<T>(items: T[], limit: number, fn: (item: T) => Promise<vo
 export async function syncAccount(
   account: AccountRow,
   refreshToken: string,
-  opts: { deep?: boolean; usage?: { calls: number } } = {},
+  opts: {
+    /** O diagnóstico está liberado nesta leitura (intervalo e cota). */
+    deep?: boolean;
+    /** Botão "Sincronizar agora": diagnóstico completo mesmo sem novidade. */
+    force?: boolean;
+    usage?: { calls: number };
+    /** O que o último diagnóstico viu (last_sync_summary da conta). */
+    prev?: { mark?: string; changeMark?: string; lastDeepAt?: string | null };
+  } = {},
 ): Promise<SyncSummary> {
   const ctx: AdsContext = { refreshToken, customerId: account.customer_id, loginCustomerId: account.login_customer_id };
   const today = todayIn(account.time_zone);
   const start = addDays(today, -(LOOKBACK_DAYS - 1));
   const deepStart = addDays(today, -DEEP_DAYS_BACK);
-  const deep = !!opts.deep;
+  const wantDeep = !!opts.deep;
+  let deep = false; // decidido depois das duas consultas de custo e status
   let apiCalls = 0;
   // A consulta conta na cota mesmo quando falha; o contador de fora sobrevive
   // a um erro no meio da coleta.
@@ -286,6 +322,23 @@ export async function syncAccount(
     SELECT campaign.id, segments.date, ${metricFields.join(', ')}
     FROM campaign
     WHERE segments.date BETWEEN '${start}' AND '${today}'`);
+
+  // O diagnóstico (cerca de 20 consultas) só roda quando há algo novo para ler:
+  // mudou o estado de alguma campanha ou os números dos dias que ele cobre.
+  // Conta parada — nenhuma campanha ligada e sem gasto hoje — fica só no custo
+  // e status; as demais fazem ao menos um por dia.
+  const mark = activityMark(statusRows, metricRows, deepStart);
+  const idleNow = !statusRows.some((r: any) => r.campaign?.status === 'ENABLED')
+    && !metricRows.some((r: any) => r.segments?.date === today && n(r.metrics?.costMicros) > 0);
+  const dayOld = minutesSince(opts.prev?.lastDeepAt) >= 24 * 60;
+  deep = wantDeep && (!!opts.force || mark !== opts.prev?.mark || (dayOld && !idleNow));
+  summary.deep = deep;
+  summary.deep_mark = deep ? mark : opts.prev?.mark;
+  if (wantDeep && !deep) summary.deep_skipped = idleNow ? 'conta parada' : 'sem novidade';
+  // Sem nenhuma conversão do Google na janela, as consultas por ação de
+  // conversão voltam vazias: o resultado é o mesmo sem gastar cota com elas.
+  const noConversions = metricRows.some((r: any) => r.metrics?.allConversions !== undefined)
+    && !metricRows.some((r: any) => n(r.metrics?.allConversions) > 0 || n(r.metrics?.conversions) > 0);
 
   // 3. Diagnóstico profundo, só dos últimos dias e só quando for a vez.
   const range = `segments.date BETWEEN '${deepStart}' AND '${today}'`;
@@ -333,9 +386,8 @@ export async function syncAccount(
       }
     }
   };
-  const [adRows, stRows, ageRows, genderRows, incomeRows, deviceRows, geoRows, changeRows] = deep
+  const [stRows, ageRows, genderRows, incomeRows, deviceRows, geoRows, changeRows] = deep
     ? await Promise.all([
-        optional('url', `SELECT campaign.id, ad_group_ad.ad.final_urls FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'`, errors),
         termsQuery(),
         rich('idade', 'age_range_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.age_range.type, ${mt} FROM age_range_view WHERE ${range} AND metrics.impressions > 0`),
         rich('gênero', 'gender_view', mt => `SELECT campaign.id, segments.date, ad_group_criterion.gender.type, ${mt} FROM gender_view WHERE ${range} AND metrics.impressions > 0`),
@@ -344,18 +396,29 @@ export async function syncAccount(
         rich('local', 'geographic_view', mt => `SELECT campaign.id, segments.date, geographic_view.country_criterion_id, geographic_view.location_type, ${mt} FROM geographic_view WHERE ${range} AND metrics.impressions > 0`),
         optional('histórico', `SELECT change_event.change_date_time, change_event.change_resource_type, change_event.change_resource_name, change_event.resource_change_operation, change_event.user_email, change_event.changed_fields, change_event.old_resource, change_event.new_resource, change_event.campaign FROM change_event WHERE change_event.change_date_time >= '${deepStart} 00:00:00' AND change_event.change_date_time <= '${today} 23:59:59' ORDER BY change_event.change_date_time DESC LIMIT 2000`, errors),
       ])
-    : [[], [], [], [], [], [], [], []];
+    : [[], [], [], [], [], [], []];
+
+  // O que quase não muda — a lista de anúncios, grupos e palavras-chave e o
+  // endereço da página — é relido uma vez por dia e sempre que o histórico do
+  // Google mostra uma alteração nova na conta. As métricas vêm toda vez.
+  const fullEntities = !account.entities_synced_at
+    || Date.now() - new Date(account.entities_synced_at).getTime() >= 24 * 60 * 60 * 1000;
+  const changeMark = String(changeRows[0]?.changeEvent?.changeDateTime || '');
+  const structure = deep && (fullEntities || changeMark !== (opts.prev?.changeMark ?? null));
+  summary.change_mark = deep ? changeMark : opts.prev?.changeMark;
+  const adRows = structure
+    ? await optional('url', `SELECT campaign.id, ad_group_ad.ad.final_urls FROM ad_group_ad WHERE ad_group_ad.status != 'REMOVED' AND campaign.status != 'REMOVED'`, errors)
+    : [];
   const bagOf = (resource: string, r: any) => normalizeMetrics(r.metrics, bags[resource] || BASE);
 
   // Conversões por ação (Checkout, Compra…), por campanha e dia, na janela
   // inteira: o Google conta conversão com atraso, e dia antigo também muda.
   // null = consulta não rodou; aí o que está gravado fica como está.
-  const [campaignActionRows, termActionRows] = deep
-    ? await Promise.all([
+  const [campaignActionRows, termActionRows] = !deep ? [null, null] : noConversions ? [[], []]
+    : await Promise.all([
         optional('ações de conversão', `SELECT campaign.id, segments.date, ${ACTION_SELECT} FROM campaign WHERE segments.date BETWEEN '${start}' AND '${today}' AND ${ACTION_WHERE}`, errors),
         optional('termos (ações de conversão)', `SELECT campaign.id, segments.date, search_term_view.search_term, ${termsWithKeyword ? 'segments.keyword.info.text, segments.keyword.info.match_type, ' : ''}${ACTION_SELECT} FROM search_term_view WHERE ${range} AND ${ACTION_WHERE}`, errors),
-      ])
-    : [null, null];
+      ]);
   const campaignActions = new Map<string, ActionCounts>();
   for (const r of campaignActionRows || []) addActionRow(campaignActions, `${r.campaign.id}|${r.segments.date}`, r);
   const actionsQueried = deep && !errors.some(e => e.startsWith('ações de conversão'));
@@ -707,8 +770,6 @@ export async function syncAccount(
     }
     // Janela inteira na primeira vez e uma vez por dia (conversões chegam
     // atrasadas); nas outras rodadas, só os dias que mais mudam.
-    const fullEntities = !account.entities_synced_at
-      || Date.now() - new Date(account.entities_synced_at).getTime() >= 24 * 60 * 60 * 1000;
     summary.entities_full = fullEntities;
     if (fullEntities) await backfillBudgetAndTarget();
     await saveChanges(changeRows, cid => productByCampaign.get(cid), errors);
@@ -718,6 +779,8 @@ export async function syncAccount(
       productIdFor: cid => productByCampaign.get(cid),
       selectable: fields => selectableFields(refreshToken, fields, usage),
       metricsFor: resource => metricFieldsFor(refreshToken, resource, DIMENSION_STORED_METRICS, usage),
+      withConfig: structure,
+      skipActions: noConversions,
       errors,
     });
     if (summary.entities.ran) {
@@ -808,10 +871,14 @@ export async function syncAccountRecord(
   const deep = opts.forceDeep || (opts.allowDeep !== false && minutesSince(acc.last_deep_sync_at) >= DEEP_INTERVAL_MIN);
   const usage = { calls: 0 };
   try {
-    const summary = await syncAccount(acc, decryptSecret(conn.refresh_token_enc), { deep, usage });
+    const last = acc.last_sync_summary || {};
+    const summary = await syncAccount(acc, decryptSecret(conn.refresh_token_enc), {
+      deep, force: !!opts.forceDeep, usage,
+      prev: { mark: last.deep_mark, changeMark: last.change_mark, lastDeepAt: acc.last_deep_sync_at },
+    });
     await db.from('google_ads_accounts').update({
       last_sync_at: now,
-      ...(deep ? { last_deep_sync_at: now } : {}),
+      ...(summary.deep ? { last_deep_sync_at: now } : {}),
       ...(summary.entities?.ran && summary.entities_full && !summary.errors.some(e => /^(ad_group|ad|keyword)(:| \((itens|métricas)\))/.test(e)) ? { entities_synced_at: now } : {}),
       last_sync_status: summary.errors.length ? 'parcial' : 'ok',
       last_sync_error: summary.errors.length ? summary.errors.slice(0, 10).join(' | ').slice(0, 2000) : null,

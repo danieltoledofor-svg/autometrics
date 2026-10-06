@@ -203,6 +203,14 @@ export async function syncEntities(
     selectable: (fields: string[]) => Promise<Set<string>>;
     /** Métricas que vão no bloco google_metrics, conforme o recurso aceita. */
     metricsFor: (resource: string) => Promise<string[]>;
+    /**
+     * Relê a lista completa de itens (inclusive os sem impressão) e marca os
+     * removidos. Sem isso, só as métricas do período — que já trazem os dados
+     * de cada item que apareceu.
+     */
+    withConfig?: boolean;
+    /** A conta não tem conversão na janela: as consultas por ação voltariam vazias. */
+    skipActions?: boolean;
     errors: string[];
   },
 ): Promise<EntitySyncResult> {
@@ -210,6 +218,7 @@ export async function syncEntities(
   if (!(await tablesReady())) return result;
   result.ran = true;
 
+  const withConfig = opts.withConfig !== false;
   const levels: EntityLevel[] = ['ad_group', 'ad', 'keyword'];
   // Um campo renomeado pelo Google derrubaria a consulta do nível inteiro.
   const available = await opts.selectable(levels.flatMap(l => FIELDS[l].fields));
@@ -223,11 +232,11 @@ export async function syncEntities(
            AND metrics.impressions > 0`);
     let usedMetrics = metricList;
     // Conversões por ação (Checkout, Compra…). Se falhar, o resto segue sem elas.
-    const actionsQuery = q(`SELECT ${ID_FIELDS[f.from === 'ad_group' ? 'ad_group' : f.from === 'ad_group_ad' ? 'ad' : 'keyword']}, segments.date, ${ACTION_SELECT}
+    const actionsQuery = opts.skipActions ? Promise.resolve([] as any[]) : q(`SELECT ${ID_FIELDS[f.from === 'ad_group' ? 'ad_group' : f.from === 'ad_group_ad' ? 'ad' : 'keyword']}, segments.date, ${ACTION_SELECT}
          FROM ${f.from} WHERE segments.date BETWEEN '${opts.start}' AND '${opts.end}' AND ${ACTION_WHERE}`)
       .catch((e: any) => { opts.errors.push(`${level} (ações de conversão): ${e.message}`); return null; });
     const [config, daily] = await Promise.all([
-      q(`SELECT ${fields} FROM ${f.from} WHERE ${f.where}`),
+      withConfig ? q(`SELECT ${fields} FROM ${f.from} WHERE ${f.where}`) : Promise.resolve([] as any[]),
       // Métrica extra recusada pelo Google: refaz com o básico em vez de perder o nível.
       dailyQuery(metrics).catch((e: any) => {
         if (metricList.length === BASE_METRICS.length) throw e;
@@ -270,8 +279,9 @@ export async function syncEntities(
       const pid = opts.productIdFor(e.campaignId);
       if (!pid) continue;
       const k = `${e.campaignId}|${e.entity_id}`;
-      // Fora da lista atual = removido no Google, mas gastou na janela.
-      if (!entities.has(k)) entities.set(k, { ...e, status: 'REMOVED' });
+      // Fora da lista atual = removido no Google, mas gastou na janela. Sem a
+      // lista, vale o que a própria linha traz.
+      if (!entities.has(k)) entities.set(k, withConfig ? { ...e, status: 'REMOVED' } : e);
       metricRows.push({
         product_id: pid, level, entity_id: e.entity_id, date: r.segments?.date,
         impressions: n(r.metrics?.impressions),
@@ -330,6 +340,7 @@ export async function syncEntities(
     });
 
     // O que estava gravado como ativo e sumiu da lista do Google foi removido lá.
+    if (!withConfig) { result.entities += entityRows.length; result.metric_rows += metricRows.length; continue; }
     const currentIds = new Set([...current].map(k => k.split('|')[1]));
     const gone: string[] = [];
     await inChunks([...products], 100, async chunk => {
