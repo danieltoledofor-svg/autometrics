@@ -1,10 +1,10 @@
 import { supabaseAdmin } from '@/lib/googleAds/server';
 import { MAIN_BLOCK, MAIN_BLOCK_NAME, blockOf, normalizeGroups, type CampaignGroup } from '@/lib/campaignGroups';
 import { addDays, todayIn, fetchAll } from './compute';
-import { deviceLabel, formatMoney } from './labels';
+import { audienceLabel, deviceLabel, formatMoney } from './labels';
 
 /**
- * Padrões entre campanhas parecidas — sem IA.
+ * Análise de IA entre campanhas parecidas — a parte dos números, sem IA.
  *
  * Junta as campanhas do usuário que têm a mesma marcação no nome ("[WL]",
  * "[MEM]"…) e mostra o que se repete nelas: palavras dos termos de pesquisa,
@@ -67,6 +67,8 @@ export interface PatternsOptions {
   period: PeriodKey;
   /** Blocos do painel que entram (MAIN_BLOCK e ids dos grupos). */
   blocks: string[];
+  /** Dados a mais para a IA responder perguntas: campanha a campanha, dia a dia, termos, idade, gênero e locais. */
+  detail?: boolean;
 }
 
 export async function computePatterns(userId: string, opts: PatternsOptions) {
@@ -224,6 +226,46 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   shareSales(termRowsIn);
   shareSales(deviceRowsIn);
 
+  // ── Dados a mais, só para as perguntas à IA ──────────────────────────────
+  let detail: any = null;
+  if (opts.detail) {
+    const [people, places] = await Promise.all([
+      byChunks(ids, (chunk, a, b) => ranged(db.from('audiences').select('product_id, date, audience_type, audience_name, cost, clicks, conversions').in('product_id', chunk).in('audience_type', ['Age', 'Gender'])).range(a, b)),
+      byChunks(ids, (chunk, a, b) => ranged(db.from('locations').select('product_id, date, location_name, cost, clicks, conversions').in('product_id', chunk)).range(a, b)),
+    ]);
+    const ages = people.filter(r => r.audience_type === 'Age' && sane(r)), genders = people.filter(r => r.audience_type === 'Gender' && sane(r)), locs = places.filter(sane);
+    [ages, genders, locs].forEach(shareSales);
+    const group = (rows: any[], nameOfRow: (r: any) => string, limit: number) => {
+      const m = new Map<string, { cost: number; conv: number; campaigns: Set<string> }>();
+      for (const r of rows) {
+        const k = nameOfRow(r);
+        if (!m.has(k)) m.set(k, { cost: 0, conv: 0, campaigns: new Set() });
+        const a = m.get(k)!;
+        a.cost += num(r.cost); a.conv += num(r.conversions); a.campaigns.add(r.product_id);
+      }
+      return [...m].filter(([, a]) => a.cost > 0).sort((a, b) => b[1].cost - a[1].cost).slice(0, limit)
+        .map(([text, a]) => ({ text, campaigns: a.campaigns.size, cost: round(a.cost), conv: round(a.conv), cpa: cpaOf(a.cost, a.conv) }));
+    };
+    // Dia a dia; no período todo, mês a mês.
+    const bucket = (date: string) => (opts.period === 'all' ? date.slice(0, 7) : date);
+    const series = new Map<string, Camp>();
+    for (const d of days) {
+      if (!inPeriod(d.date)) continue;
+      if (!series.has(bucket(d.date))) series.set(bucket(d.date), zero());
+      add(series.get(bucket(d.date))!, d);
+    }
+    detail = {
+      campaigns: [...inWindow].filter(([, c]) => c.cost > 0).sort((a, b) => b[1].cost - a[1].cost).slice(0, 50)
+        .map(([id, c]) => ({ name: nameOf.get(id) || '', cost: round(c.cost), sales: round(c.sales), cpa: cpaOf(c.cost, c.sales), clicks: c.clicks, result: hasReal ? result(c) : null })),
+      series: [...series].sort((a, b) => a[0].localeCompare(b[0])).slice(-36)
+        .map(([when, c]) => ({ when, cost: round(c.cost), sales: round(c.sales), cpa: cpaOf(c.cost, c.sales), result: hasReal ? result(c) : null })),
+      terms: group(termRowsIn, r => String(r.search_term || ''), 40),
+      ages: group(ages, r => audienceLabel('Age', String(r.audience_name || '')), 10),
+      genders: group(genders, r => audienceLabel('Gender', String(r.audience_name || '')), 5),
+      locations: group(locs, r => String(r.location_name || ''), 15),
+    };
+  }
+
   interface Agg { cost: number; conv: number; clicks: number; campaigns: Set<string> }
   const words = new Map<string, Agg>();
   const pairs = new Map<string, Agg>();
@@ -323,6 +365,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     words: wordRows, pairs: pairRows, term_cpa: termCpa, term_campaigns: termCampaigns,
     devices: deviceRows, video,
     verdicts: verdicts.slice(0, 80), verdict_counts: counts,
+    detail,
   };
 }
 

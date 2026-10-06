@@ -307,7 +307,7 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
           <button onClick={rerun} disabled={running} className="text-indigo-400 hover:underline inline-flex items-center gap-1 disabled:opacity-60">
             {running && <Loader2 size={11} className="animate-spin" />}reanalisar
           </button>
-          <br /><a href="/padroes" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Padrões das campanhas parecidas</a>
+          <br /><a href="/analise-ia" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Análise de IA das campanhas parecidas</a>
         </div>
       </div>
 

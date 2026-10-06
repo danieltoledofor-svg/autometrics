@@ -20,7 +20,7 @@ export const DEFAULT_MODELS: Record<AiFunction, string> = {
 export const FUNCTION_LABELS: Record<AiFunction, { label: string; when: string }> = {
   leitura: { label: 'Texto da leitura (resumo e pontos de alteração)', when: 'quando algum item muda de status e 1 vez por dia' },
   pagina: { label: 'Anúncio × página × VSL', when: 'quando a página, a VSL ou os termos principais mudam, e 1 vez por semana' },
-  padroes: { label: 'Padrões entre campanhas parecidas', when: 'só quando o usuário pede a leitura na tela Padrões' },
+  padroes: { label: 'Análise de IA (leitura do grupo e perguntas)', when: 'só quando o usuário pede a leitura ou faz uma pergunta na tela Análise de IA' },
 };
 
 export const aiEnabled = () => !!process.env.OPENROUTER_API_KEY;
