@@ -46,6 +46,36 @@ const FIELD_PT: Record<string, string> = {
   amount_micros: 'orçamento', target_cpa_micros: 'meta de CPA',
 };
 
+/**
+ * Caixa do "Não faz sentido": o que o usuário faria no lugar da sugestão.
+ * O texto vai para a memória da IA, que passa a ler isso nas próximas análises.
+ * Guarda o texto aqui dentro para a tela não redesenhar a cada letra.
+ */
+function CorrectionBox({ ui, initial = '', onSave, onCancel }: { ui: Ui; initial?: string; onSave: (text: string, general: boolean) => Promise<void> | void; onCancel: () => void }) {
+  const { isDark, borderCol, textHead, textMuted } = ui;
+  const [text, setText] = useState(initial);
+  const [general, setGeneral] = useState(false);
+  const [saving, setSaving] = useState(false);
+  return (
+    <div className="mt-2 space-y-2">
+      <textarea autoFocus value={text} onChange={e => setText(e.target.value)} rows={2} maxLength={1000}
+        placeholder="O que você faria nesta campanha? Ex.: esse termo vende bem para mim, eu manteria e só baixaria o lance no celular."
+        className={`w-full rounded-lg border ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-white'} ${textHead} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
+      <div className="flex flex-wrap items-center gap-3">
+        <label className={`flex items-center gap-1.5 text-[11.5px] ${textMuted} cursor-pointer`}>
+          <input type="checkbox" checked={general} onChange={e => setGeneral(e.target.checked)} /> Vale também para as minhas outras campanhas
+        </label>
+        <div className="flex-1" />
+        <button onClick={onCancel} className={`text-[11px] px-2 py-1 ${textMuted}`}>Cancelar</button>
+        <button disabled={saving} onClick={async () => { setSaving(true); await onSave(text.trim(), general); }}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-50">
+          {saving ? 'Salvando…' : text.trim() ? 'Salvar e ensinar a IA' : 'Marcar sem comentar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string; ui: Ui; onOpenVturb?: () => void }) {
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
   const [data, setData] = useState<any>(null);
@@ -78,8 +108,11 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
     setRunning(false);
   };
 
-  const mark = async (id: string, status: 'ignorada' | 'nao_faz_sentido') => {
-    await api('/api/analysis', { method: 'PATCH', body: JSON.stringify({ id, status }) });
+  // "Não faz sentido" abre a caixa para dizer o que faria no lugar.
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const mark = async (id: string, status: 'ignorada' | 'nao_faz_sentido', correction = '', general = false) => {
+    await api('/api/analysis', { method: 'PATCH', body: JSON.stringify({ id, status, correction, general }) });
+    setReplyTo(null);
     await load();
   };
 
@@ -272,10 +305,13 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
             {s.status === 'aberta' && (
               <div className="flex gap-1.5">
                 <button onClick={() => mark(s.id, 'ignorada')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-indigo-400`}>Ignorar</button>
-                <button onClick={() => mark(s.id, 'nao_faz_sentido')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-rose-400`}>Não faz sentido</button>
+                <button onClick={() => setReplyTo(s.id)} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-rose-400`}>Não faz sentido</button>
               </div>
             )}
           </div>
+          {replyTo === s.id && (
+            <CorrectionBox ui={ui} onCancel={() => setReplyTo(null)} onSave={(text, general) => mark(s.id, 'nao_faz_sentido', text, general)} />
+          )}
           <div className={`text-[11.5px] mt-1 ${textMuted}`}>⟳ {tracking(s)}</div>
         </div>
       ))}
@@ -389,7 +425,14 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
                   : h.outcome === 'funcionou' ? ['ok', '✓ funcionou'] : h.outcome === 'piorou' ? ['urgente', '✗ piorou'] : ['sem_dado', '– sem efeito'];
                 return (
                   <tr key={h.id}>
-                    <td className={`${td} whitespace-normal`}><span className={textHead}>{h.target_label}</span> <span className={`text-[11.5px] ${textMuted}`}>· {ACTIONS[h.action] || h.action}{h.eval?.metric ? ` · ${h.eval.metric === 'pitch' ? 'pitch' : 'fuga'} ${pctText(h.eval.metric_before)} → ${pctText(h.eval.metric_after)}` : ''}</span></td>
+                    <td className={`${td} whitespace-normal`}><span className={textHead}>{h.target_label}</span> <span className={`text-[11.5px] ${textMuted}`}>· {ACTIONS[h.action] || h.action}{h.eval?.metric ? ` · ${h.eval.metric === 'pitch' ? 'pitch' : 'fuga'} ${pctText(h.eval.metric_before)} → ${pctText(h.eval.metric_after)}` : ''}</span>
+                      {h.status === 'nao_faz_sentido' && (h.correction
+                        ? <div className={`text-[12px] mt-1 ${textMuted}`}>O que você faria: <span className={textHead}>{h.correction}</span> <button onClick={() => setReplyTo(h.id)} className="text-indigo-400 hover:underline">editar</button></div>
+                        : <div className="mt-1"><button onClick={() => setReplyTo(h.id)} className="text-[12px] text-indigo-400 hover:underline">Dizer o que você faria no lugar</button></div>)}
+                      {replyTo === h.id && (
+                        <CorrectionBox ui={ui} initial={h.correction || ''} onCancel={() => setReplyTo(null)} onSave={(text, general) => mark(h.id, 'nao_faz_sentido', text, general)} />
+                      )}
+                    </td>
                     <td className={td}>{h.change_at ? ddmm(h.change_at.slice(0, 10)) : '—'}</td>
                     <td className={`${td} text-right`}>{h.eval?.cpa_before === null || h.eval?.cpa_before === undefined ? <span className={textMuted}>sem venda</span> : money(h.eval.cpa_before)}</td>
                     <td className={`${td} text-right`}>{h.eval?.cpa_after === null || h.eval?.cpa_after === undefined ? <span className={textMuted}>sem venda</span>

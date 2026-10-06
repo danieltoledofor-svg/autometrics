@@ -320,7 +320,7 @@ async function writeTexts(c: Computed, items: Item[], candidates: Candidate[], u
 
   const hist = history.map(h => {
     const ev = h.eval_7d || h.eval_3d;
-    const res = h.status === 'nao_faz_sentido' ? 'o usuário disse que não fazia sentido' : h.outcome ? `${h.outcome}${ev?.cpa_change !== null && ev?.cpa_change !== undefined ? ` (CPA ${ev.cpa_change > 0 ? '+' : ''}${ev.cpa_change}%)` : ''}` : 'aplicada, resultado ainda não saiu';
+    const res = h.status === 'nao_faz_sentido' ? `o usuário disse que não fazia sentido${h.change?.correction ? ` e que faria assim: "${String(h.change.correction).slice(0, 300)}"` : ''}` : h.outcome ? `${h.outcome}${ev?.cpa_change !== null && ev?.cpa_change !== undefined ? ` (CPA ${ev.cpa_change > 0 ? '+' : ''}${ev.cpa_change}%)` : ''}` : 'aplicada, resultado ainda não saiu';
     return `- ${h.target_label}: ${ACTIONS[h.action] || h.action} → ${res}`;
   }).join('\n');
 

@@ -84,7 +84,7 @@ export async function learningsFor(items: ItemKey[]): Promise<string[]> {
 /** Resultados desta campanha — esses podem citar nome, porque são do próprio usuário. */
 export async function campaignHistory(productId: string, limit = 20) {
   const { data } = await supabaseAdmin().from('analysis_suggestions')
-    .select('id, item, target_label, action, text, status, outcome, change_at, eval_7d, eval_3d, baseline, created_at')
+    .select('id, item, target_label, action, text, status, outcome, change_at, change, eval_7d, eval_3d, baseline, created_at')
     .eq('product_id', productId)
     .in('status', ['aplicada', 'avaliada', 'nao_faz_sentido'])
     .order('created_at', { ascending: false }).limit(limit);

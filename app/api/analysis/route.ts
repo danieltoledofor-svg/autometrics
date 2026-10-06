@@ -14,7 +14,8 @@ export const dynamic = 'force-dynamic';
  * GET    ?product_id=   leitura gravada, sugestões e resultados desta campanha
  * GET    ?product_id=&only=changes   só as alterações feitas e o que aconteceu depois
  * POST   { product_id } reanalisar agora
- * PATCH  { id, status } "Ignorar" ou "Não faz sentido" numa sugestão
+ * PATCH  { id, status, correction, general } "Ignorar" ou "Não faz sentido" numa
+ *        sugestão; no segundo caso, com o que o usuário faria no lugar
  * PUT    { product_id, vsl_transcript } salvar a transcrição da VSL
  *
  * Tudo passa pelo dono da campanha. A memória geral nunca sai por aqui.
@@ -60,6 +61,7 @@ export async function GET(request: Request) {
     history: history.filter(h => h.item !== 'pagina' && (h.status === 'avaliada' || h.status === 'nao_faz_sentido')).map(h => ({
       id: h.id, item: h.item, target_label: h.target_label, action: h.action, text: h.text, status: h.status,
       outcome: h.outcome, change_at: h.change_at, eval: h.eval_7d || h.eval_3d || null, created_at: h.created_at,
+      correction: h.change?.correction || null,
     })),
     transcript: product?.vsl_transcript ? { chars: String(product.vsl_transcript).length, text: product.vsl_transcript } : null,
   });
@@ -77,19 +79,36 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
-  const { id, status } = await request.json().catch(() => ({}));
+  const { id, status, correction: rawCorrection, general } = await request.json().catch(() => ({}));
   if (!id || !['ignorada', 'nao_faz_sentido'].includes(status)) {
     return NextResponse.json({ error: 'Pedido inválido.' }, { status: 400 });
   }
   const db = supabaseAdmin();
   const { data: s } = await db.from('analysis_suggestions').select('*').eq('id', id).eq('user_id', user.id).maybeSingle();
   if (!s) return NextResponse.json({ error: 'Sugestão não encontrada.' }, { status: 404 });
-  await db.from('analysis_suggestions').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  // O que o usuário faria no lugar fica na própria sugestão (para o histórico
+  // desta campanha) e na memória da IA (para as próximas leituras).
+  const correction = status === 'nao_faz_sentido' ? String(rawCorrection || '').trim().slice(0, 1000) : '';
+  const patch: any = { status, updated_at: new Date().toISOString() };
+  if (correction) patch.change = { ...(s.change || {}), correction, corrected_at: new Date().toISOString() };
+  await db.from('analysis_suggestions').update(patch).eq('id', id);
   // "Não faz sentido" também ensina: a IA passa a ver que essa alteração, nessa situação, costuma ser recusada.
-  if (status === 'nao_faz_sentido') {
+  if (status === 'nao_faz_sentido' && s.status !== 'nao_faz_sentido') {
     await recordLearning({ id: s.id, item: s.item, action: s.action, situation: s.situation, outcome: 'recusada' });
   }
-  return NextResponse.json({ ok: true });
+  let remembered = false;
+  if (correction) {
+    // Uma anotação por sugestão: corrigir de novo troca o texto, não duplica.
+    const title = `Correção · ${String(s.target_label).slice(0, 110)} · ${String(s.id).slice(0, 8)}`;
+    const content = `A IA apontou em "${s.target_label}": ${s.text}\nO afiliado disse que não faz sentido. O que ele faria: ${correction}`;
+    const row = { user_id: user.id, product_id: general ? null : s.product_id, kind: 'decisao', title, content, summary: content, updated_at: new Date().toISOString() };
+    const { data: old, error: readError } = await db.from('ai_memory').select('id').eq('user_id', user.id).eq('title', title).maybeSingle();
+    if (!readError) {
+      const { error } = old ? await db.from('ai_memory').update(row).eq('id', old.id) : await db.from('ai_memory').insert(row);
+      remembered = !error;
+    }
+  }
+  return NextResponse.json({ ok: true, remembered });
 }
 
 export async function PUT(request: Request) {
