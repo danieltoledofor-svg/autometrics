@@ -64,7 +64,7 @@ function prompt(p: Extract<Patterns, { empty: false }>, tag: string) {
 ${p.approx ? 'As vendas de termo e de dispositivo são as vendas reais de cada campanha divididas entre os itens (valor aproximado).' : 'As vendas são as conversões do Google.'}
 
 TOTAL DO GRUPO: ${p.totals.campaigns} campanhas com gasto · custo ${money(p.totals.cost)} · vendas ${p.totals.sales} · CPA ${money(p.totals.cpa)}${p.totals.result !== null ? ` · resultado ${money(p.totals.result)}` : ''}
-CPA médio dos termos informados pelo Google: ${money(p.term_cpa)}
+CPA médio dos termos informados pelo Google: ${money(p.term_cpa)} · CPA médio das palavras-chave: ${money(p.keyword_cpa)}
 
 TERMOS DE PESQUISA QUE MAIS VENDERAM:
 ${p.terms_best.map(line).join('\n') || '(sem dados)'}

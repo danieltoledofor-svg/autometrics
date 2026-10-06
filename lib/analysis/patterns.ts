@@ -219,10 +219,13 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
 
   // ── Termos e dispositivos do período ─────────────────────────────────────
   const ranged = (q: any) => (from ? q.gte('date', from) : q).lte('date', to);
-  const [terms, devices, vturb] = await Promise.all([
+  const [terms, devices, vturb, keywordMetrics, keywordNames] = await Promise.all([
     byChunks(ids, (chunk, a, b) => ranged(db.from('search_terms').select('product_id, date, search_term, keyword, keyword_match_type, cost, clicks, conversions').in('product_id', chunk)).gt('cost', 0).range(a, b)),
     byChunks(ids, (chunk, a, b) => ranged(db.from('audiences').select('product_id, date, audience_name, cost, clicks, conversions').in('product_id', chunk).eq('audience_type', 'Device')).range(a, b)),
     byChunks(ids, (chunk, a, b) => ranged(db.from('vturb_daily').select('product_id, over_pitch, under_pitch').in('product_id', chunk)).range(a, b)).catch(() => []),
+    // Lista de palavras-chave de cada campanha (contas ligadas pela API).
+    byChunks(ids, (chunk, a, b) => ranged(db.from('google_ads_entity_metrics').select('product_id, entity_id, date, cost, clicks, conversions').in('product_id', chunk).eq('level', 'keyword')).range(a, b)).catch(() => []),
+    byChunks(ids, (chunk, a, b) => db.from('google_ads_entities').select('product_id, entity_id, name, details').in('product_id', chunk).eq('level', 'keyword').range(a, b)).catch(() => []),
   ]);
 
   // Linha com custo impossível para um dia (há registros antigos gravados em
@@ -249,8 +252,20 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     }
   };
   const termRowsIn = terms.filter(sane), deviceRowsIn = devices.filter(sane);
+  // Palavras-chave: da lista da campanha quando ela existe (traz todas, com o
+  // gasto inteiro); senão, da palavra-chave anotada em cada termo de pesquisa.
+  // Copiadas antes do rateio dos termos, que mexe nas vendas da linha.
+  const keywordText = new Map(keywordNames.map(e => [`${e.product_id}|${e.entity_id}`, keywordLabel(String(e.name || '').trim().toLowerCase(), e.details?.match_type)]));
+  const fromList = keywordMetrics.filter(sane).map(m => ({ ...m, label: keywordText.get(`${m.product_id}|${m.entity_id}`) || '' })).filter(m => m.label);
+  const listed = new Set(fromList.map(m => m.product_id));
+  const keywordRowsIn = [
+    ...fromList,
+    ...termRowsIn.filter(t => t.keyword && !listed.has(t.product_id))
+      .map(t => ({ ...t, label: keywordLabel(String(t.keyword).trim().toLowerCase(), t.keyword_match_type) })),
+  ];
   shareSales(termRowsIn);
   shareSales(deviceRowsIn);
+  shareSales(keywordRowsIn);
 
   // ── Dados a mais, só para as perguntas à IA ──────────────────────────────
   let detail: any = null;
@@ -309,8 +324,12 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     termCost += num(t.cost); termConv += num(t.conversions);
     const term = String(t.search_term || '').trim().toLowerCase();
     if (term) bump(byTerm, term, t);
-    if (t.keyword) bump(byKeyword, keywordLabel(String(t.keyword).trim().toLowerCase(), t.keyword_match_type), t);
   }
+  // A lista de palavras-chave traz o gasto inteiro da campanha e os termos só
+  // uma parte dele: cada tabela é comparada com a própria média.
+  let keywordCost = 0, keywordConv = 0;
+  for (const k of keywordRowsIn) { keywordCost += num(k.cost); keywordConv += num(k.conversions); bump(byKeyword, k.label, k); }
+  const keywordCpa = cpaOf(keywordCost, keywordConv);
   const termCpa = cpaOf(termCost, termConv);
   const mark = (cost: number, conv: number, ref: number | null): Mark => {
     if (!ref) return null;
@@ -321,14 +340,14 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     return null;
   };
   const termCampaigns = new Set(termRowsIn.map(t => t.product_id)).size;
-  const toRow = ([text, a]: [string, Agg]) => ({ text, campaigns: a.campaigns.size, cost: round(a.cost), clicks: a.clicks, conv: round(a.conv), cpa: cpaOf(a.cost, a.conv), mark: mark(a.cost, a.conv, termCpa) });
+  const toRow = (ref: number | null) => ([text, a]: [string, Agg]) => ({ text, campaigns: a.campaigns.size, cost: round(a.cost), clicks: a.clicks, conv: round(a.conv), cpa: cpaOf(a.cost, a.conv), mark: mark(a.cost, a.conv, ref) });
   // Melhores: os que mais venderam; no empate, o de menor CPA.
-  const best = (map: Map<string, Agg>, limit: number) => [...map].filter(([, a]) => a.conv >= 0.5)
-    .sort((a, b) => b[1].conv - a[1].conv || a[1].cost / a[1].conv - b[1].cost / b[1].conv).slice(0, limit).map(toRow);
-  const waste = (map: Map<string, Agg>, limit: number) => [...map].filter(([, a]) => a.conv <= 0 && a.cost > 0)
-    .sort((a, b) => b[1].cost - a[1].cost).slice(0, limit).map(toRow);
-  const terms_best = best(byTerm, 15), terms_waste = waste(byTerm, 8);
-  const keywords_best = best(byKeyword, 15), keywords_waste = waste(byKeyword, 8);
+  const best = (map: Map<string, Agg>, limit: number, ref: number | null) => [...map].filter(([, a]) => a.conv >= 0.5)
+    .sort((a, b) => b[1].conv - a[1].conv || a[1].cost / a[1].conv - b[1].cost / b[1].conv).slice(0, limit).map(toRow(ref));
+  const waste = (map: Map<string, Agg>, limit: number, ref: number | null) => [...map].filter(([, a]) => a.conv <= 0 && a.cost > 0)
+    .sort((a, b) => b[1].cost - a[1].cost).slice(0, limit).map(toRow(ref));
+  const terms_best = best(byTerm, 15, termCpa), terms_waste = waste(byTerm, 8, termCpa);
+  const keywords_best = best(byKeyword, 15, keywordCpa), keywords_waste = waste(byKeyword, 8, keywordCpa);
 
   const dev = new Map<string, Agg>();
   for (const d of deviceRowsIn) bump(dev, String(d.audience_name || ''), d);
@@ -370,7 +389,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     highlights.push({ mark: 'funciona', text: `Termo "${r.text}": ${sales(r.conv)} com CPA de ${money(r.cpa!)}, ${Math.round((1 - r.cpa! / termCpa!) * 100)}% abaixo da média dos termos, ${inCampaigns(r.campaigns)}.` });
   }
   for (const r of keywords_best.filter(r => r.mark === 'funciona').slice(0, 1)) {
-    highlights.push({ mark: 'funciona', text: `Palavra-chave ${r.text}: ${sales(r.conv)} com CPA de ${money(r.cpa!)}, ${inCampaigns(r.campaigns)}.` });
+    highlights.push({ mark: 'funciona', text: `Palavra-chave ${r.text}: ${sales(r.conv)} com CPA de ${money(r.cpa!)}, ${Math.round((1 - r.cpa! / keywordCpa!) * 100)}% abaixo da média das palavras-chave, ${inCampaigns(r.campaigns)}.` });
   }
   for (const r of terms_waste.filter(r => r.mark === 'desperdicio').slice(0, 2)) {
     highlights.push({ mark: 'desperdicio', text: `Termo "${r.text}": ${money(r.cost)} gastos sem venda, ${inCampaigns(r.campaigns)}.` });
@@ -389,7 +408,9 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     totals, highlights,
     // Com vendas reais, as vendas de termo e dispositivo são rateadas (≈).
     approx: hasReal,
-    terms_best, terms_waste, keywords_best, keywords_waste, term_cpa: termCpa, term_campaigns: termCampaigns,
+    terms_best, terms_waste, keywords_best, keywords_waste, term_cpa: termCpa, keyword_cpa: keywordCpa, term_campaigns: termCampaigns,
+    // Campanhas do conjunto com a lista de palavras-chave lida do Google.
+    keyword_listed: listed.size,
     devices: deviceRows, video,
     verdicts: verdicts.slice(0, 80), verdict_counts: counts,
     detail,

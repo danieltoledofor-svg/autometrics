@@ -375,7 +375,7 @@ export default function PatternsPage() {
               <TermTable best={d.keywords_best} waste={d.keywords_waste} label="Palavras-chave com melhor rendimento" first="Palavra-chave" />
             </div>
             <div className={`text-[11px] ${muted} -mt-2`}>
-              Camp. é em quantas campanhas do conjunto o termo ou a palavra-chave apareceu. CPA em verde está pelo menos 20% abaixo da média dos termos ({money(d.term_cpa)}); essa média fica abaixo do CPA do grupo porque o Google não informa todos os termos.
+              Camp. é em quantas campanhas do conjunto o termo ou a palavra-chave apareceu. CPA em verde está pelo menos 20% abaixo da média da própria tabela: {money(d.term_cpa)} nos termos e {money(d.keyword_cpa)} nas palavras-chave. A média dos termos é menor porque o Google não informa todos os termos; as palavras-chave vêm da lista de cada campanha, com o gasto inteiro{d.keyword_listed < d.totals.campaigns ? ` (${d.keyword_listed} de ${d.totals.campaigns} campanhas têm a lista; nas outras, vale a palavra-chave anotada no termo)` : ''}.
               {d.approx ? ' ≈ vendas reais de cada campanha divididas entre os termos pelas conversões do Google, ou pelos cliques quando não há conversão.' : ''}
             </div>
 
