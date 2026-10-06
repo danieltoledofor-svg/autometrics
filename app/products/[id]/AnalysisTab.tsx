@@ -54,7 +54,8 @@ const FIELD_PT: Record<string, string> = {
 function CorrectionBox({ ui, initial = '', onSave, onCancel }: { ui: Ui; initial?: string; onSave: (text: string, general: boolean) => Promise<void> | void; onCancel: () => void }) {
   const { isDark, borderCol, textHead, textMuted } = ui;
   const [text, setText] = useState(initial);
-  const [general, setGeneral] = useState(false);
+  // Ajuste de tráfego costuma valer de uma campanha para outra: já vem marcado.
+  const [general, setGeneral] = useState(true);
   const [saving, setSaving] = useState(false);
   return (
     <div className="mt-2 space-y-2">
@@ -63,7 +64,7 @@ function CorrectionBox({ ui, initial = '', onSave, onCancel }: { ui: Ui; initial
         className={`w-full rounded-lg border ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-white'} ${textHead} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
       <div className="flex flex-wrap items-center gap-3">
         <label className={`flex items-center gap-1.5 text-[11.5px] ${textMuted} cursor-pointer`}>
-          <input type="checkbox" checked={general} onChange={e => setGeneral(e.target.checked)} /> Vale também para as minhas outras campanhas
+          <input type="checkbox" checked={general} onChange={e => setGeneral(e.target.checked)} /> Vale para todas as minhas campanhas (desmarque se for algo só deste produto ou nicho)
         </label>
         <div className="flex-1" />
         <button onClick={onCancel} className={`text-[11px] px-2 py-1 ${textMuted}`}>Cancelar</button>

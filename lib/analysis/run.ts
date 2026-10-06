@@ -10,6 +10,7 @@ import { formatMoney } from './labels';
 import { funnelFor, vturbSuggestions, vturbFlagged, detectVturbApplied, pageHashNow as currentPageHash } from './vturbItem';
 import { buildTopo, topoHash, writeTopoText } from '@/lib/vturb/topo';
 import { memoryBlock, memoryFor } from './userMemory';
+import { adjustmentBlock, adjustmentSummary } from './changes';
 
 /**
  * Análise de uma campanha, do começo ao fim:
@@ -291,6 +292,7 @@ Regras de linguagem, obrigatórias:
 - O "ponto de alteração" é um substantivo que nomeia o elemento concreto: "Negativa exata \\"pink salt trick\\"", "Lance da palavra-chave [gelatin recipe]", "Ajuste de lance negativo na faixa Idade desconhecida".
 - Não invente números. Use só os que vierem no pedido.
 - Nunca mencione outras campanhas, outras contas ou outros usuários. O histórico geral serve só para escolher o tipo de alteração com mais chance de dar certo.
+- O bloco dos ajustes do próprio afiliado e as anotações dele valem para todas as campanhas dele: use para escolher a alteração e, quando ajudar, cite como "nas suas campanhas", com o número e sem nome de campanha. Poucas repetições (menos de 5) não são regra: diga que ainda é pouco.
 
 Para cada item em PONTOS, escolha "acao" dentro da lista permitida daquele item e escreva "texto" (até 140 caracteres).
 Leve em conta o histórico: se um tipo de alteração piorou nesta campanha ou costuma piorar nessa situação, prefira outro da lista permitida.
@@ -306,6 +308,7 @@ async function writeTexts(c: Computed, items: Item[], candidates: Candidate[], u
   const history = await campaignHistory(c.product.id, 15);
   const learnings = await learningsFor([...new Set(candidates.map(cd => cd.item))]);
   const notes = memoryBlock(await memoryFor(userId, { text: String(c.product.name || ''), productId: c.product.id }));
+  const adjustments = adjustmentBlock(await adjustmentSummary(userId).catch(() => []));
 
   const pontos = candidates.map(cd => {
     const r = cd.row;
@@ -340,7 +343,7 @@ HISTÓRICO DESTA CAMPANHA:
 ${hist || '(nenhum ainda)'}
 
 HISTÓRICO GERAL (contagens por situação; não citar a origem):
-${learnings.join('\n') || '(nenhum ainda)'}${notes ? `\n\n${notes}` : ''}`;
+${learnings.join('\n') || '(nenhum ainda)'}${adjustments ? `\n\n${adjustments}` : ''}${notes ? `\n\n${notes}` : ''}`;
 
   let raw: any = null;
   for (let attempt = 0; attempt < 2; attempt++) {

@@ -470,6 +470,43 @@ export default function PatternsPage() {
               </div>
             </div>
 
+            {/* O que os ajustes mostraram, em todas as campanhas */}
+            {(data.adjustments || []).length > 0 && (
+              <div className={`${card} border rounded-xl overflow-hidden`}>
+                <div className={`px-4 pt-4 pb-1 ${title}`}>O que os seus ajustes mostraram · todas as suas campanhas</div>
+                <div className={`px-4 pb-3 text-xs ${muted}`}>
+                  Cada tipo de ajuste feito no Google, somando todas as campanhas, e o que aconteceu com a campanha depois (7 dias antes contra 3 ou 7 dias depois). A IA lê esta tabela antes de sugerir e de responder. Não muda com o conjunto nem com o período escolhidos acima.
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse tabular-nums">
+                    <thead><tr>
+                      <th className={`${th} text-left`}>Ajuste</th>
+                      <th className={`${th} text-right`}>Conferidos</th>
+                      <th className={`${th} text-right`}>Melhorou</th>
+                      <th className={`${th} text-right`}>Piorou</th>
+                      <th className={`${th} text-right`}>Ficou igual</th>
+                      <th className={`${th} text-right`}>CPA em média</th>
+                      <th className={`${th} text-right`}>Aguardando</th>
+                    </tr></thead>
+                    <tbody>{data.adjustments.map((r: any) => (
+                      <tr key={r.kind}>
+                        <td className={`${td} font-medium ${head}`}>{r.label}</td>
+                        <td className={`${td} text-right`}>{r.times}</td>
+                        <td className={`${td} text-right ${r.melhorou ? good : muted}`}>{r.melhorou}</td>
+                        <td className={`${td} text-right ${r.piorou ? bad : muted}`}>{r.piorou}</td>
+                        <td className={`${td} text-right ${muted}`}>{r.igual}</td>
+                        <td className={`${td} text-right ${r.cpa_change === null ? muted : r.cpa_change <= 0 ? good : bad}`}>{r.cpa_change === null ? '—' : `${r.cpa_change > 0 ? '+' : ''}${r.cpa_change}%`}</td>
+                        <td className={`${td} text-right ${muted}`}>{r.waiting}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+                <div className={`px-4 py-2 text-[11px] ${muted}`}>
+                  O resultado é da campanha inteira: no dia com vários ajustes, todos levam o mesmo resultado. Com poucas repetições ainda não dá para tirar regra.
+                </div>
+              </div>
+            )}
+
             {/* Vale a pena manter? */}
             <div className={`${card} border rounded-xl overflow-hidden`}>
               <div className={`px-4 pt-4 pb-1 ${title}`}>Vale a pena manter? · todo o período de cada campanha</div>

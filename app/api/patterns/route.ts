@@ -5,6 +5,7 @@ import { aiEnabled, askJson } from '@/lib/ai/openrouter';
 import { languageProblems } from '@/lib/analysis/actions';
 import { formatMoney } from '@/lib/analysis/labels';
 import { memoryBlock, memoryFor } from '@/lib/analysis/userMemory';
+import { adjustmentBlock, adjustmentSummary } from '@/lib/analysis/changes';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -35,8 +36,11 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
   const q = new URL(request.url).searchParams;
   try {
-    const data = await computePatterns(user.id, options(Object.fromEntries(q)));
-    return NextResponse.json({ ...data, ai: aiEnabled() });
+    const [data, adjustments] = await Promise.all([
+      computePatterns(user.id, options(Object.fromEntries(q))),
+      adjustmentSummary(user.id).catch(() => []),
+    ]);
+    return NextResponse.json({ ...data, adjustments, ai: aiEnabled() });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
@@ -99,7 +103,8 @@ Regras, obrigatórias:
 - Não invente número, campanha nem termo. Se o dado necessário não está no pedido, diga claramente qual dado falta em vez de estimar.
 - Quando a amostra for pequena (poucas vendas, poucos dias), diga isso.
 - Se pedirem opinião sobre o que fazer, descreva o que os números mostram e os caminhos possíveis; a decisão é do afiliado.
-- Fale só das campanhas deste pedido. Nunca mencione campanhas, contas ou usuários de fora.
+- Fale só das campanhas deste pedido e do que o próprio afiliado fez (bloco dos ajustes e anotações dele, que valem para todas as campanhas dele). Nunca mencione campanhas, contas ou usuários de fora.
+- Ao usar o bloco dos ajustes, diga quantas vezes aconteceu; com menos de 5 repetições, avise que ainda é pouco para virar regra.
 
 Responda só com JSON: {"resposta": "texto em parágrafos curtos; use quebra de linha para separar parágrafos e '- ' para listas", "faltou": "dado que faltou para responder melhor, ou vazio"}`;
 
@@ -126,7 +131,8 @@ async function answer(userId: string, opts: ReturnType<typeof options>, question
   const past = (Array.isArray(history) ? history : []).slice(-3)
     .map((h: any) => `Pergunta: ${String(h?.q || '').slice(0, 500)}\nResposta: ${String(h?.a || '').slice(0, 1200)}`).join('\n\n');
   const notes = memoryBlock(await memoryFor(userId, { text: opts.tag }));
-  const user = `${dataPack(p, opts.tag)}\n\n${notes ? `${notes}\n\n` : ''}${past ? `CONVERSA ATÉ AQUI:\n${past}\n\n` : ''}PERGUNTA DO AFILIADO:\n${question}`;
+  const adjustments = adjustmentBlock(await adjustmentSummary(userId).catch(() => []));
+  const user = `${dataPack(p, opts.tag)}\n\n${adjustments ? `${adjustments}\n\n` : ''}${notes ? `${notes}\n\n` : ''}${past ? `CONVERSA ATÉ AQUI:\n${past}\n\n` : ''}PERGUNTA DO AFILIADO:\n${question}`;
   let raw: any = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     raw = await askJson<any>({ fn: 'padroes', userId, system: ASK_SYSTEM, user: attempt ? `${user}\n\nATENÇÃO: a resposta anterior usou palavras proibidas. Reescreva em português simples.` : user, maxTokens: 2000 });
@@ -152,7 +158,8 @@ export async function POST(request: Request) {
     const p = await computePatterns(user.id, opts);
     if (p.empty || !p.totals.cost) return NextResponse.json({ error: 'Sem gasto neste período para a IA ler.' }, { status: 400 });
     const notes = memoryBlock(await memoryFor(user.id, { text: opts.tag }));
-    const raw = await askJson<any>({ fn: 'padroes', userId: user.id, system: SYSTEM, user: `${prompt(p, opts.tag)}${notes ? `\n\n${notes}` : ''}`, maxTokens: 1500 });
+    const adjustments = adjustmentBlock(await adjustmentSummary(user.id).catch(() => []));
+    const raw = await askJson<any>({ fn: 'padroes', userId: user.id, system: SYSTEM, user: `${prompt(p, opts.tag)}${adjustments ? `\n\n${adjustments}` : ''}${notes ? `\n\n${notes}` : ''}`, maxTokens: 1500 });
     const points = (Array.isArray(raw?.pontos) ? raw.pontos : [])
       .map((x: any) => ({ mark: ['funciona', 'desperdicio', 'atencao'].includes(x?.tipo) ? x.tipo : 'atencao', text: String(x?.texto || '').trim().slice(0, 260) }))
       .filter((x: any) => x.text && !languageProblems(x.text).length).slice(0, 5);
