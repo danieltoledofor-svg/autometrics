@@ -1,14 +1,16 @@
 import { supabaseAdmin } from '@/lib/googleAds/server';
 import { MAIN_BLOCK, MAIN_BLOCK_NAME, blockOf, normalizeGroups, type CampaignGroup } from '@/lib/campaignGroups';
 import { addDays, todayIn, fetchAll } from './compute';
-import { audienceLabel, deviceLabel, formatMoney } from './labels';
+import { audienceLabel, deviceLabel, formatMoney, keywordLabel } from './labels';
+import { resolveProductStatus } from '@/lib/campaignStatus';
 
 /**
  * Análise de IA entre campanhas parecidas — a parte dos números, sem IA.
  *
  * Junta as campanhas do usuário que têm a mesma marcação no nome ("[WL]",
- * "[MEM]"…) e mostra o que se repete nelas: palavras dos termos de pesquisa,
- * dispositivos, vídeo e o resultado de cada campanha no período todo.
+ * "[MEM]"…) e mostra o que se repete nelas: os termos de pesquisa e as
+ * palavras-chave que mais vendem, dispositivos, vídeo e o resultado de cada
+ * campanha no período todo. Dá para olhar uma MCC só.
  *
  * Só as campanhas do próprio usuário entram. Os grupos do painel
  * (lib/campaignGroups) valem aqui também: por padrão só o bloco "Principais"
@@ -20,13 +22,14 @@ import { audienceLabel, deviceLabel, formatMoney } from './labels';
  * cliques. É o mesmo rateio "≈" da análise da campanha (compute.ts).
  */
 
-export type PeriodKey = 'today' | 'd2' | 'd3' | 'd7' | 'all';
+export type PeriodKey = 'today' | 'd2' | 'd3' | 'd7' | 'all' | 'custom';
 export const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: 'today', label: 'Hoje' },
   { key: 'd2', label: '2 dias' },
   { key: 'd3', label: '3 dias' },
   { key: 'd7', label: '7 dias' },
   { key: 'all', label: 'Todo o período' },
+  { key: 'custom', label: 'Personalizado' },
 ];
 
 export type Verdict = 'manter' | 'ajustar' | 'pausar' | 'cedo';
@@ -39,12 +42,6 @@ const num = (v: any) => {
 const round = (x: number) => Math.round(x * 100) / 100;
 const cpaOf = (cost: number, sales: number) => (sales > 0 ? round(cost / sales) : null);
 
-// Palavras que aparecem em qualquer pesquisa e não dizem nada sozinhas.
-const STOP = new Set(('the and for with from that this what where when how why who are was does can you your our out into about over ' +
-  'que para com por uma uns das dos como mais sem não nao sobre onde qual').split(' '));
-
-const tokens = (term: string) => term.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(w => w.length >= 3 && !STOP.has(w));
-
 async function byChunks(ids: string[], build: (chunk: string[], from: number, to: number) => any): Promise<any[]> {
   const out: any[] = [];
   for (let i = 0; i < ids.length; i += 150) {
@@ -54,7 +51,16 @@ async function byChunks(ids: string[], build: (chunk: string[], from: number, to
   return out;
 }
 
-function periodRange(key: PeriodKey, today: string): [string | null, string] {
+const isDay = (v?: string | null) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+export const NO_MCC = 'Contas Individuais';
+
+function periodRange(key: PeriodKey, today: string, from?: string, to?: string): [string | null, string] {
+  if (key === 'custom') {
+    // Datas trocadas ou no futuro são acertadas; sem data, vale 7 dias.
+    if (!isDay(from) || !isDay(to)) return [addDays(today, -7), addDays(today, -1)];
+    const a = from! <= to! ? from! : to!, b = from! <= to! ? to! : from!;
+    return [a > today ? today : a, b > today ? today : b];
+  }
   if (key === 'today') return [today, today];
   if (key === 'all') return [null, today];
   const days = key === 'd2' ? 2 : key === 'd3' ? 3 : 7;
@@ -67,17 +73,30 @@ export interface PatternsOptions {
   period: PeriodKey;
   /** Blocos do painel que entram (MAIN_BLOCK e ids dos grupos). */
   blocks: string[];
+  /** Só as campanhas desta MCC (NO_MCC = contas sem MCC); vazio = todas. */
+  mcc?: string;
+  /** Período personalizado, AAAA-MM-DD. */
+  from?: string;
+  to?: string;
   /** Dados a mais para a IA responder perguntas: campanha a campanha, dia a dia, termos, idade, gênero e locais. */
   detail?: boolean;
 }
 
 export async function computePatterns(userId: string, opts: PatternsOptions) {
   const db = supabaseAdmin();
-  const [products, prefsRow] = await Promise.all([
-    fetchAll((a, b) => db.from('products').select('id, name, currency, vturb_player_id').eq('user_id', userId).range(a, b)),
+  const [allProducts, prefsRow] = await Promise.all([
+    fetchAll((a, b) => db.from('products').select('id, name, currency, vturb_player_id, mcc_name, google_status, google_status_reasons, status').eq('user_id', userId).range(a, b)),
     db.from('user_ui_prefs').select('prefs').eq('user_id', userId).maybeSingle(),
   ]);
   const groups: CampaignGroup[] = normalizeGroups(prefsRow.data?.prefs?.campaignGroups).list;
+
+  // ── MCCs: a escolhida vale para tudo o que vem depois, inclusive as opções ──
+  const mccOf = (p: any) => (String(p.mcc_name || '').trim() ? String(p.mcc_name).trim() : NO_MCC);
+  const mccCount = new Map<string, number>();
+  for (const p of allProducts) mccCount.set(mccOf(p), (mccCount.get(mccOf(p)) || 0) + 1);
+  const mccs = [...mccCount].sort((a, b) => (a[0] === NO_MCC ? 1 : b[0] === NO_MCC ? -1 : b[1] - a[1])).map(([name, count]) => ({ name, count }));
+  const mcc = opts.mcc && mccCount.has(opts.mcc) ? opts.mcc : '';
+  const products = mcc ? allProducts.filter(p => mccOf(p) === mcc) : allProducts;
 
   // ── Opções da tela: marcações entre colchetes que se repetem e os blocos ──
   const groupTerms = new Set(groups.flatMap(g => g.terms.map(t => t.toUpperCase())));
@@ -110,13 +129,15 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   const otherCurrency = matching.length - set.length;
   const ids = set.map(p => p.id);
   const nameOf = new Map(set.map(p => [p.id, String(p.name || '')]));
+  const productOf = new Map(set.map(p => [p.id, p]));
 
   const today = todayIn('America/Sao_Paulo');
-  const [from, to] = periodRange(opts.period, today);
+  const [from, to] = periodRange(opts.period, today, opts.from, opts.to);
   const inPeriod = (date: string) => (!from || date >= from) && date <= to;
   const money = (v: number) => formatMoney(v, currency);
   const base = {
-    options: { tags, blocks: blockOptions },
+    options: { tags, blocks: blockOptions, mccs },
+    mcc,
     period: { key: opts.period, from, to, today },
     currency, other_currency: otherCurrency, set_size: set.length,
   };
@@ -185,8 +206,11 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     } else {
       verdict = 'pausar'; reason = `Prejuízo de ${money(-lifeResult)} no período todo e de ${money(-weekResult)} nos últimos 7 dias.`;
     }
+    // Estado atual da campanha (ativa, pausada, conta suspensa), o mesmo do painel.
+    const st = resolveProductStatus(productOf.get(id) || {});
     return {
       id, name: nameOf.get(id) || '', since: l.first, days: l.activeDays,
+      status: { key: st.key, label: st.label, badge: st.badge, dot: st.dot, hint: st.hint },
       cost: round(l.cost), sales: round(l.sales), cpa: cpaOf(l.cost, l.sales), result: hasReal ? lifeResult : null,
       cost7: round(w.cost), sales7: round(w.sales), cpa7: cpaOf(w.cost, w.sales), result7: hasReal ? weekResult : null,
       verdict, reason,
@@ -196,7 +220,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   // ── Termos e dispositivos do período ─────────────────────────────────────
   const ranged = (q: any) => (from ? q.gte('date', from) : q).lte('date', to);
   const [terms, devices, vturb] = await Promise.all([
-    byChunks(ids, (chunk, a, b) => ranged(db.from('search_terms').select('product_id, date, search_term, cost, clicks, conversions').in('product_id', chunk)).gt('cost', 0).range(a, b)),
+    byChunks(ids, (chunk, a, b) => ranged(db.from('search_terms').select('product_id, date, search_term, keyword, keyword_match_type, cost, clicks, conversions').in('product_id', chunk)).gt('cost', 0).range(a, b)),
     byChunks(ids, (chunk, a, b) => ranged(db.from('audiences').select('product_id, date, audience_name, cost, clicks, conversions').in('product_id', chunk).eq('audience_type', 'Device')).range(a, b)),
     byChunks(ids, (chunk, a, b) => ranged(db.from('vturb_daily').select('product_id, over_pitch, under_pitch').in('product_id', chunk)).range(a, b)).catch(() => []),
   ]);
@@ -219,7 +243,9 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     }
     for (const r of rows) {
       const t = sum.get(key(r))!, sales = salesByDay.get(key(r)) || 0;
-      r.conversions = sales * (t.conv > 0 ? num(r.conversions) / t.conv : t.clicks > 0 ? num(r.clicks) / t.clicks : 0);
+      const part = sales * (t.conv > 0 ? num(r.conversions) / t.conv : t.clicks > 0 ? num(r.clicks) / t.clicks : 0);
+      // Uma linha não pode ter mais venda do que clique: o que passar disso fica sem dono.
+      r.conversions = Math.min(part, num(r.clicks));
     }
   };
   const termRowsIn = terms.filter(sane), deviceRowsIn = devices.filter(sane);
@@ -247,7 +273,8 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
         .map(([text, a]) => ({ text, campaigns: a.campaigns.size, cost: round(a.cost), conv: round(a.conv), cpa: cpaOf(a.cost, a.conv) }));
     };
     // Dia a dia; no período todo, mês a mês.
-    const bucket = (date: string) => (opts.period === 'all' ? date.slice(0, 7) : date);
+    const monthly = !from || (Date.parse(to) - Date.parse(from)) / 86400000 > 45;
+    const bucket = (date: string) => (monthly ? date.slice(0, 7) : date);
     const series = new Map<string, Camp>();
     for (const d of days) {
       if (!inPeriod(d.date)) continue;
@@ -255,6 +282,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
       add(series.get(bucket(d.date))!, d);
     }
     detail = {
+      monthly,
       campaigns: [...inWindow].filter(([, c]) => c.cost > 0).sort((a, b) => b[1].cost - a[1].cost).slice(0, 50)
         .map(([id, c]) => ({ name: nameOf.get(id) || '', cost: round(c.cost), sales: round(c.sales), cpa: cpaOf(c.cost, c.sales), clicks: c.clicks, result: hasReal ? result(c) : null })),
       series: [...series].sort((a, b) => a[0].localeCompare(b[0])).slice(-36)
@@ -267,35 +295,40 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   }
 
   interface Agg { cost: number; conv: number; clicks: number; campaigns: Set<string> }
-  const words = new Map<string, Agg>();
-  const pairs = new Map<string, Agg>();
   const bump = (map: Map<string, Agg>, key: string, t: any) => {
     if (!map.has(key)) map.set(key, { cost: 0, conv: 0, clicks: 0, campaigns: new Set() });
     const a = map.get(key)!;
     a.cost += num(t.cost); a.conv += num(t.conversions); a.clicks += num(t.clicks); a.campaigns.add(t.product_id);
   };
+  // Termo inteiro e palavra-chave inteira, como estão no Google: é o que dá
+  // para copiar e usar em outra campanha.
+  const byTerm = new Map<string, Agg>();
+  const byKeyword = new Map<string, Agg>();
   let termCost = 0, termConv = 0;
   for (const t of termRowsIn) {
     termCost += num(t.cost); termConv += num(t.conversions);
-    const tk = tokens(String(t.search_term || ''));
-    for (const w of new Set(tk)) bump(words, w, t);
-    for (const p of new Set(tk.slice(1).map((w, i) => `${tk[i]} ${w}`))) bump(pairs, p, t);
+    const term = String(t.search_term || '').trim().toLowerCase();
+    if (term) bump(byTerm, term, t);
+    if (t.keyword) bump(byKeyword, keywordLabel(String(t.keyword).trim().toLowerCase(), t.keyword_match_type), t);
   }
   const termCpa = cpaOf(termCost, termConv);
   const mark = (cost: number, conv: number, ref: number | null): Mark => {
     if (!ref) return null;
-    if (conv >= 2 && cost / conv <= ref * 0.8) return 'funciona';
+    // Venda quase de graça é sobra do rateio, não padrão: precisa ter gasto de verdade.
+    if (conv >= 2 && cost >= ref * 0.5 && cost / conv <= ref * 0.8) return 'funciona';
     if (conv <= 0 && cost >= ref) return 'desperdicio';
     if (conv > 0 && cost / conv >= ref * 1.25) return 'atencao';
     return null;
   };
-  // "Se repete" = aparece em pelo menos 3 campanhas (ou em todas, se forem menos).
   const termCampaigns = new Set(termRowsIn.map(t => t.product_id)).size;
-  const minCampaigns = Math.min(3, Math.max(1, termCampaigns));
-  const rank = (map: Map<string, Agg>, limit: number) => [...map]
-    .filter(([, a]) => a.campaigns.size >= minCampaigns)
-    .sort((a, b) => b[1].cost - a[1].cost).slice(0, limit)
-    .map(([text, a]) => ({ text, campaigns: a.campaigns.size, cost: round(a.cost), conv: round(a.conv), cpa: cpaOf(a.cost, a.conv), mark: mark(a.cost, a.conv, termCpa) }));
+  const toRow = ([text, a]: [string, Agg]) => ({ text, campaigns: a.campaigns.size, cost: round(a.cost), clicks: a.clicks, conv: round(a.conv), cpa: cpaOf(a.cost, a.conv), mark: mark(a.cost, a.conv, termCpa) });
+  // Melhores: os que mais venderam; no empate, o de menor CPA.
+  const best = (map: Map<string, Agg>, limit: number) => [...map].filter(([, a]) => a.conv >= 0.5)
+    .sort((a, b) => b[1].conv - a[1].conv || a[1].cost / a[1].conv - b[1].cost / b[1].conv).slice(0, limit).map(toRow);
+  const waste = (map: Map<string, Agg>, limit: number) => [...map].filter(([, a]) => a.conv <= 0 && a.cost > 0)
+    .sort((a, b) => b[1].cost - a[1].cost).slice(0, limit).map(toRow);
+  const terms_best = best(byTerm, 15), terms_waste = waste(byTerm, 8);
+  const keywords_best = best(byKeyword, 15), keywords_waste = waste(byKeyword, 8);
 
   const dev = new Map<string, Agg>();
   for (const d of deviceRowsIn) bump(dev, String(d.audience_name || ''), d);
@@ -330,23 +363,17 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   };
 
   // ── O que se repete: frases montadas pelo código (a IA não mexe em número) ─
-  const wordRows = rank(words, 12), pairRows = rank(pairs, 10);
   const highlights: { mark: Exclude<Mark, null>; text: string }[] = [];
-  const quoted = (r: { text: string }) => `"${r.text}"`;
-  // Expressão na frente; a palavra solta que já está numa expressão citada não repete.
-  const pick = (m: Mark, order: (a: any, b: any) => number) => {
-    const out: typeof wordRows = [];
-    for (const r of [...pairRows.filter(x => x.mark === m).sort(order), ...wordRows.filter(x => x.mark === m).sort(order)]) {
-      if (out.length >= 2) break;
-      if (!out.some(o => o.text.split(' ').includes(r.text))) out.push(r);
-    }
-    return out;
-  };
-  for (const r of pick('funciona', (a, b) => b.conv - a.conv)) {
-    highlights.push({ mark: 'funciona', text: `Termos com ${quoted(r)}: CPA de ${money(r.cpa!)}, ${Math.round((1 - r.cpa! / termCpa!) * 100)}% abaixo da média dos termos. Aparece em ${r.campaigns} campanhas.` });
+  const inCampaigns = (n: number) => (n === 1 ? 'em 1 campanha' : `em ${n} campanhas`);
+  const sales = (v: number) => `${hasReal ? '≈ ' : ''}${(Math.round(v * 10) / 10).toLocaleString('pt-BR')} ${v === 1 ? 'venda' : 'vendas'}`;
+  for (const r of terms_best.filter(r => r.mark === 'funciona').slice(0, 2)) {
+    highlights.push({ mark: 'funciona', text: `Termo "${r.text}": ${sales(r.conv)} com CPA de ${money(r.cpa!)}, ${Math.round((1 - r.cpa! / termCpa!) * 100)}% abaixo da média dos termos, ${inCampaigns(r.campaigns)}.` });
   }
-  for (const r of pick('desperdicio', (a, b) => b.cost - a.cost)) {
-    highlights.push({ mark: 'desperdicio', text: `Termos com ${quoted(r)}: ${money(r.cost)} gastos sem venda em ${r.campaigns} campanhas.` });
+  for (const r of keywords_best.filter(r => r.mark === 'funciona').slice(0, 1)) {
+    highlights.push({ mark: 'funciona', text: `Palavra-chave ${r.text}: ${sales(r.conv)} com CPA de ${money(r.cpa!)}, ${inCampaigns(r.campaigns)}.` });
+  }
+  for (const r of terms_waste.filter(r => r.mark === 'desperdicio').slice(0, 2)) {
+    highlights.push({ mark: 'desperdicio', text: `Termo "${r.text}": ${money(r.cost)} gastos sem venda, ${inCampaigns(r.campaigns)}.` });
   }
   const strong = deviceRows.filter(r => r.conv >= 2 && r.cpa !== null).sort((a, b) => a.cpa! - b.cpa!);
   if (strong.length >= 2 && strong[strong.length - 1].cpa! >= strong[0].cpa! * 1.25) {
@@ -362,7 +389,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     totals, highlights,
     // Com vendas reais, as vendas de termo e dispositivo são rateadas (≈).
     approx: hasReal,
-    words: wordRows, pairs: pairRows, term_cpa: termCpa, term_campaigns: termCampaigns,
+    terms_best, terms_waste, keywords_best, keywords_waste, term_cpa: termCpa, term_campaigns: termCampaigns,
     devices: deviceRows, video,
     verdicts: verdicts.slice(0, 80), verdict_counts: counts,
     detail,

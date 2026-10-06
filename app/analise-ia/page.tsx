@@ -17,8 +17,10 @@ import { applyTheme } from '@/lib/theme';
 
 const PERIODS = [
   { key: 'today', label: 'Hoje' }, { key: 'd2', label: '2 dias' }, { key: 'd3', label: '3 dias' },
-  { key: 'd7', label: '7 dias' }, { key: 'all', label: 'Todo o período' },
+  { key: 'd7', label: '7 dias' }, { key: 'all', label: 'Todo o período' }, { key: 'custom', label: 'Personalizado' },
 ];
+const dayStr = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const validDay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
 const MAIN = 'main';
 const SAVED = 'autometrics_padroes';
 
@@ -40,6 +42,9 @@ export default function PatternsPage() {
   const [tag, setTag] = useState('');
   const [period, setPeriod] = useState('d7');
   const [blocks, setBlocks] = useState<string[]>([MAIN]);
+  const [mcc, setMcc] = useState('');
+  const [from, setFrom] = useState(dayStr(-7));
+  const [to, setTo] = useState(dayStr(-1));
   const [ready, setReady] = useState(false);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -61,12 +66,17 @@ export default function PatternsPage() {
       if (typeof s.tag === 'string') setTag(s.tag);
       if (PERIODS.some(p => p.key === s.period)) setPeriod(s.period);
       if (Array.isArray(s.blocks) && s.blocks.length) setBlocks(s.blocks);
+      if (typeof s.mcc === 'string') setMcc(s.mcc);
+      if (validDay(s.from) && validDay(s.to)) { setFrom(s.from); setTo(s.to); }
     } catch { /* primeira vez */ }
     setReady(true);
   }, []);
   useEffect(() => { applyTheme(theme); }, [theme]);
 
-  const query = `tag=${encodeURIComponent(tag)}&period=${period}&blocks=${encodeURIComponent(blocks.join(','))}`;
+  const custom = period === 'custom';
+  const datesOk = !custom || (validDay(from) && validDay(to));
+  const query = `tag=${encodeURIComponent(tag)}&period=${period}&blocks=${encodeURIComponent(blocks.join(','))}&mcc=${encodeURIComponent(mcc)}${custom ? `&from=${from}&to=${to}` : ''}`;
+  const selection = { tag, period, blocks: blocks.join(','), mcc, ...(custom ? { from, to } : {}) };
   const readingKey = `${SAVED}_ia_${query}`;
 
   const load = useCallback(async () => {
@@ -81,20 +91,21 @@ export default function PatternsPage() {
   }, [query]);
 
   useEffect(() => {
-    if (!authChecked || !ready) return;
-    try { localStorage.setItem(SAVED, JSON.stringify({ tag, period, blocks })); } catch { /* sem armazenamento */ }
+    // Data pela metade enquanto é digitada: espera ficar completa.
+    if (!authChecked || !ready || !datesOk) return;
+    try { localStorage.setItem(SAVED, JSON.stringify({ tag, period, blocks, mcc, from, to })); } catch { /* sem armazenamento */ }
     setAiError('');
     try {
       const saved = JSON.parse(localStorage.getItem(readingKey) || 'null');
       setReading(saved && saved.day === new Date().toDateString() ? saved.reading : null);
     } catch { setReading(null); }
     load();
-  }, [authChecked, ready, load]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authChecked, ready, load, datesOk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const askAi = async () => {
     setAsking(true);
     setAiError('');
-    const { ok, body } = await api('/api/patterns', { method: 'POST', body: JSON.stringify({ tag, period, blocks: blocks.join(',') }) });
+    const { ok, body } = await api('/api/patterns', { method: 'POST', body: JSON.stringify(selection) });
     if (!ok) setAiError(body.error || 'A IA não respondeu.');
     else {
       setReading(body.reading);
@@ -110,7 +121,7 @@ export default function PatternsPage() {
     setAskError('');
     const { ok, body } = await api('/api/patterns', {
       method: 'POST',
-      body: JSON.stringify({ tag, period, blocks: blocks.join(','), question: q, history: chat.map(c => ({ q: c.q, a: c.a })) }),
+      body: JSON.stringify({ ...selection, question: q, history: chat.map(c => ({ q: c.q, a: c.a })) }),
     });
     if (!ok) setAskError(body.error || 'A IA não respondeu.');
     else { setChat(c => [...c, { q, a: body.answer.text, missing: body.answer.missing }]); setQuestion(''); }
@@ -151,33 +162,42 @@ export default function PatternsPage() {
     <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${m.cls}`}>{m.label}</span>;
   const cpaTone = (mark: string | null) => (mark === 'funciona' ? good : mark === 'desperdicio' ? bad : mark === 'atencao' ? warn : '');
 
-  const TermTable = ({ rows, label }: { rows: any[]; label: string }) => (
-    <div className={`${card} border rounded-xl overflow-hidden`}>
-      <div className={`px-4 pt-4 pb-2 ${title}`}>{label}</div>
-      {!rows?.length ? <div className={`px-4 pb-4 text-sm ${muted}`}>Sem termos neste período.</div> : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse tabular-nums">
-            <thead><tr>
-              <th className={`${th} text-left`}>Aparece nos termos</th>
-              <th className={`${th} text-right`}>Camp.</th>
-              <th className={`${th} text-right`}>Custo</th>
-              <th className={`${th} text-right`}>Vendas</th>
-              <th className={`${th} text-right`}>CPA</th>
-            </tr></thead>
-            <tbody>{rows.map(r => (
-              <tr key={r.text}>
-                <td className={`${td} font-medium ${head}`}>{r.text}</td>
-                <td className={`${td} text-right`}>{r.campaigns}</td>
-                <td className={`${td} text-right`}>{money(r.cost)}</td>
-                <td className={`${td} text-right`}>{data.approx && r.conv > 0 ? '≈ ' : ''}{qty(r.conv)}</td>
-                <td className={`${td} text-right font-bold ${cpaTone(r.mark)}`}>{r.cpa === null ? 'sem venda' : money(r.cpa)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
+  // Os que mais venderam em cima; embaixo, os que mais gastaram sem vender.
+  const TermTable = ({ best, waste, label, first }: { best: any[]; waste: any[]; label: string; first: string }) => {
+    const row = (r: any) => (
+      <tr key={r.text}>
+        <td className={`${td} font-medium ${head}`}>{r.text}</td>
+        <td className={`${td} text-right`}>{r.campaigns}</td>
+        <td className={`${td} text-right whitespace-nowrap`}>{money(r.cost)}</td>
+        <td className={`${td} text-right whitespace-nowrap`}>{data.approx && r.conv > 0 ? '≈ ' : ''}{qty(r.conv)}</td>
+        <td className={`${td} text-right whitespace-nowrap font-bold ${cpaTone(r.mark)}`}>{r.cpa === null ? 'sem venda' : money(r.cpa)}</td>
+      </tr>
+    );
+    return (
+      <div className={`${card} border rounded-xl overflow-hidden`}>
+        <div className={`px-4 pt-4 pb-2 ${title}`}>{label}</div>
+        {!best?.length && !waste?.length ? <div className={`px-4 pb-4 text-sm ${muted}`}>Sem dados neste período.</div> : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse tabular-nums">
+              <thead><tr>
+                <th className={`${th} text-left`}>{first}</th>
+                <th className={`${th} text-right`}>Camp.</th>
+                <th className={`${th} text-right`}>Custo</th>
+                <th className={`${th} text-right`}>Vendas</th>
+                <th className={`${th} text-right`}>CPA</th>
+              </tr></thead>
+              <tbody>
+                {best.length === 0 && <tr><td colSpan={5} className={`${td} ${muted}`}>Nenhum com venda neste período.</td></tr>}
+                {best.map(row)}
+                {waste.length > 0 && <tr><td colSpan={5} className={`${th} text-left`}>Gastaram sem vender</td></tr>}
+                {waste.map(row)}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (!authChecked) return <div className="min-h-screen bg-black" />;
 
@@ -203,6 +223,19 @@ export default function PatternsPage() {
         </div>
 
         {/* Conjunto, período e blocos */}
+        {(data?.options?.mccs || []).length > 1 && (
+          <div className="flex flex-wrap gap-2">
+            {[{ name: '', label: 'Todas as MCCs', count: data.options.mccs.reduce((n: number, m: any) => n + m.count, 0) },
+              ...data.options.mccs.map((m: any) => ({ name: m.name, label: m.name, count: m.count }))].map((m: any) => (
+              <button key={m.name || 'todas'} onClick={() => setMcc(m.name)}
+                className={`text-left rounded-xl border px-3.5 py-2.5 min-w-[130px] transition-colors ${mcc === m.name ? chipOn : `${card} ${muted} hover:border-indigo-500/40`}`}>
+                <div className={`text-[13px] font-bold ${mcc === m.name ? '' : head}`}>{m.label}</div>
+                <div className="text-[11px] opacity-70 tabular-nums">{m.count} {m.count === 1 ? 'campanha' : 'campanhas'}</div>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className={`${card} border rounded-xl p-3 space-y-3`}>
           <div className="flex flex-wrap items-center gap-2">
             <select value={(data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) ? tag.toUpperCase() : tag ? '__outro' : ''}
@@ -225,6 +258,16 @@ export default function PatternsPage() {
               ))}
             </div>
           </div>
+          {custom && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-[11px] font-bold uppercase tracking-wide ${muted}`}>Período</span>
+              <input type="date" value={from} max={dayStr(0)} onChange={e => setFrom(e.target.value)}
+                className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} />
+              <span className={`text-xs ${muted}`}>até</span>
+              <input type="date" value={to} max={dayStr(0)} onChange={e => setTo(e.target.value)}
+                className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} />
+            </div>
+          )}
           {(data?.options?.blocks || []).length > 1 && (
             <div className="flex flex-wrap items-center gap-2">
               <span className={`text-[11px] font-bold uppercase tracking-wide ${muted}`}>Grupos que entram</span>
@@ -249,6 +292,7 @@ export default function PatternsPage() {
           <div className={`space-y-5 transition-opacity ${loading ? 'opacity-50' : ''}`}>
             <div className={`text-xs ${muted}`}>
               {d.set_size} {d.set_size === 1 ? 'campanha' : 'campanhas'} no conjunto
+              {data.mcc ? ` · MCC ${data.mcc}` : ''}
               {d.period.from ? ` · ${ddmm(d.period.from)}${d.period.from !== d.period.to ? ` a ${ddmm(d.period.to)}` : ''}` : ' · desde o primeiro dia de cada campanha'}
               {d.period.key === 'today' ? ' · dia ainda em andamento' : ''}
               {d.other_currency > 0 ? ` · ${d.other_currency} em outra moeda ficaram de fora` : ''}
@@ -321,17 +365,17 @@ export default function PatternsPage() {
                   </button>
                 </div>
                 <div className={`text-[11px] ${muted}`}>
-                  A IA recebe os dados do conjunto e do período escolhidos acima: cada campanha, dia a dia, termos, dispositivos, idade, gênero, locais e vídeo. Para olhar uma campanha só, escreva o nome dela no campo de trecho do nome.
+                  A IA recebe os dados do conjunto e do período escolhidos acima: cada campanha, dia a dia, termos, dispositivos, idade, gênero, locais e vídeo. Ela vê os melhores termos e palavras-chave, e a situação de cada campanha. Para olhar uma campanha só, escreva o nome dela no campo de trecho do nome.
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <TermTable rows={d.pairs} label="Expressões parecidas nos termos" />
-              <TermTable rows={d.words} label="Palavras parecidas nos termos" />
+              <TermTable best={d.terms_best} waste={d.terms_waste} label="Termos de pesquisa que mais vendem" first="Termo" />
+              <TermTable best={d.keywords_best} waste={d.keywords_waste} label="Palavras-chave com melhor rendimento" first="Palavra-chave" />
             </div>
             <div className={`text-[11px] ${muted} -mt-2`}>
-              Só entra o que aparece em pelo menos 3 campanhas. CPA médio dos termos: {money(d.term_cpa)} — fica abaixo do CPA do grupo porque o Google não informa todos os termos.
+              Camp. é em quantas campanhas do conjunto o termo ou a palavra-chave apareceu. CPA em verde está pelo menos 20% abaixo da média dos termos ({money(d.term_cpa)}); essa média fica abaixo do CPA do grupo porque o Google não informa todos os termos.
               {d.approx ? ' ≈ vendas reais de cada campanha divididas entre os termos pelas conversões do Google, ou pelos cliques quando não há conversão.' : ''}
             </div>
 
@@ -380,7 +424,7 @@ export default function PatternsPage() {
             <div className={`${card} border rounded-xl overflow-hidden`}>
               <div className={`px-4 pt-4 pb-1 ${title}`}>Vale a pena manter? · todo o período de cada campanha</div>
               <div className={`px-4 pb-3 text-xs ${muted}`}>
-                Campanhas com gasto nos últimos 7 dias. O período escolhido acima não muda esta tabela.
+                Campanhas com gasto nos últimos 7 dias, com a situação de hoje ao lado do nome. O período escolhido acima não muda esta tabela.
                 {d.verdicts.length > 0 && ` ${d.verdict_counts.manter} para manter · ${d.verdict_counts.ajustar} para ajustar · ${d.verdict_counts.pausar} para pausar · ${d.verdict_counts.cedo} cedo para dizer.`}
               </div>
               {!d.verdicts.length ? <div className={`px-4 pb-4 text-sm ${muted}`}>Nenhuma campanha do conjunto gastou nos últimos 7 dias.</div> : (
@@ -400,6 +444,11 @@ export default function PatternsPage() {
                       <tr key={v.id}>
                         <td className={`${td} max-w-[320px]`}>
                           <Link href={`/products/${v.id}`} target="_blank" className={`font-medium ${head} hover:text-indigo-400 hover:underline`}>{v.name}</Link>
+                          {v.status && (
+                            <span title={v.status.hint} className={`ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide align-middle ${v.status.badge}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${v.status.dot}`} />{v.status.label}
+                            </span>
+                          )}
                           <div className={`text-[11px] ${muted} whitespace-normal`}>{v.reason}</div>
                         </td>
                         <td className={`${td} text-right align-top`}>{v.days}</td>

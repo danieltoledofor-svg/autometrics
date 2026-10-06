@@ -11,18 +11,21 @@ export const dynamic = 'force-dynamic';
 /**
  * Tela "Análise de IA": o que se repete nas campanhas parecidas do próprio usuário.
  *
- * GET   ?tag=&period=&blocks=   números e padrões, calculados na hora, sem IA
+ * GET   ?tag=&period=&blocks=&mcc=&from=&to=   números e padrões, calculados na hora, sem IA
  * POST  { tag, period, blocks } leitura da IA em cima desses mesmos números
  * POST  { …, question, history } resposta da IA a uma pergunta do usuário
  *
  * Só entram campanhas de quem está logado.
  */
 
-function options(tag: any, period: any, blocks: any) {
+function options(q: { tag?: any; period?: any; blocks?: any; mcc?: any; from?: any; to?: any }) {
   return {
-    tag: String(tag || '').slice(0, 80),
-    period: (PERIODS.some(p => p.key === period) ? period : 'd7') as PeriodKey,
-    blocks: String(blocks || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 30),
+    tag: String(q.tag || '').slice(0, 80),
+    period: (PERIODS.some(p => p.key === q.period) ? q.period : 'd7') as PeriodKey,
+    blocks: String(q.blocks || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 30),
+    mcc: String(q.mcc || '').slice(0, 200),
+    from: String(q.from || '').slice(0, 10),
+    to: String(q.to || '').slice(0, 10),
   };
 }
 
@@ -31,7 +34,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
   const q = new URL(request.url).searchParams;
   try {
-    const data = await computePatterns(user.id, options(q.get('tag'), q.get('period'), q.get('blocks')));
+    const data = await computePatterns(user.id, options(Object.fromEntries(q)));
     return NextResponse.json({ ...data, ai: aiEnabled() });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
@@ -57,17 +60,23 @@ function prompt(p: Extract<Patterns, { empty: false }>, tag: string) {
   const money = (v: number | null) => (v === null ? '—' : formatMoney(v, p.currency));
   const line = (r: any) => `- ${r.text}: ${r.campaigns} campanhas · custo ${money(r.cost)} · vendas ${r.conv} · CPA ${money(r.cpa)}`;
   const label = PERIODS.find(x => x.key === p.period.key)!.label;
-  return `Grupo: campanhas com "${tag || 'todas'}" no nome · período: ${label}${p.period.from ? ` (${p.period.from} a ${p.period.to})` : ''}
+  return `Grupo: campanhas com "${tag || 'todas'}" no nome${p.mcc ? ` · MCC ${p.mcc}` : ''} · período: ${label}${p.period.from ? ` (${p.period.from} a ${p.period.to})` : ''}
 ${p.approx ? 'As vendas de termo e de dispositivo são as vendas reais de cada campanha divididas entre os itens (valor aproximado).' : 'As vendas são as conversões do Google.'}
 
 TOTAL DO GRUPO: ${p.totals.campaigns} campanhas com gasto · custo ${money(p.totals.cost)} · vendas ${p.totals.sales} · CPA ${money(p.totals.cpa)}${p.totals.result !== null ? ` · resultado ${money(p.totals.result)}` : ''}
 CPA médio dos termos informados pelo Google: ${money(p.term_cpa)}
 
-EXPRESSÕES QUE SE REPETEM NOS TERMOS:
-${p.pairs.map(line).join('\n') || '(sem dados)'}
+TERMOS DE PESQUISA QUE MAIS VENDERAM:
+${p.terms_best.map(line).join('\n') || '(sem dados)'}
 
-PALAVRAS QUE SE REPETEM NOS TERMOS:
-${p.words.map(line).join('\n') || '(sem dados)'}
+TERMOS QUE MAIS GASTARAM SEM VENDER:
+${p.terms_waste.map(line).join('\n') || '(nenhum)'}
+
+PALAVRAS-CHAVE QUE MAIS VENDERAM:
+${p.keywords_best.map(line).join('\n') || '(sem dados)'}
+
+PALAVRAS-CHAVE QUE MAIS GASTARAM SEM VENDER:
+${p.keywords_waste.map(line).join('\n') || '(nenhuma)'}
 
 DISPOSITIVOS:
 ${p.devices.map(line).join('\n') || '(sem dados)'}
@@ -101,8 +110,8 @@ function dataPack(p: Extract<Patterns, { empty: false }>, tag: string) {
   return [
     prompt(p, tag),
     block('CAMPANHA A CAMPANHA NO PERÍODO', (d.campaigns || []).map((c: any) => `- ${c.name}: custo ${money(c.cost)} · vendas ${c.sales} · CPA ${money(c.cpa)} · cliques ${c.clicks}${c.result !== null ? ` · resultado ${money(c.result)}` : ''}`)),
-    block(p.period.key === 'all' ? 'MÊS A MÊS' : 'DIA A DIA', (d.series || []).map((s: any) => `- ${s.when}: custo ${money(s.cost)} · vendas ${s.sales} · CPA ${money(s.cpa)}${s.result !== null ? ` · resultado ${money(s.result)}` : ''}`)),
-    block('CAMPANHAS RODANDO, VIDA INTEIRA E ÚLTIMOS 7 DIAS', p.verdicts.slice(0, 40).map(v => `- ${v.name}: ${v.days} dias com gasto desde ${v.since} · custo ${money(v.cost)} · vendas ${v.sales} · CPA ${money(v.cpa)} · resultado ${money(v.result)} · últimos 7 dias: custo ${money(v.cost7)}, vendas ${v.sales7}, resultado ${money(v.result7)} · ${v.verdict}`)),
+    block(d.monthly ? 'MÊS A MÊS' : 'DIA A DIA', (d.series || []).map((s: any) => `- ${s.when}: custo ${money(s.cost)} · vendas ${s.sales} · CPA ${money(s.cpa)}${s.result !== null ? ` · resultado ${money(s.result)}` : ''}`)),
+    block('CAMPANHAS RODANDO, VIDA INTEIRA E ÚLTIMOS 7 DIAS', p.verdicts.slice(0, 40).map(v => `- ${v.name}: ${v.days} dias com gasto desde ${v.since} · custo ${money(v.cost)} · vendas ${v.sales} · CPA ${money(v.cpa)} · resultado ${money(v.result)} · últimos 7 dias: custo ${money(v.cost7)}, vendas ${v.sales7}, resultado ${money(v.result7)} · ${v.verdict} · situação hoje: ${v.status.label}`)),
     block('TERMOS DE PESQUISA COM MAIS GASTO', (d.terms || []).map(row)),
     block('IDADE', (d.ages || []).map(row)),
     block('GÊNERO', (d.genders || []).map(row)),
@@ -131,7 +140,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
   if (!aiEnabled()) return NextResponse.json({ error: 'A IA está desligada no servidor.' }, { status: 409 });
   const body = await request.json().catch(() => ({}));
-  const opts = options(body.tag, body.period, body.blocks);
+  const opts = options(body);
   const question = String(body.question || '').trim().slice(0, 1000);
   if (question) {
     try { return await answer(user.id, opts, question, body.history); }
