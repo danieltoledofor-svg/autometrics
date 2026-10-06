@@ -7,6 +7,7 @@ import { isReconcileDue, reconcileAccountRecord, reconcileReady } from '@/lib/go
 import { runDueAnalyses } from '@/lib/analysis/run';
 import { runDueVturb } from '@/lib/vturb/sync';
 import { runAlerts } from '@/lib/alerts/run';
+import { runConversionUploads } from '@/lib/googleAds/conversionUpload';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -63,6 +64,10 @@ async function runCron() {
     report.elapsed_ms = Date.now() - started;
     return report;
   }
+
+  // Vendas para o Google (Etapa 3 do rastreamento): antes da coleta, para a
+  // venda não esperar a fila das contas. Poucas chamadas, com 15s de teto.
+  report.conversions = await runConversionUploads(Date.now() + 15000).catch((e: any) => ({ error: e.message }));
 
   const okConnections = new Set((conns || []).map(c => c.id));
   const { data: accounts } = await db.from('google_ads_accounts')

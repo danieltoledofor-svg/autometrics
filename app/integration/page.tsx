@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { TelegramCard } from './TelegramCard';
+import { ConversionUploadCard } from './ConversionUploadCard';
 import { Logo } from '@/app/components/Logo';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
@@ -1132,6 +1133,8 @@ ${commonFunctions}`;
                   {plat.steps.map((s, i) => <li key={i}>{s}</li>)}
                 </ol>
               </div>
+
+              <ConversionUploadCard isDark={isDark} />
 
               <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
                 <p className="text-xs font-bold text-amber-400 mb-2">⚠️ Antes de ativar</p>

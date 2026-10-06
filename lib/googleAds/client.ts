@@ -219,6 +219,62 @@ export async function setCampaignStatus(ctx: AdsContext, campaignId: string, sta
   return res.json();
 }
 
+/**
+ * Cria uma ação de conversão do tipo "importar cliques" (compra) e devolve o
+ * resourceName dela. primaryForGoal = false deixa a ação só como observação:
+ * aparece em "Todas as conversões" e não entra nos lances.
+ */
+export async function createUploadConversionAction(ctx: AdsContext, name: string, primaryForGoal: boolean): Promise<string> {
+  const res = await fetch(`${API_BASE}/customers/${ctx.customerId}/conversionActions:mutate`, {
+    method: 'POST',
+    headers: await headers(ctx),
+    body: JSON.stringify({
+      operations: [{
+        create: {
+          name, type: 'UPLOAD_CLICKS', category: 'PURCHASE', status: 'ENABLED', primaryForGoal,
+          countingType: 'MANY_PER_CLICK',
+          valueSettings: { defaultValue: 0, alwaysUseDefaultValue: false },
+        },
+      }],
+    }),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = await res.json();
+  return data.results?.[0]?.resourceName || '';
+}
+
+export interface ClickConversion {
+  gclid?: string; gbraid?: string; wbraid?: string;
+  conversionAction: string;
+  /** "aaaa-mm-dd hh:mm:ss+00:00" */
+  conversionDateTime: string;
+  conversionValue: number;
+  currencyCode: string;
+  orderId?: string;
+}
+
+/**
+ * Envia vendas ligadas a cliques. Devolve, para cada posição da lista, o erro
+ * do Google (ou null quando entrou): uma venda recusada não derruba as outras.
+ */
+export async function uploadClickConversions(ctx: AdsContext, conversions: ClickConversion[]): Promise<({ code: string; message: string } | null)[]> {
+  const res = await fetch(`${API_BASE}/customers/${ctx.customerId}:uploadClickConversions`, {
+    method: 'POST',
+    headers: await headers(ctx),
+    body: JSON.stringify({ conversions, partialFailure: true }),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = await res.json();
+  const out: ({ code: string; message: string } | null)[] = conversions.map(() => null);
+  for (const detail of data.partialFailureError?.details || []) {
+    for (const e of detail.errors || []) {
+      const index = e.location?.fieldPathElements?.find((f: any) => f.fieldName === 'conversions')?.index ?? 0;
+      if (index < out.length && !out[index]) out[index] = { code: String(Object.values(e.errorCode || {})[0] || ''), message: e.message || '' };
+    }
+  }
+  return out;
+}
+
 /** Remove os hífens de "123-456-7890". */
 export function cleanCustomerId(id: string | number): string {
   return String(id).replace(/\D/g, '');
