@@ -20,7 +20,7 @@ import { Logo } from '@/app/components/Logo';
 import { resolveCampaignStatus, resolveProductStatus, STATUS_SEVERITY, type CampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal, type QuickEntryTarget } from '@/app/components/QuickEntryModal';
 import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type MetricSort } from '@/lib/metricSort';
-import { MAIN_BLOCK, blockName, blockOf, passesFilters } from '@/lib/campaignGroups';
+import { MAIN_BLOCK, blockName, blockOf } from '@/lib/campaignGroups';
 import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
 import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
 
@@ -407,9 +407,8 @@ export default function DashboardPage() {
       const mccName = product?.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
       if (selectedMcc !== 'all' && mccName !== selectedMcc) return;
 
-      // Grupos do usuário: filtro ligado e bloco desmarcado ficam fora de tudo.
+      // Grupos do usuário: bloco desmarcado fica fora de tudo.
       const campaignName = product?.name || 'Venda Externa';
-      if (!passesFilters(campaignName, groups)) return;
       const blockId = blockOf(campaignName, groups.list);
       if (groups.hidden.includes(blockId)) return;
 
@@ -484,7 +483,7 @@ export default function DashboardPage() {
 
     // Dentro de cada dia, conta e campanha vêm ordenadas pela métrica escolhida.
     // Os blocos seguem a ordem dos grupos, com "Principais" na frente.
-    const blockOrder = [MAIN_BLOCK, ...groups.list.filter(g => g.separate).map(g => g.id)];
+    const blockOrder = [MAIN_BLOCK, ...groups.list.map(g => g.id)];
     const blockTotals = new Map<string, any>();
     dailyMap.forEach((day: any) => {
       const sortAccounts = (holder: any) => {
@@ -771,8 +770,6 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} />
-
         {/* ── MOBILE KPI GRID 2x2 (hidden on desktop) ── */}
         {processedData.totals && (
           <div className="md:hidden grid grid-cols-2 gap-3 px-1 pb-3">
@@ -832,6 +829,8 @@ export default function DashboardPage() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} />
 
         {/* Total de cada grupo no período, quando há mais de um bloco marcado. */}
         {showBlocks && (
