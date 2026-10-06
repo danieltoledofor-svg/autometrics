@@ -4,10 +4,10 @@
  * rotina (lib/alerts/run.ts) leem daqui.
  */
 
-export type AlertKey = 'gasto' | 'suspensa' | 'sem_venda' | 'cpa' | 'venda' | 'parou' | 'ajuste' | 'resumo' | 'coleta';
+export type AlertKey = 'gasto' | 'suspensa' | 'sem_venda' | 'cpa' | 'venda' | 'primeira_venda' | 'reembolso' | 'orcamento' | 'parou' | 'ajuste' | 'resumo' | 'coleta' | 'cota';
 
 export interface AlertParam { key: string; label: string; unit: string; min: number; max: number; step: number; value: number | null }
-export interface AlertInfo { key: AlertKey; title: string; when: string; on: boolean; params: AlertParam[] }
+export interface AlertInfo { key: AlertKey; title: string; when: string; on: boolean; params: AlertParam[]; /** Só a conta principal do Autometrics vê e recebe. */ ownerOnly?: boolean }
 
 export const ALERTS: AlertInfo[] = [
   { key: 'gasto', title: 'Gasto acima do normal', on: true,
@@ -26,6 +26,13 @@ export const ALERTS: AlertInfo[] = [
     params: [{ key: 'limit', label: 'Limite de CPA', unit: 'na moeda da conta', min: 1, max: 100000, step: 1, value: null }] },
   { key: 'venda', title: 'Venda nova', on: false,
     when: 'Cada vez que entram vendas novas numa campanha, com o total do dia.', params: [] },
+  { key: 'primeira_venda', title: 'Primeira venda da campanha', on: true,
+    when: 'A campanha vendeu hoje e não tinha vendido nos 30 dias anteriores.', params: [] },
+  { key: 'reembolso', title: 'Reembolso registrado', on: true,
+    when: 'Entrou um reembolso ou estorno numa campanha hoje.', params: [] },
+  { key: 'orcamento', title: 'Orçamento segurando campanha boa', on: true,
+    when: 'Ontem a campanha deixou de aparecer por falta de orçamento, e o CPA dos últimos 3 dias está pelo menos 20% abaixo do valor de uma venda.',
+    params: [{ key: 'lost', label: 'Avisar quando deixou de aparecer em mais de', unit: '% das vezes', min: 5, max: 90, step: 5, value: 20 }] },
   { key: 'parou', title: 'Campanha parou de gastar', on: true,
     when: 'Gastou em pelo menos 5 dos últimos 7 dias, está ativa e hoje não gastou nada até o horário escolhido.',
     params: [{ key: 'hour', label: 'Conferir a partir das', unit: 'horas', min: 6, max: 22, step: 1, value: 12 }] },
@@ -36,6 +43,9 @@ export const ALERTS: AlertInfo[] = [
     params: [{ key: 'hour', label: 'Enviar às', unit: 'horas', min: 6, max: 23, step: 1, value: 21 }] },
   { key: 'coleta', title: 'Problema na coleta do Google', on: true,
     when: 'Uma conta sua deu erro ao ser lida do Google.', params: [] },
+  { key: 'cota', title: 'Limite diário de consultas ao Google', on: true, ownerOnly: true,
+    when: 'O Autometrics inteiro já usou boa parte das consultas do dia ao Google. Acima de 80%, a leitura detalhada das campanhas para até o dia virar.',
+    params: [{ key: 'pct', label: 'Avisar quando passar de', unit: '% do limite', min: 30, max: 95, step: 5, value: 70 }] },
 ];
 
 export interface AlertSettings {

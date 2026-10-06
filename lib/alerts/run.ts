@@ -6,6 +6,8 @@ import { userChangeEvents } from '@/lib/analysis/changes';
 import { explainReasons, resolveProductStatus } from '@/lib/campaignStatus';
 import { spendAlert } from './spendRule';
 import { isQuiet, resolveSettings, type AlertSettings } from './catalog';
+import { isOwner } from '@/lib/ai/openrouter';
+import { usageToday, DAILY_QUOTA } from '@/lib/googleAds/sync';
 
 /**
  * Alertas pelo Telegram. Roda a cada chamada do agendador (5 min) para quem
@@ -102,16 +104,18 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
   const ids = products.map(p => p.id);
   const rows: any[] = [];
   for (let i = 0; i < ids.length; i += 150) {
-    rows.push(...await fetchAll((a, b) => db.from('daily_metrics').select('product_id, date, cost, conversions, conversion_value, refunds')
-      .in('product_id', ids.slice(i, i + 150)).gte('date', addDays(day, -30)).lte('date', day).or('cost.gt.0,conversions.gt.0').range(a, b)));
+    rows.push(...await fetchAll((a, b) => db.from('daily_metrics')
+      .select('product_id, date, cost, conversions, conversion_value, refunds, lost_budget:google_metrics->search_budget_lost_impression_share')
+      .in('product_id', ids.slice(i, i + 150)).gte('date', addDays(day, -30)).lte('date', day).or('cost.gt.0,conversions.gt.0,refunds.gt.0').range(a, b)));
   }
 
-  interface Camp { today: number; sales: number; revenue: number; refunds: number; past7: number; days7: number; cost3: number; sales3: number; sales30: number; revenue30: number }
+  interface Camp { today: number; sales: number; revenue: number; refunds: number; past7: number; days7: number; cost3: number; sales3: number; sales30: number; revenue30: number; lostYesterday: number }
   const camps = new Map<string, Camp>();
   const d7 = addDays(day, -7), d3 = addDays(day, -3);
   for (const r of rows) {
-    if (!camps.has(r.product_id)) camps.set(r.product_id, { today: 0, sales: 0, revenue: 0, refunds: 0, past7: 0, days7: 0, cost3: 0, sales3: 0, sales30: 0, revenue30: 0 });
+    if (!camps.has(r.product_id)) camps.set(r.product_id, { today: 0, sales: 0, revenue: 0, refunds: 0, past7: 0, days7: 0, cost3: 0, sales3: 0, sales30: 0, revenue30: 0, lostYesterday: 0 });
     const c = camps.get(r.product_id)!;
+    if (r.date === addDays(day, -1)) c.lostYesterday = num(r.lost_budget);
     const cost = num(r.cost), sales = num(r.conversions);
     c.sales30 += sales; c.revenue30 += num(r.conversion_value);
     if (r.date === day) { c.today += cost; c.sales += sales; c.revenue += num(r.conversion_value); c.refunds += num(r.refunds); continue; }
@@ -171,6 +175,26 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
     }
 
     // Campanha de centavos por dia (aquecimento) não conta: o normal dela precisa ser de pelo menos 5 por dia.
+    if (on.primeira_venda.on && c.sales > 0 && c.sales30 === c.sales && !warned('primeira_venda', id, 14)) {
+      await notify('primeira_venda', id, id, `🎉 <b>Primeira venda da campanha</b>\n${name}\n\nVendeu hoje pela primeira vez nos últimos 30 dias: ${String(c.sales).replace('.', ',')} ${c.sales === 1 ? 'venda' : 'vendas'}, ${money(c.revenue)} de receita, com ${money(c.today)} de custo no dia.\n\n${link_(id)}`);
+    }
+
+    if (on.reembolso.on && c.refunds > 0) {
+      // Avisa quando o total de reembolso do dia sobe além do último avisado.
+      const last = Math.max(0, ...(recent || []).filter(r => r.kind === 'reembolso' && r.product_id === id && r.day === day).map(r => num(r.details?.amount)));
+      if (c.refunds > last + 0.005) {
+        await notify('reembolso', `${id}:${Math.round(c.refunds * 100)}`, id, `↩️ <b>Reembolso registrado</b>\n${name}\n\nEntrou ${money(c.refunds - last)} de reembolso${last > 0 ? ` (${money(c.refunds)} no dia)` : ' hoje'}. Receita do dia: ${money(c.revenue)}.\n\n${link_(id)}`, { amount: c.refunds });
+      }
+    }
+
+    if (on.orcamento.on && c.lostYesterday * 100 >= on.orcamento.lost && c.sales3 > 0 && !warned('orcamento', id, 7)) {
+      const sale = c.sales30 > 0 && c.revenue30 > 0 ? c.revenue30 / c.sales30 : userSale;
+      const cpa3 = c.cost3 / c.sales3;
+      if (sale > 0 && cpa3 <= sale * 0.8) {
+        await notify('orcamento', id, id, `📦 <b>Orçamento segurando campanha boa</b>\n${name}\n\nOntem ela deixou de aparecer em ${Math.round(c.lostYesterday * 100)}% das vezes por falta de orçamento. O CPA dos últimos 3 dias está em ${money(cpa3)}, e uma venda vale em média ${money(sale)}.\n\n${link_(id)}`, { lost: c.lostYesterday, cpa3 });
+      }
+    }
+
     if (on.parou.on && hour >= on.parou.hour && c.today <= 0 && c.days7 >= 5 && c.past7 / c.days7 >= 5 && status.key === 'ativo') {
       await notify('parou', id, id, `🛑 <b>Campanha parou de gastar</b>\n${name}\n\nGastou em ${c.days7} dos últimos 7 dias (média de ${money(c.past7 / c.days7)} por dia) e hoje ainda não gastou nada, mesmo ativa.\n\n${link_(id)}`);
     }
@@ -214,6 +238,19 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
     const { data: accounts } = await db.from('google_ads_accounts').select('id, name, last_sync_error').eq('user_id', userId).eq('sync_enabled', true).eq('last_sync_status', 'erro');
     for (const acc of accounts || []) {
       await notify('coleta', acc.id, null, `🔌 <b>Conta com erro na leitura do Google</b>\n${escapeHtml(String(acc.name || ''))}\n\n${syncProblem(String(acc.last_sync_error || ''))}\n\n<a href="${appUrl()}/integration">Abrir Integração</a>`);
+    }
+  }
+
+  // ── Limite diário de consultas ao Google: só para a conta principal ─────────
+  if (on.cota.on) {
+    const { data: who } = await db.auth.admin.getUserById(userId).catch(() => ({ data: null as any }));
+    if (isOwner(who?.user?.email)) {
+      const used = await usageToday().catch(() => 0);
+      const pct = DAILY_QUOTA > 0 ? (used / DAILY_QUOTA) * 100 : 0;
+      if (pct >= on.cota.pct) {
+        const n = (v: number) => v.toLocaleString('pt-BR');
+        await notify('cota', 'dia', null, `📶 <b>Limite de consultas ao Google em ${Math.round(pct)}%</b>\n\nO Autometrics já usou ${n(used)} das ${n(DAILY_QUOTA)} consultas de hoje. Acima de 80%, a leitura detalhada das campanhas (termos, públicos, histórico) para; custo e status continuam. O limite zera de madrugada, por volta das 4h de Brasília.`);
+      }
     }
   }
   return sent;

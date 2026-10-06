@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { botUsername, sendTelegram, telegramEnabled, tg } from '@/lib/telegram';
 import { ALERTS, resolveSettings } from '@/lib/alerts/catalog';
+import { isOwner } from '@/lib/ai/openrouter';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,7 @@ export const dynamic = 'force-dynamic';
 const MISSING = 'Falta rodar migration_telegram.sql no Supabase.';
 const CODE_MINUTES = 30;
 
-async function status(userId: string) {
+async function status(userId: string, email?: string) {
   const { data, error } = await supabaseAdmin().from('telegram_links').select('*').eq('user_id', userId).maybeSingle();
   if (error) return { ready: false as const, error: MISSING };
   const configured = telegramEnabled();
@@ -33,14 +34,14 @@ async function status(userId: string) {
     linked: !!data?.chat_id, chat_name: data?.chat_name || null, enabled: data?.enabled !== false,
     code: !data?.chat_id && fresh ? data.code : null,
     // Alertas disponíveis e as escolhas do usuário (com o padrão no que ele não mexeu).
-    catalog: ALERTS, settings: resolveSettings(data?.settings),
+    catalog: ALERTS.filter(a => !a.ownerOnly || isOwner(email)), settings: resolveSettings(data?.settings),
   };
 }
 
 export async function GET(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
-  return NextResponse.json(await status(user.id));
+  return NextResponse.json(await status(user.id, user.email));
 }
 
 export async function POST(request: Request) {
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     const code = randomBytes(4).toString('hex').toUpperCase();
     const { error } = await db.from('telegram_links').upsert({ user_id: user.id, code, code_at: now, updated_at: now }, { onConflict: 'user_id' });
     if (error) return fail(MISSING, 409);
-    return NextResponse.json(await status(user.id));
+    return NextResponse.json(await status(user.id, user.email));
   }
 
   const { data: link, error } = await db.from('telegram_links').select('*').eq('user_id', user.id).maybeSingle();
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
     const name = [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.title || chat.username || '';
     await db.from('telegram_links').update({ chat_id: String(chat.id), chat_name: name, code: null, linked_at: now, enabled: true, updated_at: now }).eq('user_id', user.id);
     await sendTelegram(String(chat.id), '✅ <b>Autometrics ligado.</b>\nOs alertas das suas campanhas chegam por aqui.').catch(() => {});
-    return NextResponse.json(await status(user.id));
+    return NextResponse.json(await status(user.id, user.email));
   }
 
   if (body.action === 'settings') {
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
     const settings = resolveSettings(body.settings);
     const { error: saveError } = await db.from('telegram_links').upsert({ user_id: user.id, settings, updated_at: now }, { onConflict: 'user_id' });
     if (saveError) return fail('Falta rodar migration_telegram_alertas.sql no Supabase.', 409);
-    return NextResponse.json(await status(user.id));
+    return NextResponse.json(await status(user.id, user.email));
   }
 
   if (!link?.chat_id) return fail('O Telegram ainda não está ligado.');
@@ -95,11 +96,11 @@ export async function POST(request: Request) {
   }
   if (body.action === 'toggle') {
     await db.from('telegram_links').update({ enabled: !!body.enabled, updated_at: now }).eq('user_id', user.id);
-    return NextResponse.json(await status(user.id));
+    return NextResponse.json(await status(user.id, user.email));
   }
   if (body.action === 'unlink') {
     await db.from('telegram_links').update({ chat_id: null, chat_name: null, code: null, updated_at: now }).eq('user_id', user.id);
-    return NextResponse.json(await status(user.id));
+    return NextResponse.json(await status(user.id, user.email));
   }
   return fail('Pedido inválido.');
 }
