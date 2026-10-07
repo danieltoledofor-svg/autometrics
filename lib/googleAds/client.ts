@@ -241,6 +241,21 @@ export async function setCampaignStatus(ctx: AdsContext, campaignId: string, sta
 }
 
 /**
+ * Alteração em qualquer recurso da conta (campaigns, campaignBudgets,
+ * campaignCriteria, adGroupCriteria…). Com validateOnly o Google confere tudo
+ * e não muda nada: é o ensaio antes da alteração de verdade.
+ */
+export async function mutate(ctx: AdsContext, service: string, operations: any[], validateOnly = false) {
+  const res = await fetch(`${API_BASE}/customers/${ctx.customerId}/${service}:mutate`, {
+    method: 'POST',
+    headers: await headers(ctx),
+    body: JSON.stringify({ operations, validateOnly }),
+  });
+  if (!res.ok) throw await readError(res);
+  return res.json();
+}
+
+/**
  * Cria uma ação de conversão do tipo "importar cliques" (compra) e devolve o
  * resourceName dela. primaryForGoal = false deixa a ação só como observação:
  * aparece em "Todas as conversões" e não entra nos lances.
