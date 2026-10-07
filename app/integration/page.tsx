@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Copy, Check, Code, ArrowLeft, Zap, Calendar,
-  Globe, Store, AlertCircle, Sun, Moon, Link2, MousePointerClick,
-  Tv2, Key, Eye, EyeOff, Save, CheckCircle2, 
+  Globe, Store, AlertCircle, Sun, Moon, Link2, Tv2, Key, Eye, EyeOff, Save, CheckCircle2, 
   LayoutGrid, Target, Package, Settings, LogOut, Sparkles, Send, Route
 } from 'lucide-react';
 import Link from 'next/link';
@@ -43,7 +42,6 @@ export default function IntegrationPage() {
 
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [copiedPostback, setCopiedPostback] = useState<string | null>(null);
 
   // VTurb token
   const [vturbToken, setVturbToken] = useState('');
@@ -53,12 +51,9 @@ export default function IntegrationPage() {
   const [vturbTokenVisible, setVturbTokenVisible] = useState(false);
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'google' | 'conversion' | 'pixel' | 'vturb' | 'url' | 'telegram'>('google');
+  const [activeTab, setActiveTab] = useState<'google' | 'vturb' | 'telegram'>('google');
 
-  // Conversão Automática: tracker externo e plataforma de venda selecionados
 
-  // Aba de instalação do pixel
-  const [installTab, setInstallTab] = useState<'html' | 'hfcm'>('html');
 
 
 
@@ -724,12 +719,6 @@ ${commonFunctions}`;
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const copyPostback = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedPostback(key);
-    setTimeout(() => setCopiedPostback(null), 2000);
-  };
-
   // Estilos
   const isDark = theme === 'dark';
   const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
@@ -787,8 +776,6 @@ ${commonFunctions}`;
         <div className={`flex gap-1 p-1 rounded-xl mb-8 overflow-x-auto custom-scrollbar ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-200'}`}>
           {([
             { key: 'google', icon: <Code size={15} />, label: 'Google Ads' },
-            { key: 'conversion', icon: <Zap size={15} />, label: 'Conversão Automática' },
-            { key: 'pixel', icon: <MousePointerClick size={15} />, label: 'Pixel' },
             { key: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb' },
             { key: 'telegram', icon: <Send size={15} />, label: 'Telegram' },
           ] as const).map(tab => (
@@ -895,189 +882,6 @@ ${commonFunctions}`;
           </>
         )}
 
-        {/* ── ABA: CONVERSÃO AUTOMÁTICA ────────────────────────── */}
-        {activeTab === 'conversion' && (
-          <div className={`rounded-xl p-6 border ${bgCard}`}>
-            <div className="flex items-center gap-3 mb-1">
-              <Zap size={20} className="text-amber-400" />
-              <h2 className={`text-lg font-bold ${textHead}`}>Conversão Automática</h2>
-            </div>
-            <p className={`text-sm ${textMuted} mb-4`}>
-              O script das páginas, o construtor de URL, o postback de cada plataforma e o envio das vendas ao Google agora ficam no Rastreamento, na aba Instalação.
-            </p>
-            <Link href="/rastreamento?aba=instalacao" className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold">
-              <Route size={16} /> Abrir a Instalação do Rastreamento
-            </Link>
-          </div>
-        )}
-
-        {/* ── ABA 3: PIXEL DE RASTREAMENTO ─────────────────────── */}
-        {activeTab === 'pixel' && userId && (
-          <div className={`rounded-xl p-6 border ${bgCard}`}>
-            <div className="flex items-center gap-3 mb-1">
-              <MousePointerClick size={20} className="text-cyan-500" />
-              <h2 className={`text-lg font-bold ${textHead}`}>Pixel de Rastreamento AutoMetrics</h2>
-            </div>
-            <p className={`text-sm ${textMuted} mb-5`}>
-              Script leve para registrar <strong>cliques e checkouts</strong> automaticamente direto da sua página.
-              Funciona em paralelo com qualquer outro rastreador — <strong>sem interferência</strong>.
-            </p>
-
-            <div className={`flex flex-wrap items-center gap-2 text-xs mb-5 p-3 rounded-lg border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-              <span className="bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded font-mono">Landing Page</span>
-              <span className={textMuted}>→ pixel captura utm_id →</span>
-              <span className="bg-cyan-500/20 text-cyan-400 px-2 py-1 rounded font-mono">click registrado</span>
-              <span className={textMuted}>+</span>
-              <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded font-mono">Checkout Page</span>
-              <span className={textMuted}>→ pixel registra checkout</span>
-              <span className={textMuted}>+</span>
-              <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-mono">Postback sub5 → venda</span>
-            </div>
-
-            <div className="space-y-4">
-              {/* Script principal */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className={`text-xs font-bold uppercase ${textMuted}`}>1. Script de Rastreamento — colar na Landing Page</p>
-                  <button onClick={() => copyPostback(
-                    `<!-- AutoMetrics — Click Session Tracker -->\n<script>\n(function () {\n  var uid = '${userId}';\n  var p = new URLSearchParams(window.location.search);\n  var utmId       = p.get('utm_id') || '';\n  var gadId       = p.get('gad_campaignid') || '';\n  var utmCampaign = p.get('utm_campaign') || '';\n  var utmSource   = p.get('utm_source') || '';\n  var utmMedium   = p.get('utm_medium') || '';\n  if (!utmId && !gadId && !utmCampaign) return;\n  var base   = 'https://autometrics.cloud/api/track-click/' + uid;\n  var common = '&utm_id='         + encodeURIComponent(utmId)\n             + '&gad_campaignid=' + encodeURIComponent(gadId)\n             + '&utm_campaign='   + encodeURIComponent(utmCampaign)\n             + '&utm_source='     + encodeURIComponent(utmSource)\n             + '&utm_medium='     + encodeURIComponent(utmMedium);\n  ['subid','subid1','subid2','subid3','subid4','subid5','gclid','gbraid'].forEach(function (k) {\n    var v = p.get(k);\n    if (v) new Image().src = base + '?session_id=' + encodeURIComponent(v) + common;\n  });\n})();\n<\/script>`,
-                    'pixel_click'
-                  )}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === 'pixel_click' ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
-                    {copiedPostback === 'pixel_click' ? <Check size={12} /> : <Copy size={12} />}
-                    {copiedPostback === 'pixel_click' ? 'Copiado!' : 'Copiar Script'}
-                  </button>
-                </div>
-                <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-50 text-slate-700'}`}>
-                  {`<!-- AutoMetrics — Click Session Tracker -->
-<script>
-(function () {
-  var uid = '${userId}';
-  var p = new URLSearchParams(window.location.search);
-  var utmId       = p.get('utm_id') || '';
-  var gadId       = p.get('gad_campaignid') || '';
-  var utmCampaign = p.get('utm_campaign') || '';
-  var utmSource   = p.get('utm_source') || '';
-  var utmMedium   = p.get('utm_medium') || '';
-  if (!utmId && !gadId && !utmCampaign) return;
-  var base   = 'https://autometrics.cloud/api/track-click/' + uid;
-  var common = '&utm_id='         + encodeURIComponent(utmId)
-             + '&gad_campaignid=' + encodeURIComponent(gadId)
-             + '&utm_campaign='   + encodeURIComponent(utmCampaign)
-             + '&utm_source='     + encodeURIComponent(utmSource)
-             + '&utm_medium='     + encodeURIComponent(utmMedium);
-  ['subid','subid1','subid2','subid3','subid4','subid5','gclid','gbraid'].forEach(function (k) {
-    var v = p.get(k);
-    if (v) new Image().src = base + '?session_id=' + encodeURIComponent(v) + common;
-  });
-})();
-</script>`}
-                </pre>
-              </div>
-
-              {/* Instruções de instalação */}
-              <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}>
-                <p className={`text-xs font-bold uppercase mb-3 ${textHead}`}>Como instalar</p>
-                <div className="flex gap-2 mb-4">
-                  {(['html', 'hfcm'] as const).map(t => (
-                    <button key={t} onClick={() => setInstallTab(t)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${installTab === t ? 'bg-indigo-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'}`}`}>
-                      {t === 'html' ? 'HTML puro' : 'HFCM / Elementor'}
-                    </button>
-                  ))}
-                </div>
-
-                {installTab === 'html' && (
-                  <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
-                    <li>Abra o arquivo HTML da sua landing page.</li>
-                    <li>Localize a tag <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>&lt;/body&gt;</code> no final do arquivo.</li>
-                    <li>Cole o script <strong>imediatamente antes</strong> do <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>&lt;/body&gt;</code>.</li>
-                    <li>Salve e publique o arquivo.</li>
-                  </ol>
-                )}
-
-                {installTab === 'hfcm' && (
-                  <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
-                    <li>No painel do WordPress, instale o plugin <strong>HFCM — Header Footer Code Manager</strong> (se ainda não tiver).</li>
-                    <li>Vá em <strong>HFCM &gt; Add new snippet</strong>.</li>
-                    <li>Preencha:
-                      <ul className={`ml-4 mt-1 space-y-1 list-disc list-inside ${textMuted}`}>
-                        <li><strong>Snippet name:</strong> AutoMetrics Tracker</li>
-                        <li><strong>Location:</strong> <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>Before &lt;/body&gt; tag</code></li>
-                        <li><strong>Site display:</strong> Specific Pages → selecione sua landing page</li>
-                      </ul>
-                    </li>
-                    <li>Cole o script no campo de código acima.</li>
-                    <li>Marque <strong>Status: Active</strong> e clique em <strong>Save</strong>.</li>
-                  </ol>
-                )}
-              </div>
-
-              <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <h3 className={`text-sm font-bold uppercase ${textHead}`}>2. Rastreio de Checkout</h3>
-                  <span className="text-[10px] bg-slate-500/10 text-slate-500 px-2 py-0.5 rounded font-bold uppercase border border-slate-500/20">Atenção</span>
-                </div>
-                
-                {/* Abordagem 1: Produtor (Dono da página) */}
-                <div className="mb-4">
-                  <p className={`text-xs font-bold ${textHead} mb-1 flex items-center gap-1.5`}><span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>Se você FOR O PRODUTOR (dono do checkout):</p>
-                  <p className={`text-xs ${textMuted} mb-2 ml-3`}>Cole este script direto na sua página de checkout, da mesma forma que fez com a Landing Page.</p>
-                  <div className="ml-3">
-                    <div className="flex items-end justify-between mb-2">
-                       <button onClick={() => copyPostback(`<!-- AutoMetrics Pixel (Checkout) -->\n<script>(function(){var uid='${userId}';var p=new URLSearchParams(window.location.search);var cid=p.get('utm_id')||p.get('gad_campaignid')||'';if(!cid)return;var tid='chk_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);navigator.sendBeacon('${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/'+uid+'?event=checkout&campaign_id='+encodeURIComponent(cid)+'&tid='+tid);})()</\script>`, 'pixel_checkout')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === 'pixel_checkout' ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
-                        {copiedPostback === 'pixel_checkout' ? <Check size={12} /> : <Copy size={12} />}
-                        {copiedPostback === 'pixel_checkout' ? 'Copiado!' : 'Copiar Pixel de Checkout'}
-                      </button>
-                    </div>
-                    <pre className={`rounded-lg p-3 text-[10px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300 border border-slate-800' : 'bg-slate-50 text-slate-700 border border-slate-200'}`}>
-                      {`<!-- AutoMetrics Pixel (Checkout) -->
-<script>
-(function(){
-  var uid = '${userId}';
-  var p   = new URLSearchParams(window.location.search);
-  var cid = p.get('utm_id') || p.get('gad_campaignid') || '';
-  if (!cid) return;
-  var tid = 'chk_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
-  navigator.sendBeacon(
-    '${typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud"}/api/postback/' + uid +
-    '?event=checkout&campaign_id=' + encodeURIComponent(cid) + '&tid=' + tid
-  );
-})();
-</script>`}
-                    </pre>
-                  </div>
-                </div>
-
-                <div className={`my-4 border-t ${borderCol}`}></div>
-
-                {/* Abordagem 2: Afiliado (Não tem acesso ao código) */}
-                <div>
-                  <p className={`text-xs font-bold text-amber-500 mb-1 flex items-center gap-1.5`}><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Se você FOR AFILIADO (não altere o código do checkout):</p>
-                  <p className={`text-xs ${textMuted} mb-3 ml-3 leading-relaxed`}>
-                    Como afiliado, você não consegue colar códigos (scripts) na página de checkout da plataforma externa (Clickbank, Buygoods, etc). 
-                    <br/><br/>
-                    <strong>A Solução:</strong> Use a aba <strong>Conversão Automática</strong>. Lá você configura o postback dentro da plataforma (ex: BuyGoods) para que as vendas cheguem direto na campanha.
-                  </p>
-                  
-                  <div className="ml-3">
-                    <button onClick={() => setActiveTab('conversion')} className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-lg transition-colors ${isDark ? 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
-                      Ir para Conversão Automática <ArrowLeft size={14} className="rotate-180" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`p-3 rounded-lg border ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
-                <p className="text-xs text-emerald-400 font-bold mb-1">✅ Por que não há conflito</p>
-                <p className={`text-xs ${textMuted}`}>
-                  O pixel usa <code className="bg-slate-800 px-1 rounded">navigator.sendBeacon</code> — assíncrono, não bloqueia a página e não modifica nenhuma variável global. Os outros scripts da página continuam funcionando normalmente em paralelo.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ── ABA 4: VTURB ─────────────────────────────────────── */}
         {activeTab === 'vturb' && userId && (
