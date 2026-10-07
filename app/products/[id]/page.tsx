@@ -20,6 +20,7 @@ import { resolveCampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal } from '@/app/components/QuickEntryModal';
 import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
 import { SegmentTab } from './SegmentTab';
+import { GoogleControlsBar } from './GoogleControlsBar';
 import { AnalysisTab } from './AnalysisTab';
 import { ChangeNotes, type ChangeArea } from './ChangeNotes';
 import { VturbTab } from './VturbTab';
@@ -803,6 +804,7 @@ export default function ProductDetailPage() {
 
       {/* ══════════════════════════ ABA GOOGLE ADS ══════════════════════════ */}
       {activeTab === 'ads' && (<>
+        <GoogleControlsBar productId={productId} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} />
 
         {/* MOBILE KPI CAROUSEL */}
         <div className="md:hidden overflow-x-auto flex gap-3 mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>

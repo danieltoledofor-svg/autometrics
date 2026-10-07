@@ -6,6 +6,8 @@ import { DimensionTable, DimColumn, DimItem } from '@/app/components/metrics/Dim
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import type { CustomColumnsApi } from '@/app/components/metrics/useCustomColumns';
 import type { CampaignDay, DayRow } from '@/lib/metrics/dimension';
+import { useGoogleControls, type GoogleControl } from './useGoogleControls';
+import { BidCell } from './BidCell';
 
 /**
  * Termos de pesquisa, públicos e locais, no período da tela.
@@ -107,6 +109,8 @@ export function SegmentTab(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [audienceType, setAudienceType] = useState('Age');
   const [termView, setTermView] = useState<TermView>('term_keyword');
+  // Ajuste de lance de cada linha, lido do Google (só para os logins que podem alterar).
+  const google = useGoogleControls(productId, kind !== 'search_terms');
 
   useEffect(() => {
     if (!productId || !startDate || !endDate) return;
@@ -210,6 +214,23 @@ export function SegmentTab(props: Props) {
   if (hasKeywords && termView === 'keyword') {
     dims.push({ key: 'kw_match', label: 'Correspondência', value: i => MATCH_PT[i.keywordMatch] || '', render: i => muted(MATCH_PT[i.keywordMatch]) });
     dims.push({ key: 'n_terms', label: 'Termos', align: 'right', value: i => i.terms.size, render: i => muted(String(i.terms.size)) });
+  }
+
+  // Coluna "Ajuste de lance", como no Google: aparelho, idade, gênero e local.
+  const BID_KIND: Record<string, string> = { Age: 'idade', Gender: 'genero', Device: 'aparelho' };
+  const controlOf = (i: DimItem): GoogleControl | undefined => {
+    if (kind === 'audiences') return google.controls.find(c => c.kind === BID_KIND[audienceType] && c.key === i.raw);
+    const name = String(i.raw || '').toLowerCase();
+    return google.controls.find(c => c.kind === 'local' && (c.label.toLowerCase() === name || c.label.toLowerCase().startsWith(`${name},`)));
+  };
+  if (kind !== 'search_terms' && google.allowed && !google.loading && !google.error && (kind === 'locations' || BID_KIND[audienceType])) {
+    dims.push({
+      key: 'bid_adjust', label: 'Ajuste de lance', value: i => controlOf(i)?.value ?? 0,
+      render: i => {
+        const control = controlOf(i);
+        return <BidCell control={control} isDark={isDark} onChange={value => google.change({ kind: control!.kind, key: control!.key, value })} />;
+      },
+    });
   }
 
   const titles: Record<SegmentKind, [string, string]> = {
