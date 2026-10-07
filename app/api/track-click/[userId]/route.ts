@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { geoReady, lookup } from '@/lib/tracking/geo';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -29,6 +30,32 @@ function deviceOf(param: string, userAgent: string): string {
     if (/iPad|Tablet/i.test(userAgent)) return 'TABLET';
     if (/Mobi|Android|iPhone/i.test(userAgent)) return 'MOBILE';
     return userAgent ? 'DESKTOP' : '';
+}
+
+const osOf = (ua: string) =>
+    /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows'
+    : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : '';
+const browserOf = (ua: string) =>
+    /Edg(e|A|iOS)?\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /OPR\/|Opera/.test(ua) ? 'Opera'
+    : /FBAN|FBAV|Instagram/.test(ua) ? 'App do Facebook ou Instagram' : /GSA\//.test(ua) ? 'App do Google'
+    : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : '';
+const BOT = /bot\b|bot\/|crawl|spider|slurp|headless|lighthouse|pagespeed|preview|monitor|facebookexternalhit|google-inspectiontool|python|curl|wget|axios|scrapy/i;
+
+/** De onde a visita veio: anúncio, busca, rede social, outro site ou direto. */
+function trafficOf(p: Record<string, string>, referrer: string, page: string): string {
+    if (p.gclid || p.gbraid || p.wbraid || p.ftgid || p.utm_id || p.gad_campaignid || p.utm_campaign || p.utm_source || p.fbclid || p.msclkid) return 'pago';
+    let host = '', own = '';
+    try { host = new URL(referrer).hostname.toLowerCase(); } catch { /* sem origem */ }
+    try { own = new URL(page).hostname.toLowerCase(); } catch { /* sem página */ }
+    if (!host || host === own) return 'direto';
+    if (/(^|\.)(google|bing|yahoo|duckduckgo|yandex|baidu|ecosia|brave)\./.test(host)) return 'organico';
+    if (/(^|\.)(facebook|instagram|youtube|tiktok|twitter|x|t|pinterest|linkedin|reddit|whatsapp)\.(com|co|net)$/.test(host)) return 'social';
+    return 'referencia';
+}
+
+function ipOf(request: Request): string {
+    const forwarded = (request.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+    return cut(forwarded || request.headers.get('x-real-ip') || '', 60).replace(/^::ffff:/i, '');
 }
 
 /** Liga gclid e sessão da FlowTracking à campanha: é o que o postback consulta. */
@@ -80,8 +107,35 @@ async function handleV2(userId: string, body: any, request: Request) {
 
     const page = cut(body.u, 500);
     const userAgent = cut(request.headers.get('user-agent'), 300);
+
+    // e: 't' = só o tempo na página e a rolagem, sem página nova.
+    if (body.e === 't') {
+        const { error: touchError } = await supabase.rpc('tracking_touch', {
+            p_user: userId, p_click: clickId, p_seconds: Math.round(Number(body.t) || 0), p_scroll: Math.round(Number(body.s) || 0),
+        });
+        // Antes de migration_rastreamento_visitas.sql a função não existe.
+        if (touchError && !/tracking_touch/.test(touchError.message || '')) console.error('[TrackClick] Erro ao gravar o tempo:', touchError.message);
+        return ok();
+    }
+
+    // Quem é o visitante: IP e local, sistema, navegador, tela, idioma e origem.
+    const ip = ipOf(request);
+    const place = ip && await geoReady().catch(() => false) ? lookup(ip) : null;
+    const visitor = {
+        ip: ip || null,
+        country_code: place?.country_code || null, country: place?.country || null, region: place?.region || null, city: place?.city || null,
+        // Sem a base pronta, o local fica para o agendador procurar depois.
+        geo_at: ip && place ? new Date().toISOString() : null,
+        os: osOf(userAgent) || null, browser: browserOf(userAgent) || null,
+        screen: /^\d{2,5}x\d{2,5}$/.test(String(body.s || '')) ? String(body.s) : null,
+        language: cut(body.l, 20) || null,
+        traffic: trafficOf(p, cut(body.r, 500), page),
+        is_bot: !userAgent || BOT.test(userAgent),
+        last_seen_at: new Date().toISOString(),
+    };
+
     // O clique é gravado uma vez: a página seguinte não troca os dados da entrada.
-    const { error } = await supabase.from('tracking_clicks').upsert({
+    const base = {
         user_id: userId, click_id: clickId, product_id: productId, campaign_id: campaignId || null,
         gclid: gclid || null, gbraid: p.gbraid || null, wbraid: p.wbraid || null, ft_sid: p.ft_sid || null,
         utm_source: utmSource || null, utm_medium: utmMedium || null, utm_campaign: utmCampaign || null,
@@ -94,7 +148,11 @@ async function handleV2(userId: string, body: any, request: Request) {
         device: deviceOf(pick('device'), userAgent) || null,
         landing_url: (body.e ? '' : page) || null, referrer: cut(body.r, 500) || null,
         user_agent: userAgent || null, params: p,
-    }, { onConflict: 'user_id, click_id', ignoreDuplicates: true });
+    };
+    const options = { onConflict: 'user_id, click_id', ignoreDuplicates: true };
+    let { error } = await supabase.from('tracking_clicks').upsert({ ...base, ...visitor }, options);
+    // Antes de migration_rastreamento_visitas.sql as colunas novas não existem.
+    if (error && /column|schema cache/i.test(error.message || '')) ({ error } = await supabase.from('tracking_clicks').upsert(base, options));
     // Antes de migration_rastreamento.sql as tabelas não existem: o postback segue pelo click_sessions.
     if (error) { console.error('[TrackClick] Erro ao gravar clique:', error.message); return ok(); }
 
@@ -112,6 +170,8 @@ async function handleV2(userId: string, body: any, request: Request) {
             pvError = body.e === 'out' ? null : (await supabase.from('tracking_pageviews').insert(row)).error;
         }
         if (pvError) console.error('[TrackClick] Erro ao gravar página:', pvError.message);
+        // Página seguinte: marca que a visita continua (antes da migração das visitas a função não existe).
+        if (body.e !== 'out') await supabase.rpc('tracking_touch', { p_user: userId, p_click: clickId, p_seconds: 0, p_scroll: 0 }).then(() => null, () => null);
     }
     return ok();
 }

@@ -8,6 +8,7 @@ import { runDueAnalyses } from '@/lib/analysis/run';
 import { runDueVturb } from '@/lib/vturb/sync';
 import { runAlerts } from '@/lib/alerts/run';
 import { runConversionUploads } from '@/lib/googleAds/conversionUpload';
+import { fillPendingGeo } from '@/lib/tracking/lists';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -64,6 +65,9 @@ async function runCron() {
     report.elapsed_ms = Date.now() - started;
     return report;
   }
+
+  // Local das visitas que chegaram antes de a base de localização estar pronta.
+  report.geo = await fillPendingGeo(db).catch((e: any) => ({ error: e.message }));
 
   // Vendas para o Google (Etapa 3 do rastreamento): antes da coleta, para a
   // venda não esperar a fila das contas. Poucas chamadas, com 15s de teto.

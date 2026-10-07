@@ -7,12 +7,24 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { Logo } from '@/app/components/Logo';
+import { styles } from './shared';
+import { VisitsTab } from './VisitsTab';
+import { EventsTab } from './EventsTab';
+import { InstallTab } from './InstallTab';
 
 /**
  * Rastreamento: do clique à venda em todas as campanhas. Os cliques e as
  * páginas vêm do script das páginas; as vendas, do postback da plataforma.
- * Os números vêm prontos de /api/tracking/overview.
+ *
+ * Abas: Visão geral (números prontos de /api/tracking/overview), Visitas,
+ * Vendas, Checkouts e Instalação (script, postbacks e envio ao Google).
  */
+
+const TABS = [
+  { key: 'overview', label: 'Visão geral' }, { key: 'visits', label: 'Visitas' }, { key: 'sales', label: 'Vendas' },
+  { key: 'checkouts', label: 'Checkouts' }, { key: 'install', label: 'Instalação' },
+] as const;
+type Tab = (typeof TABS)[number]['key'];
 
 const PERIODS = [
   { key: 'today', label: 'Hoje' }, { key: 'd3', label: '3 dias' }, { key: 'd7', label: '7 dias' }, { key: 'custom', label: 'Personalizado' },
@@ -55,6 +67,8 @@ export default function TrackingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [email, setEmail] = useState('');
+  const [userId, setUserId] = useState('');
+  const [tab, setTab] = useState<Tab>('overview');
   const request = useRef(0);
 
   useEffect(() => {
@@ -66,8 +80,12 @@ export default function TrackingPage() {
       if (VIEWS.some(v => v.key === s.view)) setView(s.view);
       if (validDay(s.from) && validDay(s.to)) { setFrom(s.from); setTo(s.to); }
     } catch { /* primeira vez */ }
+    // Link vindo da Integração: /rastreamento?aba=instalacao
+    const aba = new URLSearchParams(window.location.search).get('aba');
+    if (aba === 'instalacao') setTab('install');
+    else if (aba === 'visitas') setTab('visits');
     setReady(true);
-    supabase.auth.getSession().then(({ data: { session } }) => setEmail(session?.user?.email || ''));
+    supabase.auth.getSession().then(({ data: { session } }) => { setEmail(session?.user?.email || ''); setUserId(session?.user?.id || ''); });
   }, []);
   useEffect(() => { applyTheme(theme); }, [theme]);
 
@@ -109,6 +127,7 @@ export default function TrackingPage() {
   const td = `px-3 py-2 text-[13px] border-b ${line}`;
   const title = `text-[11px] uppercase tracking-wider font-extrabold ${muted}`;
   const tabOn = isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-900';
+  const ui = styles(isDark);
 
   const symbol = (c?: string) => (c === 'BRL' ? 'R$' : c === 'EUR' ? '€' : 'US$');
   const money = (v: number, c?: string) => `${symbol(c || data?.currency)} ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -160,20 +179,29 @@ export default function TrackingPage() {
             <h1 className={`text-2xl font-bold ${head}`}>Rastreamento</h1>
             <div className={`text-sm ${muted}`}>Do clique no anúncio até a venda, em todas as suas campanhas</div>
           </div>
-          <div className={`flex items-center gap-1 p-1 rounded-lg border ${line} flex-wrap`}>
+          {tab !== 'install' && <div className={`flex items-center gap-1 p-1 rounded-lg border ${line} flex-wrap`}>
             {PERIODS.map(p => (
               <button key={p.key} onClick={() => setPeriod(p.key)}
                 className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${period === p.key ? tabOn : `${muted} hover:text-slate-300`}`}>
                 {p.label}
               </button>
             ))}
-          </div>
+          </div>}
           <button onClick={() => { const next = isDark ? 'light' : 'dark'; setTheme(next); localStorage.setItem('autometrics_theme', next); }} className={muted}>
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
         </div>
 
-        {custom && (
+        <div className={`flex gap-1 border-b ${line} overflow-x-auto`}>
+          {TABS.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`px-3 py-2 text-sm font-bold whitespace-nowrap border-b-2 -mb-px transition-colors ${tab === t.key ? 'border-indigo-500 text-indigo-400' : `border-transparent ${muted} hover:text-indigo-400`}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {custom && tab !== 'install' && (
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-[11px] font-bold uppercase tracking-wide ${muted}`}>Período</span>
             <input type="date" value={from} max={dayStr(0)} onChange={e => setFrom(e.target.value)}
@@ -184,24 +212,29 @@ export default function TrackingPage() {
           </div>
         )}
 
-        {error && <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>}
-        {loading && !data && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} className="animate-spin" /> Carregando…</div>}
+        {tab === 'visits' && datesOk && <VisitsTab ui={ui} period={query} campaigns={data?.campaigns || []} />}
+        {tab === 'sales' && datesOk && <EventsTab ui={ui} period={query} type="sale" />}
+        {tab === 'checkouts' && datesOk && <EventsTab ui={ui} period={query} type="checkout" />}
+        {tab === 'install' && userId && <InstallTab isDark={isDark} userId={userId} />}
 
-        {data && t && (
+        {tab === 'overview' && error && <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>}
+        {tab === 'overview' && loading && !data && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} className="animate-spin" /> Carregando…</div>}
+
+        {tab === 'overview' && data && t && (
           <div className={`space-y-5 transition-opacity ${loading ? 'opacity-60' : ''}`}>
             {t.clicks === 0 && t.sales === 0 ? (
               <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>
-                Nenhum clique rastreado neste período. O script das páginas fica em{' '}
-                <Link href="/integration" className="text-indigo-400 hover:underline">Integração → Conversão Automática</Link>.
+                Nenhum clique rastreado neste período. O script das páginas fica na aba{' '}
+                <button onClick={() => setTab('install')} className="text-indigo-400 hover:underline">Instalação</button>.
               </div>
             ) : (
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                  {stat('Cliques', qty(t.clicks), t.clicks ? `${pct(t.with_gclid, t.clicks)} com gclid` : '')}
-                  {stat('Foram para o vídeo', qty(t.video), t.clicks ? `${pct(t.video, t.clicks)} dos cliques` : '')}
+                  {stat('Visitas', qty(t.clicks), t.clicks ? `${pct(t.with_gclid, t.clicks)} com gclid` : '')}
+                  {stat('Foram para o vídeo', qty(t.video), t.clicks ? `${pct(t.video, t.clicks)} das visitas` : '')}
                   {stat('Foram para o checkout', t.checkout ? qty(t.checkout) : <span className={muted}>—</span>,
-                    t.checkout ? `${pct(t.checkout, t.clicks)} dos cliques` : 'conta após trocar o script nas páginas')}
-                  {stat('Vendas', qty(t.sales), t.sales && t.clicks ? `1 a cada ${qty(Math.round(t.clicks / t.sales))} cliques` : '')}
+                    t.checkout ? `${pct(t.checkout, t.clicks)} das visitas` : 'conta após trocar o script nas páginas')}
+                  {stat('Vendas', qty(t.sales), t.sales && t.clicks ? `1 a cada ${qty(Math.round(t.clicks / t.sales))} visitas` : '')}
                   {stat('Valor vendido', values.length ? values.map(([c, v]) => money(v, c)).join(' + ') : money(0),
                     t.unlinked ? `${t.unlinked} ${t.unlinked === 1 ? 'venda' : 'vendas'} sem clique ligado` : t.sales ? 'todas ligadas ao clique' : '')}
                 </div>
@@ -220,7 +253,7 @@ export default function TrackingPage() {
                       <thead>
                         <tr>
                           <th className={`${th} text-left`}>{column}</th>
-                          <th className={`${th} text-right`}>Cliques</th>
+                          <th className={`${th} text-right`}>Visitas</th>
                           <th className={`${th} text-right`}>Vídeo</th>
                           <th className={`${th} text-right`}>Checkout</th>
                           <th className={`${th} text-right`}>Vendas</th>

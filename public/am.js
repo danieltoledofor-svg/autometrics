@@ -1,9 +1,10 @@
 /**
- * AutoMetrics — Rastreamento (v4.1). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
- * Guarda tudo o que vier na URL de entrada, lembra o clique no navegador para
- * as páginas seguintes, marca cada página visitada e a saída para o checkout
+ * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
+ * lembra o clique no navegador para as páginas seguintes, marca cada página
+ * visitada, o tempo nela, até onde a pessoa rolou e a saída para o checkout
  * (link de compra na página ou botão do player da VTurb, inclusive quando ele
  * leva ao site do produtor). Numa página sem a FlowTracking, leva o
  * identificador no link de compra da BuyGoods; com ela na página, só lê.
@@ -42,17 +43,39 @@
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
     if (saved && now - saved.t > 30 * 864e5) saved = null;       // clique vale 30 dias
+    if (saved && !saved.k && now - saved.s > 30 * 6e4) saved = null; // visita sem anúncio: 30 minutos parada e vira outra
     var cur = null;
     if (clickId) cur = saved && saved.id === clickId ? saved : null;
     else if (saved && (!hasCampaign || now - saved.s < 30 * 6e4)) cur = saved; // página seguinte do mesmo clique
-    if (!cur) {
-      if (!clickId && !hasCampaign) return;                       // visita sem nenhum dado de campanha
-      cur = { id: clickId || 'am_' + now.toString(36) + Math.random().toString(36).slice(2, 10), p: {}, t: now };
-    }
+    if (!cur) cur = { id: clickId || 'am_' + now.toString(36) + Math.random().toString(36).slice(2, 10), p: {}, t: now, k: clickId || hasCampaign ? 1 : 0 };
     function merge(p) { var added = false; for (var k in p) if (!(k in cur.p)) { cur.p[k] = p[k]; added = true; } return added; }
     function save() { try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch (e) {} }
     merge(params); cur.s = now; save();
-    send({ v: 3, c: cur.id, p: cur.p, u: location.origin + location.pathname, r: document.referrer || '' });
+    var here = location.origin + location.pathname, view = '', lang = '';
+    try { view = screen.width + 'x' + screen.height; lang = navigator.language || ''; } catch (e) {}
+    send({ v: 3, c: cur.id, p: cur.p, u: here, r: document.referrer || '', s: view, l: lang });
+
+    // ── Tempo na página e rolagem: enviados quando a pessoa sai ou troca de aba ──
+    var since = document.visibilityState === 'hidden' ? 0 : now, active = 0, deep = 0, told = 0;
+    function depth() {
+      try {
+        var d = document.documentElement, total = Math.max(d.scrollHeight, document.body ? document.body.scrollHeight : 0);
+        var pct = total > 0 ? Math.round(((window.pageYOffset || d.scrollTop || 0) + window.innerHeight) / total * 100) : 0;
+        if (pct > deep) deep = Math.min(100, pct);
+      } catch (e) {}
+    }
+    function tell() {
+      if (since) { active += Date.now() - since; since = 0; }
+      var sec = Math.round(active / 1000);
+      active -= sec * 1000;
+      if (sec > 0 || deep > told) { told = deep; send({ v: 3, c: cur.id, e: 't', u: here, t: sec, s: deep }); }
+    }
+    try {
+      window.addEventListener('scroll', depth, { passive: true });
+      depth();
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') tell(); else if (!since) since = Date.now(); });
+      window.addEventListener('pagehide', tell);
+    } catch (e) {}
 
     // ── Saída para o checkout ──────────────────────────────────────────────
     var HOSTS = ['buygoods', 'clickbank', 'digistore24', 'cartpanda', 'maxweb', 'hotmart', 'kiwify'];

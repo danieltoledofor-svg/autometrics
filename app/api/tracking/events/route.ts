@@ -1,28 +1,21 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
-import { trackingOverview } from '@/lib/tracking/overview';
 import { readPeriod } from '@/lib/tracking/period';
+import { listEvents } from '@/lib/tracking/lists';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Tela de Rastreamento: do clique à venda, em todas as campanhas do usuário.
+ * Vendas e checkouts da tela de Rastreamento, com o clique de cada um.
  *
- * GET ?period=today|d3|d7|custom[&from=AAAA-MM-DD&to=AAAA-MM-DD]
- *
- * Os dias são os de Brasília.
+ * GET ?type=sale|checkout&period=…
  */
-
 export async function GET(request: Request) {
   const q = new URL(request.url).searchParams;
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
-
   const period = readPeriod(q);
   if ('error' in period) return NextResponse.json({ error: period.error }, { status: 400 });
-  const { from, to, since, until } = period;
-
-  const overview = await trackingOverview(supabaseAdmin(), user.id, since, until);
-  if (!overview) return NextResponse.json({ ready: false, error: 'O rastreamento ainda não foi ligado nesta conta.' });
-  return NextResponse.json({ ready: true, from, to, ...overview });
+  const type = q.get('type') === 'checkout' ? 'checkout' : 'sale';
+  return NextResponse.json({ from: period.from, to: period.to, ...(await listEvents(supabaseAdmin(), user.id, period.since, period.until, type)) });
 }
