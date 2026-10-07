@@ -108,7 +108,10 @@ async function nameDirectManagers(
       if (!link) continue;
       const id = cleanCustomerId(String(link).split('/').pop() || '');
       if (!id) continue;
-      conta.login_customer_id = id;
+      // O acesso continua direto pela própria conta: o gerenciador achado aqui
+      // é só o nome do grupo. Trocar o login por um gerenciador que este e-mail
+      // não acessa faz o Google negar todas as consultas da conta.
+      if (conhecidos.has(id)) conta.login_customer_id = id;
       conta.mcc_name = conhecidos.get(id) || `Gerenciador ${id.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')}`;
     } catch {
       // Conta sem permissão para ler o vínculo: fica em "Sem gerenciador".
