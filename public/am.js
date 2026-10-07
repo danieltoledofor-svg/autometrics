@@ -1,10 +1,12 @@
 /**
- * AutoMetrics — Rastreamento (v5.1). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5.2). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
  * lembra o clique no navegador para as páginas seguintes, marca cada página
- * visitada, o tempo nela, até onde a pessoa rolou e a saída para o checkout
+ * visitada, o tempo nela, até onde a pessoa rolou e a saída para o checkout.
+ * O identificador do clique também viaja nos links entre as páginas do mesmo
+ * site (am_c), para a visita não se perder onde o navegador não guarda nada
  * (link de compra na página ou botão do player da VTurb, inclusive quando ele
  * leva ao site do produtor). Numa página sem a FlowTracking, leva o
  * identificador no link de compra da BuyGoods; com ela na página, só lê.
@@ -39,6 +41,9 @@
         || (f.indexOf('ftgid_') === 0 && f.slice(-6) === '_ftgid' && f.indexOf('{') < 0 ? f.slice(6, -6) : '');
     }
     var params = read();
+    // Identificador trazido pelo link da página anterior: não é dado de anúncio.
+    var carried = /^[\w.-]{6,200}$/.test(params.am_c || '') ? params.am_c : '';
+    delete params.am_c;
     var clickId = gclidOf(params) || params.gbraid || params.wbraid || '';
     var hasCampaign = params.utm_id || params.gad_campaignid || params.utm_campaign || params.utm_source;
     var saved = null;
@@ -47,6 +52,7 @@
     if (saved && !saved.k && now - saved.s > 30 * 6e4) saved = null; // visita sem anúncio: 30 minutos parada e vira outra
     var cur = null;
     if (clickId) cur = saved && saved.id === clickId ? saved : null;
+    else if (carried) cur = saved && saved.id === carried ? saved : { id: carried, p: {}, t: now, k: 1 };
     else if (saved && (!hasCampaign || now - saved.s < 30 * 6e4)) cur = saved; // página seguinte do mesmo clique
     if (!cur) cur = { id: clickId || 'am_' + now.toString(36) + Math.random().toString(36).slice(2, 10), p: {}, t: now, k: clickId || hasCampaign ? 1 : 0 };
     function merge(p) { var added = false; for (var k in p) if (!(k in cur.p)) { cur.p[k] = p[k]; added = true; } return added; }
@@ -114,6 +120,18 @@
       } catch (e) {}
       return u;
     }
+    // Link para outra página do mesmo site: leva o identificador do clique.
+    function carry(u) {
+      try {
+        var d = new URL(u, location.href);
+        if (d.protocol.indexOf('http') !== 0 || d.hostname !== location.hostname) return u;
+        if (d.pathname === location.pathname && d.search === location.search) return u;   // âncora na mesma página
+        if (d.searchParams.get('am_c') === cur.id) return u;
+        d.searchParams.set('am_c', cur.id);
+        return d.toString();
+      } catch (e) {}
+      return u;
+    }
     var last = '', playerClick = 0;
     document.addEventListener('click', function (ev) {
       try {
@@ -124,7 +142,7 @@
           if (name && name.indexOf('VTURB-') === 0) inPlayer = true;
         }
         if (a) {
-          var n = stamp(a.href);
+          var n = stamp(carry(a.href));
           if (n !== a.href) a.href = n;
           note(n);
         } else if (inPlayer) playerClick = Date.now();           // botão dentro do vídeo: o link fica escondido
@@ -151,7 +169,8 @@
         el.injectUrlUpdater(function (u) {
           try {
             var d = new URL(String(u || ''), location.href);
-            if (d.protocol.indexOf('http') !== 0 || d.hostname === location.hostname) return u;
+            if (d.protocol.indexOf('http') !== 0) return u;
+            if (d.hostname === location.hostname) return carry(d.href);
             cta[d.origin + d.pathname] = 1; last = d.href;
             return stamp(d.href);
           } catch (e) { return u; }
