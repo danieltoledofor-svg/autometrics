@@ -85,7 +85,7 @@ export interface PatternsOptions {
 export async function computePatterns(userId: string, opts: PatternsOptions) {
   const db = supabaseAdmin();
   const [allProducts, prefsRow] = await Promise.all([
-    fetchAll((a, b) => db.from('products').select('id, name, currency, vturb_player_id, mcc_name, google_status, google_status_reasons, status').eq('user_id', userId).range(a, b)),
+    fetchAll((a, b) => db.from('products').select('id, name, currency, vturb_player_id, mcc_name, account_name, google_status, google_status_reasons, status').eq('user_id', userId).range(a, b)),
     db.from('user_ui_prefs').select('prefs').eq('user_id', userId).maybeSingle(),
   ]);
   const groups: CampaignGroup[] = normalizeGroups(prefsRow.data?.prefs?.campaignGroups).list;
@@ -269,6 +269,8 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
 
   // ── Dados a mais, só para as perguntas à IA ──────────────────────────────
   let detail: any = null;
+  // MCC e conta de cada campanha: a IA usa para comparar por MCC e por conta.
+  const placeOf = new Map<string, { mcc: string; account: string }>(allProducts.map((p: any) => [p.id, { mcc: String(p.mcc_name || '').trim(), account: String(p.account_name || '').trim() }]));
   if (opts.detail) {
     const [people, places] = await Promise.all([
       byChunks(ids, (chunk, a, b) => ranged(db.from('audiences').select('product_id, date, audience_type, audience_name, cost, clicks, conversions').in('product_id', chunk).in('audience_type', ['Age', 'Gender'])).range(a, b)),
@@ -299,7 +301,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     detail = {
       monthly,
       campaigns: [...inWindow].filter(([, c]) => c.cost > 0).sort((a, b) => b[1].cost - a[1].cost).slice(0, 50)
-        .map(([id, c]) => ({ name: nameOf.get(id) || '', cost: round(c.cost), sales: round(c.sales), cpa: cpaOf(c.cost, c.sales), clicks: c.clicks, result: hasReal ? result(c) : null })),
+        .map(([id, c]) => ({ name: nameOf.get(id) || '', mcc: placeOf.get(id)?.mcc || '', account: placeOf.get(id)?.account || '', cost: round(c.cost), sales: round(c.sales), cpa: cpaOf(c.cost, c.sales), clicks: c.clicks, result: hasReal ? result(c) : null })),
       series: [...series].sort((a, b) => a[0].localeCompare(b[0])).slice(-36)
         .map(([when, c]) => ({ when, cost: round(c.cost), sales: round(c.sales), cpa: cpaOf(c.cost, c.sales), result: hasReal ? result(c) : null })),
       terms: group(termRowsIn, r => String(r.search_term || ''), 40),

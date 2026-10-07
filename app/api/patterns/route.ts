@@ -115,7 +115,7 @@ function dataPack(p: Extract<Patterns, { empty: false }>, tag: string) {
   const block = (title: string, lines: string[]) => `${title}:\n${lines.join('\n') || '(sem dados)'}`;
   return [
     prompt(p, tag),
-    block('CAMPANHA A CAMPANHA NO PERÍODO', (d.campaigns || []).map((c: any) => `- ${c.name}: custo ${money(c.cost)} · vendas ${c.sales} · CPA ${money(c.cpa)} · cliques ${c.clicks}${c.result !== null ? ` · resultado ${money(c.result)}` : ''}`)),
+    block('CAMPANHA A CAMPANHA NO PERÍODO (com a MCC e a conta de cada uma)', (d.campaigns || []).map((c: any) => `- ${c.name}${c.mcc ? ` · MCC ${c.mcc}` : ''}${c.account ? ` · conta ${c.account}` : ''}: custo ${money(c.cost)} · vendas ${c.sales} · CPA ${money(c.cpa)} · cliques ${c.clicks}${c.result !== null ? ` · resultado ${money(c.result)}` : ''}`)),
     block(d.monthly ? 'MÊS A MÊS' : 'DIA A DIA', (d.series || []).map((s: any) => `- ${s.when}: custo ${money(s.cost)} · vendas ${s.sales} · CPA ${money(s.cpa)}${s.result !== null ? ` · resultado ${money(s.result)}` : ''}`)),
     block('CAMPANHAS RODANDO, VIDA INTEIRA E ÚLTIMOS 7 DIAS', p.verdicts.slice(0, 40).map(v => `- ${v.name}: ${v.days} dias com gasto desde ${v.since} · custo ${money(v.cost)} · vendas ${v.sales} · CPA ${money(v.cpa)} · resultado ${money(v.result)} · últimos 7 dias: custo ${money(v.cost7)}, vendas ${v.sales7}, resultado ${money(v.result7)} · ${v.verdict} · situação hoje: ${v.status.label}`)),
     block('TERMOS DE PESQUISA COM MAIS GASTO', (d.terms || []).map(row)),
@@ -135,7 +135,7 @@ async function answer(userId: string, opts: ReturnType<typeof options>, question
   const user = `${dataPack(p, opts.tag)}\n\n${adjustments ? `${adjustments}\n\n` : ''}${notes ? `${notes}\n\n` : ''}${past ? `CONVERSA ATÉ AQUI:\n${past}\n\n` : ''}PERGUNTA DO AFILIADO:\n${question}`;
   let raw: any = null;
   for (let attempt = 0; attempt < 2; attempt++) {
-    raw = await askJson<any>({ fn: 'padroes', userId, system: ASK_SYSTEM, user: attempt ? `${user}\n\nATENÇÃO: a resposta anterior usou palavras proibidas. Reescreva em português simples.` : user, maxTokens: 2000 });
+    raw = await askJson<any>({ fn: 'padroes', userId, system: ASK_SYSTEM, user: attempt ? `${user}\n\nATENÇÃO: a resposta anterior usou palavras proibidas. Reescreva em português simples.` : user, maxTokens: 4000, textField: 'resposta' });
     if (!languageProblems(String(raw?.resposta || '')).length) break;
   }
   const text = String(raw?.resposta || '').trim().slice(0, 6000);

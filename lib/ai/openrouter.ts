@@ -58,10 +58,33 @@ export interface AiCall {
   system: string;
   user: string;
   maxTokens?: number;
+  /** Campo de texto principal: se a resposta vier cortada, aproveita o que chegou dele. */
+  textField?: string;
 }
 
-/** Chama o modelo pedindo JSON. Devolve o objeto ou lança erro (já registrado). */
+/**
+ * Chama o modelo pedindo JSON. Devolve o objeto ou lança erro (já registrado).
+ *
+ * Resposta que bate no limite de tamanho chega cortada no meio e deixa de ser
+ * JSON: nesse caso pede de novo, uma vez, com o dobro do espaço. Se ainda vier
+ * cortada e houver um campo de texto principal, devolve o que chegou dele.
+ */
 export async function askJson<T = any>(call: AiCall): Promise<T> {
+  try {
+    return await askOnce<T>(call, call.maxTokens || 2500, false);
+  } catch (e: any) {
+    if (!(e instanceof CutShort)) throw e;
+    return askOnce<T>(call, (call.maxTokens || 2500) * 2, true);
+  }
+}
+
+class CutShort extends Error {}
+/** Erro que leva junto um pedaço do que a IA devolveu, só para o registro de consumo. */
+class Detail extends Error {
+  constructor(message: string, public content: string) { super(message); }
+}
+
+async function askOnce<T>(call: AiCall, maxTokens: number, lastTry: boolean): Promise<T> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error('OPENROUTER_API_KEY não configurada');
   const model = await modelFor(call.fn);
@@ -81,7 +104,7 @@ export async function askJson<T = any>(call: AiCall): Promise<T> {
         messages: [{ role: 'system', content: call.system }, { role: 'user', content: call.user }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
-        max_tokens: call.maxTokens || 2500,
+        max_tokens: maxTokens,
         usage: { include: true },
       }),
       signal: AbortSignal.timeout(90_000),
@@ -90,12 +113,19 @@ export async function askJson<T = any>(call: AiCall): Promise<T> {
     usage = body.usage || {};
     if (!res.ok) throw new Error(body?.error?.message || `OpenRouter ${res.status}`);
     const content = String(body.choices?.[0]?.message?.content || '');
-    const parsed = parseJson(content);
-    if (!parsed) throw new Error('Resposta da IA sem JSON válido');
+    let parsed = parseJson(content);
+    if (!parsed && body.choices?.[0]?.finish_reason === 'length') {
+      if (!lastTry) throw new CutShort('Resposta da IA cortada no limite de tamanho');
+      const partial = call.textField ? partialText(content, call.textField) : '';
+      if (partial) parsed = { [call.textField!]: `${partial}…\n\n(A resposta ficou longa e foi cortada aqui. Para ver o resto, faça uma pergunta mais específica.)` };
+      else throw new Detail('A IA não conseguiu terminar a resposta. Tente de novo.', content);
+    }
+    if (!parsed) throw new Detail('A IA respondeu fora do formato esperado. Tente de novo.', content);
     await logUsage(call, model, usage, true, null);
     return parsed as T;
   } catch (e: any) {
-    await logUsage(call, model, usage, false, `${e.message} (${Date.now() - started} ms)`);
+    const seen = e instanceof Detail ? ` · ${e.content.length} caracteres, começo: ${JSON.stringify(e.content.slice(0, 160))}, fim: ${JSON.stringify(e.content.slice(-60))}` : '';
+    await logUsage(call, model, usage, false, `${e.message} (${Date.now() - started} ms)${seen}`);
     throw e;
   }
 }
@@ -108,6 +138,17 @@ function parseJson(text: string): any {
     try { return JSON.parse(clean.slice(start, end + 1)); } catch { /* segue */ }
   }
   return null;
+}
+
+/** O que chegou de um campo de texto num JSON cortado no meio. */
+function partialText(content: string, field: string): string {
+  const start = new RegExp(`"${field}"\\s*:\\s*"`).exec(content);
+  if (!start) return '';
+  let raw = content.slice(start.index + start[0].length);
+  const end = /(^|[^\\])(\\\\)*"/.exec(raw);                       // aspas que fecham, se o corte veio depois
+  if (end) raw = raw.slice(0, end.index + end[0].length - 1);
+  raw = raw.replace(/\\u[0-9a-fA-F]{0,3}$/, '').replace(/\\$/, '');     // sequência cortada no fim
+  try { return String(JSON.parse(`"${raw}"`)).trim(); } catch { return ''; }
 }
 
 async function logUsage(call: AiCall, model: string, usage: any, ok: boolean, error: string | null) {
