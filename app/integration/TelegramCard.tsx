@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Send, Sparkles, Trash2 } from 'lucide-react';
-import { describeRule } from '@/lib/alerts/catalog';
+import { Loader2, Pencil, Send, Sparkles, Trash2 } from 'lucide-react';
+import { describeRule, sanitizeRule, RULE_METRICS, RULE_WINDOWS, RULE_BASES } from '@/lib/alerts/catalog';
 import { supabase } from '@/lib/supabaseClient';
 
 /**
@@ -14,7 +14,8 @@ import { supabase } from '@/lib/supabaseClient';
  *    limites e o horário de silêncio. Cada mudança é salva sozinha.
  *
  * 3. Regras próprias: a pessoa escreve o que quer ser avisada, a IA devolve a
- *    regra em uma frase e ela decide se adiciona. Dá para ligar, desligar e apagar.
+ *    regra em uma frase e ela decide se adiciona. Também dá para montar e
+ *    editar a regra na mão, campo a campo, sem depender da IA.
  *
  * Rota: /api/telegram.
  */
@@ -43,6 +44,8 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
   const [draft, setDraft] = useState<any>(null);
   const [drafting, setDrafting] = useState(false);
   const [ruleError, setRuleError] = useState('');
+  // Formulário manual: null = fechado; index = posição da regra em edição (ou -1 para regra nova).
+  const [manual, setManual] = useState<{ index: number; rule: any } | null>(null);
 
   const load = useCallback(async () => {
     const { body } = await api();
@@ -89,6 +92,15 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
     setDrafting(false);
   };
   const addDraft = () => { setRules([...rules, draft.rule]); setDraft(null); setRuleText(''); };
+  const BLANK = { name: '', metric: 'cpa', window: 'd3', op: 'acima', basis: 'pct_venda', value: 80, contains: '', min_cost: '' };
+  const setField = (patch: any) => setManual(m => (m ? { ...m, rule: { ...m.rule, ...patch } } : m));
+  // A mesma conferência do servidor: o que não couber no formato não entra.
+  const manualRule = manual ? sanitizeRule({ ...manual.rule, value: manual.rule.value === '' ? NaN : manual.rule.value }) : null;
+  const saveManual = () => {
+    if (!manual || !manualRule) return;
+    setRules(manual.index >= 0 ? rules.map((r, k) => (k === manual.index ? manualRule : r)) : [...rules, manualRule]);
+    setManual(null);
+  };
 
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const head = isDark ? 'text-white' : 'text-slate-900';
@@ -216,6 +228,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
                   <div className={`text-sm font-bold ${r.on ? head : muted}`}>{r.name}</div>
                   <div className={`text-xs ${muted}`}>{describeRule(r)}</div>
                 </div>
+                <button onClick={() => setManual({ index: i, rule: { ...r, min_cost: r.min_cost || '' } })} aria-label={`Editar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10"><Pencil size={14} /></button>
                 <button onClick={() => setRules(rules.filter((_, k) => k !== i))} aria-label={`Apagar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"><Trash2 size={14} /></button>
               </div>
             ))}
@@ -231,6 +244,60 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
                 <span className={`text-[11px] ${muted}`}>Dá para pedir CPA, custo, vendas, receita, resultado, retorno, cliques, custo por clique e CTR; em valor fixo ou em % do valor de uma venda ou da meta de CPA.</span>
               </div>
             </div>
+
+            {!manual && (
+              <button onClick={() => setManual({ index: -1, rule: BLANK })} className={`mt-2 text-xs font-bold ${muted} hover:text-indigo-400`}>Ou montar a regra na mão</button>
+            )}
+            {manual && (() => {
+              const r = manual.rule;
+              const moneyMetric = RULE_METRICS[r.metric as keyof typeof RULE_METRICS]?.money;
+              const label = `flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide ${muted}`;
+              return (
+                <div className={`mt-3 p-3 rounded-lg border ${line}`}>
+                  <div className={`text-[11px] uppercase tracking-wider font-extrabold ${muted} mb-2`}>{manual.index >= 0 ? 'Editar a regra' : 'Regra nova, na mão'}</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <label className={label}>Nome da regra
+                      <input value={r.name} onChange={e => setField({ name: e.target.value })} maxLength={60} placeholder="CPA alto no BP" className={`${field} font-normal normal-case`} />
+                    </label>
+                    <label className={label}>Número
+                      <select value={r.metric} onChange={e => setField({ metric: e.target.value, ...(RULE_METRICS[e.target.value as keyof typeof RULE_METRICS].money ? {} : { basis: 'valor' }) })} className={`${field} font-normal normal-case`}>
+                        {Object.entries(RULE_METRICS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                    </label>
+                    <label className={label}>Período
+                      <select value={r.window} onChange={e => setField({ window: e.target.value })} className={`${field} font-normal normal-case`}>
+                        {Object.entries(RULE_WINDOWS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </label>
+                    <label className={label}>Avisar quando ficar
+                      <select value={r.op} onChange={e => setField({ op: e.target.value })} className={`${field} font-normal normal-case`}>
+                        <option value="acima">acima do limite</option>
+                        <option value="abaixo">abaixo do limite</option>
+                      </select>
+                    </label>
+                    <label className={label}>Limite
+                      <input type="number" inputMode="decimal" step="any" value={r.value} onChange={e => setField({ value: e.target.value === '' ? '' : Number(e.target.value) })} className={`${field} font-normal text-right tabular-nums`} />
+                    </label>
+                    <label className={label}>O limite é
+                      <select value={moneyMetric ? r.basis : 'valor'} disabled={!moneyMetric} onChange={e => setField({ basis: e.target.value })} className={`${field} font-normal normal-case disabled:opacity-60`}>
+                        {Object.entries(RULE_BASES).map(([k, v]) => <option key={k} value={k}>{k === 'valor' ? (r.metric === 'roi' || r.metric === 'ctr' ? 'em %' : moneyMetric ? 'valor fixo, na moeda da conta' : 'a quantidade') : v}</option>)}
+                      </select>
+                    </label>
+                    <label className={label}>Só campanhas com este trecho no nome
+                      <input value={r.contains} onChange={e => setField({ contains: e.target.value })} maxLength={60} placeholder="vazio = todas" className={`${field} font-normal normal-case`} />
+                    </label>
+                    <label className={label}>Custo mínimo no período
+                      <input type="number" inputMode="decimal" min={0} step="any" value={r.min_cost} onChange={e => setField({ min_cost: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="sem mínimo" className={`${field} font-normal text-right tabular-nums`} />
+                    </label>
+                  </div>
+                  <div className={`text-xs mt-3 ${manualRule ? head : 'text-amber-500'}`}>{manualRule ? describeRule(manualRule) : 'Preencha o limite com um número.'}</div>
+                  <div className="flex gap-2 mt-2.5">
+                    <button onClick={saveManual} disabled={!manualRule} className={solid}>{manual.index >= 0 ? 'Salvar a regra' : 'Adicionar regra'}</button>
+                    <button onClick={() => setManual(null)} className={ghost}>Cancelar</button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {ruleError && <div className="text-xs text-rose-500 mt-2">{ruleError}</div>}
             {draft && (
