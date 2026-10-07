@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { exchangeCode, emailFromIdToken, GOOGLE_ADS_SCOPE } from '@/lib/googleAds/client';
+import { exchangeCode, emailFromIdToken, GOOGLE_ADS_SCOPE, DATA_MANAGER_SCOPE } from '@/lib/googleAds/client';
 import { refreshConnectionAccounts } from '@/lib/googleAds/accounts';
 import {
   supabaseAdmin, verifyState, encryptSecret, redirectUri, appUrl, OAUTH_NONCE_COOKIE,
@@ -51,6 +51,12 @@ export async function GET(request: Request) {
       .select('id, user_id, refresh_token_enc')
       .single();
     if (dbError || !conn) throw new Error(dbError?.message || 'Falha ao salvar a conexão');
+
+    // Autorizou o envio de vendas: o que esperava por essa permissão sai no próximo ciclo, sem aguardar a nova tentativa.
+    if (tokens.scope?.includes(DATA_MANAGER_SCOPE)) {
+      await db.from('google_conversion_uploads').update({ next_try_at: null })
+        .eq('user_id', state.userId).eq('status', 'aguardando').eq('error_code', 'SEM_PERMISSAO').then(() => null, () => null);
+    }
 
     const { accounts } = await refreshConnectionAccounts(conn);
     return back({ gads_connected: email, gads_accounts: String(accounts.length) });
