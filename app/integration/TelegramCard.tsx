@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, Sparkles, Trash2 } from 'lucide-react';
+import { describeRule, MAX_RULES } from '@/lib/alerts/catalog';
 import { supabase } from '@/lib/supabaseClient';
 
 /**
@@ -11,6 +12,9 @@ import { supabase } from '@/lib/supabaseClient';
  *    link (que já leva o código), toca em Iniciar e volta para conferir.
  * 2. Lista os alertas (lib/alerts/catalog): liga e desliga cada um, ajusta os
  *    limites e o horário de silêncio. Cada mudança é salva sozinha.
+ *
+ * 3. Regras próprias: a pessoa escreve o que quer ser avisada, a IA devolve a
+ *    regra em uma frase e ela decide se adiciona. Dá para ligar, desligar e apagar.
  *
  * Rota: /api/telegram.
  */
@@ -35,6 +39,10 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
   const [saved, setSaved] = useState<'' | 'salvando' | 'salvo' | 'erro'>('');
   const [saveError, setSaveError] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [ruleText, setRuleText] = useState('');
+  const [draft, setDraft] = useState<any>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [ruleError, setRuleError] = useState('');
 
   const load = useCallback(async () => {
     const { body } = await api();
@@ -64,6 +72,23 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
     }, 700);
   };
   const setAlert = (key: string, patch: any) => change({ ...settings, alerts: { ...settings.alerts, [key]: { ...settings.alerts[key], ...patch } } });
+
+  const rules: any[] = settings?.rules || [];
+  const setRules = (next: any[]) => change({ ...settings, rules: next });
+  // A IA só propõe: a regra entra na lista quando a pessoa clica em adicionar.
+  const askRule = async () => {
+    const text = ruleText.trim();
+    if (!text || drafting) return;
+    setDrafting(true);
+    setRuleError('');
+    setDraft(null);
+    const { ok, body } = await api({ action: 'rule_draft', text });
+    if (!ok) setRuleError(body.error || 'A IA não respondeu. Tente de novo.');
+    else if (!body.rule) setRuleError(body.reason || 'Não consegui montar essa regra.');
+    else setDraft(body);
+    setDrafting(false);
+  };
+  const addDraft = () => { setRules([...rules, draft.rule]); setDraft(null); setRuleText(''); };
 
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const head = isDark ? 'text-white' : 'text-slate-900';
@@ -170,12 +195,58 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
                         ))}
                       </div>
                     )}
-                    {a.key === 'cpa' && s.on && !s.limit && <div className="text-xs text-amber-500 mt-2">Preencha o limite para este alerta começar a avisar.</div>}
                   </div>
                 </div>
               </div>
             );
           })}
+
+          {/* ── Regras próprias ── */}
+          <div className={`px-5 py-4 border-t ${line}`}>
+            <div className={`text-sm font-bold ${head}`}>Suas regras</div>
+            <div className={`text-xs ${muted} mb-3`}>
+              Escreva do seu jeito o que quer ser avisado. A IA monta a regra e mostra em uma frase; ela só entra na lista quando você adicionar.
+              Cada regra avisa uma vez por dia por campanha.
+            </div>
+
+            {rules.map((r, i) => (
+              <div key={r.id} className="flex items-start gap-3 py-2">
+                <Switch on={!!r.on} onClick={() => setRules(rules.map((x, k) => (k === i ? { ...x, on: !x.on } : x)))} label={r.name} />
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-bold ${r.on ? head : muted}`}>{r.name}</div>
+                  <div className={`text-xs ${muted}`}>{describeRule(r)}</div>
+                </div>
+                <button onClick={() => setRules(rules.filter((_, k) => k !== i))} aria-label={`Apagar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"><Trash2 size={14} /></button>
+              </div>
+            ))}
+
+            {rules.length < MAX_RULES ? (
+              <div className="mt-2">
+                <textarea value={ruleText} onChange={e => setRuleText(e.target.value)} rows={2}
+                  placeholder="Me avise quando o CPA dos últimos 3 dias passar de 70% do valor da venda nas campanhas BP"
+                  className={`${field} w-full !py-2 resize-y`} />
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <button onClick={askRule} disabled={drafting || !ruleText.trim()} className={solid}>
+                    {drafting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Montar a regra com a IA
+                  </button>
+                  <span className={`text-[11px] ${muted}`}>Dá para pedir CPA, custo, vendas, receita, resultado, retorno, cliques, custo por clique e CTR; em valor fixo ou em % do valor de uma venda ou da meta de CPA.</span>
+                </div>
+              </div>
+            ) : <div className={`text-xs ${muted}`}>Você chegou ao limite de {MAX_RULES} regras. Apague uma para criar outra.</div>}
+
+            {ruleError && <div className="text-xs text-rose-500 mt-2">{ruleError}</div>}
+            {draft && (
+              <div className={`mt-3 p-3 rounded-lg border ${isDark ? 'border-indigo-500/40 bg-indigo-500/5' : 'border-indigo-200 bg-indigo-50'}`}>
+                <div className={`text-[11px] uppercase tracking-wider font-extrabold ${muted}`}>A IA entendeu assim</div>
+                <div className={`text-sm font-bold mt-1 ${head}`}>{draft.rule.name}</div>
+                <div className={`text-xs ${muted}`}>{draft.description}</div>
+                <div className="flex gap-2 mt-2.5">
+                  <button onClick={addDraft} className={solid}>Adicionar regra</button>
+                  <button onClick={() => setDraft(null)} className={ghost}>Descartar</button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className={`px-5 py-3.5 border-t ${line}`}>
             <div className="flex items-start gap-3">

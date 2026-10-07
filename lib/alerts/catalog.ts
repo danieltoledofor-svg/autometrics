@@ -22,8 +22,8 @@ export const ALERTS: AlertInfo[] = [
     when: 'A campanha gastou hoje mais que o valor de uma venda dela e não vendeu.',
     params: [{ key: 'mult', label: 'Avisar quando o gasto do dia passar de', unit: '× o valor de uma venda', min: 0.5, max: 5, step: 0.1, value: 1 }] },
   { key: 'cpa', title: 'CPA acima do limite', on: false,
-    when: 'O CPA dos últimos 3 dias fechados passou do valor que você definir. Só funciona com o limite preenchido.',
-    params: [{ key: 'limit', label: 'Limite de CPA', unit: 'na moeda da conta', min: 1, max: 100000, step: 1, value: null }] },
+    when: 'O CPA dos últimos 3 dias fechados passou de uma parte do valor de uma venda da própria campanha. Cada campanha é comparada com a venda dela, então serve para produtos de valores diferentes.',
+    params: [{ key: 'pct', label: 'Avisar quando o CPA passar de', unit: '% do valor de uma venda', min: 10, max: 300, step: 5, value: 80 }] },
   { key: 'venda', title: 'Venda nova', on: false,
     when: 'Cada vez que entram vendas novas numa campanha, com o total do dia.', params: [] },
   { key: 'primeira_venda', title: 'Primeira venda da campanha', on: true,
@@ -48,9 +48,68 @@ export const ALERTS: AlertInfo[] = [
     params: [{ key: 'pct', label: 'Avisar quando passar de', unit: '% do limite', min: 30, max: 95, step: 5, value: 70 }] },
 ];
 
+// ── Regras criadas pelo usuário ──────────────────────────────────────────────
+// Além dos alertas fixos, cada usuário monta as próprias regras: um número da
+// campanha, num período, acima ou abaixo de um limite. O limite pode ser um
+// valor fixo ou uma parte do valor de uma venda (ou da meta de CPA) da própria
+// campanha. A IA só traduz o pedido em português para este formato.
+
+export const RULE_METRICS = {
+  cpa: { label: 'CPA', money: true }, custo: { label: 'Custo', money: true }, vendas: { label: 'Vendas', money: false },
+  receita: { label: 'Receita', money: true }, resultado: { label: 'Resultado (receita menos custo)', money: true },
+  roi: { label: 'Retorno sobre o custo', money: false }, cliques: { label: 'Cliques', money: false },
+  cpc: { label: 'Custo por clique', money: true }, ctr: { label: 'Taxa de cliques (CTR)', money: false },
+} as const;
+export const RULE_WINDOWS = { hoje: 'hoje', ontem: 'ontem', d3: 'nos últimos 3 dias fechados', d7: 'nos últimos 7 dias fechados', d30: 'nos últimos 30 dias fechados' } as const;
+export const RULE_BASES = { valor: 'valor fixo', pct_venda: '% do valor de uma venda da campanha', pct_meta: '% da meta de CPA da campanha no Google' } as const;
+
+export interface CustomRule {
+  id: string; name: string; on: boolean;
+  metric: keyof typeof RULE_METRICS; op: 'acima' | 'abaixo'; value: number;
+  basis: keyof typeof RULE_BASES; window: keyof typeof RULE_WINDOWS;
+  /** Só campanhas com este trecho no nome; vazio = todas. */
+  contains: string;
+  /** Só vale se a campanha gastou pelo menos isto no período. */
+  min_cost: number;
+}
+export const MAX_RULES = 20;
+
+/** Regra dentro do formato, ou null se não der para aproveitar. */
+export function sanitizeRule(raw: any): CustomRule | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const metric = String(raw.metric || '') as CustomRule['metric'];
+  const window = String(raw.window || '') as CustomRule['window'];
+  let basis = String(raw.basis || 'valor') as CustomRule['basis'];
+  const value = Number(raw.value);
+  if (!(metric in RULE_METRICS) || !(window in RULE_WINDOWS) || !Number.isFinite(value)) return null;
+  if (!(basis in RULE_BASES) || !RULE_METRICS[metric].money) basis = 'valor';
+  const minCost = Number(raw.min_cost);
+  return {
+    id: /^[\w-]{4,40}$/.test(String(raw.id || '')) ? String(raw.id) : `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    name: String(raw.name || '').trim().slice(0, 60) || RULE_METRICS[metric].label,
+    on: raw.on !== false, metric, op: raw.op === 'abaixo' ? 'abaixo' : 'acima',
+    value: Math.max(-1e9, Math.min(1e9, value)), basis, window,
+    contains: String(raw.contains || '').trim().slice(0, 60),
+    min_cost: Number.isFinite(minCost) && minCost > 0 ? Math.min(1e9, minCost) : 0,
+  };
+}
+
+/** A regra em uma frase, para a tela e para a mensagem. */
+export function describeRule(r: CustomRule): string {
+  const n = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  const limit = r.basis === 'pct_venda' ? `${n(r.value)}% do valor de uma venda da campanha`
+    : r.basis === 'pct_meta' ? `${n(r.value)}% da meta de CPA da campanha no Google`
+    : r.metric === 'roi' || r.metric === 'ctr' ? `${n(r.value)}%`
+    : RULE_METRICS[r.metric].money ? `${n(r.value)} na moeda da conta` : n(r.value);
+  return `${RULE_METRICS[r.metric].label} ${RULE_WINDOWS[r.window]} ${r.op === 'acima' ? 'acima de' : 'abaixo de'} ${limit}`
+    + (r.contains ? `, só nas campanhas com "${r.contains}" no nome` : ', em todas as campanhas')
+    + (r.min_cost ? `, com pelo menos ${n(r.min_cost)} de custo no período` : '') + '.';
+}
+
 export interface AlertSettings {
   quiet: { on: boolean; from: number; to: number };
   alerts: Record<AlertKey, { on: boolean; [param: string]: any }>;
+  rules: CustomRule[];
 }
 
 const clamp = (v: any, p: AlertParam) => {
@@ -73,7 +132,8 @@ export function resolveSettings(raw: any): AlertSettings {
     for (const p of a.params) alerts[a.key][p.key] = clamp(s[p.key], p);
   }
   const q = raw?.quiet || {};
-  return { quiet: { on: q.on !== false, from: hour(q.from, 23), to: hour(q.to, 7) }, alerts };
+  const rules = (Array.isArray(raw?.rules) ? raw.rules : []).map(sanitizeRule).filter((r: CustomRule | null): r is CustomRule => !!r).slice(0, MAX_RULES);
+  return { quiet: { on: q.on !== false, from: hour(q.from, 23), to: hour(q.to, 7) }, alerts, rules };
 }
 
 /** Dentro do horário de silêncio? Aceita faixa que vira o dia (23h às 7h). */

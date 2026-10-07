@@ -5,7 +5,7 @@ import { addDays, fetchAll } from '@/lib/analysis/compute';
 import { userChangeEvents } from '@/lib/analysis/changes';
 import { explainReasons, resolveProductStatus } from '@/lib/campaignStatus';
 import { spendAlert } from './spendRule';
-import { isQuiet, resolveSettings, type AlertSettings } from './catalog';
+import { isQuiet, resolveSettings, describeRule, RULE_METRICS, RULE_WINDOWS, type AlertSettings } from './catalog';
 import { isOwner } from '@/lib/ai/openrouter';
 import { usageToday, DAILY_QUOTA } from '@/lib/googleAds/sync';
 
@@ -105,7 +105,7 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
   const rows: any[] = [];
   for (let i = 0; i < ids.length; i += 150) {
     rows.push(...await fetchAll((a, b) => db.from('daily_metrics')
-      .select('product_id, date, cost, conversions, conversion_value, refunds, lost_budget:google_metrics->search_budget_lost_impression_share')
+      .select('product_id, date, cost, conversions, conversion_value, refunds, clicks, impressions, target_cpa, lost_budget:google_metrics->search_budget_lost_impression_share')
       .in('product_id', ids.slice(i, i + 150)).gte('date', addDays(day, -30)).lte('date', day).or('cost.gt.0,conversions.gt.0,refunds.gt.0').range(a, b)));
   }
 
@@ -122,6 +122,25 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
     if (r.date >= d7 && cost > 0) { c.past7 += cost; c.days7++; }
     if (r.date >= d3) { c.cost3 += cost; c.sales3 += sales; }
   }
+  // Somas por período, para as regras criadas pelo usuário.
+  type Sum = { cost: number; sales: number; revenue: number; refunds: number; clicks: number; impressions: number };
+  const windows: Record<string, (date: string) => boolean> = {
+    hoje: d => d === day, ontem: d => d === addDays(day, -1),
+    d3: d => d < day && d >= addDays(day, -3), d7: d => d < day && d >= addDays(day, -7), d30: d => d < day && d >= addDays(day, -30),
+  };
+  const sums = new Map<string, Record<string, Sum>>();
+  const targetCpa = new Map<string, { date: string; value: number }>();
+  for (const r of settings.rules.some(x => x.on) ? rows : []) {
+    if (!sums.has(r.product_id)) sums.set(r.product_id, Object.fromEntries(Object.keys(windows).map(w => [w, { cost: 0, sales: 0, revenue: 0, refunds: 0, clicks: 0, impressions: 0 }])));
+    for (const w of Object.keys(windows)) {
+      if (!windows[w](r.date)) continue;
+      const s = sums.get(r.product_id)![w];
+      s.cost += num(r.cost); s.sales += num(r.conversions); s.revenue += num(r.conversion_value); s.refunds += num(r.refunds); s.clicks += num(r.clicks); s.impressions += num(r.impressions);
+    }
+    // Meta de CPA: a mais recente que o Google informou para a campanha.
+    if (num(r.target_cpa) > 0 && (!targetCpa.has(r.product_id) || r.date > targetCpa.get(r.product_id)!.date)) targetCpa.set(r.product_id, { date: r.date, value: num(r.target_cpa) });
+  }
+
   const allSales = [...camps.values()].reduce((s, c) => s + c.sales30, 0), allRevenue = [...camps.values()].reduce((s, c) => s + c.revenue30, 0);
   const userSale = allSales > 0 ? allRevenue / allSales : 0;
 
@@ -161,8 +180,41 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
       }
     }
 
-    if (on.cpa.on && on.cpa.limit && c.sales3 > 0 && c.cost3 / c.sales3 > on.cpa.limit) {
-      await notify('cpa', id, id, `📈 <b>CPA acima do limite</b>\n${name}\n\nCPA de <b>${money(c.cost3 / c.sales3)}</b> nos últimos 3 dias (${String(c.sales3).replace('.', ',')} vendas, ${money(c.cost3)} de custo). Seu limite é ${money(on.cpa.limit)}.\n\n${link_(id)}`);
+    if (on.cpa.on && c.sales3 > 0) {
+      // O limite é uma parte do valor de uma venda da própria campanha (sem venda em 30 dias, a média do usuário).
+      const sale = c.sales30 > 0 && c.revenue30 > 0 ? c.revenue30 / c.sales30 : userSale;
+      const limit = sale * (on.cpa.pct / 100);
+      if (sale > 0 && c.cost3 / c.sales3 > limit) {
+        await notify('cpa', id, id, `📈 <b>CPA acima do limite</b>\n${name}\n\nCPA de <b>${money(c.cost3 / c.sales3)}</b> nos últimos 3 dias (${String(c.sales3).replace('.', ',')} vendas, ${money(c.cost3)} de custo). O limite é ${money(limit)}: ${on.cpa.pct}% do valor de uma venda (${money(sale)}).\n\n${link_(id)}`);
+      }
+    }
+
+    // ── Regras criadas pelo usuário: cada uma avisa uma vez por dia por campanha ──
+    for (const rule of settings.rules) {
+      if (!rule.on || (rule.contains && !String(p.name || '').toLowerCase().includes(rule.contains.toLowerCase()))) continue;
+      const s = sums.get(id)?.[rule.window];
+      if (!s || s.cost < rule.min_cost) continue;
+      const got: number | null =
+        rule.metric === 'cpa' ? (s.sales > 0 ? s.cost / s.sales : null)
+        : rule.metric === 'custo' ? s.cost : rule.metric === 'vendas' ? s.sales : rule.metric === 'receita' ? s.revenue
+        : rule.metric === 'resultado' ? s.revenue - s.refunds - s.cost
+        : rule.metric === 'roi' ? (s.cost > 0 ? ((s.revenue - s.refunds - s.cost) / s.cost) * 100 : null)
+        : rule.metric === 'cliques' ? s.clicks : rule.metric === 'cpc' ? (s.clicks > 0 ? s.cost / s.clicks : null)
+        : s.impressions > 0 ? (s.clicks / s.impressions) * 100 : null;
+      if (got === null) continue;
+      // Sem gasto nem venda no período não há o que comparar (evita "0 vendas" em campanha parada).
+      if (s.cost <= 0 && s.sales <= 0) continue;
+      const sale = c.sales30 > 0 && c.revenue30 > 0 ? c.revenue30 / c.sales30 : userSale;
+      const base = rule.basis === 'pct_venda' ? sale : rule.basis === 'pct_meta' ? targetCpa.get(id)?.value || 0 : null;
+      if (base !== null && base <= 0) continue;                   // sem venda de referência ou sem meta no Google
+      const limit = base === null ? rule.value : base * (rule.value / 100);
+      if (rule.op === 'acima' ? got <= limit : got >= limit) continue;
+      const pctMetric = rule.metric === 'roi' || rule.metric === 'ctr';
+      const show = (v: number) => (RULE_METRICS[rule.metric].money ? money(v) : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}${pctMetric ? '%' : ''}`);
+      const basisNote = rule.basis === 'pct_venda' ? ` (${rule.value}% do valor de uma venda, ${money(sale)})` : rule.basis === 'pct_meta' ? ` (${rule.value}% da meta de CPA, ${money(base || 0)})` : '';
+      await notify('regra', `${rule.id}:${id}`, id,
+        `🔔 <b>${escapeHtml(rule.name)}</b>\n${name}\n\n${RULE_METRICS[rule.metric].label} ${RULE_WINDOWS[rule.window]}: <b>${show(got)}</b>, ${rule.op === 'acima' ? 'acima' : 'abaixo'} do limite de ${show(limit)}${basisNote}.\nCusto no período: ${money(s.cost)} · vendas: ${String(s.sales).replace('.', ',')}.\n\n<i>${escapeHtml(describeRule(rule))}</i>\n\n${link_(id)}`,
+        { rule: rule.id, got, limit });
     }
 
     if (on.venda.on && c.sales > 0) {
