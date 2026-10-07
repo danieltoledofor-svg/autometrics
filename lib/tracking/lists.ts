@@ -160,3 +160,51 @@ export async function fillPendingGeo(db: SupabaseClient, limit = 400) {
   }
   return { filled };
 }
+
+/**
+ * Agendador: liga à campanha as visitas que chegaram sem ela.
+ *
+ * 1. A visita trouxe o número da campanha, mas a campanha ainda não estava no
+ *    Autometrics (conta ligada depois, campanha criada na hora): liga quando
+ *    ela aparece.
+ * 2. A visita trouxe só o gclid: procura a campanha no que o Google informa
+ *    de cada clique (google_ads_clicks, hoje só nas campanhas com player).
+ */
+export async function relinkVisits(db: SupabaseClient, limit = 500) {
+  const since = new Date(Date.now() - 14 * 86400000).toISOString();
+  const { data, error } = await db.from('tracking_clicks').select('id, user_id, campaign_id, gclid')
+    .is('product_id', null).gte('created_at', since).or('campaign_id.not.is.null,gclid.not.is.null').order('created_at', { ascending: false }).limit(limit);
+  if (error || !data?.length) return { linked: 0 };
+  let linked = 0;
+
+  const byCampaign = new Map<string, string[]>();
+  for (const r of data) if (r.campaign_id) { const k = `${r.user_id}|${r.campaign_id}`; if (!byCampaign.has(k)) byCampaign.set(k, []); byCampaign.get(k)!.push(r.id); }
+  const solved = new Set<string>();
+  for (const [key, ids] of byCampaign) {
+    const [userId, campaignId] = key.split('|');
+    const { data: product } = await db.from('products').select('id').eq('user_id', userId).eq('google_ads_campaign_id', campaignId).limit(1);
+    if (!product?.[0]) continue;
+    await db.from('tracking_clicks').update({ product_id: product[0].id }).in('id', ids);
+    ids.forEach(id => solved.add(id));
+    linked += ids.length;
+  }
+
+  const byGclid = data.filter(r => r.gclid && !solved.has(r.id));
+  for (let i = 0; i < byGclid.length; i += 200) {
+    const chunk = byGclid.slice(i, i + 200);
+    const { data: known, error: e } = await db.from('google_ads_clicks').select('gclid, product_id').in('gclid', chunk.map(r => r.gclid));
+    if (e || !known?.length) continue;
+    const productOf = new Map(known.map(k => [k.gclid, k.product_id]));
+    const owners = new Map<string, string>();
+    const { data: products } = await db.from('products').select('id, user_id, google_ads_campaign_id').in('id', [...new Set(known.map(k => k.product_id))]);
+    for (const p of products || []) owners.set(p.id, `${p.user_id}|${p.google_ads_campaign_id || ''}`);
+    for (const r of chunk) {
+      const productId = productOf.get(r.gclid);
+      const [owner, campaignId] = (productId && owners.get(productId) || '|').split('|');
+      if (!productId || owner !== r.user_id) continue;             // só campanha do mesmo dono
+      await db.from('tracking_clicks').update({ product_id: productId, campaign_id: r.campaign_id || campaignId || null }).eq('id', r.id);
+      linked++;
+    }
+  }
+  return { linked };
+}

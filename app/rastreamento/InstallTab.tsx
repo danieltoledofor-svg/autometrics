@@ -246,15 +246,6 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
       </div>
 
       <ConversionUploadCard isDark={isDark} />
-
-      <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
-        <p className="text-xs font-bold text-amber-400 mb-2">⚠️ Antes de ativar</p>
-        <ul className={`space-y-1 text-xs ${textMuted} list-disc list-inside`}>
-          <li>A URL do anúncio precisa ter <code className="bg-slate-800 px-1 rounded text-indigo-300">utm_id={'{campaignid}'}</code> (ou o <code className="bg-slate-800 px-1 rounded text-indigo-300">gad_campaignid</code> automático do Google).</li>
-          <li>A campanha precisa estar cadastrada no AutoMetrics com o mesmo ID do Google Ads.</li>
-          <li>Vendas de cliques anteriores à instalação do script não são atribuídas.</li>
-        </ul>
-      </div>
     </div>
   );
 }
