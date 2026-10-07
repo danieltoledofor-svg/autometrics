@@ -1,5 +1,5 @@
 import { supabaseAdmin, decryptSecret } from '@/lib/googleAds/server';
-import { search, createUploadConversionAction, uploadClickConversions, type AdsContext, type ClickConversion } from '@/lib/googleAds/client';
+import { search, createUploadConversionAction, ingestSale, type AdsContext } from '@/lib/googleAds/client';
 import { addUsage } from '@/lib/googleAds/sync';
 import { fetchAll } from '@/lib/analysis/compute';
 
@@ -15,18 +15,25 @@ import { fetchAll } from '@/lib/analysis/compute';
  * quando a MCC centraliza as conversões. Por padrão ela nasce como observação
  * (não entra nos lances), para rodar ao lado do que já envia vendas hoje sem
  * contar em dobro.
+ *
+ * A venda entra pela Data Manager API (o Google fechou o caminho antigo para
+ * integrações novas). Ela pede uma permissão própria: quem ligou a conta do
+ * Google antes disso precisa autorizar de novo, pelo cartão do envio.
  */
 
 export const DEFAULT_ACTION = 'Venda Autometrics';
 const RETRY_HOURS = 2;
 const GIVE_UP_DAYS = 5;
-const BATCH = 200;
 
 /** O Google ainda não enxerga o clique ou a ação recém-criada: tenta de novo depois. */
-const RETRY = new Set(['CLICK_NOT_FOUND', 'TOO_RECENT_CONVERSION_ACTION', 'TOO_RECENT_EVENT', 'CONVERSION_ACTION_NOT_FOUND', 'INTERNAL_ERROR', 'TRANSIENT_ERROR']);
+const RETRY = new Set(['SEM_PERMISSAO', 'SERVICE_DISABLED', 'UNAVAILABLE', 'DEADLINE_EXCEEDED', 'RESOURCE_EXHAUSTED', 'INTERNAL', 'CLICK_NOT_FOUND', 'TOO_RECENT_CONVERSION_ACTION', 'TOO_RECENT_EVENT', 'CONVERSION_ACTION_NOT_FOUND', 'INTERNAL_ERROR', 'TRANSIENT_ERROR']);
 /** A venda já está lá. */
 const ALREADY = new Set(['ORDER_ID_ALREADY_IN_USE', 'CLICK_CONVERSION_ALREADY_EXISTS', 'DUPLICATE_ORDER_ID']);
 const REASON: Record<string, string> = {
+  SEM_PERMISSAO: 'Falta autorizar o envio de vendas nesta conta do Google. Use o botão "Autorizar o envio" logo acima.',
+  SERVICE_DISABLED: 'O serviço de envio de vendas do Google ainda não está ligado no projeto do Autometrics.',
+  PERMISSION_DENIED: 'O Google negou o envio para esta conta. Confira se o e-mail autorizado tem acesso a ela.',
+  INVALID_ARGUMENT: 'O Google recusou os dados desta venda.',
   CLICK_NOT_FOUND: 'O Google ainda não encontrou este clique.',
   TOO_RECENT_CONVERSION_ACTION: 'A ação de conversão foi criada há pouco; o Google leva algumas horas para aceitar vendas nela.',
   TOO_RECENT_EVENT: 'O clique é recente demais para o Google aceitar a venda.',
@@ -185,30 +192,24 @@ export async function runConversionUploads(deadline: number) {
           report.errors.push(`${customerId}: ${e.message}`);
           continue;
         }
-        for (let i = 0; i < list.length; i += BATCH) {
-          const chunk = list.slice(i, i + BATCH);
-          const conversions: ClickConversion[] = chunk.map(s => ({
-            ...(s.click.gclid ? { gclid: s.click.gclid } : s.click.gbraid ? { gbraid: s.click.gbraid } : { wbraid: s.click.wbraid }),
-            conversionAction: target.actionResource,
-            conversionDateTime: googleTime(s.event.created_at),
-            conversionValue: Number(s.event.amount) || 0,
-            currencyCode: String(s.event.currency || 'USD').toUpperCase(),
-            ...(s.event.transaction_id ? { orderId: String(s.event.transaction_id).slice(0, 64) } : {}),
-          }));
-          let results: Awaited<ReturnType<typeof uploadClickConversions>>;
+        const where = { conversionCustomerId: target.conversionCustomerId, loginCustomerId: account.login_customer_id, actionId: target.actionResource.split('/').pop() || '' };
+        for (const s of list) {
+          if (Date.now() > deadline) break;
           try {
             usage.calls++;
-            results = await uploadClickConversions(target.ctx, conversions);
+            await ingestSale(target.ctx.refreshToken, where, {
+              ...(s.click.gclid ? { gclid: s.click.gclid } : s.click.gbraid ? { gbraid: s.click.gbraid } : { wbraid: s.click.wbraid }),
+              at: s.event.created_at, value: Number(s.event.amount) || 0, currency: String(s.event.currency || 'USD').toUpperCase(),
+              ...(s.event.transaction_id ? { orderId: String(s.event.transaction_id).slice(0, 64) } : {}),
+            });
+            await record(s, { status: 'enviada', sent_at: new Date().toISOString() });
           } catch (e: any) {
-            for (const s of chunk) await later(s, e.code || 'ENVIO', e.message || 'O Google recusou o envio.');
-            report.errors.push(`${customerId}: ${e.message}`);
-            continue;
-          }
-          for (let k = 0; k < chunk.length; k++) {
-            const err = results[k];
-            if (!err || ALREADY.has(err.code)) await record(chunk[k], { status: 'enviada', sent_at: new Date().toISOString() });
-            else if (RETRY.has(err.code)) await later(chunk[k], err.code, REASON[err.code] || err.message);
-            else await record(chunk[k], { status: 'falhou', error_code: err.code, reason: REASON[err.code] || err.message });
+            // 403 por falta da permissão nova: o token desta conta é de antes do envio de vendas.
+            const code = /scope/i.test(`${e.code} ${e.message}`) ? 'SEM_PERMISSAO' : String(e.code || 'ENVIO');
+            if (ALREADY.has(code)) await record(s, { status: 'enviada', sent_at: new Date().toISOString() });
+            else if (RETRY.has(code) || Number(e.status) >= 500) await later(s, code, REASON[code] || e.message || 'O Google não respondeu.');
+            else await record(s, { status: 'falhou', error_code: code, reason: REASON[code] ? `${REASON[code]} (${e.message})`.slice(0, 500) : e.message || 'O Google recusou o envio.' });
+            if (code !== 'SEM_PERMISSAO') report.errors.push(`${customerId}: ${e.message}`);
           }
         }
       }

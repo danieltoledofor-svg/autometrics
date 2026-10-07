@@ -48,6 +48,21 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
     setBusy(false);
   };
 
+  // Leva ao Google para autorizar o envio de vendas (permissão nova), com o mesmo e-mail da conta.
+  const authorize = async () => {
+    setBusy(true);
+    setError('');
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/google-ads/oauth/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+      body: JSON.stringify({ conversions: true }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok && body.url) window.location.href = body.url;
+    else { setError(body.error || 'Não foi possível abrir a autorização do Google.'); setBusy(false); }
+  };
+
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const head = isDark ? 'text-white' : 'text-slate-900';
   const muted = 'text-slate-500';
@@ -80,6 +95,16 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
       {state.ready === false && <p className="text-xs mt-3 text-amber-500">Falta rodar a migração do envio ao Google no Supabase.</p>}
       {error && <p className="text-xs mt-3 text-rose-500">{error}</p>}
       {busy && <p className={`text-xs mt-3 flex items-center gap-1.5 ${muted}`}><Loader2 size={12} className="animate-spin" /> Salvando…</p>}
+
+      {state.ready !== false && on && (
+        <div className={`mt-4 p-3 rounded-lg border ${state.needs_auth ? 'border-amber-500/40 bg-amber-500/5' : line}`}>
+          <p className={`text-xs ${state.needs_auth ? 'text-amber-500' : muted}`}>
+            {state.needs_auth ? 'Há vendas esperando: o Google pede uma autorização própria para receber vendas.' : 'O Google pede uma autorização própria para receber vendas.'}{' '}
+            Autorize com cada e-mail do Google que tem contas vendendo. Nada mais muda na ligação que já existe.
+          </p>
+          <button onClick={authorize} disabled={busy} className="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Autorizar o envio</button>
+        </div>
+      )}
 
       {state.ready !== false && (
         <ul className={`space-y-1 text-xs mt-4 ${muted} list-disc list-inside`}>

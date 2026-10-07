@@ -12,6 +12,8 @@
  */
 
 export const GOOGLE_ADS_SCOPE = 'https://www.googleapis.com/auth/adwords';
+/** Permissão da Data Manager API, por onde o Google recebe vendas de integrações novas. */
+export const DATA_MANAGER_SCOPE = 'https://www.googleapis.com/auth/datamanager';
 
 const API_VERSION = process.env.GOOGLE_ADS_API_VERSION || 'v25';
 const API_BASE = `https://googleads.googleapis.com/${API_VERSION}`;
@@ -36,13 +38,14 @@ function oauthClient() {
 }
 
 /** Link da tela de consentimento do Google. */
-export function buildAuthUrl(state: string, redirectUri: string): string {
+export function buildAuthUrl(state: string, redirectUri: string, withConversions = false): string {
   const { clientId } = oauthClient();
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: `${GOOGLE_ADS_SCOPE} openid email`,
+    // O envio de vendas usa outra permissão do Google, pedida só a quem liga o envio.
+    scope: `${GOOGLE_ADS_SCOPE}${withConversions ? ` ${DATA_MANAGER_SCOPE}` : ''} openid email`,
     // offline + consent: garante o refresh_token mesmo se a pessoa já
     // tiver autorizado antes.
     access_type: 'offline',
@@ -243,36 +246,52 @@ export async function createUploadConversionAction(ctx: AdsContext, name: string
   return data.results?.[0]?.resourceName || '';
 }
 
-export interface ClickConversion {
+export interface SaleEvent {
   gclid?: string; gbraid?: string; wbraid?: string;
-  conversionAction: string;
-  /** "aaaa-mm-dd hh:mm:ss+00:00" */
-  conversionDateTime: string;
-  conversionValue: number;
-  currencyCode: string;
+  /** Quando a venda aconteceu (ISO). */
+  at: string;
+  value: number;
+  currency: string;
   orderId?: string;
 }
 
 /**
- * Envia vendas ligadas a cliques. Devolve, para cada posição da lista, o erro
- * do Google (ou null quando entrou): uma venda recusada não derruba as outras.
+ * Envia uma venda ligada a um clique pela Data Manager API.
+ *
+ * O Google fechou o envio pela Google Ads API (uploadClickConversions) para
+ * integrações novas; a entrada agora é esta, com outra permissão
+ * (DATA_MANAGER_SCOPE) e sem developer token. O pedido inteiro é recusado se
+ * um evento tiver erro, por isso vai uma venda por pedido. O Google só
+ * confirma o recebimento: o processamento é feito depois, do lado dele.
  */
-export async function uploadClickConversions(ctx: AdsContext, conversions: ClickConversion[]): Promise<({ code: string; message: string } | null)[]> {
-  const res = await fetch(`${API_BASE}/customers/${ctx.customerId}:uploadClickConversions`, {
+export async function ingestSale(refreshToken: string, where: { conversionCustomerId: string; loginCustomerId?: string | null; actionId: string }, sale: SaleEvent): Promise<string> {
+  const res = await fetch('https://datamanager.googleapis.com/v1/events:ingest', {
     method: 'POST',
-    headers: await headers(ctx),
-    body: JSON.stringify({ conversions, partialFailure: true }),
+    headers: { Authorization: `Bearer ${await getAccessToken(refreshToken)}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      destinations: [{
+        operatingAccount: { accountType: 'GOOGLE_ADS', accountId: where.conversionCustomerId },
+        ...(where.loginCustomerId ? { loginAccount: { accountType: 'GOOGLE_ADS', accountId: where.loginCustomerId } } : {}),
+        productDestinationId: where.actionId,
+      }],
+      events: [{
+        eventTimestamp: new Date(sale.at).toISOString(),
+        eventSource: 'WEB',
+        adIdentifiers: sale.gclid ? { gclid: sale.gclid } : sale.gbraid ? { gbraid: sale.gbraid } : { wbraid: sale.wbraid },
+        conversionValue: sale.value,
+        currency: sale.currency,
+        ...(sale.orderId ? { transactionId: sale.orderId } : {}),
+      }],
+      encoding: 'HEX',
+    }),
   });
-  if (!res.ok) throw await readError(res);
-  const data = await res.json();
-  const out: ({ code: string; message: string } | null)[] = conversions.map(() => null);
-  for (const detail of data.partialFailureError?.details || []) {
-    for (const e of detail.errors || []) {
-      const index = e.location?.fieldPathElements?.find((f: any) => f.fieldName === 'conversions')?.index ?? 0;
-      if (index < out.length && !out[index]) out[index] = { code: String(Object.values(e.errorCode || {})[0] || ''), message: e.message || '' };
-    }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = data.error || {};
+    const reason = (err.details || []).map((d: any) => d.reason || d.errors?.[0]?.reason).find(Boolean);
+    throw new GoogleAdsError(err.message || `HTTP ${res.status}`, res.status, String(reason || err.status || ''));
   }
-  return out;
+  return String(data.requestId || '');
 }
 
 /** Remove os hífens de "123-456-7890". */

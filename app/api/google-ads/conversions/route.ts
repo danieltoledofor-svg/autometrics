@@ -19,7 +19,7 @@ async function state(userId: string) {
   if (error) return { ready: false };
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
   const { data: uploads } = await db.from('google_conversion_uploads')
-    .select('status, reason, amount, currency, conversion_at, sent_at, next_try_at, product_id')
+    .select('status, reason, error_code, amount, currency, conversion_at, sent_at, next_try_at, product_id')
     .eq('user_id', userId).gte('created_at', since).order('conversion_at', { ascending: false }).limit(1000);
   const totals = { enviada: 0, aguardando: 0, falhou: 0, ignorada: 0 } as Record<string, number>;
   for (const u of uploads || []) totals[u.status] = (totals[u.status] || 0) + 1;
@@ -34,6 +34,8 @@ async function state(userId: string) {
     action_name: settings?.action_name || DEFAULT_ACTION,
     start_at: settings?.start_at || null,
     accounts: accounts || 0,
+    // Alguma venda parou por falta da permissão de envio: a tela pede para autorizar.
+    needs_auth: (uploads || []).some(u => u.status === 'aguardando' && u.error_code === 'SEM_PERMISSAO'),
     totals,
     last: last.map(u => ({ ...u, campaign: nameOf.get(u.product_id) || '' })),
   };

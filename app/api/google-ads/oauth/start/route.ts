@@ -15,7 +15,9 @@ export async function POST(request: Request) {
 
     const nonce = newNonce();
     const base = baseFromRequest(request);
-    const url = buildAuthUrl(signState(user.id, nonce, base), redirectUri(base));
+    // { conversions: true } pede também a permissão de enviar vendas ao Google.
+    const body = await request.json().catch(() => ({}));
+    const url = buildAuthUrl(signState(user.id, nonce, base), redirectUri(base), !!body?.conversions);
     const res = NextResponse.json({ url });
     res.cookies.set(OAUTH_NONCE_COOKIE, nonce, {
       httpOnly: true, secure: base.startsWith('https'), sameSite: 'lax', path: '/api/google-ads/oauth', maxAge: 15 * 60,
