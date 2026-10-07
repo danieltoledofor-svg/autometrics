@@ -72,7 +72,6 @@ export interface CustomRule {
   /** Só vale se a campanha gastou pelo menos isto no período. */
   min_cost: number;
 }
-export const MAX_RULES = 20;
 
 /** Regra dentro do formato, ou null se não der para aproveitar. */
 export function sanitizeRule(raw: any): CustomRule | null {
@@ -132,7 +131,7 @@ export function resolveSettings(raw: any): AlertSettings {
     for (const p of a.params) alerts[a.key][p.key] = clamp(s[p.key], p);
   }
   const q = raw?.quiet || {};
-  const rules = (Array.isArray(raw?.rules) ? raw.rules : []).map(sanitizeRule).filter((r: CustomRule | null): r is CustomRule => !!r).slice(0, MAX_RULES);
+  const rules = (Array.isArray(raw?.rules) ? raw.rules : []).map(sanitizeRule).filter((r: CustomRule | null): r is CustomRule => !!r);
   return { quiet: { on: q.on !== false, from: hour(q.from, 23), to: hour(q.to, 7) }, alerts, rules };
 }
 

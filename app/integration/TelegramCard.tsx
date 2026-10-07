@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Send, Sparkles, Trash2 } from 'lucide-react';
-import { describeRule, MAX_RULES } from '@/lib/alerts/catalog';
+import { describeRule } from '@/lib/alerts/catalog';
 import { supabase } from '@/lib/supabaseClient';
 
 /**
@@ -220,19 +220,17 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
               </div>
             ))}
 
-            {rules.length < MAX_RULES ? (
-              <div className="mt-2">
-                <textarea value={ruleText} onChange={e => setRuleText(e.target.value)} rows={2}
-                  placeholder="Me avise quando o CPA dos últimos 3 dias passar de 70% do valor da venda nas campanhas BP"
-                  className={`${field} w-full !py-2 resize-y`} />
-                <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <button onClick={askRule} disabled={drafting || !ruleText.trim()} className={solid}>
-                    {drafting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Montar a regra com a IA
-                  </button>
-                  <span className={`text-[11px] ${muted}`}>Dá para pedir CPA, custo, vendas, receita, resultado, retorno, cliques, custo por clique e CTR; em valor fixo ou em % do valor de uma venda ou da meta de CPA.</span>
-                </div>
+            <div className="mt-2">
+              <textarea value={ruleText} onChange={e => setRuleText(e.target.value)} rows={2}
+                placeholder="Me avise quando o CPA dos últimos 3 dias passar de 70% do valor da venda nas campanhas BP"
+                className={`${field} w-full !py-2 resize-y`} />
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <button onClick={askRule} disabled={drafting || !ruleText.trim()} className={solid}>
+                  {drafting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Montar a regra com a IA
+                </button>
+                <span className={`text-[11px] ${muted}`}>Dá para pedir CPA, custo, vendas, receita, resultado, retorno, cliques, custo por clique e CTR; em valor fixo ou em % do valor de uma venda ou da meta de CPA.</span>
               </div>
-            ) : <div className={`text-xs ${muted}`}>Você chegou ao limite de {MAX_RULES} regras. Apague uma para criar outra.</div>}
+            </div>
 
             {ruleError && <div className="text-xs text-rose-500 mt-2">{ruleError}</div>}
             {draft && (
