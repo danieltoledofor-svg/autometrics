@@ -216,8 +216,8 @@ export function SegmentTab(props: Props) {
     dims.push({ key: 'n_terms', label: 'Termos', align: 'right', value: i => i.terms.size, render: i => muted(String(i.terms.size)) });
   }
 
-  // Coluna "Ajuste de lance", como no Google: aparelho, idade, gênero e local.
-  const BID_KIND: Record<string, string> = { Age: 'idade', Gender: 'genero', Device: 'aparelho' };
+  // Coluna "Ajuste de lance", como no Google: aparelho, idade, gênero, renda e local.
+  const BID_KIND: Record<string, string> = { Age: 'idade', Gender: 'genero', Device: 'aparelho', Income: 'renda' };
   const controlOf = (i: DimItem): GoogleControl | undefined => {
     if (kind === 'audiences') return google.controls.find(c => c.kind === BID_KIND[audienceType] && c.key === i.raw);
     const name = String(i.raw || '').toLowerCase();
@@ -228,7 +228,9 @@ export function SegmentTab(props: Props) {
       key: 'bid_adjust', label: 'Ajuste de lance', value: i => controlOf(i)?.value ?? 0,
       render: i => {
         const control = controlOf(i);
-        return <BidCell control={control} isDark={isDark} onChange={value => google.change({ kind: control!.kind, key: control!.key, value })} />;
+        // País que não está na lista de locais da campanha: criar o ajuste mudaria onde o anúncio aparece.
+        const missing = kind === 'locations' ? 'Este país não está na lista de locais da campanha no Google, então não há lance para ajustar. Incluir o país por aqui mudaria onde o anúncio aparece; inclua nos locais da campanha no Google Ads e o ajuste passa a aparecer.' : undefined;
+        return <BidCell control={control} isDark={isDark} missing={missing} onChange={value => google.change({ kind: control!.kind, key: control!.key, value })} />;
       },
     });
   }

@@ -7,6 +7,8 @@ import { DimensionTable, DimColumn, DimItem } from '@/app/components/metrics/Dim
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import type { CustomColumnsApi } from '@/app/components/metrics/useCustomColumns';
 import type { CampaignDay, DayRow } from '@/lib/metrics/dimension';
+import { useGoogleControls } from './useGoogleControls';
+import { CpaCell } from './BidCell';
 
 /**
  * Abas de grupos de anúncios, anúncios e palavras-chave.
@@ -115,6 +117,9 @@ export function GoogleAdsEntitiesTab(props: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'active' | 'with_data' | 'all'>('active');
+  // Meta de CPA de cada grupo, lida do Google (só para os logins que podem alterar).
+  const google = useGoogleControls(productId, level === 'ad_group');
+  const symbol = google.currency === 'BRL' ? 'R$' : google.currency === 'EUR' ? '€' : 'US$';
 
   useEffect(() => {
     if (!productId || !startDate || !endDate) return;
@@ -193,17 +198,23 @@ export function GoogleAdsEntitiesTab(props: Props) {
     key: 'bid', label: 'Lance / meta', align: 'right',
     render: i => {
       const d = i.details || {};
-      if (d.target_cpa) return <span className="text-xs">CPA {formatMoney(d.target_cpa * fx)}</span>;
-      if (d.target_roas) return <span className="text-xs">ROAS {(d.target_roas * 100).toFixed(0)}%</span>;
       // Lance automático da campanha: o CPC do grupo é resíduo e não vale.
       const cb = props.campaignBid;
-      if (cb?.strategy && !MANUAL_BIDDING.has(cb.strategy)) {
-        const isRoas = /ROAS|VALUE/.test(cb.strategy);
+      const inherited = cb?.strategy && !MANUAL_BIDDING.has(cb.strategy) ? (() => {
+        const isRoas = /ROAS|VALUE/.test(cb.strategy!);
         return <span className="text-xs" title="Herdado da campanha">
           {cb.target ? (isRoas ? `ROAS ${(cb.target * 100).toFixed(0)}%` : `CPA ${formatMoney(cb.target * fx)}`) : 'Automático'}
           <span className={`ml-1 ${textMuted}`}>(campanha)</span>
         </span>;
+      })() : null;
+      const control = google.allowed ? google.controls.find(c => c.kind === 'meta_cpa_grupo' && c.key === i.entity_id) : undefined;
+      if (control?.editable) {
+        return <CpaCell control={control} symbol={symbol} inherited={inherited || 'Automático'} isDark={isDark}
+          onChange={value => google.change({ kind: 'meta_cpa_grupo', key: control.key, value })} />;
       }
+      if (d.target_cpa) return <span className="text-xs">CPA {formatMoney(d.target_cpa * fx)}</span>;
+      if (d.target_roas) return <span className="text-xs">ROAS {(d.target_roas * 100).toFixed(0)}%</span>;
+      if (inherited) return inherited;
       return <span className="text-xs">{d.cpc_bid ? `CPC ${formatMoney(d.cpc_bid * fx)}` : '—'}</span>;
     },
   });

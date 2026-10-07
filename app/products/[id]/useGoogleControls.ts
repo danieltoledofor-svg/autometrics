@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /**
- * O que dá para alterar na campanha dentro do Google Ads (meta de CPA, limite
- * de CPC, orçamento e ajustes de lance), lido do Google na hora, e as funções
- * de alterar e desfazer. Rota: /api/google-ads/edit.
+ * O que dá para alterar na campanha dentro do Google Ads (meta de CPA da
+ * campanha e dos grupos, limite de CPC, orçamento e ajustes de lance), lido do
+ * Google na hora, e as funções de alterar, negativar, pausar e desfazer.
+ * Rota: /api/google-ads/edit.
  *
  * As abas da campanha dividem a mesma leitura por um minuto, para trocar de
  * aba não gastar consultas do Google à toa.
@@ -14,6 +15,9 @@ import { supabase } from '@/lib/supabaseClient';
 
 export interface GoogleControl { kind: string; key: string; label: string; value: number | null; editable: boolean; note?: string; mixed?: boolean }
 export interface ControlsState { allowed: boolean; loading: boolean; error: string; currency: string; controls: GoogleControl[]; history: any[] }
+
+/** Alterar um valor, desfazer, negativar um termo ou pausar uma palavra-chave. `suggestion_id` marca a sugestão da IA como feita. */
+export type ChangeBody = ({ kind: string; key: string; value: number } | { undo: string } | { action: 'negativa'; text: string; match: 'EXACT' | 'PHRASE' } | { action: 'pausar_palavra'; keyword: string }) & { suggestion_id?: string };
 
 const cache = new Map<string, { at: number; state: ControlsState }>();
 const listeners = new Map<string, Set<(s: ControlsState) => void>>();
@@ -53,10 +57,10 @@ export function useGoogleControls(productId: string, enabled = true) {
   }, [productId, enabled]);
 
   /** Altera um item (ou desfaz uma alteração). Devolve a mensagem de erro, ou '' se deu certo. */
-  const change = useCallback(async (body: { kind: string; key: string; value: number } | { undo: string }): Promise<string> => {
+  const change = useCallback(async (body: ChangeBody): Promise<string> => {
     const { ok, body: res } = await call(productId, body);
     const current = cache.get(productId)?.state || EMPTY;
-    if (res.controls) publish(productId, { ...current, controls: res.controls, history: res.history || current.history });
+    if (res.controls || res.history) publish(productId, { ...current, controls: res.controls || current.controls, history: res.history || current.history });
     return ok && res.success ? '' : res.error || 'O Google não confirmou a alteração.';
   }, [productId]);
 

@@ -10,8 +10,10 @@ import { useGoogleControls, adjustText, type GoogleControl } from './useGoogleCo
  * pelo Autometrics, com desfazer. Só aparece para os logins liberados.
  */
 
-const KIND: Record<string, string> = { meta_cpa: 'Meta de CPA', limite_cpc: 'Limite de CPC', orcamento: 'Orçamento diário', aparelho: 'Aparelho', idade: 'Idade', genero: 'Gênero', local: 'Local' };
+const KIND: Record<string, string> = { meta_cpa: 'Meta de CPA', meta_cpa_grupo: 'Meta de CPA do grupo', limite_cpc: 'Limite de CPC', orcamento: 'Orçamento diário', aparelho: 'Aparelho', idade: 'Idade', genero: 'Gênero', renda: 'Renda', local: 'Local' };
 const MONEY = new Set(['meta_cpa', 'limite_cpc', 'orcamento']);
+/** Feito ou desfeito, sem valor: negativa de termo e pausa de palavra-chave. */
+const DONE: Record<string, [string, string]> = { negativa: ['Negativa criada', 'Negativa removida'], pausar_palavra: ['Palavra-chave pausada', 'Palavra-chave reativada'] };
 const when = (iso: string) => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
 
 export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { isDark: boolean; bgCard: string; borderCol: string; textHead: string; textMuted: string } }) {
@@ -26,7 +28,9 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
   if (!allowed) return null;
   const symbol = currency === 'BRL' ? 'R$' : currency === 'EUR' ? '€' : 'US$';
   const money = (v: number | null) => (v === null ? 'sem valor' : `${symbol} ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-  const show = (kind: string, v: number | null) => (MONEY.has(kind) ? money(v) : adjustText(v) === '—' ? 'sem ajuste' : adjustText(v));
+  const show = (kind: string, v: number | null) => (kind === 'meta_cpa_grupo' ? (v ? money(v) : 'a da campanha') : MONEY.has(kind) ? money(v) : adjustText(v) === '—' ? 'sem ajuste' : adjustText(v));
+  const describe = (h: any) => (DONE[h.kind] ? `${DONE[h.kind][h.undo_of ? 1 : 0]}: ${h.target}`
+    : `${MONEY.has(h.kind) ? KIND[h.kind] : `${KIND[h.kind] || h.kind} ${h.target}`}: de ${show(h.kind, h.previous_value === null ? null : Number(h.previous_value))} para ${show(h.kind, Number(h.new_value))}${h.undo_of ? ' (desfazendo)' : ''}`);
   const main = controls.filter(c => MONEY.has(c.kind));
   const field = `w-28 rounded-lg border px-2 py-1.5 text-right text-sm tabular-nums outline-none focus:border-indigo-500 ${isDark ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`;
   const solid = 'bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5';
@@ -47,7 +51,7 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
     <div className={`${bgCard} border rounded-xl p-4 mb-6`}>
       <div className="flex flex-wrap items-baseline gap-x-3 mb-3">
         <span className={`text-sm font-bold ${textHead}`}>No Google agora</span>
-        <span className={`text-xs ${textMuted}`}>O que você alterar aqui muda a campanha no Google Ads. Os ajustes de lance ficam nas abas Públicos e Locais.</span>
+        <span className={`text-xs ${textMuted}`}>O que você alterar aqui muda a campanha no Google Ads. A meta de cada grupo fica na aba Grupos de Anúncios; os ajustes de lance, nas abas Públicos e Locais.</span>
       </div>
       {loading && <div className={`flex items-center gap-2 text-xs ${textMuted}`}><Loader2 size={14} className="animate-spin" /> Lendo do Google…</div>}
       {error && <div className="text-xs text-amber-500">{error}</div>}
@@ -100,10 +104,9 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
           {shown.map(h => (
             <div key={h.id} className="flex flex-wrap items-center justify-between gap-x-3 py-1.5 text-xs">
               <span className={h.ok ? textHead : textMuted}>
-                <span className={`tabular-nums ${textMuted}`}>{when(h.created_at)}</span> · {MONEY.has(h.kind) ? KIND[h.kind] : `${KIND[h.kind] || h.kind} ${h.target}`}: de {show(h.kind, h.previous_value === null ? null : Number(h.previous_value))} para {show(h.kind, Number(h.new_value))}
-                {h.undo_of ? ' (desfazendo)' : ''}{!h.ok ? ` · não aplicada: ${h.error || 'o Google recusou'}` : ''}
+                <span className={`tabular-nums ${textMuted}`}>{when(h.created_at)}</span> · {describe(h)}{!h.ok ? ` · não aplicada: ${h.error || 'o Google recusou'}` : ''}
               </span>
-              {h.ok && !h.undone_at && !h.undo_of && h.previous_value !== null
+              {h.ok && !h.undone_at && !h.undo_of && (h.previous_value !== null || h.kind === 'meta_cpa_grupo' || DONE[h.kind])
                 ? <button disabled={!!busy} onClick={() => send(h.id, { undo: h.id })} className={ghost}>{busy === h.id ? 'Desfazendo…' : 'Desfazer'}</button>
                 : h.undone_at ? <span className={textMuted}>desfeita</span> : null}
             </div>

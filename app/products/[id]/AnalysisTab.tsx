@@ -7,6 +7,7 @@ import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { ACTIONS } from '@/lib/analysis/actions';
 import { formatMoney } from '@/lib/analysis/labels';
 import { ChangeNotes } from './ChangeNotes';
+import { useGoogleControls, adjustText, type ChangeBody, type GoogleControl } from './useGoogleControls';
 
 /**
  * Aba "Análise": checklist fixo de 8 itens, sempre na mesma ordem.
@@ -77,6 +78,79 @@ function CorrectionBox({ ui, initial = '', onSave, onCancel }: { ui: Ui; initial
   );
 }
 
+type Plan = { type: 'negativa' } | { type: 'pausar' } | { type: 'ajuste'; control: GoogleControl };
+const PEOPLE_KIND: Record<string, string> = { Age: 'idade', Gender: 'genero', Income: 'renda', Device: 'aparelho' };
+
+/** O que o botão Aplicar faz em cada tipo de sugestão; null quando a alteração ainda não é feita por aqui. */
+function applyPlan(s: any, controls: GoogleControl[]): Plan | null {
+  if (s.action === 'negativa' && s.item === 'termos') return { type: 'negativa' };
+  if (s.action === 'pausar_palavra' && /^\d+~\d+$/.test(String(s.target_key))) return { type: 'pausar' };
+  let control: GoogleControl | undefined;
+  if (s.action === 'ajuste_dispositivo') control = controls.find(c => c.kind === 'aparelho' && c.key === s.target_key);
+  if (s.action === 'ajuste_publico') {
+    const [type, code] = String(s.target_key).split('|');
+    control = controls.find(c => c.kind === PEOPLE_KIND[type] && c.key === code);
+  }
+  if (s.action === 'ajuste_local') {
+    const name = String(s.target_key).toLowerCase();
+    control = controls.find(c => c.kind === 'local' && (c.label.toLowerCase() === name || c.label.toLowerCase().startsWith(`${name},`)));
+  }
+  return control?.editable ? { type: 'ajuste', control } : null;
+}
+
+/**
+ * Caixa do "Aplicar": mostra o que vai mudar no Google e só altera depois da
+ * confirmação. Negativa pede o tipo (exata ou de frase); ajuste de lance pede o percentual.
+ */
+function ApplyBox({ ui, s, plan, change, onDone, onCancel }: { ui: Ui; s: any; plan: Plan; change: (body: ChangeBody) => Promise<string>; onDone: () => Promise<void> | void; onCancel: () => void }) {
+  const { isDark, borderCol, textHead, textMuted } = ui;
+  const [match, setMatch] = useState<'EXACT' | 'PHRASE'>(/frase/i.test(String(s.text)) ? 'PHRASE' : 'EXACT');
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const term = String(s.target_key);
+  const control = plan.type === 'ajuste' ? plan.control : null;
+  const value = Number(text.replace(',', '.'));
+  const min = control?.kind === 'aparelho' ? -100 : -90;
+  const valid = !control || (text.trim() !== '' && Number.isFinite(value) && value >= min && value <= 900 && value !== control.value);
+  const body: ChangeBody = plan.type === 'negativa' ? { action: 'negativa', text: term, match, suggestion_id: s.id }
+    : plan.type === 'pausar' ? { action: 'pausar_palavra', keyword: term, suggestion_id: s.id }
+    : { kind: control!.kind, key: control!.key, value, suggestion_id: s.id };
+  const option = (m: 'EXACT' | 'PHRASE', label: string, hint: string) => (
+    <label className={`flex items-start gap-1.5 text-[12.5px] cursor-pointer ${textHead}`}>
+      <input type="radio" className="mt-0.5" checked={match === m} onChange={() => setMatch(m)} />
+      <span>{label} <span className={textMuted}>{hint}</span></span>
+    </label>
+  );
+  return (
+    <div className="mt-2 p-3 rounded-lg border border-amber-500/40 bg-amber-500/5 space-y-2">
+      <div className="text-xs font-bold text-amber-500">Confirmar a alteração no Google</div>
+      {plan.type === 'negativa' && <>
+        <div className={`text-[13px] ${textHead}`}>Negativar o termo <b>{term}</b> na campanha inteira.</div>
+        {option('EXACT', `Exata: [${term}]`, 'bloqueia só essa pesquisa, escrita assim.')}
+        {option('PHRASE', `De frase: "${term}"`, 'bloqueia toda pesquisa que tenha essas palavras nessa ordem.')}
+      </>}
+      {plan.type === 'pausar' && <div className={`text-[13px] ${textHead}`}>Pausar a palavra-chave <b>{s.target_label}</b>.</div>}
+      {control && (
+        <div className={`flex flex-wrap items-center gap-2 text-[13px] ${textHead}`}>
+          <span>{control.label}: hoje {adjustText(control.value, control.mixed) === '—' ? 'sem ajuste' : adjustText(control.value, control.mixed)}. Novo ajuste:</span>
+          <input autoFocus value={text} onChange={e => setText(e.target.value)} inputMode="decimal" placeholder="-30" aria-label="Novo ajuste em %"
+            className={`w-20 rounded border ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-white'} px-2 py-1 text-right text-[13px] tabular-nums outline-none focus:border-indigo-500`} />
+          <span className={textMuted}>% (de {min}% a +900%; negativo reduz o lance)</span>
+        </div>
+      )}
+      {error && <div className="text-xs text-rose-500">{error}</div>}
+      <div className="flex gap-2">
+        <button disabled={sending || !valid} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-50 inline-flex items-center gap-1.5"
+          onClick={async () => { setSending(true); setError(''); const problem = await change(body); if (problem) { setError(problem); setSending(false); } else await onDone(); }}>
+          {sending && <Loader2 size={12} className="animate-spin" />} {plan.type === 'negativa' ? 'Negativar no Google' : plan.type === 'pausar' ? 'Pausar no Google' : 'Alterar no Google'}
+        </button>
+        <button disabled={sending} onClick={onCancel} className={`text-[11px] px-2 py-1 ${textMuted}`}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
 export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string; ui: Ui; onOpenVturb?: () => void }) {
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
   const [data, setData] = useState<any>(null);
@@ -111,6 +185,9 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
 
   // "Não faz sentido" abre a caixa para dizer o que faria no lugar.
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  // "Aplicar" faz a alteração no Google (só para os logins que podem alterar).
+  const google = useGoogleControls(productId);
+  const [applyTo, setApplyTo] = useState<string | null>(null);
   const mark = async (id: string, status: 'ignorada' | 'nao_faz_sentido', correction = '', general = false) => {
     await api('/api/analysis', { method: 'PATCH', body: JSON.stringify({ id, status, correction, general }) });
     setReplyTo(null);
@@ -296,7 +373,9 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
 
   const Points = ({ list }: { list: any[] }) => (
     <div className="space-y-2 mt-3">
-      {list.map(s => (
+      {list.map(s => {
+        const plan = google.allowed && s.status === 'aberta' ? applyPlan(s, google.controls) : null;
+        return (
         <div key={s.id} className={`rounded-r-lg border-l-[3px] border-blue-400 ${soft} px-3 py-2`}>
           <div className="flex flex-wrap items-start gap-2">
             <div className="flex-1 min-w-[220px]">
@@ -305,17 +384,22 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
             </div>
             {s.status === 'aberta' && (
               <div className="flex gap-1.5">
+                {plan && <button onClick={() => { setReplyTo(null); setApplyTo(s.id); }} className="text-[11px] px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold">Aplicar</button>}
                 <button onClick={() => mark(s.id, 'ignorada')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-indigo-400`}>Ignorar</button>
-                <button onClick={() => setReplyTo(s.id)} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-rose-400`}>Não faz sentido</button>
+                <button onClick={() => { setApplyTo(null); setReplyTo(s.id); }} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-rose-400`}>Não faz sentido</button>
               </div>
             )}
           </div>
+          {plan && applyTo === s.id && (
+            <ApplyBox ui={ui} s={s} plan={plan} change={google.change} onCancel={() => setApplyTo(null)} onDone={async () => { setApplyTo(null); await load(); }} />
+          )}
           {replyTo === s.id && (
             <CorrectionBox ui={ui} onCancel={() => setReplyTo(null)} onSave={(text, general) => mark(s.id, 'nao_faz_sentido', text, general)} />
           )}
           <div className={`text-[11.5px] mt-1 ${textMuted}`}>⟳ {tracking(s)}</div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 
