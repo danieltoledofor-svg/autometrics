@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Check, Copy, Zap } from 'lucide-react';
 import { ConversionUploadCard } from '@/app/integration/ConversionUploadCard';
+import { UrlBuilder } from './UrlBuilder';
 
 /**
  * Aba Instalação do Rastreamento (antes "Conversão Automática", na Integração):
@@ -213,6 +214,9 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
         </p>
         <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-50 text-slate-700'}`}>{flowScript}</pre>
       </div>
+
+      {/* Endereço do anúncio, com os campos que o script lê */}
+      <UrlBuilder isDark={isDark} />
 
       {/* PASSO 2: POSTBACK */}
       <div className={`rounded-xl p-6 border ${bgCard}`}>

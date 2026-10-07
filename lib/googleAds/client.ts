@@ -122,6 +122,24 @@ export async function getAccessToken(refreshToken: string): Promise<string> {
   return data.access_token;
 }
 
+const scopeCache = new Map<string, { at: number; ok: boolean }>();
+
+/**
+ * Este acesso do Google já tem a permissão de enviar vendas? Pergunta ao
+ * próprio Google quais permissões o token carrega (guardado por 10 minutos;
+ * autorizar de novo gera outro token, então a resposta nova vem na hora).
+ */
+export async function canSendSales(refreshToken: string): Promise<boolean> {
+  const cached = scopeCache.get(refreshToken);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.ok;
+  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(await getAccessToken(refreshToken))}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new GoogleAdsError(data.error_description || 'Não foi possível conferir a autorização', res.status);
+  const ok = String(data.scope || '').split(' ').includes(DATA_MANAGER_SCOPE);
+  scopeCache.set(refreshToken, { at: Date.now(), ok });
+  return ok;
+}
+
 export interface AdsContext {
   refreshToken: string;
   /** Conta que recebe a consulta. */

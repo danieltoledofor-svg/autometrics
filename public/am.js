@@ -1,5 +1,5 @@
 /**
- * AutoMetrics — Rastreamento (v5). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5.1). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
@@ -32,10 +32,11 @@
         fetch(url, { method: 'POST', body: b, keepalive: true, mode: 'no-cors' });
       } catch (e) {}
     }
-    // gclid: o do Google ou o que vem em ftgid=ftgid_{gclid}_ftgid
+    // gclid: o do Google, o do Autometrics (amclid=am_{gclid}_am) ou o da FlowTracking (ftgid=ftgid_{gclid}_ftgid)
     function gclidOf(p) {
-      var f = p.ftgid || '';
-      return p.gclid || (f.indexOf('ftgid_') === 0 && f.slice(-6) === '_ftgid' && f.indexOf('{') < 0 ? f.slice(6, -6) : '');
+      var f = p.ftgid || '', a = p.amclid || '';
+      return p.gclid || (a.length > 6 && a.indexOf('am_') === 0 && a.slice(-3) === '_am' && a.indexOf('{') < 0 ? a.slice(3, -3) : '')
+        || (f.indexOf('ftgid_') === 0 && f.slice(-6) === '_ftgid' && f.indexOf('{') < 0 ? f.slice(6, -6) : '');
     }
     var params = read();
     var clickId = gclidOf(params) || params.gbraid || params.wbraid || '';

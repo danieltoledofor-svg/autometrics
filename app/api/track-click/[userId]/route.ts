@@ -43,7 +43,7 @@ const BOT = /bot\b|bot\/|crawl|spider|slurp|headless|lighthouse|pagespeed|previe
 
 /** De onde a visita veio: anúncio, busca, rede social, outro site ou direto. */
 function trafficOf(p: Record<string, string>, referrer: string, page: string): string {
-    if (p.gclid || p.gbraid || p.wbraid || p.ftgid || p.utm_id || p.gad_campaignid || p.utm_campaign || p.utm_source || p.fbclid || p.msclkid) return 'pago';
+    if (p.gclid || p.gbraid || p.wbraid || p.ftgid || p.amclid || p.utm_id || p.gad_campaignid || p.utm_campaign || p.utm_source || p.fbclid || p.msclkid) return 'pago';
     let host = '', own = '';
     try { host = new URL(referrer).hostname.toLowerCase(); } catch { /* sem origem */ }
     try { own = new URL(page).hostname.toLowerCase(); } catch { /* sem página */ }
@@ -94,7 +94,8 @@ async function handleV2(userId: string, body: any, request: Request) {
     const campaignId = [utmId, gadId].find(v => /^\d+$/.test(v)) || utmId || gadId;
     // O modelo da FlowTracking manda o gclid em ftgid=ftgid_{gclid}_ftgid, o
     // grupo em utm_medium e o anúncio em utm_content.
-    const gclid = p.gclid || clean(/^ftgid_(.+)_ftgid$/.exec(p.ftgid || '')?.[1]);
+    // O construtor de URL do Autometrics manda o mesmo em amclid=am_{gclid}_am.
+    const gclid = p.gclid || clean(/^am_(.+)_am$/.exec(p.amclid || '')?.[1]) || clean(/^ftgid_(.+)_ftgid$/.exec(p.ftgid || '')?.[1]);
     const digits = (v: string) => (/^\d{6,}$/.test(v) ? v : '');
     const ids = [gclid, p.gbraid, p.wbraid, p.ft_sid ? `ftsession_${p.ft_sid}` : ''].filter(Boolean);
     await saveSessions(userId, ids, { utmId, gadId, utmCampaign, utmSource, utmMedium });

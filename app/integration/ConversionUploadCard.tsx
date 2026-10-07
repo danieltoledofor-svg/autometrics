@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, UploadCloud } from 'lucide-react';
+import { Check, Loader2, UploadCloud } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
 /**
@@ -103,6 +103,19 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
             Autorize com cada e-mail do Google que tem contas vendendo. Nada mais muda na ligação que já existe.
           </p>
           <button onClick={authorize} disabled={busy} className="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50">Autorizar o envio</button>
+          {(state.emails || []).length > 0 && (
+            <div className={`mt-3 pt-3 border-t ${line} space-y-1.5`}>
+              {state.emails.map((e: any) => (
+                <div key={e.email} className="flex flex-wrap items-center gap-x-2 text-xs">
+                  {e.authorized
+                    ? <span className="inline-flex items-center gap-1 text-emerald-500 font-bold"><Check size={13} /> Autorizado</span>
+                    : <span className="text-amber-500 font-bold">Falta autorizar</span>}
+                  <span className={head}>{e.email}</span>
+                  {e.note && <span className={muted}>· {e.note}</span>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

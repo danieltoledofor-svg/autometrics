@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
+import { supabaseAdmin, getRequestUser, decryptSecret } from '@/lib/googleAds/server';
+import { canSendSales } from '@/lib/googleAds/client';
 import { DEFAULT_ACTION } from '@/lib/googleAds/conversionUpload';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,13 @@ async function state(userId: string) {
   const ids = [...new Set(last.map(u => u.product_id).filter(Boolean))];
   const { data: products } = ids.length ? await db.from('products').select('id, name, google_ads_campaign_name').in('id', ids) : { data: [] as any[] };
   const nameOf = new Map((products || []).map(p => [p.id, p.google_ads_campaign_name || p.name]));
+  // Cada e-mail do Google ligado, e se já tem a autorização de enviar vendas.
+  const { data: conns } = await db.from('google_ads_connections').select('google_email, refresh_token_enc, status').eq('user_id', userId).order('google_email');
+  const emails = await Promise.all((conns || []).map(async c => {
+    if (c.status !== 'ok') return { email: c.google_email, authorized: false, note: 'A ligação com o Google expirou. Reconecte na aba Google Ads da Integração.' };
+    try { return { email: c.google_email, authorized: await canSendSales(decryptSecret(c.refresh_token_enc)), note: '' }; }
+    catch (e: any) { return { email: c.google_email, authorized: false, note: e.message || 'Não foi possível conferir.' }; }
+  }));
   const { count: accounts } = await db.from('google_ads_accounts').select('id', { count: 'exact', head: true }).eq('user_id', userId);
   return {
     ready: true,
@@ -34,6 +42,7 @@ async function state(userId: string) {
     action_name: settings?.action_name || DEFAULT_ACTION,
     start_at: settings?.start_at || null,
     accounts: accounts || 0,
+    emails,
     // Alguma venda parou por falta da permissão de envio: a tela pede para autorizar.
     needs_auth: (uploads || []).some(u => u.status === 'aguardando' && u.error_code === 'SEM_PERMISSAO'),
     totals,
