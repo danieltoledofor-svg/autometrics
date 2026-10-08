@@ -34,9 +34,10 @@ const ago = (iso: string | null) => {
   return min < 1 ? 'lido agora' : min < 60 ? `lido há ${min} min` : `lido há ${Math.round(min / 60)} h`;
 };
 const STATE: Record<string, { text: string; tone: 'good' | 'warn' | 'bad' | 'plain' }> = {
-  bate: { text: 'bate', tone: 'good' }, a_cobrar: { text: 'a cobrar', tone: 'plain' }, cobrado_a_mais: { text: 'pago além do gasto', tone: 'warn' },
+  bate: { text: 'bate', tone: 'good' }, a_cobrar: { text: 'a cobrar', tone: 'plain' }, credito: { text: 'crédito na conta', tone: 'plain' }, credito_parado: { text: 'crédito a devolver', tone: 'warn' },
   falta_cobrar: { text: 'faltou cobrar', tone: 'warn' }, outra_moeda: { text: 'outra moeda', tone: 'plain' }, fora: { text: 'fora do Autometrics', tone: 'bad' },
 };
+const ACCOUNT_STATUS: Record<string, string> = { SUSPENDED: 'suspensa', CANCELED: 'cancelada', CANCELLED: 'cancelada', CLOSED: 'encerrada' };
 const STATUS: Record<string, string> = { on_hold: 'em espera', settled: 'fechada', declined: 'recusada', reversed: 'desfeita' };
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const monthName = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]} de ${m.slice(0, 4)}`;
@@ -76,11 +77,12 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
 
   const check = data?.check;
   const accounts: any[] = check?.accounts || [];
-  const issues = accounts.filter(a => a.state === 'cobrado_a_mais' || a.state === 'falta_cobrar' || a.state === 'fora');
+  const issues = accounts.filter(a => a.state === 'credito_parado' || a.state === 'falta_cobrar' || a.state === 'fora');
   const shown = onlyIssues ? issues : accounts;
-  const t = check?.total, gap = t ? t.google - t.compared_charged : 0;
+  const t = check?.total;
   const outside = (check?.others || []).length, toReview = issues.length + (t?.declined || 0) + outside;
-  const reviewText = t ? [issues.length && `${issues.length} conta${issues.length > 1 ? 's' : ''} com diferença`, t.declined && `${t.declined} recusada${t.declined > 1 ? 's' : ''}`, outside && `${outside} fora do Google`].filter(Boolean).join(' · ') : '';
+  const stoppedCount = accounts.filter(a => a.state === 'credito_parado').length;
+  const reviewText = t ? [stoppedCount && `${usd(t.credit_stopped)} de crédito em ${stoppedCount} conta${stoppedCount > 1 ? 's' : ''} parada${stoppedCount > 1 ? 's' : ''}`, (issues.length - stoppedCount) > 0 && `${issues.length - stoppedCount} conta${issues.length - stoppedCount > 1 ? 's' : ''} para ver`, t.declined && `${t.declined} recusada${t.declined > 1 ? 's' : ''}`, outside && `${outside} fora do Google`].filter(Boolean).join(' · ') : '';
   const c = check?.closing;
 
   return (
@@ -118,9 +120,9 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
                 <div className={`text-[11px] ${muted}`}>{t.pending ? `${usd(t.pending)} ainda em espera` : 'pelo gasto deste mês'}</div>
               </div>
               <div className={`${soft} rounded-lg p-3`}>
-                <div className={`text-xs ${muted}`}>{gap >= 0 ? (check.closed ? 'Ficou sem cobrar' : 'Ainda vai ser cobrado') : 'Cobrado além do gasto'}</div>
-                <div className={`text-xl font-bold ${head}`}>{usd(Math.abs(gap))}</div>
-                <div className={`text-[11px] ${muted}`}>{check.closed ? 'gasto menos cobrado, mês fechado' : 'vira cobrança até o dia 1º'}</div>
+                <div className={`text-xs ${muted}`}>Crédito nas contas</div>
+                <div className={`text-xl font-bold ${head}`}>{usd(t.credit)}</div>
+                <div className={`text-[11px] ${muted}`}>pago e ainda não gasto{t.to_charge > 0 ? ` · ${usd(t.to_charge)} ${check.closed ? 'gasto sem cobrança' : 'gasto a cobrar'}` : ''}</div>
               </div>
               <div className={`rounded-lg p-3 ${toReview ? tone.bad : soft}`}>
                 <div className={`text-xs ${toReview ? '' : muted}`}>Para conferir</div>
@@ -163,7 +165,7 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
         <div className={`${card} border rounded-xl p-5`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className={`text-sm font-bold ${head}`}>Conta por conta</div>
-            {issues.length > 0 && <label className={`text-xs inline-flex items-center gap-1.5 cursor-pointer ${muted}`}><input type="checkbox" checked={onlyIssues} onChange={e => setOnlyIssues(e.target.checked)} /> só as {issues.length} com diferença</label>}
+            {issues.length > 0 && <label className={`text-xs inline-flex items-center gap-1.5 cursor-pointer ${muted}`}><input type="checkbox" checked={onlyIssues} onChange={e => setOnlyIssues(e.target.checked)} /> só as {issues.length} para conferir</label>}
           </div>
           {!accounts.length ? <div className={`text-[13px] mt-3 ${muted}`}>Nenhum gasto e nenhuma cobrança nestes cartões neste mês.</div> : (
             <div className="overflow-x-auto mt-3">
@@ -180,7 +182,7 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
                         <td className="py-2 pr-3">
                           <div className={head}>{a.name || `Conta ${dashed(a.customer_id)}`}</div>
                           <div className={`text-[11px] ${a.known ? muted : 'text-rose-500'}`}>
-                            {a.known ? `${dashed(a.customer_id)}${a.mcc ? ` · ${a.mcc}` : ''}` : 'ainda não está nas suas contas do Autometrics'}
+                            {a.known ? `${dashed(a.customer_id)}${a.mcc ? ` · ${a.mcc}` : ''}${a.state === 'credito_parado' ? ` · conta ${ACCOUNT_STATUS[String(a.status).toUpperCase()] || 'parada'}` : ''}` : 'ainda não está nas suas contas do Autometrics'}
                             {a.cards.length ? ` · ${a.cards.length === 1 ? 'final' : 'finais'} ${a.cards.join(', ')}` : ''}{a.declined ? ` · ${a.declined} recusada${a.declined > 1 ? 's' : ''}` : ''}
                           </div>
                         </td>
@@ -198,8 +200,8 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
             </div>
           )}
           <div className={`text-[11px] mt-3 space-y-1 ${muted}`}>
-            <div>&quot;Bate&quot; é diferença de até 10% do gasto (ou US$ 50). &quot;A cobrar&quot; é gasto do mês em andamento que ainda vai virar cobrança. &quot;Faltou cobrar&quot; só aparece em mês fechado. Conta em outra moeda aparece sem diferença.</div>
-            <div>&quot;Pago além do gasto&quot;: em conta com pagamento antecipado (valores redondos, como US$ 20 ou US$ 500) é saldo que ficou na conta do Google e ainda vai ser gasto. Em conta de cobrança automática, vale conferir no Google Ads.</div>
+            <div>&quot;Crédito na conta&quot;: ao cadastrar o cartão o Google cobra um valor (US$ 10, 20, 40…) que fica como crédito e é gasto quando a conta roda. &quot;Crédito a devolver&quot;: a conta foi suspensa ou cancelada com crédito sobrando; o Google devolve esse valor para o cartão{t.returned > 0 ? ` (neste mês já voltaram ${usd(t.returned)})` : ''}.</div>
+            <div>&quot;Bate&quot; é diferença de até 10% do gasto (ou US$ 50). &quot;A cobrar&quot; é gasto do mês em andamento acima do que já foi pago. &quot;Faltou cobrar&quot; só aparece em mês fechado. Conta em outra moeda aparece sem diferença.</div>
             {t.added_elsewhere > 0 && <div>O cartão foi cadastrado em {t.added_elsewhere} {t.added_elsewhere === 1 ? 'conta que ainda não está' : 'contas que ainda não estão'} no Autometrics (cobrança de US$ 0, só para o Google conferir o cartão).</div>}
             {t.elsewhere_accounts > 0 && <div>{t.elsewhere_accounts} {t.elsewhere_accounts === 1 ? 'conta sua gastou' : 'contas suas gastaram'} {usd(t.elsewhere_cost)} neste mês e nunca {t.elsewhere_accounts === 1 ? 'foi cobrada' : 'foram cobradas'} nestes cartões: {t.elsewhere_accounts === 1 ? 'deve estar' : 'devem estar'} em outro cartão.</div>}
           </div>

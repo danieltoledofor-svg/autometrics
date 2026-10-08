@@ -55,7 +55,7 @@ export const ALERTS: AlertInfo[] = [
   { key: 'lr_recusada', title: 'Cartões: cobrança recusada', on: true, lootrush: true,
     when: 'O cartão recusou uma cobrança. No Google, isso costuma parar os anúncios da conta até o pagamento passar.', params: [] },
   { key: 'lr_credito', title: 'Cartões: valor devolvido', on: false, lootrush: true,
-    when: 'Uma cobrança foi desfeita ou um valor voltou para o cartão.', params: [] },
+    when: 'Uma cobrança foi desfeita ou o Google devolveu um valor para o cartão, como o crédito de uma conta suspensa ou cancelada.', params: [] },
 ];
 
 // ── Regras criadas pelo usuário ──────────────────────────────────────────────
