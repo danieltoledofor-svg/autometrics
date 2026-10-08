@@ -3,6 +3,8 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { addUsage } from '@/lib/googleAds/sync';
 import { campaignAccess, canEdit } from '@/lib/googleAds/edit';
 import { readTemplate } from '@/lib/campaignBuilder/template';
+import { suggestLocations } from '@/lib/googleAds/client';
+import { decryptSecret } from '@/lib/googleAds/server';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -13,6 +15,7 @@ export const maxDuration = 60;
  * GET                      campanhas do usuário ligadas ao Google e os modelos já lidos
  * GET ?product_id=…        lê a campanha inteira do Google e guarda como modelo
  * GET ?template=<id>       devolve um modelo guardado, sem consultar o Google
+ * GET ?local=<texto>       locais do Google que batem com o texto (país, estado, cidade)
  *
  * Só para os logins liberados (lib/googleAds/edit).
  */
@@ -27,6 +30,20 @@ export async function GET(request: Request) {
     const { data } = await db.from('campaign_templates').select('id, name, funnel, data, updated_at').eq('id', q.get('template')!).eq('user_id', user.id).maybeSingle();
     return data ? NextResponse.json({ allowed: true, template: data.data, saved: { id: data.id, funnel: data.funnel, updated_at: data.updated_at } })
       : NextResponse.json({ allowed: true, error: 'Modelo não encontrado.' }, { status: 404 });
+  }
+
+  const place = (q.get('local') || '').trim().slice(0, 80);
+  if (place) {
+    // Qualquer ligação ativa do usuário serve: a lista de locais é a mesma para todas as contas.
+    const { data: conns } = await db.from('google_ads_connections').select('refresh_token_enc').eq('user_id', user.id).eq('status', 'ok').limit(1);
+    if (!conns?.length) return NextResponse.json({ allowed: true, error: 'Nenhuma ligação ativa com o Google. Reconecte em Integração.' }, { status: 409 });
+    try {
+      const places = await suggestLocations(decryptSecret(conns[0].refresh_token_enc), place);
+      await addUsage(1).catch(() => {});
+      return NextResponse.json({ allowed: true, places: places.slice(0, 12) });
+    } catch (e: any) {
+      return NextResponse.json({ allowed: true, error: `O Google não respondeu: ${e.message}` }, { status: 502 });
+    }
   }
 
   const productId = q.get('product_id');

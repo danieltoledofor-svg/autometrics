@@ -23,8 +23,8 @@ const PARAMS: Record<Exclude<Tracker, 'nenhum'>, [string, string][]> = {
   autometrics: [...COMMON.slice(0, 5), ['matchtype', '{matchtype}'], ...COMMON.slice(5), ['amclid', 'am_{gclid}_am']],
   flowtracking: [...COMMON, ['ftgid', 'ftgid_{gclid}_ftgid']],
 };
-/** Identificadores de clique de outros rastreadores: saem quando o rastreador escolhido é outro. */
-const CLICK_IDS = ['amclid', 'ftgid', 'raclid'];
+/** Sobras de outros rastreadores, que saem quando o rastreador é escolhido aqui: os identificadores de clique e o utm_campaign escrito à mão (padrão antigo da Ratoeira). */
+const CLICK_IDS = ['amclid', 'ftgid', 'raclid', 'utm_campaign'];
 
 export function trackedUrl(page: string, tracker: Tracker): string {
   const raw = String(page || '').trim();

@@ -328,6 +328,19 @@ export async function ingestSale(refreshToken: string, where: { conversionCustom
 }
 
 /** Remove os hífens de "123-456-7890". */
+/** Locais do Google que batem com um texto ("Canada", "São Paulo"), para escolher no criador de campanhas. */
+export async function suggestLocations(refreshToken: string, text: string): Promise<{ id: string; nome: string; tipo: string }[]> {
+  const res = await fetch(`${API_BASE}/geoTargetConstants:suggest`, {
+    method: 'POST',
+    headers: await headers({ refreshToken }),
+    body: JSON.stringify({ locale: 'pt', locationNames: { names: [text] } }),
+  });
+  if (!res.ok) throw await readError(res);
+  const data = await res.json();
+  return (data.geoTargetConstantSuggestions || []).map((s: any) => s.geoTargetConstant || {}).filter((g: any) => g.id && g.status !== 'REMOVAL_PLANNED')
+    .map((g: any) => ({ id: String(g.id), nome: g.canonicalName || g.name, tipo: g.targetType || '' }));
+}
+
 export function cleanCustomerId(id: string | number): string {
   return String(id).replace(/\D/g, '');
 }

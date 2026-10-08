@@ -7,14 +7,19 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import type { Template } from '@/lib/campaignBuilder/template';
+import { draftFromTemplate, emptyDraft, type Draft } from '@/lib/campaignBuilder/draft';
+import { StepCampaign } from './StepCampaign';
 
 /**
- * Criador de campanhas de Pesquisa. Por enquanto só o primeiro passo: escolher
- * uma campanha que já existe e ler tudo dela do Google, para servir de modelo.
- * A leitura não altera nada na campanha. Só para os logins liberados.
+ * Criador de campanhas de Pesquisa. Passo 1: escolher uma campanha que já
+ * existe e ler tudo dela do Google, para servir de modelo (a leitura não altera
+ * nada), ou começar do zero. Passo 2: a configuração da campanha. Os passos
+ * seguintes ainda não existem, e nada é enviado ao Google por aqui.
+ * Só para os logins liberados.
  */
 
 const STEPS = ['Modelo', 'Campanha', 'Anúncio', 'Onde subir', 'Conferir'];
+const SAVED = 'autometrics_criador_rascunho';
 const MATCH: Record<string, string> = { EXACT: 'exata', PHRASE: 'frase', BROAD: 'ampla' };
 const STRATEGY: Record<string, string> = {
   MAXIMIZE_CONVERSIONS: 'Maximizar conversões', TARGET_CPA: 'CPA desejado', MAXIMIZE_CONVERSION_VALUE: 'Maximizar valor das conversões',
@@ -41,6 +46,20 @@ export default function CampaignBuilderPage() {
   const [reading, setReading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ template: Template; currency?: string; migration?: boolean } | null>(null);
+  const [step, setStep] = useState(0);
+  const [draft, setDraftState] = useState<Draft | null>(null);
+  const [currency, setCurrency] = useState('USD');
+
+  // O rascunho fica guardado neste navegador, para não se perder ao fechar a aba.
+  useEffect(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem(SAVED) || 'null');
+      if (s?.draft?.grupos) { setDraftState(s.draft); setCurrency(s.currency || 'USD'); }
+    } catch { /* rascunho ilegível: começa sem */ }
+  }, []);
+  const keep = (d: Draft | null, cur = currency) => { try { if (d) localStorage.setItem(SAVED, JSON.stringify({ draft: d, currency: cur })); else localStorage.removeItem(SAVED); } catch { /* sem armazenamento */ } };
+  const setDraft = (fn: (d: Draft) => Draft) => setDraftState(d => { const next = fn(d || emptyDraft()); keep(next); return next; });
+  const start = (d: Draft, cur: string) => { setDraftState(d); setCurrency(cur); keep(d, cur); setStep(1); window.scrollTo({ top: 0 }); };
 
   useEffect(() => {
     const t = localStorage.getItem('autometrics_theme') as 'dark' | 'light' | null;
@@ -74,7 +93,9 @@ export default function CampaignBuilderPage() {
 
   if (!authChecked) return null;
   const t = result?.template;
-  const symbol = result?.currency === 'BRL' ? 'R$' : result?.currency === 'EUR' ? '€' : 'US$';
+  const symbolOf = (c?: string) => (c === 'BRL' ? 'R$' : c === 'EUR' ? '€' : 'US$');
+  const symbol = symbolOf(result?.currency);
+  const css = { isDark, card, head, muted, line, soft, label };
   const money = (v: number | null) => (v === null ? 'sem valor' : `${symbol} ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
   const Field = ({ name, children }: { name: string; children: React.ReactNode }) => (
     <div className={`${soft} rounded-lg px-3 py-2`}><div className={`text-xs ${muted}`}>{name}</div><div className={`text-[13px] ${head}`}>{children}</div></div>
@@ -100,22 +121,43 @@ export default function CampaignBuilderPage() {
           <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border ${line} ${muted} hover:text-indigo-400`}><ArrowLeft size={16} /></Link>
           <div>
             <h1 className={`text-xl font-extrabold ${head}`}>Criar campanha</h1>
-            <div className={`text-xs ${muted}`}>Rede de Pesquisa · em construção: por enquanto só a leitura do modelo</div>
+            <div className={`text-xs ${muted}`}>Rede de Pesquisa · em construção: os passos 1 e 2 funcionam; nada é enviado ao Google ainda</div>
           </div>
         </div>
 
         <div className="grid grid-cols-5 gap-1.5">
-          {STEPS.map((s, i) => (
-            <div key={s} className={`rounded-lg border px-3 py-2 text-xs ${i === 0 ? 'border-indigo-500 text-indigo-400' : `${line} ${muted}`}`}>
-              <b className="block text-[13px]">{i + 1}. {s}</b>{i === 0 ? 'copiar uma campanha' : 'em breve'}
-            </div>
-          ))}
+          {STEPS.map((s, i) => {
+            const open = i === 0 || (i === 1 && !!draft);
+            return (
+              <button key={s} disabled={!open} onClick={() => setStep(i)} aria-current={step === i ? 'step' : undefined}
+                className={`text-left rounded-lg border px-3 py-2 text-xs ${step === i ? 'border-indigo-500 text-indigo-400' : `${line} ${muted} ${open ? 'hover:border-indigo-500/50' : ''}`}`}>
+                <b className="block text-[13px]">{i + 1}. {s}</b>{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : 'em breve'}
+              </button>
+            );
+          })}
         </div>
 
         {list && list.allowed === false && <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}>O criador de campanhas ainda não está liberado para este login.</div>}
 
-        {list?.allowed && (
+        {list?.allowed && step === 1 && draft && (
+          <StepCampaign draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} onNext={() => setStep(2)}
+            findPlaces={async text => (await api(`/api/campaign-builder?local=${encodeURIComponent(text)}`)).body} />
+        )}
+        {list?.allowed && step === 2 && (
+          <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}>O passo do anúncio (palavras-chave, títulos, descrições, sitelinks e frases de destaque, com as sugestões da IA) é o próximo a ser construído. A configuração da campanha ficou guardada neste navegador.</div>
+        )}
+
+        {list?.allowed && step === 0 && (
           <div className={`${card} border rounded-xl p-4 space-y-3`}>
+            {draft && (
+              <div className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border ${line} ${soft} px-3 py-2 text-xs`}>
+                <span className={head}>Há um rascunho em andamento: <b>{draft.nome || 'sem nome'}</b></span>
+                <span className="flex gap-2">
+                  <button onClick={() => setStep(1)} className="font-bold text-indigo-400 hover:underline">Continuar</button>
+                  <button onClick={() => { setDraftState(null); keep(null); }} className={`${muted} hover:text-rose-400`}>Descartar</button>
+                </span>
+              </div>
+            )}
             <div className={`text-sm font-bold ${head}`}>Escolha a campanha que serve de modelo</div>
             <div className={`text-xs ${muted}`}>O Autometrics lê do Google a configuração, a meta de conversão, os locais, as negativas, os grupos, as palavras-chave, os anúncios, os sitelinks e as frases de destaque. Ler não altera nada na campanha.</div>
             {list.migration && <div className="text-xs text-amber-500">Para guardar os modelos, rode migration_criador.sql no Supabase. Sem ela a leitura funciona, mas o modelo não fica salvo.</div>}
@@ -148,14 +190,19 @@ export default function CampaignBuilderPage() {
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2">
                 {reading && <Loader2 size={13} className="animate-spin" />} Ler do Google
               </button>
+              <button onClick={() => start(emptyDraft(), 'USD')} className={`px-4 py-2 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400`}>Começar do zero</button>
               {(list.campaigns || []).length > 40 && !filter && <span className={`text-xs ${muted}`}>Mostrando 40 de {list.campaigns.length}; use a busca.</span>}
             </div>
             {error && <div className="text-xs text-rose-500">{error}</div>}
           </div>
         )}
 
-        {t && (
+        {t && step === 0 && (
           <>
+            <div className={`${card} border !border-indigo-500/50 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3`}>
+              <div className={`text-xs ${muted}`}>Confira abaixo o que foi lido. Usar como modelo copia tudo para um rascunho que você edita; a campanha original não muda. A IA Max entra desligada no rascunho.</div>
+              <button onClick={() => start(draftFromTemplate(t), result?.currency || 'USD')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold">Usar como modelo</button>
+            </div>
             <div className={`flex items-baseline justify-between gap-3 flex-wrap`}>
               <div className={`text-base font-extrabold ${head}`}>{t.origem.nome}</div>
               <div className={`text-xs ${muted}`}>conta {t.origem.conta_id} · lido em {new Date(t.origem.lido_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
