@@ -41,6 +41,7 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import { resolveProductStatus, type StatusKey } from '@/lib/campaignStatus';
 import Link from 'next/link';
+import { canEdit } from '@/lib/googleAds/editors';
 import { useRouter } from 'next/navigation';
 import { Logo } from '@/app/components/Logo';
 import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
@@ -87,6 +88,7 @@ export default function ProductsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState('');
+  const [canCreate, setCanCreate] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // Novos Estados (Enhancements)
@@ -157,6 +159,7 @@ export default function ProductsPage() {
       }
 
       setUserId(session.user.id);
+      setCanCreate(canEdit(session.user.email));
       await fetchProducts(session.user.id, savedDateFilter, savedCustomStart, savedCustomEnd);
     }
     init();
@@ -726,6 +729,7 @@ export default function ProductsPage() {
           
           <div className="flex flex-wrap gap-3">
              <button onClick={toggleTheme} className={`hidden md:block p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+             {canCreate && <Link href="/criar-campanha" className={`flex-1 md:flex-none justify-center px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 border ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-500' : 'border-slate-300 text-slate-700 hover:border-indigo-500'}`}><Plus size={18} /> Criar campanha no Google</Link>}
              <button onClick={() => setIsModalOpen(true)} className="flex-1 md:flex-none justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Plus size={18} /> Novo Produto</button>
           </div>
         </div>

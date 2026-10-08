@@ -10,11 +10,10 @@ import { supabaseAdmin, decryptSecret } from '@/lib/googleAds/server';
  * hora (nunca do que a coleta guardou) e cada alteração passa antes por um
  * ensaio (validateOnly): se o Google recusar o ensaio, nada muda.
  *
- * Por enquanto só para os logins da lista abaixo.
+ * Por enquanto só para os logins de lib/googleAds/editors.
  */
 
-const EDITORS = ['dcalmeida431@gmail.com', 'daniel.camiloalm@gmail.com'];
-export const canEdit = (email?: string | null) => !!email && EDITORS.includes(email.trim().toLowerCase());
+export { canEdit } from './editors';
 
 export type Kind = 'meta_cpa' | 'meta_cpa_grupo' | 'limite_cpc' | 'orcamento' | 'aparelho' | 'idade' | 'genero' | 'renda' | 'local';
 /**
