@@ -198,3 +198,8 @@ export function noteSummary(notes: string): string {
   const changes = auto.length === 1 ? first : auto.length ? `${auto.length} alterações no Google · ${first}` : '';
   return [manual[0], changes].filter(Boolean).join(' · ');
 }
+
+/** As alterações automáticas de uma anotação, com a hora de cada uma. */
+export function autoLines(notes: string | null | undefined): { time: string; text: string }[] {
+  return String(notes || '').split('\n').map(l => l.match(AUTO)).filter((m): m is RegExpMatchArray => !!m).map(m => ({ time: m[1] || m[3], text: m[4] }));
+}

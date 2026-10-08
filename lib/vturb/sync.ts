@@ -143,6 +143,12 @@ export async function syncProductVturb(productId: string, opts: { force?: boolea
         product_id: productId, player_id: playerId, start_date: retStart, end_date: retEnd, duration: player.duration,
         pitch_time: player.pitch_time, average_watched: int(eng?.average_watched_time), curve, updated_at: now,
       }], 'product_id,player_id');
+      // Uma curva por semana fechada fica guardada, para comparar antes e depois de cada mudança.
+      // Antes de migration_vturb_historico.sql a tabela não existe; a coleta segue.
+      await db.from('vturb_retention_history').upsert({
+        product_id: productId, player_id: playerId, start_date: retStart, end_date: retEnd, duration: player.duration,
+        pitch_time: player.pitch_time, curve, updated_at: now,
+      }, { onConflict: 'product_id,player_id,end_date' }).then(() => null, () => null);
     }
 
     await db.from('products').update({

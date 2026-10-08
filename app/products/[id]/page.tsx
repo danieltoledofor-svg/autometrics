@@ -1255,7 +1255,7 @@ export default function ProductDetailPage() {
 
       {/* ══════════════════════════ ABA VTURB ══════════════════════════ */}
       {activeTab === 'vturb' && (
-        <VturbTab productId={productId} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} />
+        <VturbTab productId={productId} startDate={startDate} endDate={endDate} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} />
       )}
 
         </div>{/* end p-4 md:p-6 */}

@@ -78,7 +78,7 @@ function CorrectionBox({ ui, initial = '', onSave, onCancel }: { ui: Ui; initial
   );
 }
 
-type Plan = { type: 'negativa' } | { type: 'pausar' } | { type: 'ajuste'; control: GoogleControl };
+export type Plan = { type: 'negativa' } | { type: 'pausar' } | { type: 'ajuste'; control: GoogleControl };
 const PEOPLE_KIND: Record<string, string> = { Age: 'idade', Gender: 'genero', Income: 'renda', Device: 'aparelho' };
 
 /** O que o botão Aplicar faz em cada tipo de sugestão; null quando a alteração ainda não é feita por aqui. */
@@ -102,7 +102,7 @@ function applyPlan(s: any, controls: GoogleControl[]): Plan | null {
  * Caixa do "Aplicar": mostra o que vai mudar no Google e só altera depois da
  * confirmação. Negativa pede o tipo (exata ou de frase); ajuste de lance pede o percentual.
  */
-function ApplyBox({ ui, s, plan, change, onDone, onCancel }: { ui: Ui; s: any; plan: Plan; change: (body: ChangeBody) => Promise<string>; onDone: () => Promise<void> | void; onCancel: () => void }) {
+export function ApplyBox({ ui, s, plan, change, onDone, onCancel }: { ui: Ui; s: any; plan: Plan; change: (body: ChangeBody) => Promise<string>; onDone: () => Promise<void> | void; onCancel: () => void }) {
   const { isDark, borderCol, textHead, textMuted } = ui;
   const [match, setMatch] = useState<'EXACT' | 'PHRASE'>(/frase/i.test(String(s.text)) ? 'PHRASE' : 'EXACT');
   const [text, setText] = useState('');

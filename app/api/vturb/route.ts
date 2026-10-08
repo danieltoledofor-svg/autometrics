@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { computeFunnel } from '@/lib/vturb/funnel';
+import { computeScreen } from '@/lib/vturb/screen';
 import { syncProductVturb } from '@/lib/vturb/sync';
 import { playerIdFrom } from '@/lib/vturb/client';
 import { buildTopo, type Funnel } from '@/lib/vturb/topo';
@@ -11,9 +12,11 @@ const topoKeyOf = (targetKey: string) =>
   targetKey === 'vturb:fuga' ? 'fuga' : targetKey === 'vturb:pitch' ? 'retencao' : targetKey.startsWith('vturb:kw:') ? 'palavras' : 'congruencia';
 
 /** Funil + análise do topo de funil (checklist, resumo, sugestões, histórico). */
-async function vturbView(productId: string) {
+async function vturbView(productId: string, range: { start?: string | null; end?: string | null } = {}) {
   const funnel: any = await computeFunnel(productId);
   if (!funnel?.ready) return funnel;
+  // Período da tela: funil em sete etapas, cruzamentos e alterações. Se falhar, a aba segue com o resto.
+  funnel.screen = await computeScreen(productId, range.start || null, range.end || null).catch(() => null);
   const db = supabaseAdmin();
   const [{ data: product }, analysis, { data: sugg }] = await Promise.all([
     db.from('products').select('vsl_transcript').eq('id', productId).maybeSingle(),
@@ -53,7 +56,7 @@ export const dynamic = 'force-dynamic';
  * Aba VTurb da campanha. Lê do banco — a coleta grava de hora em hora — e
  * nunca repassa o token para o navegador.
  *
- * GET  ?product_id=…                        do clique à venda, retenção e palavras-chave
+ * GET  ?product_id=…&start=…&end=…          do clique à venda no período da tela, cruzamentos, retenção
  * POST { product_id, action: 'sync' }       lê a VTurb agora
  * POST { product_id, action: 'link', player } vincula o player (ID ou URL) e lê
  */
@@ -78,7 +81,8 @@ export async function GET(request: Request) {
   const own = await ownProduct(request, productId);
   if ('error' in own) return own.error;
   if (!(await tablesReady())) return NextResponse.json(NOT_READY);
-  return NextResponse.json(await vturbView(productId!));
+  const q = new URL(request.url).searchParams;
+  return NextResponse.json(await vturbView(productId!, { start: q.get('start'), end: q.get('end') }));
 }
 
 export async function POST(request: Request) {
@@ -89,7 +93,7 @@ export async function POST(request: Request) {
 
   if (body.action === 'analyze') {
     if (await analysisTablesReady()) await runAnalysis(body.product_id, { force: true });
-    return NextResponse.json(await vturbView(body.product_id));
+    return NextResponse.json(await vturbView(body.product_id, body));
   }
   if (body.action === 'link') {
     const pid = playerIdFrom(body.player);
@@ -99,6 +103,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Ação desconhecida.' }, { status: 400 });
   }
   const result = await syncProductVturb(body.product_id, { force: true });
-  const funnel = await vturbView(body.product_id);
+  const funnel = await vturbView(body.product_id, body);
   return NextResponse.json({ ...funnel, sync: result }, { status: 'error' in result && body.action === 'link' ? 400 : 200 });
 }

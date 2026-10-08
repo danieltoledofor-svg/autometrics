@@ -161,8 +161,9 @@ export async function computeFunnel(productId: string) {
   if (gclids.length) {
     const map = new Map<string, any>();
     const list = gclids.map(g => g.gclid);
-    for (let i = 0; i < list.length; i += 300) {
-      const { data } = await db.from('google_ads_clicks').select('gclid, keyword_text, match_type').in('gclid', list.slice(i, i + 300));
+    // Lotes pequenos: cada gclid tem perto de 90 letras, e um lote grande estoura o tamanho do endereço da consulta.
+    for (let i = 0; i < list.length; i += 40) {
+      const { data } = await db.from('google_ads_clicks').select('gclid, keyword_text, match_type').in('gclid', list.slice(i, i + 40));
       for (const c of data || []) map.set(c.gclid, c);
     }
     const byKw: [string, string, any][] = [];

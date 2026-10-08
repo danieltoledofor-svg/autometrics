@@ -7,9 +7,12 @@ import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { formatMoney } from '@/lib/analysis/labels';
 import { TranscriptBanner } from './TranscriptBanner';
 import { TopoAnalysis } from './TopoAnalysis';
+import { Funnel, Segments, Changes } from './VturbScreen';
 
 /**
- * Aba "VTurb": do clique à venda, retenção do vídeo e palavras-chave.
+ * Aba "VTurb": a análise do topo de funil (3 dias × 7 dias), o caminho do
+ * clique à venda no período da tela, quem assiste e quem compra, as alterações
+ * do período e a retenção do vídeo.
  *
  * Tudo vem pronto de /api/vturb, que lê do banco (a coleta grava de hora em
  * hora). A tela não chama a VTurb.
@@ -46,7 +49,7 @@ function timeAgo(ts?: string | null) {
   return h < 24 ? `há ${h} h` : `há ${Math.round(h / 24)} d`;
 }
 
-export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
+export function VturbTab({ productId, startDate, endDate, ui }: { productId: string; startDate: string; endDate: string; ui: Ui }) {
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -56,17 +59,17 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
   const [playerInput, setPlayerInput] = useState('');
 
   const load = useCallback(async () => {
-    const { ok, body } = await api(`/api/vturb?product_id=${productId}`);
+    const { ok, body } = await api(`/api/vturb?product_id=${productId}&start=${startDate}&end=${endDate}`);
     if (!ok) setError(body.error || 'Erro ao carregar.');
     else { setData(body); setError(body.error || null); }
     setLoading(false);
-  }, [productId]);
+  }, [productId, startDate, endDate]);
   useEffect(() => { load(); }, [load]);
 
   const post = async (payload: Record<string, any>) => {
     setRunning(true);
     setError(null);
-    const { ok, body } = await api('/api/vturb', { method: 'POST', body: JSON.stringify({ product_id: productId, ...payload }) });
+    const { ok, body } = await api('/api/vturb', { method: 'POST', body: JSON.stringify({ product_id: productId, start: startDate, end: endDate, ...payload }) });
     if (body && body.player !== undefined) setData(body);
     if (!ok) setError(body.error || body.sync?.error || 'Erro ao ler a VTurb.');
     else if (body.sync?.error) setError(body.sync.error);
@@ -176,7 +179,11 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
 
       {(error || data?.sync_error) && <div className={`${bgCard} border rounded-xl px-5 py-3 text-sm ${tone.urgente}`}>{error || data.sync_error}</div>}
 
-      {d3 && (
+      {data?.screen && <Funnel screen={data.screen} ui={ui} />}
+      {data?.screen && data.screen.segments.visits.gclid > 0 && <Segments screen={data.screen} productId={productId} money={money} ui={ui} onChanged={load} />}
+      {data?.screen && <Changes screen={data.screen} ui={ui} />}
+
+      {d3 && !data?.screen && (
         <>
           <div className="space-y-2.5">
             <div className={label}>Do clique à venda · 3 dias</div>
@@ -203,15 +210,16 @@ export function VturbTab({ productId, ui }: { productId: string; ui: Ui }) {
         </>
       )}
 
-      {data?.curve && <Retention curve={data.curve} ui={ui} />}
+      {data?.curve && <Retention curve={data.curve} before={data.screen?.retention_before || null} history={data.screen ? data.screen.retention_history : true} drops={data.topo?.drops || []} ui={ui} />}
 
-      {data?.keywords && <Keywords kw={data.keywords} money={money} ui={ui} />}
+      {data?.keywords && !(data?.screen && data.screen.segments.visits.gclid > 0) && <Keywords kw={data.keywords} money={money} ui={ui} />}
     </div>
   );
 }
 
-function Retention({ curve, ui }: { curve: any; ui: Ui }) {
-  const { isDark, bgCard, textHead, textMuted } = ui;
+function Retention({ curve, before, history, drops, ui }: { curve: any; before: any; history: boolean; drops: any[]; ui: Ui }) {
+  const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
+  const old: [number, number][] | null = before?.points?.length ? before.points : null;
   const W = 1000, H = 210, top = 10;
   const x = (t: number) => (t / curve.duration) * W;
   const y = (p: number) => H - (p / 100) * (H - top);
@@ -228,12 +236,13 @@ function Retention({ curve, ui }: { curve: any; ui: Ui }) {
     <div className={`${bgCard} border rounded-xl px-5 py-4 space-y-3`}>
       <div className="flex justify-between items-baseline gap-3 flex-wrap">
         <div className={`text-sm font-bold ${textHead}`}>Retenção do vídeo · 7 dias ({ddmm(curve.period[0])}–{ddmm(curve.period[1])})</div>
-        <div className={`text-xs ${textMuted}`}>% de quem deu play que ainda está assistindo · atualizada 1 vez por dia</div>
+        <div className={`text-xs ${textMuted}`}>% de quem deu play que ainda está assistindo · semana fechada, atualizada 1 vez por dia (não segue o período da tela)</div>
       </div>
       <svg viewBox={`0 0 ${W} ${H + 20}`} className="w-full h-auto block" role="img"
         aria-label={`Curva de retenção. ${curve.notes.join('. ')}`}>
         {[top, (H + top) / 2, H].map(v => <line key={v} x1={0} y1={v} x2={W} y2={v} stroke={grid} strokeWidth={1} />)}
         <path d={area} fill={stroke} fillOpacity={0.15} />
+        {old && <polyline points={old.filter(([t]) => t <= curve.duration).map(([t, p]) => `${x(t).toFixed(1)},${y(p).toFixed(1)}`).join(' ')} fill="none" stroke={muted} strokeWidth={2} strokeDasharray="6 5" />}
         <polyline points={line} fill="none" stroke={stroke} strokeWidth={2.5} />
         {curve.pitch_time && (
           <>
@@ -260,6 +269,32 @@ function Retention({ curve, ui }: { curve: any; ui: Ui }) {
       <div className={`flex gap-6 flex-wrap text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
         {curve.notes.map((n: string) => <span key={n}>{n}</span>)}
       </div>
+      {old ? (
+        <div className={`text-xs ${textMuted} space-y-1`}>
+          <div className="flex gap-5 flex-wrap">
+            <span><span className="inline-block w-5 align-middle" style={{ borderTop: `2.5px solid ${stroke}` }} /> esta semana ({ddmm(curve.period[0])}–{ddmm(curve.period[1])})</span>
+            <span><span className="inline-block w-5 align-middle" style={{ borderTop: `2px dashed ${muted}` }} /> semana anterior ({ddmm(before.period[0])}–{ddmm(before.period[1])})</span>
+          </div>
+          {before.changes?.length > 0 && (
+            <div>Alterações entre as duas: {before.changes.slice(0, 4).map((c: any) => `${ddmm(c.date)} ${c.text}`).join(' · ')}{before.changes.length > 4 ? ` · e mais ${before.changes.length - 4}` : ''}</div>
+          )}
+        </div>
+      ) : (
+        <div className={`text-xs ${textMuted}`}>{history
+          ? 'A curva da semana anterior aparece aqui, tracejada, assim que houver uma semana fechada guardada (a primeira leva cerca de 7 dias).'
+          : 'Para comparar com a semana anterior, rode migration_vturb_historico.sql no Supabase.'}</div>
+      )}
+      {drops.some(d => d.vsl) && (
+        <div className={`pt-3 border-t ${borderCol} space-y-2`}>
+          <div className={`text-[11px] font-semibold tracking-wide uppercase ${textMuted}`}>O que o vídeo diz onde mais gente sai (≈ pela posição na transcrição)</div>
+          {drops.filter(d => d.vsl).map(d => (
+            <div key={d.label} className="grid grid-cols-[150px_1fr] gap-3 text-xs">
+              <div className={textHead}>{d.label}<div className={textMuted}>saem {d.left}</div></div>
+              <div className={`italic ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{d.vsl}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
