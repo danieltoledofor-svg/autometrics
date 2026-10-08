@@ -6,7 +6,8 @@
  * O histórico do Google diz só o campo que mudou; quem é a linha (qual idade,
  * qual aparelho, qual país) vem do número no fim do nome do item, que é fixo.
  *
- * Linhas: "[AUTO] HH:MM · frase". O que o usuário escreveu à mão fica intacto.
+ * Linhas: "HH:MM · frase" (as antigas começavam com "[AUTO]" e são lidas do
+ * mesmo jeito). O que o usuário escreveu à mão fica intacto.
  */
 
 export interface ChangeEntry {
@@ -137,7 +138,7 @@ function sentence(e: ChangeEntry): { text: string; quiet?: string } {
   return { text: generic(type, op) };
 }
 
-const AUTO = /^\[AUTO\] (\d\d:\d\d)(:\d\d)?\s*[-·]\s*(.*)$/;
+const AUTO = /^(?:\[AUTO\] (\d\d:\d\d)(:\d\d)?\s*[-·]\s*|(\d\d:\d\d) · )(.*)$/;
 
 /**
  * Reescreve as linhas automáticas do dia com o histórico recebido e devolve a
@@ -155,7 +156,7 @@ export function mergeAutoNotes(current: string, history: ChangeEntry[]): string 
   for (const line of String(current || '').split('\n')) {
     const m = line.match(AUTO);
     if (!m) { if (line.trim() || manual.length) manual.push(line); continue; }
-    const [, time, , body] = m;
+    const time = m[1] || m[3], body = m[4];
     const old = body.match(/^(.+?) — (criou|alterou|removeu|criado|alterado|removido)\s*(.*)$/);
     // Linha antiga: some quando o mesmo minuto chega agora com detalhe; sem isso, só vira frase simples.
     if (old) {
@@ -183,7 +184,7 @@ export function mergeAutoNotes(current: string, history: ChangeEntry[]): string 
     for (const word of slot.quiet) if (!said(word)) add(time, `${word}: faixas incluídas na campanha, sem ajuste de lance`);
   }
 
-  const auto = [...kept.keys()].sort().flatMap(time => [...kept.get(time)!].map(text => `[AUTO] ${time} · ${text}`));
+  const auto = [...kept.keys()].sort().flatMap(time => [...kept.get(time)!].map(text => `${time} · ${text}`));
   while (manual.length && !manual[manual.length - 1].trim()) manual.pop();
   return [...manual, ...auto].join('\n');
 }
@@ -193,7 +194,7 @@ export function noteSummary(notes: string): string {
   const lines = String(notes || '').split('\n').filter(l => l.trim());
   const auto = lines.filter(l => AUTO.test(l));
   const manual = lines.filter(l => !AUTO.test(l));
-  const first = auto[0]?.match(AUTO)?.[3] || '';
+  const first = auto[0]?.match(AUTO)?.[4] || '';
   const changes = auto.length === 1 ? first : auto.length ? `${auto.length} alterações no Google · ${first}` : '';
   return [manual[0], changes].filter(Boolean).join(' · ');
 }
