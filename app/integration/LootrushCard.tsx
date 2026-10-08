@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabaseClient';
  * 1. Ele cola a chave gerada na LootRush (só com "MCP → Read"). O servidor
  *    confere a chave e guarda criptografada; ela não volta para a tela.
  * 2. Escolhe os grupos de cartões que quer acompanhar. A primeira leitura
- *    guarda os últimos 30 dias, sem avisos.
+ *    guarda os últimos 70 dias, sem avisos.
  *
  * As cobranças aparecem em Metas e os avisos saem pelo Telegram. Rota: /api/lootrush.
  */
@@ -64,7 +64,7 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
     setMessage(body.result?.error ? { ok: false, text: body.result.error } : { ok: true, text: done(body) });
   };
   const connect = () => run('ligar', { key }, () => 'Chave conferida. Agora escolha os grupos de cartões.').then(() => { setKey(''); setChanging(false); });
-  const saveGroups = () => run('grupos', { groups: picked }, b => (picked.length ? `Grupos salvos. Primeira leitura feita: ${b.result?.read ?? 0} cobranças dos últimos 30 dias.` : 'Nenhum grupo marcado: nada será lido.'));
+  const saveGroups = () => run('grupos', { groups: picked }, b => (picked.length ? `Grupos salvos. Primeira leitura feita: ${b.result?.read ?? 0} cobranças dos últimos 70 dias.` : 'Nenhum grupo marcado: nada será lido.'));
   const disconnect = () => { if (window.confirm('Desligar a LootRush? A chave e as cobranças guardadas aqui são apagadas. Nada muda na LootRush.')) run('desligar', {}, () => 'LootRush desligada.').then(() => setAvailable(null)); };
 
   if (!state) return <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}><Loader2 size={14} className="inline animate-spin mr-2" />Carregando…</div>;

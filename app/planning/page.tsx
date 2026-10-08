@@ -95,6 +95,15 @@ export default function PlanningPage() {
   const [goal, setGoal] = useState({ revenue: 0, profit: 0, limit: 0 });
 
   // --- NOVO PADRÃO DE DATAS ---
+  // Aba da tela: as metas ou os cartões (LootRush), que só aparece para quem ligou em Integração.
+  const [view, setView] = useState<'metas' | 'cartoes'>('metas');
+  const [hasCards, setHasCards] = useState(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.auth.getSession().then(({ data: { session } }) => fetch('/api/lootrush', { headers: { Authorization: `Bearer ${session?.access_token || ''}` } }))
+      .then(r => r.json()).then(b => setHasCards(!!b?.connected && !!b.groups?.length)).catch(() => {});
+  }, [user]);
+
   const [dateRange, setDateRange] = useState('this_month'); 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -722,6 +731,18 @@ export default function PlanningPage() {
       {/* MAIN CONTENT */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
 
+      {/* ABAS: Metas | Cartões (LootRush). A segunda só existe para quem ligou a LootRush em Integração. */}
+      {hasCards && (
+        <div className={`flex gap-1 p-1 rounded-xl mb-4 md:mb-6 w-full sm:w-fit ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-200'}`}>
+          {([['metas', 'Metas e DRE'], ['cartoes', 'Cartões · LootRush']] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setView(key)}
+              className={`flex-1 sm:flex-none py-2 px-4 rounded-lg text-sm font-medium transition-all ${view === key ? 'bg-indigo-600 text-white shadow-lg' : `${textMuted} hover:text-indigo-400`}`}>{label}</button>
+          ))}
+        </div>
+      )}
+      {view === 'cartoes' && hasCards && <LootrushPanel isDark={isDark} />}
+      {(view !== 'cartoes' || !hasCards) && (<>
+
       {/* MOBILE HEADER */}
       <div className="flex md:hidden items-center justify-between px-1 pt-1 pb-3">
         <div>
@@ -1198,9 +1219,6 @@ export default function PlanningPage() {
          </div>
       </div>
 
-      {/* CARTÕES (LootRush): cobrado nos cartões × gasto no Google. Só para quem ligou em Integração. */}
-      {user?.id && isValidDay(startDate) && isValidDay(endDate) && <LootrushPanel from={startDate} to={endDate} isDark={isDark} />}
-
       {/* GRÁFICO */}
       <div className={`hidden md:block ${bgCard} rounded-xl p-6 mb-8 h-64 shadow-sm`}>
          <ResponsiveContainer width="100%" height="100%">
@@ -1437,6 +1455,7 @@ export default function PlanningPage() {
       </div>
         );
       })()}
+      </>)}
 
       </main>
 

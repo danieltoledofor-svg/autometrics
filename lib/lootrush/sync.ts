@@ -13,11 +13,13 @@ import { groupTransactions, plainLootrushError } from './client';
  * conta do Google ("Google ADS1234567890"), e é por ela que a cobrança é
  * ligada à conta no Autometrics — por código, sem IA: é um número exato.
  *
- * A primeira leitura só guarda (30 dias); os avisos valem do que chegar depois.
+ * A primeira leitura só guarda (70 dias, para cobrir o mês anterior inteiro); os avisos valem do que chegar depois.
  */
 
 const TZ = 'America/Sao_Paulo';
-const WINDOW_DAYS = 7, FIRST_DAYS = 30, MAX_MESSAGES = 10;
+const WINDOW_DAYS = 7, FIRST_DAYS = 70, MAX_MESSAGES = 10;
+/** Primeiras leituras feitas antes desta data guardaram só 30 dias: são refeitas uma vez, para cobrir o mês anterior inteiro. */
+const DEEP_SINCE = '2026-10-08T21:00:00Z';
 const num = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
 
 /** Conta do Google no nome da cobrança: "Google ADS7973609921", "GOOGLE *ADS5586615519". */
@@ -53,12 +55,13 @@ function message(kind: Kind, r: Row, account: { name: string | null; mcc_name: s
   const card = `Cartão final ${r.card_last4 || '????'}${r.card_name ? ` (${escapeHtml(r.card_name)})` : ''}${r.group_name ? ` · grupo ${escapeHtml(r.group_name)}` : ''}`;
   const where = r.customer_id
     ? account ? `Conta do Google: <b>${escapeHtml(account.name || dashed(r.customer_id))}</b> (${dashed(r.customer_id)}${account.mcc_name ? ` · ${escapeHtml(account.mcc_name)}` : ''})`
-      : `⚠️ Conta do Google ${dashed(r.customer_id)}: <b>não está entre as suas contas no Autometrics</b>. Confira se a cobrança é sua.`
+      : `⚠️ Conta do Google ${dashed(r.customer_id)}: <b>ainda não está entre as suas contas no Autometrics</b>. Confira se é sua.`
     : isGoogle(r.merchant) ? '' : '⚠️ Esta cobrança <b>não é do Google</b>.';
   const local = r.local_currency && r.local_currency !== 'USD' && r.local_amount ? ` (${r.local_currency} ${Math.abs(r.local_amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})` : '';
   const lines = kind === 'lr_codigo' ? [`🔑 <b>Código de verificação do Google: ${r.code}</b>`, card, `${escapeHtml(r.merchant)} · ${hhmm(r.charged_at)}`]
     : kind === 'lr_recusada' ? [`⛔ <b>Cobrança recusada: ${usd(r.amount)}</b>${local}`, `${escapeHtml(r.merchant)} · ${hhmm(r.charged_at)}`, card, where, r.reason ? `Motivo: ${escapeHtml(r.reason)}` : '']
     : kind === 'lr_credito' ? [`↩️ <b>${r.status === 'reversed' ? 'Cobrança desfeita' : 'Valor devolvido'}: ${usd(r.amount)}</b>${local}`, `${escapeHtml(r.merchant)} · ${hhmm(r.charged_at)}`, card, where]
+    : r.amount === 0 ? [`🪪 <b>Cartão cadastrado numa conta do Google</b> (cobrança de US$ 0, só para conferir o cartão)`, `${escapeHtml(r.merchant)} · ${hhmm(r.charged_at)}`, card, where]
     : [`💳 <b>Cobrança nova: ${usd(r.amount)}</b>${local}`, `${escapeHtml(r.merchant)} · ${hhmm(r.charged_at)}`, card, where];
   return [...lines.filter(Boolean), `<a href="${appUrl()}/planning">Abrir a conferência</a>`].join('\n');
 }
@@ -68,14 +71,14 @@ export async function syncLootrush(conn: any): Promise<{ read: number; fresh: nu
   const db = supabaseAdmin(), userId: string = conn.user_id;
   const groups: { id: string; name: string }[] = Array.isArray(conn.groups) ? conn.groups : [];
   const out = { read: 0, fresh: 0, sent: 0 } as { read: number; fresh: number; sent: number; error?: string };
-  const first = !conn.baseline_at;
+  const first = !conn.baseline_at || conn.baseline_at < DEEP_SINCE;
   const stamp = (patch: Record<string, any>) => db.from('lootrush_connections').update({ ...patch, last_sync_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('user_id', userId);
   if (!groups.length) { await stamp({}); return out; }
 
   const rows: Row[] = [];
   try {
     const key = decryptSecret(conn.key_enc), since = new Date(Date.now() - (first ? FIRST_DAYS : WINDOW_DAYS) * 86400000);
-    for (const g of groups) rows.push(...(await groupTransactions(key, g.id, since, first ? 12 : 4)).rows.map(t => toRow(userId, t)));
+    for (const g of groups) rows.push(...(await groupTransactions(key, g.id, since, first ? 15 : 4)).rows.map(t => toRow(userId, t)));
   } catch (e: any) {
     out.error = plainLootrushError(e);
     await stamp({ status: 'erro', last_error: out.error });
@@ -149,70 +152,118 @@ export async function runLootrush(deadline: number) {
 
 export interface AccountCheck {
   customer_id: string; name: string | null; mcc: string | null; currency: string | null; known: boolean;
-  /** Cobrado no cartão no período, em dólar: cobranças que valeram, menos o que foi devolvido. */
-  charged: number; charges: number; pending: number; declined: number; last_at: string | null; cards: string[];
-  /** Gasto que o Google informou no mesmo período, na moeda da conta. Vazio quando a conta não está no Autometrics. */
+  /** Cobrado no cartão pelo gasto deste mês, em dólar: cobranças que valeram, menos o que foi devolvido. */
+  charged: number; charges: number; pending: number; declined: number; cards: string[];
+  /** Gasto que o Google informou no mês, na moeda da conta. Vazio quando a conta não está no Autometrics. */
   google_cost: number | null;
   /** Cobrado menos gasto, só quando a conta é em dólar (a moeda do cartão). */
   diff: number | null;
-  state: 'bate' | 'cobrado_a_mais' | 'falta_cobrar' | 'outra_moeda' | 'conta_estranha';
+  state: 'bate' | 'a_cobrar' | 'cobrado_a_mais' | 'falta_cobrar' | 'outra_moeda' | 'fora';
 }
 
 /** Folga da conferência: o Google cobra em parcelas, então cobrado e gasto nunca batem no centavo. */
 const tolerance = (cost: number) => Math.max(50, cost * 0.1);
+const signedOf = (c: any) => (c.polarity === 'credit' ? -Math.abs(num(c.amount)) : Math.abs(num(c.amount)));
+const validOf = (c: any) => c.status !== 'declined' && c.status !== 'reversed';
+/** Dia da cobrança no horário de Brasília. */
+const dayOf = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3600000).toISOString().slice(0, 10);
+const shiftMonth = (month: string, delta: number) => { const d = new Date(`${month}-15T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + delta); return d.toISOString().slice(0, 7); };
+const lastDay = (month: string) => { const d = new Date(`${shiftMonth(month, 1)}-01T12:00:00Z`); d.setUTCDate(0); return d.toISOString().slice(0, 10); };
 
-/** Conferência do período (dias de Brasília, inclusive): por conta do Google, o cobrado no cartão ao lado do gasto no Google. */
-export async function lootrushCheck(userId: string, from: string, to: string) {
+/**
+ * Conferência de um mês (AAAA-MM), conta por conta: o gasto que o Google informou no mês
+ * ao lado do que foi cobrado nos cartões por esse gasto.
+ *
+ * O Google cobra em parcelas enquanto o gasto acumula e, no dia 1º, cobra o que sobrou do
+ * mês anterior. Por isso as cobranças de um mês vão do dia 2 até o dia 1º do mês seguinte,
+ * e as do dia 1º entram no fechamento do mês anterior — não no mês que começa.
+ */
+export async function lootrushCheck(userId: string, month: string) {
   const db = supabaseAdmin();
-  const start = new Date(`${from}T00:00:00-03:00`).toISOString(), end = new Date(`${to}T23:59:59.999-03:00`).toISOString();
-  const charges: any[] = await fetchAll((a, b) => db.from('lootrush_charges')
-    .select('id, group_name, card_last4, card_name, merchant, customer_id, code, amount, local_amount, local_currency, status, polarity, reason, charged_at')
-    .eq('user_id', userId).gte('charged_at', start).lte('charged_at', end).order('charged_at', { ascending: false }).range(a, b));
+  const prev = shiftMonth(month, -1), next = shiftMonth(month, 1);
+  const first = `${month}-01`, last = lastDay(month), nextFirst = `${next}-01`, today = dayOf(new Date().toISOString());
+  const closed = today > nextFirst;                                  // o dia 1º seguinte já passou: o mês está fechado
 
-  const ids = [...new Set(charges.map(c => c.customer_id).filter(Boolean))] as string[];
-  const [{ data: accounts }, products] = await Promise.all([
-    ids.length ? db.from('google_ads_accounts').select('customer_id, name, mcc_name, currency_code').eq('user_id', userId).in('customer_id', ids) : Promise.resolve({ data: [] as any[] }),
-    ids.length ? fetchAll((a, b) => db.from('products').select('id, google_ads_customer_id').eq('user_id', userId).in('google_ads_customer_id', ids).range(a, b)) : Promise.resolve([] as any[]),
+  // Tudo do dia 2 do mês anterior até o dia 1º do mês seguinte: o mês pedido e o fechamento do anterior.
+  const start = new Date(`${prev}-02T00:00:00-03:00`).toISOString(), end = new Date(`${nextFirst}T23:59:59.999-03:00`).toISOString();
+  const [rows, oldest, everRows] = await Promise.all([
+    fetchAll((a, b) => db.from('lootrush_charges')
+      .select('id, group_name, card_last4, card_name, merchant, customer_id, code, amount, local_amount, local_currency, status, polarity, reason, charged_at')
+      .eq('user_id', userId).gte('charged_at', start).lte('charged_at', end).order('charged_at', { ascending: false }).range(a, b)),
+    db.from('lootrush_charges').select('charged_at').eq('user_id', userId).order('charged_at', { ascending: true }).limit(1),
+    fetchAll((a, b) => db.from('lootrush_charges').select('customer_id').eq('user_id', userId).not('customer_id', 'is', null).range(a, b)),
   ]);
+  const oldestDay = oldest.data?.[0]?.charged_at ? dayOf(oldest.data[0].charged_at) : null;
+  const cardAccounts = [...new Set(everRows.map((r: any) => String(r.customer_id)))];   // contas já cobradas nestes cartões, em qualquer data
+
+  const withDay = rows.map((c: any) => ({ ...c, day: dayOf(c.charged_at) }));
+  const cycle = withDay.filter(c => c.day > first && c.day <= nextFirst);              // pagam o gasto deste mês
+  const closing = withDay.filter(c => c.day === first);                                // dia 1º: pagam o que sobrou do mês anterior
+  const prevCycle = withDay.filter(c => c.day > `${prev}-01` && c.day < first);
+
+  const [{ data: accounts }, products] = await Promise.all([
+    cardAccounts.length ? db.from('google_ads_accounts').select('customer_id, name, mcc_name, currency_code').eq('user_id', userId).in('customer_id', cardAccounts) : Promise.resolve({ data: [] as any[] }),
+    fetchAll((a, b) => db.from('products').select('id, google_ads_customer_id').eq('user_id', userId).not('google_ads_customer_id', 'is', null).range(a, b)),
+  ]);
+  const known = new Map((accounts || []).map(a => [a.customer_id, a]));
   const accountOfProduct = new Map<string, string>(products.map((p: any) => [p.id, String(p.google_ads_customer_id).replace(/\D/g, '')]));
-  const cost = new Map<string, number>();
+  const cost = new Map<string, number>(), prevCost = new Map<string, number>();
   const productIds = [...accountOfProduct.keys()];
   for (let i = 0; i < productIds.length; i += 150) {
-    const rows = await fetchAll((a, b) => db.from('daily_metrics').select('product_id, cost').in('product_id', productIds.slice(i, i + 150)).gte('date', from).lte('date', to).gt('cost', 0).range(a, b));
-    for (const r of rows) { const acc = accountOfProduct.get(r.product_id)!; cost.set(acc, (cost.get(acc) || 0) + num(r.cost)); }
+    const list = await fetchAll((a, b) => db.from('daily_metrics').select('product_id, date, cost').in('product_id', productIds.slice(i, i + 150)).gte('date', `${prev}-01`).lte('date', last).gt('cost', 0).range(a, b));
+    for (const r of list) { const acc = accountOfProduct.get(r.product_id)!, m = r.date >= first ? cost : prevCost; m.set(acc, (m.get(acc) || 0) + num(r.cost)); }
   }
+  const isUsd = (id: string) => String(known.get(id)?.currency_code || '').toUpperCase() === 'USD';
 
-  const known = new Map((accounts || []).map(a => [a.customer_id, a]));
   const byAccount = new Map<string, AccountCheck>();
-  const others: any[] = [], codes: any[] = [];
-  const total = { charged: 0, pending: 0, declined: 0, returned: 0, outside: 0 };
-  for (const c of charges) {
-    const valid = c.status !== 'declined' && c.status !== 'reversed', signed = c.polarity === 'credit' ? -Math.abs(num(c.amount)) : Math.abs(num(c.amount));
-    if (c.code) codes.push(c);
-    if (c.status === 'declined') total.declined += Math.abs(num(c.amount));
-    else if (!valid || c.polarity === 'credit') total.returned += Math.abs(num(c.amount));
-    if (valid) { total.charged += signed; if (c.status === 'on_hold') total.pending += signed; }
-    if (!c.customer_id) { if (!c.code) { others.push(c); if (valid) total.outside += signed; } continue; }
-    const a = known.get(c.customer_id);
-    let row = byAccount.get(c.customer_id);
-    if (!row) byAccount.set(c.customer_id, row = { customer_id: c.customer_id, name: a?.name || null, mcc: a?.mcc_name || null, currency: a?.currency_code || null, known: !!a,
-      charged: 0, charges: 0, pending: 0, declined: 0, last_at: null, cards: [], google_cost: a ? cost.get(c.customer_id) || 0 : null, diff: null, state: a ? 'bate' : 'conta_estranha' });
-    if (valid) { row.charged += signed; row.charges++; if (c.status === 'on_hold') row.pending += signed; }
-    if (c.status === 'declined') row.declined++;
-    if (!row.last_at || c.charged_at > row.last_at) row.last_at = c.charged_at;
+  const rowOf = (id: string) => {
+    let row = byAccount.get(id);
+    if (!row) { const a = known.get(id); byAccount.set(id, row = { customer_id: id, name: a?.name || null, mcc: a?.mcc_name || null, currency: a?.currency_code || null, known: !!a,
+      charged: 0, charges: 0, pending: 0, declined: 0, cards: [], google_cost: a ? cost.get(id) || 0 : null, diff: null, state: a ? 'bate' : 'fora' }); }
+    return row;
+  };
+  const others: any[] = [], codes: any[] = [], added = new Set<string>();
+  const total = { charged: 0, pending: 0, declined: 0, google: 0, compared_charged: 0, outside: 0 };
+  for (const c of cycle) {
+    const valid = validOf(c), value = signedOf(c);
+    if (c.code) { codes.push(c); continue; }
+    if (!c.customer_id) { others.push(c); if (valid) total.outside += value; continue; }
+    if (c.status === 'declined') { total.declined++; rowOf(c.customer_id).declined++; continue; }
+    // Cobrança de US$ 0 é o Google conferindo o cartão quando ele é cadastrado numa conta: não é gasto.
+    if (valid && value === 0) { if (!known.has(c.customer_id)) { added.add(c.customer_id); continue; } }
+    if (!valid) continue;
+    const row = rowOf(c.customer_id);
+    row.charged += value; if (value !== 0) row.charges++;
+    if (c.status === 'on_hold') { row.pending += value; total.pending += value; }
+    total.charged += value;
     if (c.card_last4 && !row.cards.includes(c.card_last4)) row.cards.push(c.card_last4);
   }
-  let googleUsd = 0;
+  // Conta que gastou no mês e ainda não teve cobrança neste ciclo também entra: é gasto a cobrar.
+  for (const id of cardAccounts) if (known.has(id) && (cost.get(id) || 0) > 0) rowOf(id);
   for (const row of byAccount.values()) {
     if (!row.known) continue;
-    if (String(row.currency || '').toUpperCase() !== 'USD') { row.state = 'outra_moeda'; continue; }
-    googleUsd += row.google_cost || 0;
+    if (!isUsd(row.customer_id)) { row.state = 'outra_moeda'; continue; }
+    total.google += row.google_cost || 0; total.compared_charged += row.charged;
     row.diff = row.charged - (row.google_cost || 0);
-    row.state = Math.abs(row.diff) <= tolerance(row.google_cost || 0) ? 'bate' : row.diff > 0 ? 'cobrado_a_mais' : 'falta_cobrar';
+    const ok = Math.abs(row.diff) <= tolerance(row.google_cost || 0);
+    row.state = row.diff > 0 && !ok ? 'cobrado_a_mais' : closed ? (ok ? 'bate' : 'falta_cobrar') : (ok && row.diff >= 0 ? 'bate' : 'a_cobrar');
   }
+
+  // Gasto de contas que nunca foram cobradas nestes cartões: devem estar em outro cartão.
+  const elsewhere = [...cost].filter(([id]) => !cardAccounts.includes(id));
+  // Fechamento do mês anterior: o que sobrou dele (gasto menos o já cobrado) contra o que foi cobrado no dia 1º.
+  const usdCard = (c: any) => c.customer_id && known.has(c.customer_id) && isUsd(c.customer_id) && validOf(c) && !c.code;
+  const prevSpent = cardAccounts.filter(id => known.has(id) && isUsd(id)).reduce((s, id) => s + (prevCost.get(id) || 0), 0);
+  const prevCharged = prevCycle.filter(usdCard).reduce((s, c) => s + signedOf(c), 0), closingCharged = closing.filter(usdCard).reduce((s, c) => s + signedOf(c), 0);
+
+  const order: Record<string, number> = { cobrado_a_mais: 0, falta_cobrar: 1, fora: 2, a_cobrar: 3, outra_moeda: 4, bate: 5 };
   return {
-    total: { ...total, google_usd: googleUsd }, codes, others,
-    accounts: [...byAccount.values()].sort((x, y) => Number(x.known) - Number(y.known) || y.charged - x.charged),
-    charges: charges.slice(0, 300), more: Math.max(0, charges.length - 300),
+    month, first, last, closed, oldest_day: oldestDay,
+    total: { ...total, added_elsewhere: added.size, elsewhere_accounts: elsewhere.length, elsewhere_cost: elsewhere.reduce((s, [, v]) => s + v, 0) },
+    // Só vale quando as cobranças guardadas cobrem o mês anterior inteiro.
+    closing: { month: prev, complete: !!oldestDay && oldestDay <= `${prev}-02`, spent: prevSpent, charged_before: prevCharged, left: prevSpent - prevCharged, charged_day1: closingCharged, done: today >= first },
+    codes, others,
+    accounts: [...byAccount.values()].sort((x, y) => order[x.state] - order[y.state] || (y.google_cost || 0) - (x.google_cost || 0) || y.charged - x.charged),
+    charges: cycle.slice(0, 400), more: Math.max(0, cycle.length - 400),
   };
 }

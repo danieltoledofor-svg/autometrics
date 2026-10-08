@@ -12,7 +12,7 @@ export const maxDuration = 60;
  *
  * GET                          situação da ligação e os grupos escolhidos
  * GET ?grupos=1                grupos de cartões que a chave enxerga na LootRush
- * GET ?from=AAAA-MM-DD&to=…    conferência do período: cobrado no cartão × gasto no Google, por conta
+ * GET ?mes=AAAA-MM             conferência do mês: gasto no Google × cobrado no cartão, por conta
  * POST { action: 'ligar', key }        confere a chave na LootRush e guarda criptografada
  * POST { action: 'grupos', groups }    escolhe os grupos e faz a primeira leitura
  * POST { action: 'ler' }               lê agora, sem esperar o agendador
@@ -34,7 +34,6 @@ async function cardGroups(key: string, email?: string) {
 }
 
 const MISSING = 'Falta rodar migration_lootrush.sql no Supabase.';
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 async function connection(userId: string) {
   const { data, error } = await supabaseAdmin().from('lootrush_connections').select('*').eq('user_id', userId).maybeSingle();
@@ -58,11 +57,11 @@ export async function GET(request: Request) {
     catch (e: any) { return NextResponse.json({ error: plainLootrushError(e) }, { status: 502 }); }
   }
 
-  const from = q.get('from') || '', to = q.get('to') || '';
-  if (from || to) {
-    if (!DAY.test(from) || !DAY.test(to) || from > to) return NextResponse.json({ error: 'Período inválido.' }, { status: 400 });
+  const month = q.get('mes') || '';
+  if (month) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return NextResponse.json({ error: 'Mês inválido.' }, { status: 400 });
     if (!conn) return NextResponse.json({ ...publicStatus(conn), check: null });
-    try { return NextResponse.json({ ...publicStatus(conn), check: await lootrushCheck(user.id, from, to) }); }
+    try { return NextResponse.json({ ...publicStatus(conn), check: await lootrushCheck(user.id, month) }); }
     catch (e: any) { return NextResponse.json({ ...publicStatus(conn), error: e.message }, { status: 500 }); }
   }
   return NextResponse.json(publicStatus(conn));
