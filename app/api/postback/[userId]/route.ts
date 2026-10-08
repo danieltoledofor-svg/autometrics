@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { notifySaleNow } from '@/lib/alerts/saleNow';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -202,6 +203,12 @@ async function handleRequest(
             console.warn(
                 `[Postback] Produto não encontrado. user_id=${userId} candidatos=${candidateIds.join(',')} utm_campaign=${campaignName}`
             );
+            // Fica guardado para conferir depois (migration_postback_sem_campanha.sql); antes disso a tabela não existe e nada muda.
+            await supabase.from('postback_unmatched').insert({
+                user_id: userId, event_type: event, amount, currency, transaction_id: tid || null,
+                source: searchParams.has('CONV_TYPE') ? 'BuyGoods' : searchParams.get('source') || null,
+                ref_ids: candidateIds, campaign_name: campaignName || null, query: searchParams.toString().slice(0, 4000),
+            }).then(() => null, () => null);
             return new Response('OK', { status: 200, headers: corsHeaders });
         }
 
@@ -296,6 +303,9 @@ async function handleRequest(
             console.error('[Postback] Erro no upsert:', upsertError.message);
             return new Response('DB_ERROR', { status: 500, headers: corsHeaders });
         }
+
+        // Aviso de venda no Telegram na hora, sem esperar a rodada do agendador. Falha de aviso não derruba o postback.
+        if (event === 'sale') await notifySaleNow(userId, product.id, today).catch((e: any) => console.warn('[Postback] Aviso de venda:', e?.message));
 
         return new Response('OK', { status: 200, headers: corsHeaders });
 
