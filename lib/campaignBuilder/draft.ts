@@ -32,9 +32,9 @@ export interface Draft {
   /** O que o usuário informou para a IA escrever os recursos, e o último pacote que ela devolveu. */
   ia: { parecidas: string; url: string; idioma: string; pais: string; vsl: string; oferta: Partial<Offer> };
   sugestoes: ResourcePack | null;
-  /** Uma campanha por página em cada conta escolhida. */
-  paginas: { url: string; nome: string }[];
-  /** Contas onde subir, cada uma com a meta de conversão escolhida nela (a lista de metas muda de conta para conta). */
+  /** Cada página vai para as contas escolhidas para ela: sai uma campanha por conta. `contas` guarda os números das contas. */
+  paginas: { url: string; nome: string; contas: string[] }[];
+  /** As contas usadas neste lançamento (por qualquer página), cada uma com a meta de conversão escolhida nela: a lista de metas muda de conta para conta. */
   contas: { id: string; nome: string; mcc: string; meta_id: string | null; meta_nome: string | null }[];
   origem: string | null;
 }
@@ -109,9 +109,19 @@ export function whereProblems(d: Draft): string[] {
   if (!pages.length) out.push('Informe pelo menos uma página.');
   if (pages.some(p => !/^https:\/\/[^\s/]+\.[^\s/]+/i.test(p.url.trim()))) out.push('Toda página precisa começar com https://');
   if (pages.some(p => !p.nome.trim())) out.push('Toda página precisa do nome da campanha.');
-  if (!d.contas.length) out.push('Escolha pelo menos uma conta.');
-  if (d.lance.estrategia === 'MAXIMIZE_CONVERSIONS' && d.contas.some(c => !c.meta_id)) out.push('Escolha a meta de conversão de cada conta.');
+  if (pages.some(p => !p.contas.length)) out.push('Escolha a conta de cada página.');
+  const used = new Set(pages.flatMap(p => p.contas));
+  if (d.lance.estrategia === 'MAXIMIZE_CONVERSIONS' && d.contas.some(c => used.has(c.id) && !c.meta_id)) out.push('Escolha a meta de conversão de cada conta.');
+  // Duas páginas na mesma conta, com o mesmo nome de campanha, o Google recusa.
+  const seen = new Set<string>();
+  for (const p of pages) for (const c of p.contas) { const k = `${c}|${p.nome.trim().toLowerCase()}`; if (seen.has(k)) { out.push(`Duas campanhas com o nome "${p.nome.trim()}" iriam para a mesma conta. Mude o nome de uma.`); return out; } seen.add(k); }
   return out;
+}
+
+/** As campanhas que este lançamento cria: uma por página em cada conta escolhida para ela. */
+export function launchPlan(d: Draft): { url: string; nome: string; conta: Draft['contas'][number] }[] {
+  const byId = new Map(d.contas.map(c => [c.id, c]));
+  return d.paginas.filter(p => p.url.trim()).flatMap(p => p.contas.map(id => byId.get(id)).filter((c): c is Draft['contas'][number] => !!c).map(conta => ({ url: p.url.trim(), nome: p.nome.trim(), conta })));
 }
 
 /** Quanto cabe em um anúncio de pesquisa responsivo e em uma campanha. */

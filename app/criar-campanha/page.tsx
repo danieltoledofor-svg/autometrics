@@ -64,7 +64,7 @@ export default function CampaignBuilderPage() {
       if (s?.draft?.grupos) {
         const { aparelhos: _old, ...saved } = s.draft;
         void _old;
-        setDraftState({ ...emptyDraft(), ...saved, ia: { ...emptyDraft().ia, ...(saved.ia || {}) }, locais: (saved.locais || []).map((l: any) => ({ id: l.id, nome: l.nome, excluido: !!l.excluido })) });
+        setDraftState({ ...emptyDraft(), ...saved, ia: { ...emptyDraft().ia, ...(saved.ia || {}) }, paginas: (saved.paginas || []).map((p: any) => ({ url: p.url || '', nome: p.nome || '', contas: Array.isArray(p.contas) ? p.contas : [] })), locais: (saved.locais || []).map((l: any) => ({ id: l.id, nome: l.nome, excluido: !!l.excluido })) });
         setCurrency(s.currency || 'USD');
       }
     } catch { /* rascunho ilegível: começa sem */ }

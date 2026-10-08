@@ -22,7 +22,7 @@ export const maxDuration = 60;
  * GET ?template=<id>       devolve um modelo guardado, sem consultar o Google
  * GET ?local=<texto>       locais do Google que batem com o texto (país, estado, cidade)
  * GET ?idiomas=1           idiomas que o Google aceita, com o nome em português
- * GET ?contas=1            contas do usuário ligadas ao Google, com a MCC de cada uma
+ * GET ?contas=1            contas ativas do usuário, com a MCC e as campanhas que estão rodando em cada uma
  * GET ?metas=<conta>       metas de conversão personalizadas que aquela conta enxerga
  * GET ?parecidas=<trecho>  o que mais converteu nas campanhas do usuário com esse trecho no nome
  * POST { action: 'oferta', url }                 lê a página do produto (preço, garantia, frete…) com a IA
@@ -94,10 +94,25 @@ export async function GET(request: Request) {
   }
 
   if (q.get('contas')) {
-    const { data: accounts } = await db.from('google_ads_accounts').select('customer_id, login_customer_id, name, mcc_name, status').eq('user_id', user.id).order('mcc_name').order('name').limit(2000);
+    // Conta suspensa ou cancelada não recebe campanha: fica fora da lista.
+    const [{ data: accounts }, { data: running }] = await Promise.all([
+      db.from('google_ads_accounts').select('customer_id, login_customer_id, name, mcc_name, status').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
+      db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name').eq('user_id', user.id).eq('status', 'active').not('google_ads_customer_id', 'is', null).limit(5000),
+    ]);
+    // Campanhas rodando em cada conta, para não subir duas na mesma conta sem querer.
+    const active = new Map<string, string[]>();
+    for (const p of running || []) {
+      const id = String(p.google_ads_customer_id).replace(/\D/g, '');
+      if (!active.has(id)) active.set(id, []);
+      active.get(id)!.push(p.google_ads_campaign_name || p.name || 'Campanha');
+    }
     return NextResponse.json({
       allowed: true,
-      accounts: (accounts || []).map(a => ({ id: a.customer_id, nome: a.name || `Conta ${a.customer_id}`, mcc: a.mcc_name || (a.login_customer_id && a.login_customer_id !== a.customer_id ? `MCC ${a.login_customer_id}` : 'Sem MCC'), status: a.status || '' })),
+      accounts: (accounts || []).map(a => ({
+        id: a.customer_id, nome: a.name || `Conta ${a.customer_id}`,
+        mcc: a.mcc_name || (a.login_customer_id && a.login_customer_id !== a.customer_id ? `MCC ${a.login_customer_id}` : 'Sem MCC'),
+        ativas: active.get(a.customer_id) || [],
+      })),
     });
   }
 
