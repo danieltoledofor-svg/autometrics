@@ -11,15 +11,15 @@ import { supabaseAdmin, appUrl } from '@/lib/googleAds/server';
 export type AiFunction = 'leitura' | 'pagina' | 'padroes' | 'recursos';
 
 /**
- * Padrão de cada função; o dono troca em /ia sem precisar publicar. As leituras
- * usam modelo barato. A escrita dos anúncios (recursos) usa um modelo forte em
- * redação: ali o texto é o que vai ao ar, e cada pacote é pedido poucas vezes.
+ * Padrão barato de cada função; o dono troca em /ia sem precisar publicar.
+ * A escrita dos anúncios (recursos) usa o Gemini 3.8 Flash: escreve melhor que
+ * os modelos de leitura e custa poucos centavos por pacote.
  */
 export const DEFAULT_MODELS: Record<AiFunction, string> = {
   leitura: process.env.AI_MODEL_LEITURA || 'deepseek/deepseek-v4.1-flash',
   pagina: process.env.AI_MODEL_PAGINA || 'google/gemini-3.5-flash-lite',
   padroes: process.env.AI_MODEL_PADROES || 'deepseek/deepseek-v4.1-flash',
-  recursos: process.env.AI_MODEL_RECURSOS || 'anthropic/claude-sonnet-5.5',
+  recursos: process.env.AI_MODEL_RECURSOS || 'google/gemini-3.8-flash',
 };
 
 export const FUNCTION_LABELS: Record<AiFunction, { label: string; when: string }> = {
