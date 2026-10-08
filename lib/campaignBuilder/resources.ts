@@ -22,11 +22,15 @@ import { askJson } from '@/lib/ai/openrouter';
 export type Funnel = 'fundo' | 'topo';
 export type ResourceKind = 'titulo' | 'descricao' | 'sitelink' | 'sitelink_desc' | 'destaque';
 
-/** Limites de letras. `max` nunca passa do que o Google aceita; `min` é a regra de qualidade da skill. */
-export const LIMITS: Record<Funnel, Record<ResourceKind, { min: number; max: number }>> = {
-  fundo: { titulo: { min: 23, max: 30 }, descricao: { min: 80, max: 90 }, sitelink: { min: 15, max: 25 }, sitelink_desc: { min: 15, max: 35 }, destaque: { min: 1, max: 25 } },
-  topo: { titulo: { min: 1, max: 30 }, descricao: { min: 1, max: 90 }, sitelink: { min: 15, max: 25 }, sitelink_desc: { min: 1, max: 35 }, destaque: { min: 1, max: 25 } },
+/**
+ * Limites de letras, os mesmos do Google: título 30, descrição 90, texto do
+ * sitelink 25, cada linha de descrição do sitelink 35, frase de destaque 25.
+ * Decisão do usuário (08/10/2026): só o máximo vale; título curto é aceito.
+ */
+const GOOGLE: Record<ResourceKind, { min: number; max: number }> = {
+  titulo: { min: 1, max: 30 }, descricao: { min: 1, max: 90 }, sitelink: { min: 1, max: 25 }, sitelink_desc: { min: 1, max: 35 }, destaque: { min: 1, max: 25 },
 };
+export const LIMITS: Record<Funnel, Record<ResourceKind, { min: number; max: number }>> = { fundo: GOOGLE, topo: GOOGLE };
 
 /** Quanto de cada coisa o pacote traz. O anúncio usa até 15 títulos e 4 descrições; o resto fica como banco para trocar. */
 export const PACKAGE = {
@@ -118,7 +122,8 @@ const OUTPUT = `Responda só com JSON, neste formato:
 
 const limitsText = (f: Funnel) => {
   const l = LIMITS[f], span = (x: { min: number; max: number }) => (x.min > 1 ? `de ${x.min} a ${x.max}` : `até ${x.max}`);
-  return `Limites de letras: título ${span(l.titulo)} · descrição ${span(l.descricao)} · texto do sitelink ${span(l.sitelink)} · cada linha de descrição do sitelink ${span(l.sitelink_desc)} · frase de destaque ${span(l.destaque)}.`;
+  return `Aproveite o espaço: prefira títulos perto de 30 letras e descrições perto de 90, sem passar.
+Limites de letras: título ${span(l.titulo)} · descrição ${span(l.descricao)} · texto do sitelink ${span(l.sitelink)} · cada linha de descrição do sitelink ${span(l.sitelink_desc)} · frase de destaque ${span(l.destaque)}.`;
 };
 
 export function systemFor(f: Funnel): string {
