@@ -231,7 +231,7 @@ export function review(f: Funnel, raw: any) {
 export async function generateResources(ids: { userId: string; productId?: string | null }, f: Funnel, input: Offer | TopContext): Promise<ResourcePack> {
   const system = systemFor(f);
   const user = f === 'fundo' ? userForOffer(input as Offer) : userForTop(input as TopContext);
-  const ask = (text: string) => askJson<any>({ fn: 'recursos', userId: ids.userId, productId: ids.productId, system, user: text, maxTokens: 9000 });
+  const ask = (text: string) => askJson<any>({ fn: 'recursos', userId: ids.userId, productId: ids.productId, system, user: text, maxTokens: 9000, temperature: 0.8 });
   const first = review(f, await ask(user));
   const { good } = first;
   let discarded = 0;

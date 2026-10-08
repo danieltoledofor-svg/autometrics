@@ -10,12 +10,16 @@ import { supabaseAdmin, appUrl } from '@/lib/googleAds/server';
 
 export type AiFunction = 'leitura' | 'pagina' | 'padroes' | 'recursos';
 
-/** Padrão barato de cada função; o dono troca em /ia sem precisar publicar. */
+/**
+ * Padrão de cada função; o dono troca em /ia sem precisar publicar. As leituras
+ * usam modelo barato. A escrita dos anúncios (recursos) usa um modelo forte em
+ * redação: ali o texto é o que vai ao ar, e cada pacote é pedido poucas vezes.
+ */
 export const DEFAULT_MODELS: Record<AiFunction, string> = {
   leitura: process.env.AI_MODEL_LEITURA || 'deepseek/deepseek-v4.1-flash',
   pagina: process.env.AI_MODEL_PAGINA || 'google/gemini-3.5-flash-lite',
   padroes: process.env.AI_MODEL_PADROES || 'deepseek/deepseek-v4.1-flash',
-  recursos: process.env.AI_MODEL_RECURSOS || 'deepseek/deepseek-v4.1-flash',
+  recursos: process.env.AI_MODEL_RECURSOS || 'anthropic/claude-sonnet-5.5',
 };
 
 export const FUNCTION_LABELS: Record<AiFunction, { label: string; when: string }> = {
@@ -62,6 +66,8 @@ export interface AiCall {
   maxTokens?: number;
   /** Campo de texto principal: se a resposta vier cortada, aproveita o que chegou dele. */
   textField?: string;
+  /** Quanto a IA varia o texto. Leitura de números fica em 0,2 (padrão); escrita de anúncio pede mais variedade. */
+  temperature?: number;
 }
 
 /**
@@ -105,7 +111,7 @@ async function askOnce<T>(call: AiCall, maxTokens: number, lastTry: boolean): Pr
         model,
         messages: [{ role: 'system', content: call.system }, { role: 'user', content: call.user }],
         response_format: { type: 'json_object' },
-        temperature: 0.2,
+        temperature: call.temperature ?? 0.2,
         max_tokens: maxTokens,
         usage: { include: true },
       }),
