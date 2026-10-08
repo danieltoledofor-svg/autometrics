@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Loader2, Plus, Sparkles, X } from 'lucide-react';
+import { Check, Loader2, Plus, Sparkles, X } from 'lucide-react';
 import { AD_MAX, adProblems, type Draft } from '@/lib/campaignBuilder/draft';
 import { LIMITS, VARIATIONS, count, type Item, type Offer, type ResourceKind } from '@/lib/campaignBuilder/rules';
 import type { Similar, SimilarRow } from '@/lib/campaignBuilder/similar';
@@ -48,6 +48,26 @@ function Lines({ items, onChange, kind, max, funil, css, placeholder, add }: {
         ? <button onClick={() => onChange([...items, ''])} className={`text-xs font-bold inline-flex items-center gap-1 ${css.muted} hover:text-indigo-400`}><Plus size={13} /> {add}</button>
         : <div className={`text-xs ${css.muted}`}>Limite de {max} atingido.</div>}
     </div>
+  );
+}
+
+/**
+ * Botão de escolher: verde com ✓ quando o item já está na campanha nova (clicar
+ * tira), neutro com + quando não está (clicar põe). `full` = o limite daquele
+ * tipo foi atingido, então os que estão fora ficam travados até tirar um.
+ */
+function Pick({ on, full, onClick, css, wide, children }: { on: boolean; full?: boolean; onClick: () => void; css: Css; wide?: boolean; children?: React.ReactNode }) {
+  const tone = on
+    ? (css.isDark ? 'bg-emerald-500/15 border-emerald-500/70 text-emerald-300 hover:bg-emerald-500/25' : 'bg-emerald-50 border-emerald-500 text-emerald-800 hover:bg-emerald-100')
+    : full ? `${css.line} ${css.muted} opacity-50 cursor-not-allowed`
+      : (css.isDark ? 'border-slate-600 text-slate-100 hover:border-indigo-400 hover:text-indigo-300' : 'border-slate-300 text-slate-800 hover:border-indigo-500 hover:text-indigo-700');
+  const label = on ? 'Na campanha' : full ? 'Limite cheio' : 'Usar';
+  return (
+    <button onClick={onClick} disabled={!on && !!full} aria-pressed={on}
+      title={on ? 'Está na campanha nova. Clique para tirar.' : full ? 'O limite deste tipo foi atingido. Tire um para usar este.' : 'Não está na campanha nova. Clique para usar.'}
+      className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded border text-left ${wide ? 'w-full' : 'shrink-0'} ${children ? '' : 'font-bold'} ${tone}`}>
+      {on ? <Check size={13} className="shrink-0" /> : <Plus size={13} className="shrink-0" />}{children || label}
+    </button>
   );
 }
 
@@ -104,66 +124,95 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
     const seen = new Set(d.palavras.map(k => `${k.texto}|${k.tipo}`));
     return { ...d, palavras: [...d.palavras, ...list.filter(k => !seen.has(`${k.texto}|${k.tipo}`))] };
   });
-  const addTitle = (t: string) => setDraft(d => (d.anuncio.titulos.includes(t) || d.anuncio.titulos.length >= AD_MAX.titulos ? d : { ...d, anuncio: { ...d.anuncio, titulos: [...d.anuncio.titulos, t] } }));
-  const addDescription = (t: string) => setDraft(d => (d.anuncio.descricoes.includes(t) || d.anuncio.descricoes.length >= AD_MAX.descricoes ? d : { ...d, anuncio: { ...d.anuncio, descricoes: [...d.anuncio.descricoes, t] } }));
-  const addSitelink = (s: { texto: string; desc1: string; desc2: string }) => setDraft(d => (d.sitelinks.some(x => x.texto === s.texto) || d.sitelinks.length >= AD_MAX.sitelinks ? d : { ...d, sitelinks: [...d.sitelinks, s] }));
-  const addCallout = (t: string) => setDraft(d => (d.destaques.includes(t) || d.destaques.length >= AD_MAX.destaques ? d : { ...d, destaques: [...d.destaques, t] }));
+  const toggleKeyword = (k: { texto: string; tipo: string }) => setDraft(d => (d.palavras.some(x => x.texto === k.texto && x.tipo === k.tipo)
+    ? { ...d, palavras: d.palavras.filter(x => !(x.texto === k.texto && x.tipo === k.tipo)) } : { ...d, palavras: [...d.palavras, k] }));
+  const toggleTitle = (t: string) => setDraft(d => (d.anuncio.titulos.includes(t) ? { ...d, anuncio: { ...d.anuncio, titulos: d.anuncio.titulos.filter(x => x !== t) } }
+    : d.anuncio.titulos.length >= AD_MAX.titulos ? d : { ...d, anuncio: { ...d.anuncio, titulos: [...d.anuncio.titulos, t] } }));
+  const toggleDescription = (t: string) => setDraft(d => (d.anuncio.descricoes.includes(t) ? { ...d, anuncio: { ...d.anuncio, descricoes: d.anuncio.descricoes.filter(x => x !== t) } }
+    : d.anuncio.descricoes.length >= AD_MAX.descricoes ? d : { ...d, anuncio: { ...d.anuncio, descricoes: [...d.anuncio.descricoes, t] } }));
+  const toggleSitelink = (x: { texto: string; desc1: string; desc2: string }) => setDraft(d => (d.sitelinks.some(y => y.texto === x.texto) ? { ...d, sitelinks: d.sitelinks.filter(y => y.texto !== x.texto) }
+    : d.sitelinks.length >= AD_MAX.sitelinks ? d : { ...d, sitelinks: [...d.sitelinks, x] }));
+  const toggleCallout = (t: string) => setDraft(d => (d.destaques.includes(t) ? { ...d, destaques: d.destaques.filter(x => x !== t) }
+    : d.destaques.length >= AD_MAX.destaques ? d : { ...d, destaques: [...d.destaques, t] }));
+  const titlesFull = draft.anuncio.titulos.length >= AD_MAX.titulos, descsFull = draft.anuncio.descricoes.length >= AD_MAX.descricoes;
+  const hasKeyword = (k: { texto: string; tipo?: string }) => draft.palavras.some(x => x.texto === k.texto && x.tipo === (k.tipo || 'BROAD'));
+  /** O que já está na campanha nova, para o usuário não perder a conta enquanto escolhe. */
+  const tally = (
+    <div className={`rounded-lg border ${css.isDark ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-emerald-300 bg-emerald-50'} px-3 py-2 text-xs ${head} flex flex-wrap gap-x-4 gap-y-1`}>
+      <b>Na campanha nova agora:</b>
+      <span>{draft.palavras.length} {draft.palavras.length === 1 ? 'palavra-chave' : 'palavras-chave'}</span>
+      <span className={titlesFull ? 'text-amber-500 font-bold' : ''}>{draft.anuncio.titulos.length} de {AD_MAX.titulos} títulos</span>
+      <span className={descsFull ? 'text-amber-500 font-bold' : ''}>{draft.anuncio.descricoes.length} de {AD_MAX.descricoes} descrições</span>
+      <span>{draft.sitelinks.length} sitelinks</span>
+      <span>{draft.destaques.length} frases de destaque</span>
+    </div>
+  );
+  const legend = (
+    <div className={`text-xs ${muted} flex flex-wrap items-center gap-x-4 gap-y-1`}>
+      <span className="inline-flex items-center gap-1.5"><Pick on css={css} onClick={() => {}} /> está na campanha nova; clique para tirar</span>
+      <span className="inline-flex items-center gap-1.5"><Pick on={false} css={css} onClick={() => {}} /> não está; clique para pôr</span>
+      <span>Tudo o que você puser pode ser editado mais abaixo.</span>
+    </div>
+  );
   const pack = draft.sugestoes;
   const used = { t: new Set(draft.anuncio.titulos), d: new Set(draft.anuncio.descricoes), s: new Set(draft.sitelinks.map(s => s.texto)), c: new Set(draft.destaques) };
-  const Suggest = ({ item, isUsed, full, onAdd, max }: { item: Item; isUsed: boolean; full: boolean; onAdd: () => void; max: number }) => (
-    <div className={`flex items-start gap-2 py-1 border-t ${line}`}>
+  const suggest = (item: Item, key: React.Key, on: boolean, full: boolean, onToggle: () => void, max: number) => (
+    <div key={key} className={`flex items-start gap-2 py-1.5 border-t ${line}`}>
       <div className="flex-1 min-w-0">
-        <div className={`text-[13px] ${head}`}>{item.texto}</div>
+        <div className={`text-[13px] ${on ? (css.isDark ? 'text-emerald-300' : 'text-emerald-800') : head}`}>{item.texto}</div>
         {item.pt && <div className={`text-[11px] ${muted}`}>{item.pt}{item.grupo ? ` · ${item.grupo}` : ''}</div>}
       </div>
       <Counter text={item.texto} max={max} css={css} />
-      <button onClick={onAdd} disabled={isUsed || full} className={small}>{isUsed ? 'no anúncio' : 'Usar'}</button>
+      <Pick on={on} full={full} css={css} onClick={onToggle} />
     </div>
   );
 
   return (
     <div className="space-y-4">
-      <Block css={css} title="O que mais converteu nas suas campanhas parecidas" hint="Só as suas campanhas, últimos 30 dias. As conversões são as que o Google contou. O Google não informa conversão por título: os títulos vêm dos anúncios que mais converteram.">
+      <Block css={css} title="O que mais converteu nas suas campanhas parecidas" hint="Aqui você escolhe o que copiar das suas campanhas que já venderam. Só as suas campanhas, últimos 30 dias, com as conversões que o Google contou. O Google não informa conversão por título, então os títulos aparecem dentro dos anúncios que mais converteram.">
         <div className="flex gap-2">
           <input value={draft.ia.parecidas} onChange={e => setIa({ parecidas: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') findSimilar(); }} placeholder="Trecho do nome: [WL], ALKAMELT…" aria-label="Trecho do nome das campanhas parecidas" className={`flex-1 ${field}`} />
           <button onClick={findSimilar} disabled={busy !== '' || draft.ia.parecidas.trim().length < 2} className={solid}>{busy === 'parecidas' && <Loader2 size={12} className="animate-spin" />} Buscar</button>
         </div>
         {similar && (
-          <div className="space-y-3">
-            <div className={`text-xs ${muted}`}>{similar.campanhas} {similar.campanhas === 1 ? 'campanha' : 'campanhas'} com "{similar.trecho}" no nome{!similar.palavras.length && !similar.anuncios.length ? '. Nenhuma teve conversão contada pelo Google nos últimos 30 dias.' : '.'}</div>
+          <div className="space-y-4">
+            <div className={`text-xs ${muted}`}>{similar.campanhas} {similar.campanhas === 1 ? 'campanha' : 'campanhas'} com "{similar.trecho}" no nome{!similar.palavras.length && !similar.anuncios.length ? '. Nenhuma teve conversão contada pelo Google nos últimos 30 dias.' : '. Escolha abaixo o que vai para a campanha nova.'}</div>
+            {(similar.palavras.length > 0 || similar.anuncios.length > 0) && <>{tally}{legend}</>}
             {similar.palavras.length > 0 && (
-              <div><div className={`${label} mb-1`}>Palavras-chave</div>
+              <div><div className={`${label} mb-1`}>Palavras-chave que mais converteram</div>
                 {similar.palavras.slice(0, 10).map(k => (
-                  <div key={`${k.texto}|${k.tipo}`} className={`flex items-center gap-2 py-1 border-t ${line} text-[13px]`}>
-                    <span className={`flex-1 ${head}`}>{keyword(k)} <span className={`text-xs ${muted}`}>· {MATCH[k.tipo || ''] || 'ampla'}</span></span>
+                  <div key={`${k.texto}|${k.tipo}`} className={`flex flex-wrap items-center gap-2 py-1.5 border-t ${line} text-[13px]`}>
+                    <span className={`flex-1 min-w-[160px] ${hasKeyword(k) ? (css.isDark ? 'text-emerald-300' : 'text-emerald-800') : head}`}>{keyword(k)} <span className={`text-xs ${muted}`}>· {MATCH[k.tipo || ''] || 'ampla'}</span></span>
                     <span className={`text-xs ${muted}`}>{conv(k, money)}</span>
-                    <button onClick={() => addKeywords([{ texto: k.texto, tipo: k.tipo || 'BROAD' }])} disabled={draft.palavras.some(x => x.texto === k.texto && x.tipo === (k.tipo || 'BROAD'))} className={small}>Usar</button>
+                    <Pick on={hasKeyword(k)} css={css} onClick={() => toggleKeyword({ texto: k.texto, tipo: k.tipo || 'BROAD' })} />
                   </div>
                 ))}</div>
             )}
             {similar.anuncios.length > 0 && (
-              <div><div className={`${label} mb-1`}>Anúncios que mais converteram</div>
+              <div><div className={`${label} mb-1`}>Anúncios que mais converteram · clique em cada título ou descrição que quiser levar</div>
                 {similar.anuncios.map((a, i) => (
-                  <div key={i} className={`py-2 border-t ${line} space-y-1.5`}>
-                    <div className={`text-xs ${muted}`}>{a.campanha} · {String(a.conversoes).replace('.', ',')} conversões · gasto {money(a.custo)}</div>
-                    <div className="flex flex-wrap gap-1.5">{a.titulos.map(t => <button key={t} onClick={() => addTitle(t)} disabled={used.t.has(t) || draft.anuncio.titulos.length >= AD_MAX.titulos} title="Usar este título" className={`text-xs px-2 py-1 rounded border ${line} ${used.t.has(t) ? muted : head} hover:border-indigo-500 disabled:opacity-50`}>{t}</button>)}</div>
-                    <div className="space-y-1">{a.descricoes.map(t => <button key={t} onClick={() => addDescription(t)} disabled={used.d.has(t) || draft.anuncio.descricoes.length >= AD_MAX.descricoes} title="Usar esta descrição" className={`block text-left text-xs ${used.d.has(t) ? muted : head} hover:text-indigo-400 disabled:opacity-50`}>{t}</button>)}</div>
+                  <div key={i} className={`py-2.5 border-t ${line} space-y-2`}>
+                    <div className={`text-xs ${head}`}><b>{a.campanha}</b> <span className={muted}>· {String(a.conversoes).replace('.', ',')} conversões · gasto {money(a.custo)}</span></div>
+                    <div><div className={`text-[11px] ${muted} mb-1`}>Títulos deste anúncio</div>
+                      <div className="flex flex-wrap gap-1.5">{a.titulos.map(t => <Pick key={t} on={used.t.has(t)} full={titlesFull} css={css} onClick={() => toggleTitle(t)}>{t}</Pick>)}</div></div>
+                    <div><div className={`text-[11px] ${muted} mb-1`}>Descrições deste anúncio</div>
+                      <div className="space-y-1.5">{a.descricoes.map(t => <Pick key={t} wide on={used.d.has(t)} full={descsFull} css={css} onClick={() => toggleDescription(t)}>{t}</Pick>)}</div></div>
                   </div>
                 ))}</div>
             )}
             {similar.sitelinks.length > 0 && (
-              <div><div className={`${label} mb-1`}>Sitelinks</div>
-                {similar.sitelinks.map(s => (
-                  <div key={s.texto} className={`flex items-center gap-2 py-1 border-t ${line} text-[13px]`}>
-                    <span className="flex-1 min-w-0"><span className={head}>{s.texto}</span> <span className={`text-xs ${muted}`}>· {[s.extra?.desc1, s.extra?.desc2].filter(Boolean).join(' / ')}</span></span>
-                    <span className={`text-xs ${muted} shrink-0`}>{String(s.conversoes).replace('.', ',')} conv.</span>
-                    <button onClick={() => addSitelink({ texto: s.texto, desc1: s.extra?.desc1 || '', desc2: s.extra?.desc2 || '' })} disabled={used.s.has(s.texto)} className={small}>Usar</button>
+              <div><div className={`${label} mb-1`}>Sitelinks que mais converteram</div>
+                {similar.sitelinks.map(x => (
+                  <div key={x.texto} className={`flex flex-wrap items-center gap-2 py-1.5 border-t ${line} text-[13px]`}>
+                    <span className="flex-1 min-w-[200px]"><span className={used.s.has(x.texto) ? (css.isDark ? 'text-emerald-300' : 'text-emerald-800') : head}>{x.texto}</span> <span className={`text-xs ${muted}`}>· {[x.extra?.desc1, x.extra?.desc2].filter(Boolean).join(' / ')}</span></span>
+                    <span className={`text-xs ${muted} shrink-0`}>{String(x.conversoes).replace('.', ',')} conversões</span>
+                    <Pick on={used.s.has(x.texto)} full={draft.sitelinks.length >= AD_MAX.sitelinks} css={css} onClick={() => toggleSitelink({ texto: x.texto, desc1: x.extra?.desc1 || '', desc2: x.extra?.desc2 || '' })} />
                   </div>
                 ))}</div>
             )}
             {similar.destaques.length > 0 && (
-              <div><div className={`${label} mb-1`}>Frases de destaque</div>
-                <div className="flex flex-wrap gap-1.5">{similar.destaques.map(c => <button key={c.texto} onClick={() => addCallout(c.texto)} disabled={used.c.has(c.texto)} title={`${String(c.conversoes).replace('.', ',')} conversões`} className={`text-xs px-2 py-1 rounded border ${line} ${used.c.has(c.texto) ? muted : head} hover:border-indigo-500 disabled:opacity-50`}>{c.texto} · {String(c.conversoes).replace('.', ',')}</button>)}</div></div>
+              <div><div className={`${label} mb-1`}>Frases de destaque que mais converteram</div>
+                <div className="flex flex-wrap gap-1.5">{similar.destaques.map(c => <Pick key={c.texto} on={used.c.has(c.texto)} full={draft.destaques.length >= AD_MAX.destaques} css={css} onClick={() => toggleCallout(c.texto)}>{c.texto} <span className="opacity-70">· {String(c.conversoes).replace('.', ',')} conv.</span></Pick>)}</div></div>
             )}
           </div>
         )}
@@ -229,24 +278,27 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
         </div>
         {error && <div className="text-xs text-rose-500">{error}</div>}
         {pack && (
-          <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
-            <div><div className={`${label} mb-1`}>Títulos sugeridos</div>{pack.titulos.map((t, i) => <Suggest key={i} item={t} max={30} isUsed={used.t.has(t.texto)} full={draft.anuncio.titulos.length >= AD_MAX.titulos} onAdd={() => addTitle(t.texto)} />)}</div>
-            <div className="space-y-4">
-              <div><div className={`${label} mb-1`}>Descrições sugeridas</div>{pack.descricoes.map((t, i) => <Suggest key={i} item={t} max={90} isUsed={used.d.has(t.texto)} full={draft.anuncio.descricoes.length >= AD_MAX.descricoes} onAdd={() => addDescription(t.texto)} />)}</div>
-              <div><div className={`${label} mb-1`}>Sitelinks sugeridos</div>
-                {pack.sitelinks.map((s, i) => (
-                  <div key={i} className={`flex items-start gap-2 py-1 border-t ${line}`}>
-                    <div className="flex-1 min-w-0"><div className={`text-[13px] ${head}`}>{s.texto.texto}</div><div className={`text-[11px] ${muted}`}>{s.desc1.texto} / {s.desc2.texto}</div><div className={`text-[11px] ${muted}`}>{s.texto.pt}</div></div>
-                    <button onClick={() => addSitelink({ texto: s.texto.texto, desc1: s.desc1.texto, desc2: s.desc2.texto })} disabled={used.s.has(s.texto.texto)} className={small}>{used.s.has(s.texto.texto) ? 'na campanha' : 'Usar'}</button>
-                  </div>
-                ))}</div>
-              <div><div className={`${label} mb-1`}>Frases de destaque sugeridas</div>{pack.destaques.map((t, i) => <Suggest key={i} item={t} max={25} isUsed={used.c.has(t.texto)} full={draft.destaques.length >= AD_MAX.destaques} onAdd={() => addCallout(t.texto)} />)}</div>
+          <>
+            {tally}{legend}
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
+              <div><div className={`${label} mb-1`}>Títulos sugeridos</div>{pack.titulos.map((t, i) => suggest(t, i, used.t.has(t.texto), titlesFull, () => toggleTitle(t.texto), 30))}</div>
+              <div className="space-y-4">
+                <div><div className={`${label} mb-1`}>Descrições sugeridas</div>{pack.descricoes.map((t, i) => suggest(t, i, used.d.has(t.texto), descsFull, () => toggleDescription(t.texto), 90))}</div>
+                <div><div className={`${label} mb-1`}>Sitelinks sugeridos</div>
+                  {pack.sitelinks.map((x, i) => (
+                    <div key={i} className={`flex items-start gap-2 py-1.5 border-t ${line}`}>
+                      <div className="flex-1 min-w-0"><div className={`text-[13px] ${used.s.has(x.texto.texto) ? (css.isDark ? 'text-emerald-300' : 'text-emerald-800') : head}`}>{x.texto.texto}</div><div className={`text-[11px] ${muted}`}>{x.desc1.texto} / {x.desc2.texto}</div><div className={`text-[11px] ${muted}`}>{x.texto.pt}</div></div>
+                      <Pick on={used.s.has(x.texto.texto)} full={draft.sitelinks.length >= AD_MAX.sitelinks} css={css} onClick={() => toggleSitelink({ texto: x.texto.texto, desc1: x.desc1.texto, desc2: x.desc2.texto })} />
+                    </div>
+                  ))}</div>
+                <div><div className={`${label} mb-1`}>Frases de destaque sugeridas</div>{pack.destaques.map((t, i) => suggest(t, i, used.c.has(t.texto), draft.destaques.length >= AD_MAX.destaques, () => toggleCallout(t.texto), 25))}</div>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </Block>
 
-      <Block css={css} title="Anúncio" hint="A página de destino é informada no passo Onde subir, uma por campanha. O que você vê aqui vai igual para todas.">
+      <Block css={css} title="Anúncio da campanha nova" hint="É isto que vai ao Google: o que você escolheu acima aparece aqui e pode ser editado, apagado ou completado à mão. A página de destino é informada no passo Onde subir.">
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
           <span className={muted}>Caminho de exibição: seusite.com /</span>
           <input value={draft.anuncio.caminho1} onChange={e => setAd({ caminho1: e.target.value.replace(/\s/g, '') })} maxLength={15} placeholder="caminho" aria-label="Caminho de exibição 1" className={`w-36 ${field}`} />
