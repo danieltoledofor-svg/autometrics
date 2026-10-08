@@ -43,6 +43,36 @@ async function accountContext(userId: string, customerId?: string): Promise<AdsC
   return null;
 }
 
+/**
+ * Contas que o usuário ocultou dentro da MCC, no próprio Google Ads. O Google as dá como ativas, mas
+ * quem ocultou não quer usar: ficam fora da lista do criador. Uma consulta por gerenciador, guardada
+ * por 10 minutos. Se a consulta falhar, ninguém é escondido.
+ */
+const hiddenCache = new Map<string, { at: number; ids: Set<string> }>();
+async function hiddenAccounts(userId: string, accounts: { customer_id: string; login_customer_id: string | null; connection_id: string }[]): Promise<{ ids: Set<string>; calls: number }> {
+  const hit = hiddenCache.get(userId);
+  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return { ids: hit.ids, calls: 0 };
+  const db = supabaseAdmin();
+  const managers = new Map<string, string>();                    // gerenciador → ligação
+  for (const a of accounts) if (a.login_customer_id && a.login_customer_id !== a.customer_id && !managers.has(a.login_customer_id)) managers.set(a.login_customer_id, a.connection_id);
+  const { data: conns } = await db.from('google_ads_connections').select('id, refresh_token_enc, status').in('id', [...new Set(managers.values())]);
+  const token = new Map((conns || []).filter(c => c.status === 'ok').map(c => [c.id, c.refresh_token_enc]));
+  const ids = new Set<string>();
+  let calls = 0;
+  await Promise.all([...managers].map(async ([manager, connection]) => {
+    const enc = token.get(connection);
+    if (!enc) return;
+    calls++;
+    try {
+      const rows = await search({ refreshToken: decryptSecret(enc), customerId: manager, loginCustomerId: manager },
+        'SELECT customer_client.id, customer_client.hidden FROM customer_client WHERE customer_client.level >= 1 AND customer_client.hidden = TRUE');
+      for (const r of rows) if (r.customerClient?.id) ids.add(String(r.customerClient.id).replace(/\D/g, ''));
+    } catch { /* sem a resposta deste gerenciador, as contas dele aparecem todas */ }
+  }));
+  hiddenCache.set(userId, { at: Date.now(), ids });
+  return { ids, calls };
+}
+
 let languageCache: { at: number; list: { id: string; nome: string }[] } | null = null;
 
 export async function GET(request: Request) {
@@ -96,7 +126,7 @@ export async function GET(request: Request) {
   if (q.get('contas')) {
     // Conta suspensa ou cancelada não recebe campanha: fica fora da lista.
     const [{ data: accounts }, { data: running }] = await Promise.all([
-      db.from('google_ads_accounts').select('customer_id, login_customer_id, name, mcc_name, status').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
+      db.from('google_ads_accounts').select('customer_id, login_customer_id, connection_id, name, mcc_name, status').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
       db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name, status, mcc_name').eq('user_id', user.id).not('google_ads_customer_id', 'is', null).limit(5000),
     ]);
     // Campanhas rodando em cada conta, para não subir duas na mesma conta sem querer.
@@ -124,9 +154,13 @@ export async function GET(request: Request) {
     const groupOf = (a: { customer_id: string; login_customer_id: string | null; mcc_name: string | null }) => (a.login_customer_id && a.login_customer_id !== a.customer_id
       ? managerName(a.login_customer_id) || a.mcc_name || `MCC ${a.login_customer_id}`
       : mccOf.get(a.customer_id) || a.mcc_name || 'Sem MCC');           // conta acessada direto: vale a MCC das campanhas dela
+    const hiddenInGoogle = await hiddenAccounts(user.id, accounts || []).catch(() => ({ ids: new Set<string>(), calls: 0 }));
+    if (hiddenInGoogle.calls) await addUsage(hiddenInGoogle.calls).catch(() => {});
+    const visible = (accounts || []).filter(a => !hiddenInGoogle.ids.has(a.customer_id));
     return NextResponse.json({
       allowed: true,
-      accounts: (accounts || []).map(a => ({
+      hidden_in_google: (accounts || []).length - visible.length,
+      accounts: visible.map(a => ({
         id: a.customer_id, nome: a.name || `Conta ${a.customer_id}`,
         mcc: groupOf(a),
         ativas: active.get(a.customer_id) || [],

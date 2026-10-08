@@ -92,6 +92,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
 }) {
   const { isDark, card, head, muted, line, soft } = css;
   const [accounts, setAccounts] = useState<Account[] | null>(null);
+  const [hiddenInGoogle, setHiddenInGoogle] = useState(0);
   const [open, setOpen] = useState<number | null>(0);
   const [goals, setGoals] = useState<Record<string, Goals>>({});
   const asked = useRef(new Set<string>());
@@ -107,7 +108,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
   const plan = launchPlan(draft);
   const byId = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);
 
-  useEffect(() => { api('/api/campaign-builder?contas=1').then(({ body }) => setAccounts(body.accounts || [])); }, [api]);
+  useEffect(() => { api('/api/campaign-builder?contas=1').then(({ body }) => { setAccounts(body.accounts || []); setHiddenInGoogle(Number(body.hidden_in_google) || 0); }); }, [api]);
   // Sempre há pelo menos um cartão para preencher.
   useEffect(() => { if (!draft.paginas.length) setDraft(d => (d.paginas.length ? d : { ...d, paginas: [{ url: '', nome: d.nome, contas: [] }] })); }, [draft.paginas.length, setDraft]);
 
@@ -156,7 +157,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
       <div className={`${card} border rounded-xl p-4 space-y-1`}>
         <div className={`text-sm font-bold ${head}`}>Onde cada campanha vai subir</div>
         <div className={`text-xs ${muted}`}>Cada cartão abaixo é uma página. Em cada um você diz o endereço, o nome da campanha e marca a MCC e as contas que recebem aquela página: sai uma campanha por conta marcada. Todas levam a mesma configuração e o mesmo anúncio. Cole só o endereço da página; o rastreador ({tracker}) entra sozinho.</div>
-        <div className={`text-xs ${muted}`}>{accounts ? `${accounts.length} contas que o Google dá como ativas. As que ele marca como suspensas ou canceladas não aparecem. Se uma conta daqui estiver suspensa, passe o mouse nela e clique em "esconder".` : 'Carregando as contas…'}</div>
+        <div className={`text-xs ${muted}`}>{accounts ? `${accounts.length} contas que o Google dá como ativas. Não aparecem as suspensas, as canceladas${hiddenInGoogle ? ` nem as ${hiddenInGoogle} que você ocultou na MCC, no Google Ads` : ' nem as que você ocultou na MCC, no Google Ads'}. Para tirar mais alguma daqui, passe o mouse nela e clique em "esconder".` : 'Carregando as contas…'}</div>
       </div>
 
       {draft.paginas.map((p, i) => {
