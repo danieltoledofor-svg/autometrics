@@ -1,83 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { resolveCampaignStatus, resolveEffectiveStatus } from '@/lib/campaignStatus';
 import { mergeGoogleMetrics } from '@/lib/metrics/catalog';
+import { mergeAutoNotes } from '@/lib/googleAds/changeNotes';
 
 // Configuração do Cliente Supabase
 // Tenta usar a Service Role (Admin) se disponível, senão usa a Anon
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
-
-/** Nomes técnicos do Google em português, para a anotação do dia. */
-const RECURSO_PT: Record<string, string> = {
-  CAMPAIGN: 'Campanha',
-  CAMPAIGN_BUDGET: 'Orçamento',
-  CAMPAIGN_CRITERION: 'Segmentação da campanha',
-  AD_GROUP: 'Grupo de anúncios',
-  AD_GROUP_AD: 'Anúncio',
-  AD_GROUP_CRITERION: 'Palavra-chave / segmentação',
-  AD_GROUP_BID_MODIFIER: 'Ajuste de lance',
-  CAMPAIGN_ASSET: 'Recurso da campanha',
-  AD_GROUP_ASSET: 'Recurso do grupo',
-  ASSET: 'Recurso',
-  FEED: 'Feed',
-  AD: 'Anúncio',
-  CAMPAIGN_SHARED_SET: 'Lista compartilhada',
-  SHARED_SET: 'Lista compartilhada',
-  ASSET_SET: 'Conjunto de recursos',
-  CUSTOMER_ASSET: 'Recurso da conta',
-  AD_GROUP_FEED: 'Feed do grupo',
-  CAMPAIGN_FEED: 'Feed da campanha',
-  BIDDING_STRATEGY: 'Estratégia de lance',
-};
-
-const OPERACAO_PT: Record<string, string> = {
-  CREATE: 'criou',
-  UPDATE: 'alterou',
-  REMOVE: 'removeu',
-};
-
-const CAMPO_PT: Record<string, string> = {
-  amount_micros: 'valor',
-  target_cpa_micros: 'CPA alvo',
-  target_roas: 'ROAS alvo',
-  status: 'status',
-  name: 'nome',
-  cpc_bid_micros: 'lance de CPC',
-  bidding_strategy_type: 'estratégia de lance',
-  final_urls: 'URL final',
-  start_date: 'data de início',
-  end_date: 'data de término',
-};
-
-/**
- * Monta a linha do histórico no formato que o Google usa: o que mudou e de que
- * valor para qual. Antes a anotação dizia apenas "CAMPAIGN_BUDGET (UPDATE) por
- * fulano", que informa que algo mudou mas não o quê.
- */
-function descreverAlteracao(hist: any): string {
-  const recurso = RECURSO_PT[hist.type] || hist.type || 'Alteração';
-  const acao = OPERACAO_PT[hist.op] || (hist.op || '').toLowerCase();
-
-  // O e-mail de quem alterou não entra na anotação: é dado pessoal de operadores
-  // e a plataforma é usada por várias contas.
-  const campos = Array.isArray(hist.fields) ? hist.fields : [];
-  if (!campos.length) {
-    // Sem o de/para, ao menos o recurso e a ação, em português.
-    return `${recurso} — ${acao}`;
-  }
-
-  const detalhes = campos
-    .map((c: any) => {
-      const nome = CAMPO_PT[String(c.f).split('.').pop() || ''] || String(c.f).split('.').pop();
-      const de = c.de === '' || c.de === undefined ? '—' : c.de;
-      const para = c.para === '' || c.para === undefined ? '—' : c.para;
-      return de === para ? `${nome}: ${para}` : `${nome}: ${de} → ${para}`;
-    })
-    .join(', ');
-
-  return `${recurso} — ${acao} ${detalhes}`;
-}
 
 export interface IngestResult {
   status: number;
@@ -593,16 +523,9 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
     diagTasks.push((async () => {
       try {
         const { data: currentMetrics } = await supabase.from('daily_metrics').select('notes').eq('product_id', product.id).eq('date', date).maybeSingle();
-        let currentNotes = currentMetrics?.notes || '';
-        let addedHistory = false;
-        history.forEach((hist: any) => {
-          const histLine = `[AUTO] ${hist.time} - ${descreverAlteracao(hist)}`;
-          if (!currentNotes.includes(histLine)) {
-            currentNotes += (currentNotes ? '\n' : '') + histLine;
-            addedHistory = true;
-          }
-        });
-        if (addedHistory) {
+        // Cada alteração vira uma frase em português simples (lib/googleAds/changeNotes).
+        const currentNotes = mergeAutoNotes(currentMetrics?.notes || '', history);
+        if (currentNotes !== (currentMetrics?.notes || '')) {
            const { error } = await supabase.from('daily_metrics').update({ notes: currentNotes }).eq('product_id', product.id).eq('date', date);
            if (error) taskErrors.push('history: ' + error.message);
         }

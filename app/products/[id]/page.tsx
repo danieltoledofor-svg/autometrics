@@ -21,6 +21,7 @@ import { QuickEntryModal } from '@/app/components/QuickEntryModal';
 import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
 import { SegmentTab } from './SegmentTab';
 import { GoogleControlsBar } from './GoogleControlsBar';
+import { noteSummary } from '@/lib/googleAds/changeNotes';
 import { AnalysisTab } from './AnalysisTab';
 import { ChangeNotes, type ChangeArea } from './ChangeNotes';
 import { VturbTab } from './VturbTab';
@@ -909,7 +910,7 @@ export default function ProductDetailPage() {
                       </div>
                     </div>
                     {hasNote && (
-                      <div className={`mt-2 p-2 rounded-lg text-xs italic text-amber-400 ${isDark ? 'bg-amber-400/5' : 'bg-amber-50'}`}>
+                      <div className={`mt-2 p-2 rounded-lg text-xs italic whitespace-pre-line text-amber-400 ${isDark ? 'bg-amber-400/5' : 'bg-amber-50'}`}>
                         {notes[dateKey]}
                       </div>
                     )}
@@ -1040,7 +1041,7 @@ export default function ProductDetailPage() {
                           if (col.key === 'notes') return (
                             <td key={col.key} className={`${pad} ${bg} max-w-[200px]`} style={widthStyle(overviewPrefs.widths[col.key])}>
                               {hasNote
-                                ? <span className={`text-xs italic truncate block max-w-[180px] text-amber-400/80 cursor-pointer hover:text-amber-300`} title={notes[dateKey]} onClick={() => openNoteByKey(dateKey)}>{notes[dateKey]}</span>
+                                ? <span className={`text-xs italic truncate block max-w-[180px] text-amber-400/80 cursor-pointer hover:text-amber-300`} title={notes[dateKey]} onClick={() => openNoteByKey(dateKey)}>{noteSummary(notes[dateKey])}</span>
                                 : <button onClick={() => openNoteByKey(dateKey)} className={`text-xs ${textMuted} hover:text-indigo-400 transition-colors`}>+ nota</button>
                               }
                             </td>

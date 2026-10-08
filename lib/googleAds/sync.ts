@@ -535,6 +535,9 @@ export async function syncAccount(
       op: ev.resourceChangeOperation || '',
       user: ev.userEmail || '',
       fields: describeChanges(ev),
+      // Quem é a linha (qual idade, aparelho ou país) sai do número no fim do nome do item.
+      res: ev.changeResourceName || '',
+      geo: ev.changeResourceType === 'CAMPAIGN_CRITERION' ? geoCache.get(String(ev.changeResourceName || '').split('~').pop() || '') : undefined,
     });
   }
 
