@@ -2,18 +2,20 @@
 
 import React, { useState } from 'react';
 import { Loader2, Plus, Search, X } from 'lucide-react';
-import { LANGUAGES, campaignProblems, type Draft } from '@/lib/campaignBuilder/draft';
+import { campaignProblems, type Draft } from '@/lib/campaignBuilder/draft';
 import { TRACKERS } from '@/lib/campaignBuilder/url';
 
 /**
  * Passo 2 do criador: a configuração da campanha. Funil, lance, orçamento,
  * redes, locais (incluir e excluir), quem conta como no local, idiomas, IA Max
- * (desligada por padrão), ajuste por aparelho, grupos com meta de CPA própria,
- * negativas e o rastreador da URL. Nada aqui vai ao Google ainda.
+ * (desligada por padrão), grupos com meta de CPA própria, negativas e o
+ * rastreador da URL. Campanha nova não leva ajuste de lance: isso fica para
+ * depois de ver os números dela. Nada aqui vai ao Google ainda.
  */
 
 export interface Css { isDark: boolean; card: string; head: string; muted: string; line: string; soft: string; label: string }
-const DEVICE: Record<string, string> = { MOBILE: 'Celular', DESKTOP: 'Computador', TABLET: 'Tablet' };
+/** Os que aparecem antes de digitar. */
+const COMMON_LANGUAGES = ['Inglês', 'Português', 'Espanhol', 'Francês', 'Alemão', 'Italiano', 'Holandês'];
 const PLACE: Record<string, string> = { Country: 'país', State: 'estado', Province: 'província', Region: 'região', City: 'cidade', County: 'condado', 'Postal Code': 'CEP', DMA: 'região de mídia' };
 
 const toNumber = (text: string) => { const v = Number(String(text).replace(',', '.')); return text.trim() === '' || !Number.isFinite(v) ? null : v; };
@@ -38,8 +40,10 @@ function NumberField({ value, onChange, css, width = 'w-28', placeholder, label 
   );
 }
 
-export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, onNext }: {
+export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languages, onNext }: {
   draft: Draft; setDraft: (fn: (d: Draft) => Draft) => void; symbol: string; css: Css;
+  /** Idiomas que o Google aceita. null = ainda carregando ou a lista não veio. */
+  languages: { id: string; nome: string }[] | null;
   findPlaces: (text: string) => Promise<{ places?: { id: string; nome: string; tipo: string }[]; error?: string }>; onNext: () => void;
 }) {
   const { isDark, card, head, muted, line, soft, label } = css;
@@ -48,6 +52,7 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, onNext 
   const [searching, setSearching] = useState(false);
   const [placeError, setPlaceError] = useState('');
   const [negatives, setNegatives] = useState('');
+  const [langText, setLangText] = useState('');
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }));
   const problems = campaignProblems(draft);
 
@@ -60,7 +65,7 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, onNext 
     setSearching(false);
   };
   const addPlace = (p: { id: string; nome: string }, excluido: boolean) => {
-    setDraft(d => ({ ...d, locais: [...d.locais.filter(l => l.id !== p.id), { id: p.id, nome: p.nome, excluido, ajuste: 0 }] }));
+    setDraft(d => ({ ...d, locais: [...d.locais.filter(l => l.id !== p.id), { id: p.id, nome: p.nome, excluido }] }));
     setPlaces([]); setPlaceText('');
   };
   const addNegatives = () => {
@@ -142,8 +147,6 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, onNext 
               {list.map(l => (
                 <span key={l.id} className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded border ${line} ${head}`}>
                   {l.nome}
-                  {!l.excluido && <><NumberField key={l.id} label={`Ajuste de lance de ${l.nome}`} value={l.ajuste || null} css={css} width="w-14" placeholder="0"
-                    onChange={v => setDraft(d => ({ ...d, locais: d.locais.map(x => (x.id === l.id ? { ...x, ajuste: v || 0 } : x)) }))} />%</>}
                   <button onClick={() => setDraft(d => ({ ...d, locais: d.locais.filter(x => x.id !== l.id) }))} aria-label={`Remover ${l.nome}`} className={`${muted} hover:text-rose-400`}><X size={12} /></button>
                 </span>
               ))}
@@ -177,32 +180,32 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, onNext 
         )}
       </Block>
 
-      <Block css={css} title="Idiomas" hint="Sem nenhum marcado, vale para todos os idiomas.">
-        <div className="flex flex-wrap gap-2">
-          {LANGUAGES.map(l => {
-            const on = draft.idiomas.some(i => i.id === l.id);
-            return <button key={l.id} onClick={() => set({ idiomas: on ? draft.idiomas.filter(i => i.id !== l.id) : [...draft.idiomas, l] })} className={choice(on)}>{l.nome}</button>;
-          })}
-          {draft.idiomas.filter(i => !LANGUAGES.some(l => l.id === i.id)).map(i => (
-            <button key={i.id} onClick={() => set({ idiomas: draft.idiomas.filter(x => x.id !== i.id) })} className={choice(true)}>{i.nome}</button>
+      <Block css={css} title="Idiomas" hint="Sem nenhum escolhido, a campanha vale para todos os idiomas.">
+        <div className="flex flex-wrap gap-1.5">
+          {draft.idiomas.map(i => (
+            <span key={i.id} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${line} ${head}`}>{i.nome}
+              <button onClick={() => set({ idiomas: draft.idiomas.filter(x => x.id !== i.id) })} aria-label={`Remover ${i.nome}`} className={`${muted} hover:text-rose-400`}><X size={12} /></button></span>
           ))}
+          {!draft.idiomas.length && <span className={`text-xs ${muted}`}>todos os idiomas</span>}
         </div>
+        {languages ? (
+          <>
+            <input value={langText} onChange={e => setLangText(e.target.value)} placeholder="Procurar idioma: inglês, espanhol, francês…" aria-label="Procurar idioma"
+              className={`w-full rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500`} />
+            <div className="flex flex-wrap gap-1.5">
+              {languages.filter(l => !draft.idiomas.some(i => i.id === l.id))
+                .filter(l => (langText.trim() ? l.nome.toLowerCase().includes(langText.trim().toLowerCase()) : COMMON_LANGUAGES.includes(l.nome)))
+                .slice(0, 24).map(l => <button key={l.id} onClick={() => { set({ idiomas: [...draft.idiomas, l] }); setLangText(''); }} className={choice(false)}>{l.nome}</button>)}
+            </div>
+            {!langText.trim() && <div className={`text-xs ${muted}`}>Aparecem os mais usados; digite para achar qualquer outro dos {languages.length}.</div>}
+          </>
+        ) : <div className={`text-xs ${muted}`}>Carregando os idiomas do Google…</div>}
       </Block>
 
       <Block css={css} title="IA Max do Google" hint="Desligada por padrão. Ligada, o Google amplia as pesquisas em que o anúncio aparece. As duas opções abaixo deixam o Google reescrever o seu texto e trocar a página de destino.">
         {check(draft.ia_max.ligada, 'Ligar a IA Max nesta campanha', v => set({ ia_max: v ? { ...draft.ia_max, ligada: true } : { ligada: false, personalizar_texto: false, expandir_url: false } }))}
         {check(draft.ia_max.personalizar_texto, 'Personalização do texto: o Google cria títulos e descrições novos', v => set({ ia_max: { ...draft.ia_max, personalizar_texto: v, expandir_url: v ? draft.ia_max.expandir_url : false } }), !draft.ia_max.ligada)}
         {check(draft.ia_max.expandir_url, 'Expansão de URL final: o Google pode levar o clique a outra página do site', v => set({ ia_max: { ...draft.ia_max, expandir_url: v } }), !draft.ia_max.ligada || !draft.ia_max.personalizar_texto)}
-      </Block>
-
-      <Block css={css} title="Ajuste de lance por aparelho" hint="De −100% a +900%. Em branco, sem ajuste.">
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
-          {draft.aparelhos.map(a => (
-            <span key={a.tipo} className={`inline-flex items-center gap-2 text-[13px] ${head}`}>{DEVICE[a.tipo]}
-              <NumberField label={`Ajuste de ${DEVICE[a.tipo]}`} value={a.ajuste || null} css={css} width="w-20" placeholder="0"
-                onChange={v => setDraft(d => ({ ...d, aparelhos: d.aparelhos.map(x => (x.tipo === a.tipo ? { ...x, ajuste: v || 0 } : x)) }))} />%</span>
-          ))}
-        </div>
       </Block>
 
       <Block css={css} title={`Negativas da campanha (${draft.negativas.length})`} hint='Uma por linha ou separadas por vírgula. Use [colchetes] para exata e "aspas" para frase; sem nada, ampla.'>

@@ -1,5 +1,6 @@
 import { search, type AdsContext } from '@/lib/googleAds/client';
 import { selectableFields } from '@/lib/googleAds/fields';
+import { languageName, placeName } from './names';
 
 /**
  * Modelo de campanha: tudo o que uma campanha de Pesquisa tem no Google, lido
@@ -131,11 +132,11 @@ export async function readTemplate(ctx: AdsContext, campaignId: string): Promise
   const geoIds = [...new Set(criteria.map(r => r.campaignCriterion?.location?.geoTargetConstant).filter(Boolean))].slice(0, 400);
   const langIds = [...new Set(criteria.map(r => r.campaignCriterion?.language?.languageConstant).filter(Boolean))];
   const [geoRows, langRows] = await Promise.all([
-    geoIds.length ? q('nomes dos locais', `SELECT geo_target_constant.resource_name, geo_target_constant.canonical_name FROM geo_target_constant WHERE geo_target_constant.resource_name IN (${geoIds.map(g => `'${g}'`).join(',')})`) : [],
-    langIds.length ? q('nomes dos idiomas', `SELECT language_constant.resource_name, language_constant.name FROM language_constant WHERE language_constant.resource_name IN (${langIds.map(g => `'${g}'`).join(',')})`) : [],
+    geoIds.length ? q('nomes dos locais', `SELECT geo_target_constant.resource_name, geo_target_constant.name, geo_target_constant.canonical_name, geo_target_constant.country_code, geo_target_constant.target_type FROM geo_target_constant WHERE geo_target_constant.resource_name IN (${geoIds.map(g => `'${g}'`).join(',')})`) : [],
+    langIds.length ? q('nomes dos idiomas', `SELECT language_constant.resource_name, language_constant.name, language_constant.code FROM language_constant WHERE language_constant.resource_name IN (${langIds.map(g => `'${g}'`).join(',')})`) : [],
   ]);
-  const geoName = new Map(geoRows.map(r => [r.geoTargetConstant?.resourceName, r.geoTargetConstant?.canonicalName]));
-  const langName = new Map(langRows.map(r => [r.languageConstant?.resourceName, r.languageConstant?.name]));
+  const geoName = new Map(geoRows.map(r => [r.geoTargetConstant?.resourceName, placeName(r.geoTargetConstant || {})]));
+  const langName = new Map(langRows.map(r => [r.languageConstant?.resourceName, languageName(r.languageConstant?.code, r.languageConstant?.name)]));
 
   const t: Template = {
     origem: { campanha_id: String(campaignId), conta_id: ctx.customerId, nome: c.name || '', lido_em: new Date().toISOString() },

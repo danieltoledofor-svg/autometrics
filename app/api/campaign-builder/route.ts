@@ -3,7 +3,8 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { addUsage } from '@/lib/googleAds/sync';
 import { campaignAccess, canEdit } from '@/lib/googleAds/edit';
 import { readTemplate } from '@/lib/campaignBuilder/template';
-import { suggestLocations } from '@/lib/googleAds/client';
+import { search, suggestLocations, type AdsContext } from '@/lib/googleAds/client';
+import { languageName } from '@/lib/campaignBuilder/names';
 import { decryptSecret } from '@/lib/googleAds/server';
 
 export const dynamic = 'force-dynamic';
@@ -16,9 +17,27 @@ export const maxDuration = 60;
  * GET ?product_id=…        lê a campanha inteira do Google e guarda como modelo
  * GET ?template=<id>       devolve um modelo guardado, sem consultar o Google
  * GET ?local=<texto>       locais do Google que batem com o texto (país, estado, cidade)
+ * GET ?idiomas=1           idiomas que o Google aceita, com o nome em português
+ * GET ?contas=1            contas do usuário ligadas ao Google, com a MCC de cada uma
+ * GET ?metas=<conta>       metas de conversão personalizadas que aquela conta enxerga
  *
  * Só para os logins liberados (lib/googleAds/edit).
  */
+/** Acesso a uma conta do usuário (ou à primeira com ligação ativa, quando qualquer uma serve). */
+async function accountContext(userId: string, customerId?: string): Promise<AdsContext | null> {
+  const db = supabaseAdmin();
+  let query = db.from('google_ads_accounts').select('customer_id, login_customer_id, connection_id').eq('user_id', userId);
+  if (customerId) query = query.eq('customer_id', customerId);
+  const { data: accounts } = await query.limit(customerId ? 1 : 25);
+  for (const acc of accounts || []) {
+    const { data: conn } = await db.from('google_ads_connections').select('refresh_token_enc, status').eq('id', acc.connection_id).maybeSingle();
+    if (conn?.status === 'ok') return { refreshToken: decryptSecret(conn.refresh_token_enc), customerId: acc.customer_id, loginCustomerId: acc.login_customer_id };
+  }
+  return null;
+}
+
+let languageCache: { at: number; list: { id: string; nome: string }[] } | null = null;
+
 export async function GET(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
@@ -41,6 +60,43 @@ export async function GET(request: Request) {
       const places = await suggestLocations(decryptSecret(conns[0].refresh_token_enc), place);
       await addUsage(1).catch(() => {});
       return NextResponse.json({ allowed: true, places: places.slice(0, 12) });
+    } catch (e: any) {
+      return NextResponse.json({ allowed: true, error: `O Google não respondeu: ${e.message}` }, { status: 502 });
+    }
+  }
+
+  if (q.get('idiomas')) {
+    if (languageCache && Date.now() - languageCache.at < 24 * 3600 * 1000) return NextResponse.json({ allowed: true, languages: languageCache.list });
+    const ctx = await accountContext(user.id);
+    if (!ctx) return NextResponse.json({ allowed: true, error: 'Nenhuma ligação ativa com o Google. Reconecte em Integração.' }, { status: 409 });
+    try {
+      const rows = await search(ctx, 'SELECT language_constant.id, language_constant.code, language_constant.name FROM language_constant WHERE language_constant.targetable = TRUE');
+      await addUsage(1).catch(() => {});
+      const list = rows.map(r => r.languageConstant || {}).filter(l => l.id)
+        .map(l => ({ id: String(l.id), nome: languageName(l.code, l.name) })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      languageCache = { at: Date.now(), list };
+      return NextResponse.json({ allowed: true, languages: list });
+    } catch (e: any) {
+      return NextResponse.json({ allowed: true, error: `O Google não respondeu: ${e.message}` }, { status: 502 });
+    }
+  }
+
+  if (q.get('contas')) {
+    const { data: accounts } = await db.from('google_ads_accounts').select('customer_id, login_customer_id, name, mcc_name, status').eq('user_id', user.id).order('mcc_name').order('name').limit(2000);
+    return NextResponse.json({
+      allowed: true,
+      accounts: (accounts || []).map(a => ({ id: a.customer_id, nome: a.name || `Conta ${a.customer_id}`, mcc: a.mcc_name || (a.login_customer_id && a.login_customer_id !== a.customer_id ? `MCC ${a.login_customer_id}` : 'Sem MCC'), status: a.status || '' })),
+    });
+  }
+
+  const goalsOf = (q.get('metas') || '').replace(/\D/g, '');
+  if (goalsOf) {
+    const ctx = await accountContext(user.id, goalsOf);
+    if (!ctx) return NextResponse.json({ allowed: true, error: 'Esta conta não está ligada, ou a ligação expirou. Reconecte em Integração.' }, { status: 409 });
+    try {
+      const rows = await search(ctx, 'SELECT custom_conversion_goal.id, custom_conversion_goal.name, custom_conversion_goal.status FROM custom_conversion_goal');
+      await addUsage(1).catch(() => {});
+      return NextResponse.json({ allowed: true, goals: rows.map(r => r.customConversionGoal || {}).filter(g => g.id && g.status !== 'REMOVED').map(g => ({ id: String(g.id), nome: g.name || `Meta ${g.id}` })) });
     } catch (e: any) {
       return NextResponse.json({ allowed: true, error: `O Google não respondeu: ${e.message}` }, { status: 502 });
     }

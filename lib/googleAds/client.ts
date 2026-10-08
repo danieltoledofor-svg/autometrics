@@ -11,6 +11,8 @@
  * configurado — hoje o Google o aceita e ignora.
  */
 
+import { placeName } from '@/lib/campaignBuilder/names';
+
 export const GOOGLE_ADS_SCOPE = 'https://www.googleapis.com/auth/adwords';
 /** Permissão da Data Manager API, por onde o Google recebe vendas de integrações novas. */
 export const DATA_MANAGER_SCOPE = 'https://www.googleapis.com/auth/datamanager';
@@ -338,7 +340,7 @@ export async function suggestLocations(refreshToken: string, text: string): Prom
   if (!res.ok) throw await readError(res);
   const data = await res.json();
   return (data.geoTargetConstantSuggestions || []).map((s: any) => s.geoTargetConstant || {}).filter((g: any) => g.id && g.status !== 'REMOVAL_PLANNED')
-    .map((g: any) => ({ id: String(g.id), nome: g.canonicalName || g.name, tipo: g.targetType || '' }));
+    .map((g: any) => ({ id: String(g.id), nome: placeName(g), tipo: g.targetType || '' }));
 }
 
 export function cleanCustomerId(id: string | number): string {

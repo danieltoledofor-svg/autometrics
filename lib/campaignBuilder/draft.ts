@@ -16,12 +16,11 @@ export interface Draft {
   orcamento_diario: number | null;
   redes: { parceiros: boolean; display: boolean };
   /** Locais incluídos e excluídos. Sem nenhum incluído, a campanha roda em todos os países, menos os excluídos. */
-  locais: { id: string; nome: string; excluido: boolean; ajuste: number }[];
+  locais: { id: string; nome: string; excluido: boolean }[];
   local_incluir: 'PRESENCE' | 'PRESENCE_OR_INTEREST';
   idiomas: { id: string; nome: string }[];
   /** IA Max do Google: nasce sempre desligada, com as duas opções desligadas. */
   ia_max: { ligada: boolean; personalizar_texto: boolean; expandir_url: boolean };
-  aparelhos: { tipo: 'MOBILE' | 'DESKTOP' | 'TABLET'; ajuste: number }[];
   negativas: { texto: string; tipo: string }[];
   /** Grupos iguais (mesmas palavras e mesmo anúncio); só a meta de CPA muda. Vazio = segue a meta da campanha. */
   grupos: { nome: string; meta_cpa: number | null }[];
@@ -30,22 +29,26 @@ export interface Draft {
   anuncio: { caminho1: string; caminho2: string; titulos: string[]; descricoes: string[] };
   sitelinks: { texto: string; desc1: string; desc2: string }[];
   destaques: string[];
+  /** Uma campanha por página em cada conta escolhida. */
+  paginas: { url: string; nome: string }[];
+  /** Contas onde subir, cada uma com a meta de conversão escolhida nela (a lista de metas muda de conta para conta). */
+  contas: { id: string; nome: string; mcc: string; meta_id: string | null; meta_nome: string | null }[];
   origem: string | null;
 }
 
-export const LANGUAGES: { id: string; nome: string }[] = [
-  { id: '1000', nome: 'Inglês' }, { id: '1014', nome: 'Português' }, { id: '1003', nome: 'Espanhol' },
-  { id: '1002', nome: 'Francês' }, { id: '1001', nome: 'Alemão' }, { id: '1004', nome: 'Italiano' },
-];
-const DEVICES: Draft['aparelhos'][number]['tipo'][] = ['MOBILE', 'DESKTOP', 'TABLET'];
+/**
+ * Campanha nova começa sem nenhum ajuste de lance (aparelho, local, idade,
+ * gênero, renda), mesmo quando o modelo tinha: ajuste é decisão de depois de
+ * ver os números da campanha nova, não herança do modelo.
+ */
 
 export function emptyDraft(): Draft {
   return {
     funil: 'topo', nome: '', lance: { estrategia: 'MAXIMIZE_CONVERSIONS', meta_cpa: null, limite_cpc: null }, orcamento_diario: null,
     redes: { parceiros: false, display: false }, locais: [], local_incluir: 'PRESENCE', idiomas: [],
     ia_max: { ligada: false, personalizar_texto: false, expandir_url: false },
-    aparelhos: DEVICES.map(tipo => ({ tipo, ajuste: 0 })), negativas: [], grupos: [{ nome: 'Grupo 01', meta_cpa: null }], palavras: [],
-    rastreador: 'autometrics', anuncio: { caminho1: '', caminho2: '', titulos: [], descricoes: [] }, sitelinks: [], destaques: [], origem: null,
+    negativas: [], grupos: [{ nome: 'Grupo 01', meta_cpa: null }], palavras: [],
+    rastreador: 'autometrics', anuncio: { caminho1: '', caminho2: '', titulos: [], descricoes: [] }, sitelinks: [], destaques: [], paginas: [], contas: [], origem: null,
   };
 }
 
@@ -63,11 +66,10 @@ export function draftFromTemplate(t: Template): Draft {
     },
     orcamento_diario: c.orcamento_diario,
     redes: { parceiros: c.redes.parceiros, display: c.redes.display },
-    locais: t.locais.map(l => ({ ...l })),
+    locais: t.locais.map(l => ({ id: l.id, nome: l.nome, excluido: l.excluido })),
     local_incluir: c.local_incluir === 'PRESENCE' ? 'PRESENCE' : 'PRESENCE_OR_INTEREST',
     idiomas: t.idiomas.map(i => ({ ...i })),
     ia_max: { ligada: false, personalizar_texto: false, expandir_url: false },
-    aparelhos: DEVICES.map(tipo => ({ tipo, ajuste: t.aparelhos.find(a => a.tipo === tipo)?.ajuste || 0 })),
     negativas: uniq([...t.negativas, ...t.grupos.flatMap(g => g.negativas)], n => `${n.texto}|${n.tipo}`),
     grupos: t.grupos.length ? t.grupos.map(g => ({ nome: g.nome, meta_cpa: g.meta_cpa })) : [{ nome: 'Grupo 01', meta_cpa: null }],
     palavras: uniq((first?.palavras || []).filter(k => k.status !== 'REMOVED').map(k => ({ texto: k.texto, tipo: k.tipo })), k => `${k.texto}|${k.tipo}`),
@@ -75,6 +77,7 @@ export function draftFromTemplate(t: Template): Draft {
     anuncio: { caminho1: ad?.caminho1 || '', caminho2: ad?.caminho2 || '', titulos: (ad?.titulos || []).map(x => x.texto), descricoes: (ad?.descricoes || []).map(x => x.texto) },
     sitelinks: t.recursos.sitelinks.map(s => ({ texto: s.texto, desc1: s.desc1, desc2: s.desc2 })),
     destaques: t.recursos.destaques.map(d => d.texto),
+    paginas: [], contas: [],
     origem: t.origem.nome,
   };
 }
@@ -89,7 +92,17 @@ export function campaignProblems(d: Draft): string[] {
   if (!d.grupos.length) out.push('A campanha precisa de pelo menos um grupo de anúncios.');
   if (d.grupos.some(g => !g.nome.trim())) out.push('Todo grupo precisa de um nome.');
   if (new Set(d.grupos.map(g => g.nome.trim().toLowerCase())).size !== d.grupos.length) out.push('Dois grupos têm o mesmo nome.');
-  if (d.aparelhos.some(a => a.ajuste < -100 || a.ajuste > 900)) out.push('O ajuste de aparelho vai de −100% a +900%.');
-  if (d.locais.some(l => l.ajuste < -90 || l.ajuste > 900)) out.push('O ajuste de local vai de −90% a +900%.');
+  return out;
+}
+
+/** O que falta no passo "Onde subir". */
+export function whereProblems(d: Draft): string[] {
+  const out: string[] = [];
+  const pages = d.paginas.filter(p => p.url.trim());
+  if (!pages.length) out.push('Informe pelo menos uma página.');
+  if (pages.some(p => !/^https:\/\/[^\s/]+\.[^\s/]+/i.test(p.url.trim()))) out.push('Toda página precisa começar com https://');
+  if (pages.some(p => !p.nome.trim())) out.push('Toda página precisa do nome da campanha.');
+  if (!d.contas.length) out.push('Escolha pelo menos uma conta.');
+  if (d.lance.estrategia === 'MAXIMIZE_CONVERSIONS' && d.contas.some(c => !c.meta_id)) out.push('Escolha a meta de conversão de cada conta.');
   return out;
 }
