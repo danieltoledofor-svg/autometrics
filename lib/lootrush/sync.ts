@@ -19,7 +19,7 @@ import { groupTransactions, plainLootrushError } from './client';
 const TZ = 'America/Sao_Paulo';
 const WINDOW_DAYS = 7, FIRST_DAYS = 70, MAX_MESSAGES = 10;
 /** Primeiras leituras feitas antes desta data guardaram só 30 dias: são refeitas uma vez, para cobrir o mês anterior inteiro. */
-const DEEP_SINCE = '2026-10-08T21:00:00Z';
+const DEEP_SINCE = Date.parse('2026-10-08T18:25:00Z');
 const num = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
 
 /** Conta do Google no nome da cobrança: "Google ADS7973609921", "GOOGLE *ADS5586615519". */
@@ -71,7 +71,7 @@ export async function syncLootrush(conn: any): Promise<{ read: number; fresh: nu
   const db = supabaseAdmin(), userId: string = conn.user_id;
   const groups: { id: string; name: string }[] = Array.isArray(conn.groups) ? conn.groups : [];
   const out = { read: 0, fresh: 0, sent: 0 } as { read: number; fresh: number; sent: number; error?: string };
-  const first = !conn.baseline_at || conn.baseline_at < DEEP_SINCE;
+  const first = !conn.baseline_at || new Date(conn.baseline_at).getTime() < DEEP_SINCE;
   const stamp = (patch: Record<string, any>) => db.from('lootrush_connections').update({ ...patch, last_sync_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('user_id', userId);
   if (!groups.length) { await stamp({}); return out; }
 

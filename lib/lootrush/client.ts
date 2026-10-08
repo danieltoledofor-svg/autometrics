@@ -29,9 +29,20 @@ const lastCall = new Map<string, number>();
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export async function lootrush<T = any>(apiKey: string, tool: string, args: Record<string, any> = {}): Promise<T> {
-  // Um pedido por segundo para cada função, por chave.
+  // A LootRush aceita um pedido por segundo para cada função. Dois logins podem usar a mesma chave,
+  // e a tela pode pedir ao mesmo tempo que o agendador: quando ela manda esperar, espera e tenta de novo.
+  for (let attempt = 0; ; attempt++) {
+    try { return await callOnce<T>(apiKey, tool, args); }
+    catch (e: any) {
+      if (!(e instanceof LootrushError) || (e.code !== -32005 && e.status !== 429) || attempt >= 3) throw e;
+      await wait(1500 * (attempt + 1));
+    }
+  }
+}
+
+async function callOnce<T>(apiKey: string, tool: string, args: Record<string, any>): Promise<T> {
   const slot = `${apiKey.slice(-8)}|${tool}`, gap = Date.now() - (lastCall.get(slot) || 0);
-  if (gap < 1100) await wait(1100 - gap);
+  if (gap < 1300) await wait(1300 - gap);
   lastCall.set(slot, Date.now());
 
   const res = await fetch(ENDPOINT, {
