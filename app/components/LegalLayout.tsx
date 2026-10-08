@@ -9,7 +9,7 @@ import { Logo } from '@/app/components/Logo';
  * login para aprovar a tela de consentimento e a verificação de marca.
  */
 export const CONTACT_EMAIL = 'danieltoledofor@gmail.com';
-export const LAST_UPDATE = '22 de setembro de 2026';
+export const LAST_UPDATE = '8 de outubro de 2026';
 
 export function LegalLayout({ title, children }: { title: string; children: React.ReactNode }) {
   return (

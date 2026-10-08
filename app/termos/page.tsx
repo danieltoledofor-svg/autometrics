@@ -34,11 +34,13 @@ export default function TermosPage() {
       <Section title="3. Conexão com o Google Ads">
         <p>
           Ao conectar, você autoriza a plataforma a ler os dados das contas a que esse login do Google tem
-          acesso e a mudar o status de campanhas quando você comandar no painel.
+          acesso e a alterar essas contas quando você comandar no painel: pausar ou ativar campanhas e
+          palavras-chave, incluir palavras-chave negativas, mudar ajustes de lance e metas de CPA, criar
+          campanhas novas (sempre pausadas) e, se você ligar, enviar suas vendas ao Google Ads.
         </p>
         <p>
-          <strong className="text-white">Pausar ou ativar vale na hora, na conta real do Google Ads.</strong>{' '}
-          Confira a campanha antes de confirmar. Cada ação fica registrada com data, hora e resultado.
+          <strong className="text-white">Toda alteração vale na hora, na conta real do Google Ads.</strong>{' '}
+          Confira antes de confirmar. Cada ação fica registrada com data, hora e resultado.
         </p>
         <p>
           Você continua sujeito às políticas do Google Ads. Conta suspensa, campanha reprovada ou limite de
