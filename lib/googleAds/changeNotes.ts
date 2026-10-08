@@ -43,16 +43,18 @@ const PAST: Record<string, string> = { CREATE: 'incluíd', UPDATE: 'alterad', RE
 const OLD_LABEL: Record<string, string> = {
   'Campanha': 'CAMPAIGN', 'Orçamento': 'CAMPAIGN_BUDGET', 'Segmentação da campanha': 'CAMPAIGN_CRITERION', 'Grupo de anúncios': 'AD_GROUP', 'Anúncio': 'AD_GROUP_AD',
   'Palavra-chave / segmentação': 'AD_GROUP_CRITERION', 'Ajuste de lance': 'AD_GROUP_BID_MODIFIER', 'Recurso da campanha': 'CAMPAIGN_ASSET', 'Recurso do grupo': 'AD_GROUP_ASSET',
-  'Recurso': 'ASSET', 'Lista compartilhada': 'SHARED_SET', 'Conjunto de recursos': 'ASSET_SET', 'Recurso da conta': 'CUSTOMER_ASSET', 'Estratégia de lance': 'BIDDING_STRATEGY',
+  'Recurso': 'ASSET', 'Anúncio do grupo': 'AD_GROUP_AD', 'Lista compartilhada': 'SHARED_SET', 'Conjunto de recursos': 'ASSET_SET', 'Recurso da conta': 'CUSTOMER_ASSET', 'Estratégia de lance': 'BIDDING_STRATEGY',
 };
-const OLD_OP: Record<string, string> = { criou: 'CREATE', alterou: 'UPDATE', removeu: 'REMOVE' };
+const OLD_OP: Record<string, string> = { criou: 'CREATE', alterou: 'UPDATE', removeu: 'REMOVE', criado: 'CREATE', alterado: 'UPDATE', removido: 'REMOVE' };
+/** O que se cria; o resto se inclui na campanha. */
+const CREATED = new Set(['CAMPAIGN', 'CAMPAIGN_BUDGET', 'AD_GROUP', 'AD_GROUP_AD']);
 
 const num = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
 const money = (v: any) => num(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** 0,6 no Google = −40% na tela; vazio ou 1 = sem ajuste. */
 const pct = (v: any) => { const p = v === '' || v === undefined || v === null ? 0 : Math.round((num(v) - 1) * 100); return p === 0 ? 'sem ajuste' : `${p > 0 ? '+' : '−'}${Math.abs(p)}%`; };
 const fromTo = (f: { de: string; para: string }, fmt: (v: any) => string) => (f.de !== '' && f.para !== '' ? `de ${fmt(f.de)} para ${fmt(f.para)}` : f.para !== '' ? `agora ${fmt(f.para)}` : `retirado (era ${fmt(f.de)})`);
-const generic = (type: string, op: string) => { const [name, g] = GENERIC[type] || ['Item da campanha', 'o']; return `${name} ${PAST[op] || 'alterad'}${g}`; };
+const generic = (type: string, op: string) => { const [name, g] = GENERIC[type] || ['Item da campanha', 'o']; return `${name} ${op === 'CREATE' && CREATED.has(type) ? 'criad' : PAST[op] || 'alterad'}${g}`; };
 const keyword = (text: string, match: string) => (match === 'EXACT' ? `[${text}]` : match === 'PHRASE' ? `"${text}"` : text);
 
 /** De quem é a linha: idade, gênero, renda, aparelho ou local. */
@@ -154,13 +156,15 @@ export function mergeAutoNotes(current: string, history: ChangeEntry[]): string 
     const m = line.match(AUTO);
     if (!m) { if (line.trim() || manual.length) manual.push(line); continue; }
     const [, time, , body] = m;
-    const old = body.match(/^(.+?) — (criou|alterou|removeu)\s*(.*)$/);
+    const old = body.match(/^(.+?) — (criou|alterou|removeu|criado|alterado|removido)\s*(.*)$/);
     // Linha antiga: some quando o mesmo minuto chega agora com detalhe; sem isso, só vira frase simples.
     if (old) {
       if (incoming.has(time) && (detailed || !old[3])) continue;
       if (!old[3]) { add(time, generic(OLD_LABEL[old[1]] || '', OLD_OP[old[2]])); continue; }
+      const value = old[3].match(/^(valor|CPA alvo): (\S+) → (\S+)$/);
+      if (value) { add(time, `${value[1] === 'valor' ? 'Orçamento diário' : 'Meta de CPA'}: ${fromTo({ de: value[2] === '—' ? '' : value[2], para: value[3] === '—' ? '' : value[3] }, money)}`); continue; }
     } else if (incoming.has(time) && detailed) continue;
-    add(time, body);
+    add(time, /^Alteração —\s*$/.test(body) ? 'Alteração na campanha' : body);
   }
 
   // Alterações do mesmo minuto ficam numa linha só; faixas criadas sem ajuste viram um aviso curto, ou nada.
