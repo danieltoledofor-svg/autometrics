@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Columns, X, ExternalLink, Calendar, Link as LinkIcon,
-  PlayCircle, PauseCircle, RefreshCw, FileText, Save, Sun, Moon,
+  PlayCircle, PauseCircle, RefreshCw, FileText, Sun, Moon,
   Video, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
   SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound, ListChecks, Sparkles, Route
 } from 'lucide-react';
@@ -184,13 +184,11 @@ export default function ProductDetailPage() {
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   
-  const [campaignStrategy, setCampaignStrategy] = useState('');
-  const [isSavingStrategy, setIsSavingStrategy] = useState(false);
 
   // --- DEEP METRICS (Search Terms, Audiences, Locations) ---
 
   // --- ABAS ---
-  const [activeTab, setActiveTab] = useState<'ads' | 'ad_groups' | 'ad_list' | 'keywords' | 'search_terms' | 'audiences' | 'locations' | 'analysis' | 'strategy' | 'vturb'>('ads');
+  const [activeTab, setActiveTab] = useState<'ads' | 'ad_groups' | 'ad_list' | 'keywords' | 'search_terms' | 'audiences' | 'locations' | 'analysis' | 'vturb'>('ads');
   const [entityAdGroup, setEntityAdGroup] = useState('');
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [userEmail, setUserEmail] = useState('');
@@ -278,8 +276,6 @@ export default function ProductDetailPage() {
       (metricsData || []).forEach((m: any) => { if (m.notes) notesMap[m.date] = m.notes; });
       setNotes(notesMap);
 
-      const { data: stratData } = await supabase.from('campaign_strategies').select('strategy_text').eq('product_id', productId).maybeSingle();
-      if (stratData) setCampaignStrategy(stratData.strategy_text || '');
 
     } catch (error) { console.error(error); }
     finally { setLoading(false); }
@@ -764,7 +760,6 @@ export default function ProductDetailPage() {
           { id: 'search_terms', label: 'Termos' },
           { id: 'audiences', label: 'Públicos' },
           { id: 'locations', label: 'Locais' },
-          { id: 'strategy', label: 'Estratégia' },
           { id: 'vturb', label: 'VTurb' },
         ].map(tab => (
           <button
@@ -787,7 +782,6 @@ export default function ProductDetailPage() {
           { id: 'search_terms', icon: <FileText size={15} />, label: 'Termos de Pesquisa' },
           { id: 'audiences', icon: <BarChart size={15} />, label: 'Públicos' },
           { id: 'locations', icon: <Globe size={15} />, label: 'Locais' },
-          { id: 'strategy', icon: <NotebookPen size={15} />, label: 'Estratégia' },
           { id: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb Analytics' },
         ].map(tab => (
           <button
@@ -1213,44 +1207,6 @@ export default function ProductDetailPage() {
       {/* ══════════════════════════ ABA ANÁLISE ══════════════════════════ */}
       {activeTab === 'analysis' && (
         <AnalysisTab productId={productId} ui={{ isDark, bgCard, borderCol, textHead, textMuted }} onOpenVturb={() => setActiveTab('vturb')} />
-      )}
-
-      {/* ══════════════════════════ ABA ESTRATÉGIA ══════════════════════════ */}
-      {activeTab === 'strategy' && (
-        <div className="space-y-6">
-          <div className={`${bgCard} rounded-xl p-6 shadow-sm border ${borderCol} max-w-4xl`}>
-            <div className="flex items-center gap-3 mb-4">
-              <NotebookPen size={20} className="text-indigo-500" />
-              <h2 className={`text-lg font-bold ${textHead}`}>Estratégia da Campanha</h2>
-            </div>
-            <p className={`text-sm mb-6 ${textMuted}`}>
-              Use esta área como seu "Diário de Bordo" (War Room). Documente a tese principal, ângulos de anúncios que estão sendo testados, limites de CPA, ou regras de escala.
-            </p>
-            <div className="flex flex-col gap-4">
-              <textarea
-                value={campaignStrategy}
-                onChange={e => setCampaignStrategy(e.target.value)}
-                placeholder="Exemplo: Testando ângulo 'Saúde Natural' focado em homens 45+. CPA limite é $40."
-                className={`w-full h-80 rounded-xl p-4 text-sm outline-none resize-none border focus:border-indigo-500 transition-colors ${
-                  isDark ? 'bg-slate-950 border-slate-700 text-slate-200 placeholder-slate-600' : 'bg-slate-50 border-slate-300 text-slate-800'
-                }`}
-              />
-              <div className="flex justify-end">
-                <button 
-                  onClick={async () => {
-                    setIsSavingStrategy(true);
-                    await supabase.from('campaign_strategies').upsert({ product_id: productId, strategy_text: campaignStrategy }, { onConflict: 'product_id' });
-                    setIsSavingStrategy(false);
-                  }}
-                  disabled={isSavingStrategy}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center gap-2"
-                >
-                  {isSavingStrategy ? 'Salvando...' : <><Save size={16}/> Salvar Estratégia</>}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* ══════════════════════════ ABA VTURB ══════════════════════════ */}
