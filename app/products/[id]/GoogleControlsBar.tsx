@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useGoogleControls, adjustText, type GoogleControl } from './useGoogleControls';
 
@@ -23,6 +23,10 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [showAll, setShowAll] = useState(false);
+  // A lista de alterações pode ficar fechada; a escolha vale para todas as campanhas, neste navegador.
+  const [closed, setClosed] = useState(false);
+  useEffect(() => { try { setClosed(localStorage.getItem('am_alteracoes_fechadas') === '1'); } catch { /* sem armazenamento */ } }, []);
+  const toggleClosed = () => setClosed(v => { try { localStorage.setItem('am_alteracoes_fechadas', v ? '0' : '1'); } catch { /* sem armazenamento */ } return !v; });
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
 
   if (!allowed) return null;
@@ -100,8 +104,11 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
 
       {history.length > 0 && (
         <div className={`mt-4 pt-3 border-t ${borderCol}`}>
-          <div className={`text-[11px] uppercase tracking-wider font-extrabold ${textMuted} mb-1`}>Alterações feitas por aqui</div>
-          {shown.map(h => (
+          <button onClick={toggleClosed} aria-expanded={!closed} className={`w-full flex items-center justify-between gap-3 text-[11px] uppercase tracking-wider font-extrabold ${textMuted} hover:text-indigo-400 ${closed ? '' : 'mb-1'}`}>
+            <span>Alterações feitas por aqui ({history.length})</span>
+            <span className="normal-case tracking-normal font-bold">{closed ? 'Mostrar' : 'Ocultar'}</span>
+          </button>
+          {!closed && shown.map(h => (
             <div key={h.id} className="flex flex-wrap items-center justify-between gap-x-3 py-1.5 text-xs">
               <span className={h.ok ? textHead : textMuted}>
                 <span className={`tabular-nums ${textMuted}`}>{when(h.created_at)}</span> · {describe(h)}{!h.ok ? ` · não aplicada: ${h.error || 'o Google recusou'}` : ''}
@@ -111,7 +118,7 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
                 : h.undone_at ? <span className={textMuted}>desfeita</span> : null}
             </div>
           ))}
-          {history.length > 3 && <button onClick={() => setShowAll(v => !v)} className={`text-xs font-bold mt-1 ${textMuted} hover:text-indigo-400`}>{showAll ? 'Mostrar menos' : `Ver as ${history.length}`}</button>}
+          {!closed && history.length > 3 && <button onClick={() => setShowAll(v => !v)} className={`text-xs font-bold mt-1 ${textMuted} hover:text-indigo-400`}>{showAll ? 'Mostrar menos' : `Ver as ${history.length}`}</button>}
         </div>
       )}
     </div>
