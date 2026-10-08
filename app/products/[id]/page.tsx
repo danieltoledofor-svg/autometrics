@@ -33,6 +33,7 @@ import { GOOGLE_METRICS_CATALOG, GOOGLE_COLUMN_KEY } from '@/lib/metrics/catalog
 import { actionColumns, actionNames, actionSlug } from '@/lib/metrics/dimension';
 import type { CampaignDay } from '@/lib/metrics/dimension';
 import { customValue } from '@/lib/metrics/formula';
+import { useLiveMetrics } from '@/lib/useLiveMetrics';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -161,6 +162,8 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // Venda nova (ou custo novo) desta campanha entra sozinha, sem recarregar a página.
+  useLiveMetrics(supabase, authChecked && !loading && !!productId, setMetrics, { productId, ascending: true });
 
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);

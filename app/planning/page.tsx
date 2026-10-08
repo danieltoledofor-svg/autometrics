@@ -18,6 +18,7 @@ import { applyTheme } from '@/lib/theme';
 import { useDayInput, isValidDay, safeDay } from '@/lib/useDayInput';
 import { Logo } from '@/app/components/Logo';
 import { LootrushPanel } from './LootrushPanel';
+import { useLiveMetrics } from '@/lib/useLiveMetrics';
 import { useTablePrefs } from '@/app/components/table/useTablePrefs';
 import { cellPad, TableControls, tableTone, Th, widthStyle } from '@/app/components/table/tableUi';
 
@@ -107,6 +108,9 @@ export default function PlanningPage() {
   const [dateRange, setDateRange] = useState('this_month'); 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  // Venda nova (ou custo novo) entra sozinha, sem recarregar: só as linhas de ontem e de hoje que mudaram, dentro do período da tela.
+  const liveProducts = useMemo(() => new Set(products.map(p => p.id)), [products]);
+  useLiveMetrics(supabase, !!user?.id && !loading, setMetrics, { accept: row => liveProducts.has(row.product_id) && row.date >= startDate && row.date <= endDate });
   // -----------------------------
 
   // UI

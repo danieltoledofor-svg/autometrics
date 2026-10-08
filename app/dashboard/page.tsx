@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar, Sun, Moon, LayoutGrid, Package, Settings,
   LogOut, Target, ArrowUpRight, ArrowDownRight,
@@ -10,6 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { supabase } from '../../lib/supabaseClient';
+import { useLiveMetrics } from '@/lib/useLiveMetrics';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
@@ -583,38 +584,10 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, [user, fetchedFrom]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Venda nova (ou custo novo) sem recarregar a página: a cada 30 segundos, com a aba à vista, o painel
-  // pede só as linhas de ontem e de hoje que mudaram desde a última olhada e troca essas linhas.
-  // É uma consulta pequena; a releitura completa continua sendo a de 20 minutos, acima.
-  const lastLook = useRef<string>('');
-  useEffect(() => {
-    if (!user || loading) return;
-    if (!lastLook.current) lastLook.current = new Date().toISOString();
-    let busy = false;
-    const look = async () => {
-      if (busy || document.hidden) return;
-      busy = true;
-      try {
-        const since = new Date(new Date(lastLook.current).getTime() - 5000).toISOString();   // folga para o relógio do servidor
-        const started = new Date().toISOString();
-        const from = new Date(); from.setDate(from.getDate() - 1);
-        const { data, error } = await supabase.from('daily_metrics').select('*').gte('date', getLocalYYYYMMDD(from)).gt('updated_at', since).limit(1000);
-        if (error) return;
-        lastLook.current = started;
-        if (!data?.length) return;
-        setMetrics(current => {
-          const known = new Set(products.map(p => p.id));
-          const fresh = new Map(data.filter(r => known.has(r.product_id)).map(r => [r.id, r]));
-          if (!fresh.size) return current;
-          const next = current.map(r => { const n = fresh.get(r.id); if (n) fresh.delete(r.id); return n || r; });
-          return fresh.size ? [...fresh.values(), ...next] : next;                            // linha de um dia que ainda não existia
-        });
-      } finally { busy = false; }
-    };
-    const timer = setInterval(look, 30 * 1000);
-    document.addEventListener('visibilitychange', look);                                      // voltou para a aba: olha na hora
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', look); };
-  }, [user, loading, products]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Venda nova (ou custo novo) sem recarregar a página: só as linhas de ontem e de hoje que mudaram, a cada
+  // 30 segundos. A releitura completa continua sendo a de 20 minutos, acima.
+  const productIds = useMemo(() => new Set(products.map(p => p.id)), [products]);
+  useLiveMetrics(supabase, !!user && !loading, setMetrics, { accept: row => productIds.has(row.product_id) });
 
   const sparklineData = useMemo(() => {
     const last7 = processedData.chart.slice(-7);
