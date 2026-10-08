@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, getRequestUser, encryptSecret, decryptSecret } from '@/lib/googleAds/server';
-import { cardGroups, plainLootrushError } from '@/lib/lootrush/client';
+import { cardGroups as allCardGroups, plainLootrushError } from '@/lib/lootrush/client';
 import { lootrushCheck, syncLootrush } from '@/lib/lootrush/sync';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +18,20 @@ export const maxDuration = 60;
  * POST { action: 'ler' }               lê agora, sem esperar o agendador
  * POST { action: 'desligar' }          apaga a chave e as cobranças guardadas
  */
+
+/**
+ * A mesma chave serve aos dois logins do dono, mas cada login acompanha só o grupo dele:
+ * o outro grupo nem aparece para escolher. Os demais usuários veem todos os grupos da própria chave.
+ */
+const GROUP_LOCK: Record<string, string[]> = {
+  'dcalmeida431@gmail.com': ['topo de funil'],
+  'daniel.camiloalm@gmail.com': ['cristiane'],
+};
+async function cardGroups(key: string, email?: string) {
+  const lock = GROUP_LOCK[String(email || '').toLowerCase()];
+  const groups = await allCardGroups(key);
+  return lock ? groups.filter(g => lock.includes(g.name.trim().toLowerCase())) : groups;
+}
 
 const MISSING = 'Falta rodar migration_lootrush.sql no Supabase.';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,7 +54,7 @@ export async function GET(request: Request) {
 
   if (q.get('grupos')) {
     if (!conn) return NextResponse.json({ error: 'Ligue a LootRush primeiro.' }, { status: 409 });
-    try { return NextResponse.json({ available: await cardGroups(decryptSecret(conn.key_enc)), ...publicStatus(conn) }); }
+    try { return NextResponse.json({ available: await cardGroups(decryptSecret(conn.key_enc), user.email), ...publicStatus(conn) }); }
     catch (e: any) { return NextResponse.json({ error: plainLootrushError(e) }, { status: 502 }); }
   }
 
@@ -66,7 +80,7 @@ export async function POST(request: Request) {
     const key = String(body.key || '').trim();
     if (key.length < 20 || /\s/.test(key)) return fail('Cole a chave inteira da LootRush, sem espaços.');
     let available;
-    try { available = await cardGroups(key); } catch (e: any) { return fail(plainLootrushError(e), 502); }
+    try { available = await cardGroups(key, user.email); } catch (e: any) { return fail(plainLootrushError(e), 502); }
     // Chave nova no lugar da antiga: os grupos escolhidos continuam, se ainda existirem.
     const { conn, missing } = await connection(user.id);
     if (missing) return fail(MISSING, 409);
@@ -91,7 +105,7 @@ export async function POST(request: Request) {
   if (body.action === 'grupos') {
     const wanted = new Set((Array.isArray(body.groups) ? body.groups : []).map(String));
     let available;
-    try { available = await cardGroups(decryptSecret(conn.key_enc)); } catch (e: any) { return fail(plainLootrushError(e), 502); }
+    try { available = await cardGroups(decryptSecret(conn.key_enc), user.email); } catch (e: any) { return fail(plainLootrushError(e), 502); }
     const groups = available.filter(g => wanted.has(g.id)).map(g => ({ id: g.id, name: g.name }));
     // Grupo que saiu da escolha leva as cobranças guardadas dele; a leitura recomeça do zero para os que ficaram.
     const keep = groups.map(g => g.id);

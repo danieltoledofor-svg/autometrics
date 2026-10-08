@@ -17,6 +17,7 @@ import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { useDayInput, isValidDay, safeDay } from '@/lib/useDayInput';
 import { Logo } from '@/app/components/Logo';
+import { LootrushPanel } from './LootrushPanel';
 import { useTablePrefs } from '@/app/components/table/useTablePrefs';
 import { cellPad, TableControls, tableTone, Th, widthStyle } from '@/app/components/table/tableUi';
 
@@ -1196,6 +1197,9 @@ export default function PlanningPage() {
             </div>
          </div>
       </div>
+
+      {/* CARTÕES (LootRush): cobrado nos cartões × gasto no Google. Só para quem ligou em Integração. */}
+      {user?.id && isValidDay(startDate) && isValidDay(endDate) && <LootrushPanel from={startDate} to={endDate} isDark={isDark} />}
 
       {/* GRÁFICO */}
       <div className={`hidden md:block ${bgCard} rounded-xl p-6 mb-8 h-64 shadow-sm`}>

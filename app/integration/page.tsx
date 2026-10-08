@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Copy, Check, Code, ArrowLeft, Zap, Calendar,
   Globe, Store, AlertCircle, Sun, Moon, Link2, Tv2, Key, Eye, EyeOff, Save, CheckCircle2, 
-  LayoutGrid, Target, Package, Settings, LogOut, Sparkles, Send, Route
+  LayoutGrid, Target, Package, Settings, LogOut, Sparkles, Send, Route, CreditCard
 } from 'lucide-react';
 import Link from 'next/link';
 import { TelegramCard } from './TelegramCard';
+import { LootrushCard } from './LootrushCard';
 import { Logo } from '@/app/components/Logo';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
@@ -51,7 +52,7 @@ export default function IntegrationPage() {
   const [vturbTokenVisible, setVturbTokenVisible] = useState(false);
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'google' | 'vturb' | 'telegram'>('google');
+  const [activeTab, setActiveTab] = useState<'google' | 'vturb' | 'telegram' | 'cartoes'>('google');
 
 
 
@@ -778,6 +779,7 @@ ${commonFunctions}`;
             { key: 'google', icon: <Code size={15} />, label: 'Google Ads' },
             { key: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb' },
             { key: 'telegram', icon: <Send size={15} />, label: 'Telegram' },
+            { key: 'cartoes', icon: <CreditCard size={15} />, label: 'Cartões' },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -801,6 +803,9 @@ ${commonFunctions}`;
 
         {/* ── ABA TELEGRAM: ligação com o bot e alertas ─────────── */}
         {activeTab === 'telegram' && <TelegramCard isDark={isDark} />}
+
+        {/* ── ABA CARTÕES: LootRush ─────────────────────────────── */}
+        {activeTab === 'cartoes' && <LootrushCard isDark={isDark} />}
 
         {/* ── ABA 1: GOOGLE ADS ────────────────────────────────── */}
         {activeTab === 'google' && (

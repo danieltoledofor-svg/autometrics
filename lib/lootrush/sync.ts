@@ -153,7 +153,13 @@ export interface AccountCheck {
   charged: number; charges: number; pending: number; declined: number; last_at: string | null; cards: string[];
   /** Gasto que o Google informou no mesmo período, na moeda da conta. Vazio quando a conta não está no Autometrics. */
   google_cost: number | null;
+  /** Cobrado menos gasto, só quando a conta é em dólar (a moeda do cartão). */
+  diff: number | null;
+  state: 'bate' | 'cobrado_a_mais' | 'falta_cobrar' | 'outra_moeda' | 'conta_estranha';
 }
+
+/** Folga da conferência: o Google cobra em parcelas, então cobrado e gasto nunca batem no centavo. */
+const tolerance = (cost: number) => Math.max(50, cost * 0.1);
 
 /** Conferência do período (dias de Brasília, inclusive): por conta do Google, o cobrado no cartão ao lado do gasto no Google. */
 export async function lootrushCheck(userId: string, from: string, to: string) {
@@ -190,14 +196,22 @@ export async function lootrushCheck(userId: string, from: string, to: string) {
     const a = known.get(c.customer_id);
     let row = byAccount.get(c.customer_id);
     if (!row) byAccount.set(c.customer_id, row = { customer_id: c.customer_id, name: a?.name || null, mcc: a?.mcc_name || null, currency: a?.currency_code || null, known: !!a,
-      charged: 0, charges: 0, pending: 0, declined: 0, last_at: null, cards: [], google_cost: a ? cost.get(c.customer_id) || 0 : null });
+      charged: 0, charges: 0, pending: 0, declined: 0, last_at: null, cards: [], google_cost: a ? cost.get(c.customer_id) || 0 : null, diff: null, state: a ? 'bate' : 'conta_estranha' });
     if (valid) { row.charged += signed; row.charges++; if (c.status === 'on_hold') row.pending += signed; }
     if (c.status === 'declined') row.declined++;
     if (!row.last_at || c.charged_at > row.last_at) row.last_at = c.charged_at;
     if (c.card_last4 && !row.cards.includes(c.card_last4)) row.cards.push(c.card_last4);
   }
+  let googleUsd = 0;
+  for (const row of byAccount.values()) {
+    if (!row.known) continue;
+    if (String(row.currency || '').toUpperCase() !== 'USD') { row.state = 'outra_moeda'; continue; }
+    googleUsd += row.google_cost || 0;
+    row.diff = row.charged - (row.google_cost || 0);
+    row.state = Math.abs(row.diff) <= tolerance(row.google_cost || 0) ? 'bate' : row.diff > 0 ? 'cobrado_a_mais' : 'falta_cobrar';
+  }
   return {
-    total, codes, others,
+    total: { ...total, google_usd: googleUsd }, codes, others,
     accounts: [...byAccount.values()].sort((x, y) => Number(x.known) - Number(y.known) || y.charged - x.charged),
     charges: charges.slice(0, 300), more: Math.max(0, charges.length - 300),
   };
