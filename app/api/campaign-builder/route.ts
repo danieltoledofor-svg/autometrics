@@ -97,20 +97,38 @@ export async function GET(request: Request) {
     // Conta suspensa ou cancelada não recebe campanha: fica fora da lista.
     const [{ data: accounts }, { data: running }] = await Promise.all([
       db.from('google_ads_accounts').select('customer_id, login_customer_id, name, mcc_name, status').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
-      db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name').eq('user_id', user.id).eq('status', 'active').not('google_ads_customer_id', 'is', null).limit(5000),
+      db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name, status, mcc_name').eq('user_id', user.id).not('google_ads_customer_id', 'is', null).limit(5000),
     ]);
     // Campanhas rodando em cada conta, para não subir duas na mesma conta sem querer.
-    const active = new Map<string, string[]>();
+    // E a MCC como aparece na tela de Campanhas: uma conta que o Google também entrega por outro
+    // gerenciador (ou direto) fica guardada com o nome desse outro, e sumiria do grupo certo.
+    const active = new Map<string, string[]>(), mccOf = new Map<string, string>();
     for (const p of running || []) {
       const id = String(p.google_ads_customer_id).replace(/\D/g, '');
+      if (p.mcc_name && !mccOf.has(id)) mccOf.set(id, p.mcc_name);
+      if (p.status !== 'active') continue;
       if (!active.has(id)) active.set(id, []);
       active.get(id)!.push(p.google_ads_campaign_name || p.name || 'Campanha');
     }
+    // Um nome só por gerenciador: o mais usado nas campanhas das contas dele (a tela de Campanhas escreve
+    // "MCC TOPO 03" onde o Google diz "MCC Topo 03", e sem isso a mesma MCC viraria dois grupos).
+    const votes = new Map<string, Map<string, number>>();
+    for (const a of accounts || []) {
+      const name = mccOf.get(a.customer_id);
+      if (!name || !a.login_customer_id || a.login_customer_id === a.customer_id) continue;
+      if (!votes.has(a.login_customer_id)) votes.set(a.login_customer_id, new Map());
+      const v = votes.get(a.login_customer_id)!;
+      v.set(name, (v.get(name) || 0) + 1);
+    }
+    const managerName = (login: string) => [...(votes.get(login) || new Map<string, number>()).entries()].sort((x, y) => y[1] - x[1])[0]?.[0];
+    const groupOf = (a: { customer_id: string; login_customer_id: string | null; mcc_name: string | null }) => (a.login_customer_id && a.login_customer_id !== a.customer_id
+      ? managerName(a.login_customer_id) || a.mcc_name || `MCC ${a.login_customer_id}`
+      : mccOf.get(a.customer_id) || a.mcc_name || 'Sem MCC');           // conta acessada direto: vale a MCC das campanhas dela
     return NextResponse.json({
       allowed: true,
       accounts: (accounts || []).map(a => ({
         id: a.customer_id, nome: a.name || `Conta ${a.customer_id}`,
-        mcc: a.mcc_name || (a.login_customer_id && a.login_customer_id !== a.customer_id ? `MCC ${a.login_customer_id}` : 'Sem MCC'),
+        mcc: groupOf(a),
         ativas: active.get(a.customer_id) || [],
       })),
     });

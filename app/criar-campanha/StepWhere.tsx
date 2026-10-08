@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Loader2, Plus, Search, X } from 'lucide-react';
+import { Check, EyeOff, Loader2, Plus, Search, X } from 'lucide-react';
 import { launchPlan, whereProblems, type Draft } from '@/lib/campaignBuilder/draft';
 import { trackedUrl } from '@/lib/campaignBuilder/url';
 import type { Css } from './StepCampaign';
@@ -17,27 +17,32 @@ import type { Css } from './StepCampaign';
 interface Account { id: string; nome: string; mcc: string; ativas: string[] }
 type Goals = { list?: { id: string; nome: string }[]; error?: string; loading?: boolean };
 const REMEMBER = 'autometrics_criador_metas';
+const HIDDEN = 'autometrics_criador_contas_ocultas';
 const dashed = (id: string) => (id.length === 10 ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id);
 const running = (a: Account) => (a.ativas.length ? `${a.ativas.length} ${a.ativas.length === 1 ? 'campanha ativa' : 'campanhas ativas'}` : '');
 
 /** Lista de contas por MCC para um cartão. Fora do passo de propósito: guarda a própria busca sem redesenhar o resto. */
-function AccountPicker({ accounts, picked, elsewhere, onToggle, css }: {
-  accounts: Account[]; picked: Set<string>; elsewhere: Map<string, number>; onToggle: (list: Account[], on: boolean) => void; css: Css;
+function AccountPicker({ accounts, picked, elsewhere, onToggle, hidden, onHide, css }: {
+  accounts: Account[]; picked: Set<string>; elsewhere: Map<string, number>; onToggle: (list: Account[], on: boolean) => void;
+  /** Contas que o usuário escondeu à mão (o Google ainda as dá como ativas). */
+  hidden: Set<string>; onHide: (id: string, hide: boolean) => void; css: Css;
 }) {
   const { isDark, head, muted, line, soft } = css;
   const [filter, setFilter] = useState('');
   const [onlyFree, setOnlyFree] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const groups = useMemo(() => {
     const f = filter.trim().toLowerCase();
     const map = new Map<string, Account[]>();
     for (const a of accounts) {
       if (onlyFree && a.ativas.length) continue;
+      if (hidden.has(a.id) && !showHidden) continue;
       if (f && !`${a.nome} ${a.mcc} ${a.id} ${dashed(a.id)}`.toLowerCase().includes(f)) continue;
       if (!map.has(a.mcc)) map.set(a.mcc, []);
       map.get(a.mcc)!.push(a);
     }
     return [...map.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
-  }, [accounts, filter, onlyFree]);
+  }, [accounts, filter, onlyFree, hidden, showHidden]);
   const warn = isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300';
   return (
     <div className={`rounded-lg border ${line} ${soft} p-2.5 space-y-2`}>
@@ -48,22 +53,29 @@ function AccountPicker({ accounts, picked, elsewhere, onToggle, css }: {
             className={`w-full rounded-lg border ${line} ${isDark ? 'bg-slate-900' : 'bg-white'} ${head} pl-9 pr-3 py-1.5 text-[13px] outline-none focus:border-indigo-500`} />
         </div>
         <label className={`flex items-center gap-1.5 text-xs cursor-pointer ${head}`}><input type="checkbox" checked={onlyFree} onChange={e => setOnlyFree(e.target.checked)} /> Só contas sem campanha ativa</label>
+        {hidden.size > 0 && <label className={`flex items-center gap-1.5 text-xs cursor-pointer ${head}`}><input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} /> Mostrar as {hidden.size} que escondi</label>}
       </div>
       <div className={`max-h-72 overflow-y-auto rounded-lg border ${line} ${isDark ? 'bg-slate-900' : 'bg-white'} divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
         {groups.map(([mcc, list]) => (
           <div key={mcc} className="px-3 py-2">
             <label className={`flex items-center gap-2 text-xs font-bold cursor-pointer ${head}`}>
-              <input type="checkbox" checked={list.every(a => picked.has(a.id))} onChange={e => onToggle(list, e.target.checked)} /> {mcc}
+              <input type="checkbox" checked={list.every(a => picked.has(a.id))} onChange={e => onToggle(list.filter(a => !hidden.has(a.id) || picked.has(a.id)), e.target.checked)} /> {mcc}
               <span className={`font-normal ${muted}`}>· {list.length} {list.length === 1 ? 'conta' : 'contas'} · marcar todas</span>
             </label>
             <div className="mt-1.5 grid md:grid-cols-2 gap-x-4 gap-y-1 pl-5">
               {list.map(a => (
-                <label key={a.id} className={`flex items-center gap-2 text-[13px] cursor-pointer ${head}`}>
-                  <input type="checkbox" checked={picked.has(a.id)} onChange={e => onToggle([a], e.target.checked)} />
-                  <span className="min-w-0 truncate">{a.nome} <span className={`text-xs ${muted}`}>{dashed(a.id)}</span></span>
+                <div key={a.id} className={`group flex items-center gap-2 text-[13px] ${hidden.has(a.id) ? 'opacity-60' : ''} ${head}`}>
+                  <label className="flex items-center gap-2 min-w-0 cursor-pointer">
+                    <input type="checkbox" checked={picked.has(a.id)} onChange={e => onToggle([a], e.target.checked)} />
+                    <span className="min-w-0 truncate">{a.nome} <span className={`text-xs ${muted}`}>{dashed(a.id)}</span></span>
+                  </label>
                   {a.ativas.length > 0 && <span title={`Rodando agora: ${a.ativas.slice(0, 6).join(' · ')}`} className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${warn}`}>{running(a)}</span>}
                   {(elsewhere.get(a.id) || 0) > 0 && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${line} ${muted}`}>outra página deste lançamento</span>}
-                </label>
+                  <button onClick={() => onHide(a.id, !hidden.has(a.id))} title={hidden.has(a.id) ? 'Voltar a mostrar esta conta' : 'Esconder esta conta da lista (por exemplo, se ela está suspensa)'}
+                    className={`shrink-0 text-[11px] inline-flex items-center gap-1 ${muted} hover:text-rose-400 ${hidden.has(a.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}>
+                    <EyeOff size={12} /> {hidden.has(a.id) ? 'mostrar' : 'esconder'}
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -83,6 +95,14 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
   const [open, setOpen] = useState<number | null>(0);
   const [goals, setGoals] = useState<Record<string, Goals>>({});
   const asked = useRef(new Set<string>());
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  useEffect(() => { try { setHidden(new Set(JSON.parse(localStorage.getItem(HIDDEN) || '[]'))); } catch { /* sem lembrança */ } }, []);
+  const hide = (id: string, on: boolean) => setHidden(h => {
+    const next = new Set(h);
+    if (on) next.add(id); else next.delete(id);
+    try { localStorage.setItem(HIDDEN, JSON.stringify([...next])); } catch { /* sem armazenamento */ }
+    return next;
+  });
   const problems = whereProblems(draft);
   const plan = launchPlan(draft);
   const byId = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);
@@ -136,7 +156,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
       <div className={`${card} border rounded-xl p-4 space-y-1`}>
         <div className={`text-sm font-bold ${head}`}>Onde cada campanha vai subir</div>
         <div className={`text-xs ${muted}`}>Cada cartão abaixo é uma página. Em cada um você diz o endereço, o nome da campanha e marca a MCC e as contas que recebem aquela página: sai uma campanha por conta marcada. Todas levam a mesma configuração e o mesmo anúncio. Cole só o endereço da página; o rastreador ({tracker}) entra sozinho.</div>
-        <div className={`text-xs ${muted}`}>{accounts ? `${accounts.length} contas ativas. Contas suspensas ou canceladas não aparecem.` : 'Carregando as contas…'}</div>
+        <div className={`text-xs ${muted}`}>{accounts ? `${accounts.length} contas que o Google dá como ativas. As que ele marca como suspensas ou canceladas não aparecem. Se uma conta daqui estiver suspensa, passe o mouse nela e clique em "esconder".` : 'Carregando as contas…'}</div>
       </div>
 
       {draft.paginas.map((p, i) => {
@@ -177,7 +197,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
               </div>
             </div>
             {open === i && (accounts
-              ? <AccountPicker accounts={accounts} picked={picked} elsewhere={elsewhere} css={css} onToggle={(list, on) => toggle(i, list, on)} />
+              ? <AccountPicker accounts={accounts} picked={picked} elsewhere={elsewhere} hidden={hidden} onHide={hide} css={css} onToggle={(list, on) => toggle(i, list, on)} />
               : <div className={`text-xs ${muted} flex items-center gap-2`}><Loader2 size={13} className="animate-spin" /> Carregando as contas…</div>)}
           </div>
         );
