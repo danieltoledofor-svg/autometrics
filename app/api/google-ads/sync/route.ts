@@ -10,6 +10,7 @@ import { runAlerts } from '@/lib/alerts/run';
 import { runConversionUploads } from '@/lib/googleAds/conversionUpload';
 import { fillPendingGeo, relinkVisits } from '@/lib/tracking/lists';
 import { runLootrush } from '@/lib/lootrush/sync';
+import { retryUnmatched } from '@/lib/tracking/unmatched';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -59,6 +60,9 @@ async function runCron() {
 
   // Cobranças dos cartões (LootRush) e os avisos delas: não usam a cota do Google. Até 12s por chamada.
   report.lootrush = await runLootrush(Date.now() + 12000).catch((e: any) => ({ error: e.message }));
+
+  // Vendas que chegaram por postback e não acharam a campanha: procura pelo gclid e repete. Até 10s e 40 consultas.
+  report.unmatched = await retryUnmatched(Date.now() + 10000).catch((e: any) => ({ error: e.message }));
 
   // Cota do dia: acima de 80% só custo e status; acima de 95% para tudo até
   // a virada (meia-noite do Pacífico). O botão "Sincronizar" continua valendo.
