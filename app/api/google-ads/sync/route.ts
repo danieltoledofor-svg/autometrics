@@ -9,6 +9,7 @@ import { runDueVturb } from '@/lib/vturb/sync';
 import { runAlerts } from '@/lib/alerts/run';
 import { runConversionUploads } from '@/lib/googleAds/conversionUpload';
 import { fillPendingGeo, relinkVisits } from '@/lib/tracking/lists';
+import { runLootrush } from '@/lib/lootrush/sync';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -55,6 +56,9 @@ async function runCron() {
   // Alertas pelo Telegram: antes de tudo, para saírem mesmo quando a cota do
   // Google acabou ou a coleta ocupa o tempo inteiro. Lê só o que já está gravado.
   report.alerts = await runAlerts().catch((e: any) => ({ error: e.message }));
+
+  // Cobranças dos cartões (LootRush) e os avisos delas: não usam a cota do Google. Até 12s por chamada.
+  report.lootrush = await runLootrush(Date.now() + 12000).catch((e: any) => ({ error: e.message }));
 
   // Cota do dia: acima de 80% só custo e status; acima de 95% para tudo até
   // a virada (meia-noite do Pacífico). O botão "Sincronizar" continua valendo.

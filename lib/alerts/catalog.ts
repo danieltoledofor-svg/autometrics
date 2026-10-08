@@ -4,10 +4,11 @@
  * rotina (lib/alerts/run.ts) leem daqui.
  */
 
-export type AlertKey = 'gasto' | 'suspensa' | 'sem_venda' | 'cpa' | 'venda' | 'primeira_venda' | 'reembolso' | 'orcamento' | 'parou' | 'ajuste' | 'resumo' | 'coleta' | 'cota';
+export type AlertKey = 'gasto' | 'suspensa' | 'sem_venda' | 'cpa' | 'venda' | 'primeira_venda' | 'reembolso' | 'orcamento' | 'parou' | 'ajuste' | 'resumo' | 'coleta' | 'cota'
+  | 'lr_codigo' | 'lr_cobranca' | 'lr_recusada' | 'lr_credito';
 
 export interface AlertParam { key: string; label: string; unit: string; min: number; max: number; step: number; value: number | null }
-export interface AlertInfo { key: AlertKey; title: string; when: string; on: boolean; params: AlertParam[]; /** Só a conta principal do Autometrics vê e recebe. */ ownerOnly?: boolean }
+export interface AlertInfo { key: AlertKey; title: string; when: string; on: boolean; params: AlertParam[]; /** Só a conta principal do Autometrics vê e recebe. */ ownerOnly?: boolean; /** Só para quem ligou a LootRush. */ lootrush?: boolean }
 
 export const ALERTS: AlertInfo[] = [
   { key: 'gasto', title: 'Gasto acima do normal', on: true,
@@ -46,6 +47,15 @@ export const ALERTS: AlertInfo[] = [
   { key: 'cota', title: 'Limite diário de consultas ao Google', on: true, ownerOnly: true,
     when: 'O Autometrics inteiro já usou boa parte das consultas do dia ao Google. Acima de 80%, a leitura detalhada das campanhas para até o dia virar.',
     params: [{ key: 'pct', label: 'Avisar quando passar de', unit: '% do limite', min: 30, max: 95, step: 5, value: 70 }] },
+  // Cartões da LootRush (lib/lootrush/sync.ts): saem da leitura das cobranças, a cada 5 minutos.
+  { key: 'lr_codigo', title: 'Cartões: código de verificação do Google', on: true, lootrush: true,
+    when: 'O Google fez a cobrança de verificação num cartão seu e o código veio no nome dela. Sai na hora, mesmo no horário de silêncio, porque o código vence.', params: [] },
+  { key: 'lr_cobranca', title: 'Cartões: cobrança nova', on: true, lootrush: true,
+    when: 'Cada cobrança nova nos cartões que você acompanha, com o valor, o cartão e a conta do Google de onde ela veio. Avisa também quando a conta não é sua ou a cobrança não é do Google.', params: [] },
+  { key: 'lr_recusada', title: 'Cartões: cobrança recusada', on: true, lootrush: true,
+    when: 'O cartão recusou uma cobrança. No Google, isso costuma parar os anúncios da conta até o pagamento passar.', params: [] },
+  { key: 'lr_credito', title: 'Cartões: valor devolvido', on: false, lootrush: true,
+    when: 'Uma cobrança foi desfeita ou um valor voltou para o cartão.', params: [] },
 ];
 
 // ── Regras criadas pelo usuário ──────────────────────────────────────────────

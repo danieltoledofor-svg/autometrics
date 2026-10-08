@@ -47,6 +47,8 @@ const CODE_MINUTES = 30;
 async function status(userId: string, email?: string) {
   const { data, error } = await supabaseAdmin().from('telegram_links').select('*').eq('user_id', userId).maybeSingle();
   if (error) return { ready: false as const, error: MISSING };
+  // Os alertas dos cartões só aparecem para quem ligou a LootRush.
+  const { data: lootrush } = await supabaseAdmin().from('lootrush_connections').select('user_id').eq('user_id', userId).maybeSingle();
   const configured = telegramEnabled();
   const bot = configured ? await botUsername().catch(() => '') : '';
   const fresh = data?.code && data.code_at && Date.now() - new Date(data.code_at).getTime() < CODE_MINUTES * 60 * 1000;
@@ -55,7 +57,7 @@ async function status(userId: string, email?: string) {
     linked: !!data?.chat_id, chat_name: data?.chat_name || null, enabled: data?.enabled !== false,
     code: !data?.chat_id && fresh ? data.code : null,
     // Alertas disponíveis e as escolhas do usuário (com o padrão no que ele não mexeu).
-    catalog: ALERTS.filter(a => !a.ownerOnly || isOwner(email)), settings: resolveSettings(data?.settings),
+    catalog: ALERTS.filter(a => (!a.ownerOnly || isOwner(email)) && (!a.lootrush || !!lootrush)), settings: resolveSettings(data?.settings),
   };
 }
 
