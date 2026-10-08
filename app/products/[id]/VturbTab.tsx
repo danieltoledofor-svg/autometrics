@@ -8,6 +8,7 @@ import { formatMoney } from '@/lib/analysis/labels';
 import { TranscriptBanner } from './TranscriptBanner';
 import { TopoAnalysis } from './TopoAnalysis';
 import { Funnel, Segments, Changes } from './VturbScreen';
+import { VturbAsk } from './VturbAsk';
 
 /**
  * Aba "VTurb": a análise do topo de funil (3 dias × 7 dias), o caminho do
@@ -158,6 +159,7 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
       {data?.topo && d3 && (
         <TopoAnalysis data={data} ui={ui} money={money} running={running} onAnalyze={() => post({ action: 'analyze' })} onMark={mark} />
       )}
+      {data?.ai && d3 && <VturbAsk productId={productId} startDate={startDate} endDate={endDate} period={data?.screen?.period || null} ui={ui} />}
       <div className={`flex items-center gap-2 text-[11px] uppercase tracking-wider font-extrabold ${textMuted}`}>
         Números da VTurb <span className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
       </div>

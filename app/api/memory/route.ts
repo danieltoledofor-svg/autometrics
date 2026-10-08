@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
  * Memória da IA do usuário (tela Análise de IA).
  *
  * GET     lista do que ele guardou
- * POST    { kind, title, content, scope } guarda uma decisão, observação ou material
+ * POST    { kind, title, content, scope, product_id } guarda uma decisão, observação ou material
+ *         (com product_id, a anotação vale só para aquela campanha)
  * DELETE  ?id= apaga
  *
  * Texto longo (aula transcrita, material) é resumido em regras práticas na
@@ -63,8 +64,16 @@ export async function POST(request: Request) {
       } catch { /* fica o começo do texto */ }
     }
   }
+  // Anotação de uma campanha só: confere que a campanha é do usuário.
+  let productId: string | null = null;
+  if (body.product_id) {
+    const { data: own } = await supabaseAdmin().from('products').select('id').eq('id', String(body.product_id)).eq('user_id', user.id).maybeSingle();
+    if (!own) return NextResponse.json({ error: 'Campanha não encontrada.' }, { status: 404 });
+    productId = own.id;
+  }
   const { data, error } = await supabaseAdmin().from('ai_memory').insert({
     user_id: user.id, kind, title, content, summary, scope: String(body.scope || '').trim().slice(0, 40) || null,
+    ...(productId ? { product_id: productId } : {}),
   }).select('id').single();
   if (error) return NextResponse.json({ error: missing(error) ? MISSING : error.message }, { status: missing(error) ? 409 : 500 });
   return NextResponse.json({ ok: true, id: data.id, summarized, cut: content.length > 60_000 });

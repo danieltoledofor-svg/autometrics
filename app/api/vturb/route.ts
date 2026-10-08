@@ -6,6 +6,8 @@ import { syncProductVturb } from '@/lib/vturb/sync';
 import { playerIdFrom } from '@/lib/vturb/client';
 import { buildTopo, type Funnel } from '@/lib/vturb/topo';
 import { runAnalysis, analysisTablesReady } from '@/lib/analysis/run';
+import { aiEnabled } from '@/lib/ai/openrouter';
+import { askVturb } from '@/lib/vturb/ask';
 
 /** Item do checklist do topo de funil a que cada sugestão pertence. */
 const topoKeyOf = (targetKey: string) =>
@@ -38,6 +40,7 @@ async function vturbView(productId: string, range: { start?: string | null; end?
   });
   return {
     ...funnel,
+    ai: aiEnabled(),
     topo: {
       ...topo,
       summary: analysis?.summary?.topo || { ...funnel.summary, source: 'modelo' },
@@ -59,6 +62,7 @@ export const dynamic = 'force-dynamic';
  * GET  ?product_id=…&start=…&end=…          do clique à venda no período da tela, cruzamentos, retenção
  * POST { product_id, action: 'sync' }       lê a VTurb agora
  * POST { product_id, action: 'link', player } vincula o player (ID ou URL) e lê
+ * POST { product_id, action: 'ask', question, history, start, end }  pergunta à IA sobre os dados da aba
  */
 
 async function ownProduct(request: Request, productId: string | null) {
@@ -91,6 +95,20 @@ export async function POST(request: Request) {
   if ('error' in own) return own.error;
   if (!(await tablesReady())) return NextResponse.json(NOT_READY, { status: 409 });
 
+  if (body.action === 'ask') {
+    if (!aiEnabled()) return NextResponse.json({ error: 'A IA está desligada no servidor.' }, { status: 409 });
+    const question = String(body.question || '').trim().slice(0, 1000);
+    if (!question) return NextResponse.json({ error: 'Escreva a pergunta.' }, { status: 400 });
+    try {
+      const view = await vturbView(body.product_id, body);
+      if (!view?.ready) return NextResponse.json({ error: 'Vincule o player da VTurb antes de perguntar.' }, { status: 400 });
+      const { data: product } = await supabaseAdmin().from('products').select('name, google_ads_campaign_name').eq('id', body.product_id).maybeSingle();
+      const answer = await askVturb({ userId: own.user.id, productId: body.product_id }, view, product?.google_ads_campaign_name || product?.name || 'Campanha', question, body.history);
+      return NextResponse.json({ answer });
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || 'A IA não respondeu. Tente de novo.' }, { status: 500 });
+    }
+  }
   if (body.action === 'analyze') {
     if (await analysisTablesReady()) await runAnalysis(body.product_id, { force: true });
     return NextResponse.json(await vturbView(body.product_id, body));
