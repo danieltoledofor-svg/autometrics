@@ -54,6 +54,7 @@ const money = (micros: any) => (micros === undefined || micros === null || micro
 /** 0,8 no Google = −20% na tela; sem valor = sem ajuste. */
 const pct = (modifier: any) => (modifier === undefined || modifier === null || Number(modifier) === 0 ? 0 : Math.round((Number(modifier) - 1) * 100));
 const hhmm = (h: any, m: any) => `${String(h ?? 0).padStart(2, '0')}:${{ ZERO: '00', FIFTEEN: '15', THIRTY: '30', FORTY_FIVE: '45' }[String(m)] || '00'}`;
+const t_hasAds = (groups: Map<string, { anuncios: any[] }>) => [...groups.values()].some(g => g.anuncios.length > 0);
 const last = (resource: any) => String(resource || '').split('/').pop() || '';
 
 export async function readTemplate(ctx: AdsContext, campaignId: string): Promise<{ template: Template; calls: number }> {
@@ -80,34 +81,34 @@ export async function readTemplate(ctx: AdsContext, campaignId: string): Promise
              campaign.tracking_url_template, campaign.final_url_suffix, campaign_budget.amount_micros${extra.map(f => `, ${f}`).join('')}
       FROM campaign WHERE campaign.id = ${id}`),
     q('locais, idiomas e negativas', `
-      SELECT campaign_criterion.type, campaign_criterion.negative, campaign_criterion.bid_modifier, campaign_criterion.criterion_id,
+      SELECT campaign.id, campaign_criterion.type, campaign_criterion.negative, campaign_criterion.bid_modifier, campaign_criterion.criterion_id,
              campaign_criterion.location.geo_target_constant, campaign_criterion.language.language_constant, campaign_criterion.device.type,
              campaign_criterion.keyword.text, campaign_criterion.keyword.match_type,
              campaign_criterion.ad_schedule.day_of_week, campaign_criterion.ad_schedule.start_hour, campaign_criterion.ad_schedule.start_minute,
              campaign_criterion.ad_schedule.end_hour, campaign_criterion.ad_schedule.end_minute
       FROM campaign_criterion
       WHERE campaign.id = ${id} AND campaign_criterion.type IN ('LOCATION', 'LANGUAGE', 'DEVICE', 'KEYWORD', 'AD_SCHEDULE')`),
-    q('grupos', `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.target_cpa_micros FROM ad_group WHERE campaign.id = ${id} AND ad_group.status != 'REMOVED'`),
+    q('grupos', `SELECT campaign.id, ad_group.id, ad_group.name, ad_group.status, ad_group.target_cpa_micros FROM ad_group WHERE campaign.id = ${id} AND ad_group.status != 'REMOVED'`),
     q('palavras-chave e públicos', `
-      SELECT ad_group.id, ad_group_criterion.type, ad_group_criterion.negative, ad_group_criterion.status, ad_group_criterion.bid_modifier,
+      SELECT campaign.id, ad_group.id, ad_group_criterion.type, ad_group_criterion.negative, ad_group_criterion.status, ad_group_criterion.bid_modifier,
              ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
              ad_group_criterion.age_range.type, ad_group_criterion.gender.type, ad_group_criterion.income_range.type
       FROM ad_group_criterion
       WHERE campaign.id = ${id} AND ad_group.status != 'REMOVED' AND ad_group_criterion.status != 'REMOVED'
         AND ad_group_criterion.type IN ('KEYWORD', 'AGE_RANGE', 'GENDER', 'INCOME_RANGE')`),
     q('anúncios', `
-      SELECT ad_group.id, ad_group_ad.status, ad_group_ad.ad.id, ad_group_ad.ad.final_urls,
+      SELECT campaign.id, ad_group.id, ad_group_ad.status, ad_group_ad.ad.id, ad_group_ad.ad.type, ad_group_ad.ad.final_urls,
              ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
              ad_group_ad.ad.responsive_search_ad.path1, ad_group_ad.ad.responsive_search_ad.path2
       FROM ad_group_ad
-      WHERE campaign.id = ${id} AND ad_group.status != 'REMOVED' AND ad_group_ad.status != 'REMOVED' AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'`),
+      WHERE campaign.id = ${id} AND ad_group_ad.status != 'REMOVED'`),
     q('recursos da campanha', `
-      SELECT campaign_asset.field_type, asset.final_urls, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2,
+      SELECT campaign.id, campaign_asset.field_type, asset.final_urls, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2,
              asset.callout_asset.callout_text, asset.text_asset.text
       FROM campaign_asset
       WHERE campaign.id = ${id} AND campaign_asset.status = 'ENABLED' AND campaign_asset.field_type IN ('SITELINK', 'CALLOUT', 'BUSINESS_NAME')`),
     q('recursos dos grupos', `
-      SELECT ad_group_asset.field_type, asset.final_urls, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2,
+      SELECT campaign.id, ad_group.id, ad_group_asset.field_type, asset.final_urls, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2,
              asset.callout_asset.callout_text
       FROM ad_group_asset
       WHERE campaign.id = ${id} AND ad_group_asset.status = 'ENABLED' AND ad_group_asset.field_type IN ('SITELINK', 'CALLOUT')`),
@@ -117,7 +118,7 @@ export async function readTemplate(ctx: AdsContext, campaignId: string): Promise
       FROM customer_asset
       WHERE customer_asset.status = 'ENABLED' AND customer_asset.field_type IN ('SITELINK', 'CALLOUT', 'BUSINESS_NAME')`),
     q('meta de conversão da campanha', `
-      SELECT conversion_goal_campaign_config.goal_config_level, conversion_goal_campaign_config.custom_conversion_goal
+      SELECT campaign.id, conversion_goal_campaign_config.goal_config_level, conversion_goal_campaign_config.custom_conversion_goal
       FROM conversion_goal_campaign_config WHERE campaign.id = ${id}`),
     q('metas da conta', `SELECT custom_conversion_goal.id, custom_conversion_goal.name, custom_conversion_goal.status FROM custom_conversion_goal`),
   ]);
@@ -199,10 +200,11 @@ export async function readTemplate(ctx: AdsContext, campaignId: string): Promise
   }
   for (const r of ads) {
     const g = byGroup.get(String(r.adGroup?.id)), a = r.adGroupAd || {}, rsa = a.ad?.responsiveSearchAd || {};
-    if (!g) continue;
+    if (!g || (a.ad?.type && a.ad.type !== 'RESPONSIVE_SEARCH_AD')) continue;
     const texts = (list: any) => (Array.isArray(list) ? list : []).map((x: any) => ({ texto: String(x.text || ''), fixo: x.pinnedField || null }));
     g.anuncios.push({ id: String(a.ad?.id || ''), status: a.status || '', urls: a.ad?.finalUrls || [], caminho1: rsa.path1 || '', caminho2: rsa.path2 || '', titulos: texts(rsa.headlines), descricoes: texts(rsa.descriptions) });
   }
+  if (ads.length && !t_hasAds(byGroup)) avisos.push(`anúncios: o Google devolveu ${ads.length}, mas nenhum é de pesquisa responsivo ou de um grupo ativo.`);
   t.grupos = [...byGroup.values()].sort((a, b) => a.nome.localeCompare(b.nome));
 
   const seen = new Set<string>();
