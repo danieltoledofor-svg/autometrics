@@ -5,6 +5,10 @@ import { campaignAccess, canEdit } from '@/lib/googleAds/edit';
 import { readTemplate } from '@/lib/campaignBuilder/template';
 import { search, suggestLocations, type AdsContext } from '@/lib/googleAds/client';
 import { languageName } from '@/lib/campaignBuilder/names';
+import { similarCampaigns } from '@/lib/campaignBuilder/similar';
+import { extractOffer, generateResources, type Funnel, type Offer } from '@/lib/campaignBuilder/resources';
+import { fetchPageText } from '@/lib/analysis/page';
+import { aiEnabled } from '@/lib/ai/openrouter';
 import { decryptSecret } from '@/lib/googleAds/server';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +24,9 @@ export const maxDuration = 60;
  * GET ?idiomas=1           idiomas que o Google aceita, com o nome em português
  * GET ?contas=1            contas do usuário ligadas ao Google, com a MCC de cada uma
  * GET ?metas=<conta>       metas de conversão personalizadas que aquela conta enxerga
+ * GET ?parecidas=<trecho>  o que mais converteu nas campanhas do usuário com esse trecho no nome
+ * POST { action: 'oferta', url }                 lê a página do produto (preço, garantia, frete…) com a IA
+ * POST { action: 'recursos', funil, … }          títulos, descrições, sitelinks e frases de destaque pela IA
  *
  * Só para os logins liberados (lib/googleAds/edit).
  */
@@ -63,6 +70,11 @@ export async function GET(request: Request) {
     } catch (e: any) {
       return NextResponse.json({ allowed: true, error: `O Google não respondeu: ${e.message}` }, { status: 502 });
     }
+  }
+
+  if (q.get('parecidas')) {
+    try { return NextResponse.json({ allowed: true, similar: await similarCampaigns(user.id, q.get('parecidas')!) }); }
+    catch (e: any) { return NextResponse.json({ allowed: true, error: e.message }, { status: 500 }); }
   }
 
   if (q.get('idiomas')) {
@@ -129,5 +141,55 @@ export async function GET(request: Request) {
     return NextResponse.json({ allowed: true, template, currency: access.currency, saved: error ? null : saved, migration: !!error });
   } catch (e: any) {
     return NextResponse.json({ allowed: true, error: `O Google não respondeu: ${e.message}` }, { status: 502 });
+  }
+}
+
+export async function POST(request: Request) {
+  const user = await getRequestUser(request);
+  if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
+  if (!canEdit(user.email)) return NextResponse.json({ error: 'O criador de campanhas ainda não está liberado para este login.' }, { status: 403 });
+  if (!aiEnabled()) return NextResponse.json({ error: 'A IA está desligada no servidor.' }, { status: 409 });
+  const body = await request.json().catch(() => ({}));
+  const pageOf = async (url: any) => {
+    const u = String(url || '').trim();
+    if (!/^https?:\/\//i.test(u)) return '';
+    return fetchPageText(u.split('?')[0]);
+  };
+
+  try {
+    if (body.action === 'oferta') {
+      const text = await pageOf(body.url);
+      if (!text) return NextResponse.json({ error: 'Informe o endereço da página do produto, começando com https://' }, { status: 400 });
+      return NextResponse.json({ offer: await extractOffer({ userId: user.id }, text) });
+    }
+    if (body.action === 'recursos') {
+      const funil: Funnel = body.funil === 'fundo' ? 'fundo' : 'topo';
+      const text = (v: any, max = 120) => String(v ?? '').trim().slice(0, max);
+      if (funil === 'fundo') {
+        const o = body.oferta || {};
+        if (!text(o.produto)) return NextResponse.json({ error: 'Informe o nome do produto.' }, { status: 400 });
+        const offer: Offer = {
+          produto: text(o.produto, 60), idioma: text(o.idioma, 40) || 'inglês', pais: text(o.pais, 40) || 'US', moeda: text(o.moeda, 10) || 'USD',
+          formato_moeda: text(o.formato_moeda, 40) || undefined, preco: text(o.preco, 30), preco_original: text(o.preco_original, 30),
+          desconto_valor: text(o.desconto_valor, 30), desconto_pct: text(o.desconto_pct, 10),
+          frete: ['gratis', 'rapido', 'imediato', 'expresso'].includes(o.frete) ? o.frete : '', garantia_dias: Number(o.garantia_dias) > 0 ? Math.round(Number(o.garantia_dias)) : null,
+          oficial: o.oficial === true, variacoes: (Array.isArray(o.variacoes) ? o.variacoes : [0]).map(Number).filter((n: number) => n >= 0 && n <= 9).slice(0, 9),
+        };
+        return NextResponse.json({ pack: await generateResources({ userId: user.id }, 'fundo', offer) });
+      }
+      const t = body.topo || {};
+      const page = await pageOf(t.url).catch(() => '');
+      const list = (v: any, max: number) => (Array.isArray(v) ? v : []).map(x => text(x, 80)).filter(Boolean).slice(0, max);
+      return NextResponse.json({
+        page_read: !!page,
+        pack: await generateResources({ userId: user.id }, 'topo', {
+          idioma: text(t.idioma, 40) || 'inglês', pais: text(t.pais, 60) || 'Estados Unidos', grupos: [],
+          palavras: list(t.palavras, 30), termos: list(t.termos, 40), pagina: page, vsl: text(t.vsl, 20000),
+        }),
+      });
+    }
+    return NextResponse.json({ error: 'Ação desconhecida.' }, { status: 400 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'A IA não respondeu. Tente de novo.' }, { status: 502 });
   }
 }

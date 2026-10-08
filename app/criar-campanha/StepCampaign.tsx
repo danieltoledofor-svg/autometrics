@@ -21,7 +21,7 @@ const PLACE: Record<string, string> = { Country: 'país', State: 'estado', Provi
 const toNumber = (text: string) => { const v = Number(String(text).replace(',', '.')); return text.trim() === '' || !Number.isFinite(v) ? null : v; };
 
 /** Fora do componente de propósito: definido lá dentro, cada letra digitada recriaria o bloco e o campo perderia o cursor. */
-function Block({ title, hint, css, children }: { title: string; hint?: string; css: Css; children: React.ReactNode }) {
+export function Block({ title, hint, css, children }: { title: string; hint?: string; css: Css; children: React.ReactNode }) {
   return (
     <div className={`${css.card} border rounded-xl p-4 space-y-3`}>
       <div><div className={`text-sm font-bold ${css.head}`}>{title}</div>{hint && <div className={`text-xs ${css.muted} mt-0.5`}>{hint}</div>}</div>

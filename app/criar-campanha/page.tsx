@@ -10,6 +10,7 @@ import type { Template } from '@/lib/campaignBuilder/template';
 import { draftFromTemplate, emptyDraft, type Draft } from '@/lib/campaignBuilder/draft';
 import { StepCampaign } from './StepCampaign';
 import { StepWhere } from './StepWhere';
+import { StepAd } from './StepAd';
 
 /**
  * Criador de campanhas de Pesquisa. Passo 1: escolher uma campanha que já
@@ -32,9 +33,13 @@ const keyword = (k: { texto: string; tipo: string }) => (k.tipo === 'EXACT' ? `[
 const adjust = (v: number) => (!v ? 'sem ajuste' : `${v > 0 ? '+' : '−'}${Math.abs(v)}%`);
 const yesNo = (v: boolean | null) => (v === null ? 'o Google não informou' : v ? 'ligada' : 'desligada');
 
-async function api(path: string) {
+async function api(path: string, body?: Record<string, any>) {
   const { data: { session } } = await supabase.auth.getSession();
-  const res = await fetch(path, { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+  const res = await fetch(path, {
+    method: body ? 'POST' : 'GET',
+    headers: { Authorization: `Bearer ${session?.access_token || ''}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
   return { ok: res.ok, body: await res.json().catch(() => ({})) };
 }
 
@@ -59,7 +64,7 @@ export default function CampaignBuilderPage() {
       if (s?.draft?.grupos) {
         const { aparelhos: _old, ...saved } = s.draft;
         void _old;
-        setDraftState({ ...emptyDraft(), ...saved, locais: (saved.locais || []).map((l: any) => ({ id: l.id, nome: l.nome, excluido: !!l.excluido })) });
+        setDraftState({ ...emptyDraft(), ...saved, ia: { ...emptyDraft().ia, ...(saved.ia || {}) }, locais: (saved.locais || []).map((l: any) => ({ id: l.id, nome: l.nome, excluido: !!l.excluido })) });
         setCurrency(s.currency || 'USD');
       }
     } catch { /* rascunho ilegível: começa sem */ }
@@ -130,17 +135,17 @@ export default function CampaignBuilderPage() {
           <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border ${line} ${muted} hover:text-indigo-400`}><ArrowLeft size={16} /></Link>
           <div>
             <h1 className={`text-xl font-extrabold ${head}`}>Criar campanha</h1>
-            <div className={`text-xs ${muted}`}>Rede de Pesquisa · em construção: funcionam os passos Modelo, Campanha e Onde subir; nada é enviado ao Google ainda</div>
+            <div className={`text-xs ${muted}`}>Rede de Pesquisa · em construção: funcionam os passos de 1 a 4; a conferência e a criação no Google ainda não existem</div>
           </div>
         </div>
 
         <div className="grid grid-cols-5 gap-1.5">
           {STEPS.map((s, i) => {
-            const open = i === 0 || ((i === 1 || i === 3) && !!draft);
+            const open = i === 0 || (i >= 1 && i <= 3 && !!draft);
             return (
               <button key={s} disabled={!open} onClick={() => setStep(i)} aria-current={step === i ? 'step' : undefined}
                 className={`text-left rounded-lg border px-3 py-2 text-xs ${step === i ? 'border-indigo-500 text-indigo-400' : `${line} ${muted} ${open ? 'hover:border-indigo-500/50' : ''}`}`}>
-                <b className="block text-[13px]">{i + 1}. {s}</b>{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : i === 3 ? (draft ? 'páginas, MCCs e contas' : 'escolha um modelo') : 'em breve'}
+                <b className="block text-[13px]">{i + 1}. {s}</b>{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : i === 2 ? (draft ? 'palavras, textos e IA' : 'escolha um modelo') : i === 3 ? (draft ? 'páginas, MCCs e contas' : 'escolha um modelo') : 'em breve'}
               </button>
             );
           })}
@@ -152,12 +157,7 @@ export default function CampaignBuilderPage() {
           <StepCampaign draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} languages={languages} onNext={() => setStep(2)}
             findPlaces={async text => (await api(`/api/campaign-builder?local=${encodeURIComponent(text)}`)).body} />
         )}
-        {list?.allowed && step === 2 && (
-          <div className={`${card} border rounded-xl p-5 text-sm ${muted} space-y-3`}>
-            <div>O passo do anúncio (palavras-chave, títulos, descrições, sitelinks e frases de destaque, com as sugestões da IA) ainda vai ser construído. A configuração da campanha ficou guardada neste navegador.</div>
-            {draft && <button onClick={() => setStep(3)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold">Seguir para Onde subir</button>}
-          </div>
-        )}
+        {list?.allowed && step === 2 && draft && <StepAd draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} api={api} onNext={() => setStep(3)} />}
         {list?.allowed && step === 3 && draft && <StepWhere draft={draft} setDraft={setDraft} css={css} api={api} onNext={() => setStep(4)} />}
         {list?.allowed && step === 4 && (
           <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}>A conferência (ensaio de cada campanha no Google e criação, tudo pausado) ainda vai ser construída. Páginas, contas e metas ficaram guardadas neste navegador.</div>

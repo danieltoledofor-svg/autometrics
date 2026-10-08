@@ -1,5 +1,5 @@
 import type { Template } from './template';
-import type { Funnel } from './resources';
+import { LIMITS, count, problemOf, type Funnel, type Offer, type ResourcePack } from './rules';
 import type { Tracker } from './url';
 
 /**
@@ -29,6 +29,9 @@ export interface Draft {
   anuncio: { caminho1: string; caminho2: string; titulos: string[]; descricoes: string[] };
   sitelinks: { texto: string; desc1: string; desc2: string }[];
   destaques: string[];
+  /** O que o usuário informou para a IA escrever os recursos, e o último pacote que ela devolveu. */
+  ia: { parecidas: string; url: string; idioma: string; pais: string; vsl: string; oferta: Partial<Offer> };
+  sugestoes: ResourcePack | null;
   /** Uma campanha por página em cada conta escolhida. */
   paginas: { url: string; nome: string }[];
   /** Contas onde subir, cada uma com a meta de conversão escolhida nela (a lista de metas muda de conta para conta). */
@@ -48,7 +51,9 @@ export function emptyDraft(): Draft {
     redes: { parceiros: false, display: false }, locais: [], local_incluir: 'PRESENCE', idiomas: [],
     ia_max: { ligada: false, personalizar_texto: false, expandir_url: false },
     negativas: [], grupos: [{ nome: 'Grupo 01', meta_cpa: null }], palavras: [],
-    rastreador: 'autometrics', anuncio: { caminho1: '', caminho2: '', titulos: [], descricoes: [] }, sitelinks: [], destaques: [], paginas: [], contas: [], origem: null,
+    rastreador: 'autometrics', anuncio: { caminho1: '', caminho2: '', titulos: [], descricoes: [] }, sitelinks: [], destaques: [],
+    ia: { parecidas: '', url: '', idioma: '', pais: '', vsl: '', oferta: { variacoes: [0] } }, sugestoes: null,
+    paginas: [], contas: [], origem: null,
   };
 }
 
@@ -77,6 +82,8 @@ export function draftFromTemplate(t: Template): Draft {
     anuncio: { caminho1: ad?.caminho1 || '', caminho2: ad?.caminho2 || '', titulos: (ad?.titulos || []).map(x => x.texto), descricoes: (ad?.descricoes || []).map(x => x.texto) },
     sitelinks: t.recursos.sitelinks.map(s => ({ texto: s.texto, desc1: s.desc1, desc2: s.desc2 })),
     destaques: t.recursos.destaques.map(d => d.texto),
+    ia: { parecidas: (t.origem.nome.match(/\[[^\]]+\]/) || [''])[0], url: (ad?.urls?.[0] || '').split('?')[0], idioma: t.idiomas[0]?.nome || '', pais: t.locais.find(l => !l.excluido)?.nome || '', vsl: '', oferta: { variacoes: [0] } },
+    sugestoes: null,
     paginas: [], contas: [],
     origem: t.origem.nome,
   };
@@ -106,3 +113,34 @@ export function whereProblems(d: Draft): string[] {
   if (d.lance.estrategia === 'MAXIMIZE_CONVERSIONS' && d.contas.some(c => !c.meta_id)) out.push('Escolha a meta de conversão de cada conta.');
   return out;
 }
+
+/** Quanto cabe em um anúncio de pesquisa responsivo e em uma campanha. */
+export const AD_MAX = { titulos: 15, descricoes: 4, sitelinks: 20, destaques: 20, caminho: 15 };
+
+/** O que falta no passo Anúncio. As letras são contadas aqui, do mesmo jeito que o Google conta. */
+export function adProblems(d: Draft): string[] {
+  const out: string[] = [];
+  const f = d.funil, bad = (kind: Parameters<typeof problemOf>[1], text: string) => problemOf(f, kind, text);
+  if (!d.palavras.length) out.push('Inclua pelo menos uma palavra-chave.');
+  const titles = d.anuncio.titulos.filter(t => t.trim()), descs = d.anuncio.descricoes.filter(t => t.trim());
+  if (titles.length < 3) out.push('O anúncio precisa de pelo menos 3 títulos.');
+  if (titles.length > AD_MAX.titulos) out.push(`O anúncio aceita até ${AD_MAX.titulos} títulos.`);
+  if (descs.length < 2) out.push('O anúncio precisa de pelo menos 2 descrições.');
+  if (descs.length > AD_MAX.descricoes) out.push(`O anúncio aceita até ${AD_MAX.descricoes} descrições.`);
+  const first = (label: string, list: [Parameters<typeof problemOf>[1], string][]) => {
+    for (const [kind, text] of list) { const p = bad(kind, text); if (p) { out.push(`${label} "${text.slice(0, 40)}": ${p}.`); return; } }
+  };
+  first('Título', titles.map(t => ['titulo', t]));
+  first('Descrição', descs.map(t => ['descricao', t]));
+  if (new Set(titles.map(t => t.trim().toLowerCase())).size !== titles.length) out.push('Há títulos repetidos.');
+  for (const path of [d.anuncio.caminho1, d.anuncio.caminho2]) if (count(path) > AD_MAX.caminho || /\s/.test(path)) { out.push('Cada caminho de exibição tem até 15 letras, sem espaço.'); break; }
+  if (!d.anuncio.caminho1 && d.anuncio.caminho2) out.push('Preencha o primeiro caminho de exibição antes do segundo.');
+  for (const s of d.sitelinks) {
+    const p = bad('sitelink', s.texto) || ((s.desc1 || s.desc2) && (bad('sitelink_desc', s.desc1) || bad('sitelink_desc', s.desc2)));
+    if (p) { out.push(`Sitelink "${s.texto.slice(0, 30)}": ${p === 'vazio' ? 'as duas linhas de descrição vão juntas (ou nenhuma)' : p}.`); break; }
+  }
+  if (d.sitelinks.length === 1) out.push('O Google só mostra sitelinks quando há pelo menos 2.');
+  first('Frase de destaque', d.destaques.map(t => ['destaque', t]));
+  return out;
+}
+export { LIMITS };
