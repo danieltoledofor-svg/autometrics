@@ -330,6 +330,42 @@ export async function ingestSale(refreshToken: string, where: { conversionCustom
 }
 
 /** Remove os hífens de "123-456-7890". */
+export interface MutateProblem { message: string; code: string; operation: number | null; field: string }
+
+/**
+ * Várias alterações de tipos diferentes num pedido só (orçamento, campanha,
+ * grupos, palavras, anúncio, recursos). Ou entra tudo, ou não entra nada. Com
+ * validateOnly o Google confere o pedido inteiro e não cria coisa alguma.
+ * Devolve os nomes criados, ou a lista de todos os problemas (com o número da
+ * operação que falhou), em vez de só o primeiro.
+ */
+export async function mutateAll(ctx: AdsContext, mutateOperations: any[], validateOnly: boolean): Promise<{ results: any[]; problems: MutateProblem[] }> {
+  const res = await fetch(`${API_BASE}/customers/${ctx.customerId}/googleAds:mutate`, {
+    method: 'POST',
+    headers: await headers(ctx),
+    body: JSON.stringify({ mutateOperations, validateOnly, partialFailure: false }),
+  });
+  const text = await res.text();
+  let body: any = {};
+  try { body = JSON.parse(text); } catch { /* resposta fora do formato */ }
+  if (res.ok) return { results: body.mutateOperationResponses || [], problems: [] };
+  const err = Array.isArray(body) ? body[0]?.error : body.error;
+  const problems: MutateProblem[] = [];
+  for (const detail of err?.details || []) {
+    for (const e of detail.errors || []) {
+      const path: any[] = e.location?.fieldPathElements || [];
+      const op = path.find(x => x.fieldName === 'mutate_operations' || x.fieldName === 'operations');
+      problems.push({
+        message: e.message || 'O Google recusou.', code: String(Object.values(e.errorCode || {})[0] || ''),
+        operation: op && op.index !== undefined ? Number(op.index) : null,
+        field: path.filter(x => x !== op).map(x => (x.index !== undefined ? `${x.fieldName}[${x.index}]` : x.fieldName)).join('.'),
+      });
+    }
+  }
+  if (!problems.length) problems.push({ message: err?.message || text.slice(0, 300) || `HTTP ${res.status}`, code: err?.status || '', operation: null, field: '' });
+  return { results: [], problems };
+}
+
 /** Locais do Google que batem com um texto ("Canada", "São Paulo"), para escolher no criador de campanhas. */
 export async function suggestLocations(refreshToken: string, text: string): Promise<{ id: string; nome: string; tipo: string }[]> {
   const res = await fetch(`${API_BASE}/geoTargetConstants:suggest`, {

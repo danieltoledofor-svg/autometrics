@@ -9,6 +9,8 @@ import { similarCampaigns } from '@/lib/campaignBuilder/similar';
 import { extractOffer, generateResources, type Funnel, type Offer } from '@/lib/campaignBuilder/resources';
 import { fetchPageText } from '@/lib/analysis/page';
 import { aiEnabled } from '@/lib/ai/openrouter';
+import { createCampaign } from '@/lib/campaignBuilder/create';
+import type { Draft } from '@/lib/campaignBuilder/draft';
 import { decryptSecret } from '@/lib/googleAds/server';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +29,7 @@ export const maxDuration = 60;
  * GET ?parecidas=<trecho>  o que mais converteu nas campanhas do usuário com esse trecho no nome
  * POST { action: 'oferta', url }                 lê a página do produto (preço, garantia, frete…) com a IA
  * POST { action: 'recursos', funil, … }          títulos, descrições, sitelinks e frases de destaque pela IA
+ * POST { action: 'criar', draft, linha, ensaio }  ensaia (ou cria, pausada) uma campanha em uma conta
  *
  * Só para os logins liberados (lib/googleAds/edit).
  */
@@ -215,8 +218,33 @@ export async function POST(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
   if (!canEdit(user.email)) return NextResponse.json({ error: 'O criador de campanhas ainda não está liberado para este login.' }, { status: 403 });
-  if (!aiEnabled()) return NextResponse.json({ error: 'A IA está desligada no servidor.' }, { status: 409 });
   const body = await request.json().catch(() => ({}));
+
+  // Ensaio ou criação de UMA campanha em UMA conta. A tela chama uma vez por campanha do lançamento.
+  if (body.action === 'criar') {
+    const draft = body.draft as Draft, line = body.linha || {};
+    const accountId = String(line.conta_id || '').replace(/\D/g, '');
+    if (!draft?.grupos || !accountId) return NextResponse.json({ error: 'Pedido incompleto.' }, { status: 400 });
+    const ctx = await accountContext(user.id, accountId);
+    if (!ctx) return NextResponse.json({ error: 'Esta conta não está ligada, ou a ligação expirou. Reconecte em Integração.' }, { status: 409 });
+    const ensaio = body.ensaio !== false;
+    const name = String(line.nome || '').trim().slice(0, 250);
+    try {
+      const result = await createCampaign(ctx, draft, { url: String(line.url || '').trim(), nome: name, conta_id: accountId, meta_id: line.meta_id ? String(line.meta_id) : null }, ensaio);
+      await addUsage(result.calls).catch(() => {});
+      if (!ensaio) {
+        await supabaseAdmin().from('google_ads_actions').insert({
+          user_id: user.id, customer_id: accountId, campaign_id: result.campanha_id, action: 'criar', kind: 'campanha', target: name,
+          new_status: result.ok ? 'PAUSED' : null, ok: result.ok, error: result.ok ? (result.avisos.join(' | ') || null) : result.problemas.map(p => `${p.onde}: ${p.texto}`).join(' | ').slice(0, 1000),
+        }).then(() => null, () => null);
+      }
+      return NextResponse.json({ result });
+    } catch (e: any) {
+      return NextResponse.json({ result: { ok: false, ensaio, campanha_id: null, problemas: [{ onde: 'Google', texto: String(e.message).slice(0, 300) }], avisos: [], calls: 0, itens: 0 } });
+    }
+  }
+
+  if (!aiEnabled()) return NextResponse.json({ error: 'A IA está desligada no servidor.' }, { status: 409 });
   const pageOf = async (url: any) => {
     const u = String(url || '').trim();
     if (!/^https?:\/\//i.test(u)) return '';

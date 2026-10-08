@@ -11,12 +11,14 @@ import { draftFromTemplate, emptyDraft, type Draft } from '@/lib/campaignBuilder
 import { StepCampaign } from './StepCampaign';
 import { StepWhere } from './StepWhere';
 import { StepAd } from './StepAd';
+import { StepReview } from './StepReview';
 
 /**
  * Criador de campanhas de Pesquisa. Passo 1: escolher uma campanha que já
  * existe e ler tudo dela do Google, para servir de modelo (a leitura não altera
- * nada), ou começar do zero. Passo 2: a configuração da campanha. Os passos
- * seguintes ainda não existem, e nada é enviado ao Google por aqui.
+ * nada), ou começar do zero. Depois: a configuração da campanha, o anúncio,
+ * onde subir e a conferência, que ensaia no Google e, com a confirmação do
+ * usuário, cria as campanhas pausadas.
  * Só para os logins liberados.
  */
 
@@ -135,17 +137,17 @@ export default function CampaignBuilderPage() {
           <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border ${line} ${muted} hover:text-indigo-400`}><ArrowLeft size={16} /></Link>
           <div>
             <h1 className={`text-xl font-extrabold ${head}`}>Criar campanha</h1>
-            <div className={`text-xs ${muted}`}>Rede de Pesquisa · em construção: funcionam os passos de 1 a 4; a conferência e a criação no Google ainda não existem</div>
+            <div className={`text-xs ${muted}`}>Rede de Pesquisa · em construção: o ensaio não cria nada; a criação só acontece no passo 5, com a sua confirmação, e tudo nasce pausado</div>
           </div>
         </div>
 
         <div className="grid grid-cols-5 gap-1.5">
           {STEPS.map((s, i) => {
-            const open = i === 0 || (i >= 1 && i <= 3 && !!draft);
+            const open = i === 0 || !!draft;
             return (
               <button key={s} disabled={!open} onClick={() => setStep(i)} aria-current={step === i ? 'step' : undefined}
                 className={`text-left rounded-lg border px-3 py-2 text-xs ${step === i ? 'border-indigo-500 text-indigo-400' : `${line} ${muted} ${open ? 'hover:border-indigo-500/50' : ''}`}`}>
-                <b className="block text-[13px]">{i + 1}. {s}</b>{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : i === 2 ? (draft ? 'palavras, textos e IA' : 'escolha um modelo') : i === 3 ? (draft ? 'páginas, MCCs e contas' : 'escolha um modelo') : 'em breve'}
+                <b className="block text-[13px]">{i + 1}. {s}</b>{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : i === 2 ? (draft ? 'palavras, textos e IA' : 'escolha um modelo') : i === 3 ? (draft ? 'páginas, MCCs e contas' : 'escolha um modelo') : (draft ? 'ensaio e criação' : 'escolha um modelo')}
               </button>
             );
           })}
@@ -159,9 +161,7 @@ export default function CampaignBuilderPage() {
         )}
         {list?.allowed && step === 2 && draft && <StepAd draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} api={api} onNext={() => setStep(3)} />}
         {list?.allowed && step === 3 && draft && <StepWhere draft={draft} setDraft={setDraft} css={css} api={api} onNext={() => setStep(4)} />}
-        {list?.allowed && step === 4 && (
-          <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}>A conferência (ensaio de cada campanha no Google e criação, tudo pausado) ainda vai ser construída. Páginas, contas e metas ficaram guardadas neste navegador.</div>
-        )}
+        {list?.allowed && step === 4 && draft && <StepReview draft={draft} css={css} api={api} goTo={setStep} />}
 
         {list?.allowed && step === 0 && (
           <div className={`${card} border rounded-xl p-4 space-y-3`}>
