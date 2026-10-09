@@ -9,7 +9,7 @@ import type { CustomColumnsApi } from '@/app/components/metrics/useCustomColumns
 import type { CampaignDay, DayRow } from '@/lib/metrics/dimension';
 import { useGoogleControls } from './useGoogleControls';
 import { CpaCell } from './BidCell';
-import { AdForm, AddButton, GroupForm, KeywordForm, ResultLine, RowAction, useManage, type AdSeed, type ManageGroup, type Result } from './ManageBox';
+import { AdForm, AddButton, AssetsBox, GroupForm, KeywordForm, ResultLine, RowAction, useManage, type AdSeed, type ManageGroup, type Result } from './ManageBox';
 
 /**
  * Abas de grupos de anúncios, anúncios e palavras-chave.
@@ -123,7 +123,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
   const symbol = google.currency === 'BRL' ? 'R$' : google.currency === 'EUR' ? '€' : 'US$';
   // Montagem da campanha pelo Autometrics (só para os logins liberados): formulário aberto, linha ocupada e o resultado.
   const manage = useManage(supabase, productId);
-  const [form, setForm] = useState<null | { type: 'grupo'; copyFrom?: ManageGroup; rename?: ManageGroup } | { type: 'anuncio'; seed?: AdSeed } | { type: 'palavra' }>(null);
+  const [form, setForm] = useState<null | { type: 'grupo'; copyFrom?: ManageGroup; rename?: ManageGroup } | { type: 'anuncio'; mode: 'novo' | 'copia' | 'editar'; seed?: AdSeed; adKey?: string } | { type: 'palavra' } | { type: 'recursos' }>(null);
   const [rowBusy, setRowBusy] = useState('');
   const [rowResult, setRowResult] = useState<Result>(null);
   const [reload, setReload] = useState(0);
@@ -291,7 +291,8 @@ export function GoogleAdsEntitiesTab(props: Props) {
       <span className="inline-flex gap-3">
         {level === 'ad_group' && <RowAction label="Renomear" onClick={() => setForm({ type: 'grupo', rename: groupOf(i.entity_id) })} />}
         {level === 'ad_group' && <RowAction label="Duplicar" onClick={() => setForm({ type: 'grupo', copyFrom: groupOf(i.entity_id) })} />}
-        {level === 'ad' && i.details?.type === 'RESPONSIVE_SEARCH_AD' && <RowAction label="Duplicar" onClick={() => setForm({ type: 'anuncio', seed: seedOf(i) })} />}
+        {level === 'ad' && i.details?.type === 'RESPONSIVE_SEARCH_AD' && <RowAction label="Editar" onClick={() => setForm({ type: 'anuncio', mode: 'editar', seed: seedOf(i), adKey: i.entity_id })} />}
+        {level === 'ad' && i.details?.type === 'RESPONSIVE_SEARCH_AD' && <RowAction label="Duplicar" onClick={() => setForm({ type: 'anuncio', mode: 'copia', seed: seedOf(i), adKey: i.entity_id })} />}
         <RowAction label={i.status === 'ENABLED' ? 'Pausar' : 'Reativar'} busy={rowBusy === i.entity_id} onClick={() => toggleStatus(i)} danger={i.status === 'ENABLED'} />
       </span>
     ),
@@ -381,7 +382,8 @@ export function GoogleAdsEntitiesTab(props: Props) {
   return (
     <div className="space-y-4">
     {manage.allowed && form?.type === 'grupo' && <GroupForm key={`${form.copyFrom?.id || ''}${form.rename?.id || ''}`} manage={manage} ui={ui} copyFrom={form.copyFrom} rename={form.rename} onClose={() => setForm(null)} onDone={done} />}
-    {manage.allowed && form?.type === 'anuncio' && <AdForm key={(form.seed?.titulos || []).join('|')} manage={manage} ui={ui} seed={form.seed} onClose={() => setForm(null)} onDone={done} />}
+    {manage.allowed && form?.type === 'anuncio' && <AdForm key={`${form.mode}${form.adKey || ''}`} manage={manage} ui={ui} productId={productId} mode={form.mode} seed={form.seed} adKey={form.adKey} onClose={() => setForm(null)} onDone={done} />}
+    {manage.allowed && form?.type === 'recursos' && <AssetsBox manage={manage} ui={ui} productId={productId} defaultUrl={blankAd()?.url || ''} onClose={() => setForm(null)} />}
     {manage.allowed && form?.type === 'palavra' && <KeywordForm manage={manage} ui={ui} groupId={props.adGroupFilter || undefined} onClose={() => setForm(null)} onDone={done} />}
     <ResultLine result={rowResult} />
     <DimensionTable
@@ -404,7 +406,8 @@ export function GoogleAdsEntitiesTab(props: Props) {
       footnote="Conversões (Google) são as que o Google mede. As colunas com ≈ distribuem as vendas reais do dia (postback e lançamento manual) pelas conversões do Google de cada item, ou pelos cliques quando o Google ainda não contou nenhuma."
       toolbar={<>
         {manage.allowed && !isPmax && level === 'ad_group' && <AddButton label="Novo grupo" ui={ui} onClick={() => setForm({ type: 'grupo' })} />}
-        {manage.allowed && !isPmax && level === 'ad' && <AddButton label="Novo anúncio" ui={ui} onClick={() => setForm({ type: 'anuncio', seed: blankAd() })} />}
+        {manage.allowed && !isPmax && level === 'ad' && <AddButton label="Novo anúncio" ui={ui} onClick={() => setForm({ type: 'anuncio', mode: 'novo', seed: blankAd() })} />}
+        {manage.allowed && !isPmax && level === 'ad' && <button onClick={() => setForm({ type: 'recursos' })} className={`text-sm rounded-lg px-3 py-1.5 border ${borderCol} ${isDark ? 'bg-slate-950 text-slate-200 hover:border-indigo-400' : 'bg-white text-slate-800 hover:border-indigo-500'}`}>Sitelinks e frases</button>}
         {manage.allowed && !isPmax && level === 'keyword' && <AddButton label="Palavra-chave" ui={ui} onClick={() => setForm({ type: 'palavra' })} />}
         {level !== 'ad_group' && adGroups.length > 0 && (
           <select value={props.adGroupFilter} onChange={e => props.onAdGroupFilter(e.target.value)} className={`${selectCls} max-w-[240px]`}>

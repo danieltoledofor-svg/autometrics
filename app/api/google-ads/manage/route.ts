@@ -3,7 +3,9 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { addUsage } from '@/lib/googleAds/sync';
 import { GoogleAdsError, search } from '@/lib/googleAds/client';
 import { campaignAccess, canEdit, setKeywordStatus } from '@/lib/googleAds/edit';
-import { addKeywords, addLocation, createAd, createGroup, readAds, readLocations, Refused, removeLocation, renameGroup, setAdStatus, setGroupStatus, type Match } from '@/lib/googleAds/manage';
+import { addCampaignAsset, addKeywords, addLocation, createAd, createGroup, readAdDetail, readAds, readCampaignAssets, readLocations, Refused, removeCampaignAsset, removeLocation, renameGroup, setAdStatus, setGroupStatus, updateAd, type Match } from '@/lib/googleAds/manage';
+import { adviseAd } from '@/lib/googleAds/adAdvice';
+import { aiEnabled } from '@/lib/ai/openrouter';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -14,6 +16,8 @@ export const maxDuration = 60;
  * GET  ?product_id=…&ver=grupos     os grupos de anúncios da campanha, como estão no Google agora
  * GET  ?product_id=…&ver=anuncios   os anúncios com o texto inteiro (para copiar)
  * GET  ?product_id=…&ver=locais     os locais incluídos e excluídos
+ * GET  ?product_id=…&ver=anuncio&ad=grupo~anúncio   um anúncio com o que cada título e descrição rendeu em 30 dias
+ * GET  ?product_id=…&ver=recursos   sitelinks e frases de destaque da campanha, com impressões e cliques
  * POST { product_id, action, … }
  *   palavra_nova     { group_id, texts[], match }          inclui palavras-chave num grupo (também a partir de um termo de pesquisa)
  *   palavra_status   { keyword: "grupo~palavra", status }  pausa ou reativa uma palavra-chave
@@ -22,6 +26,10 @@ export const maxDuration = 60;
  *   grupo_nome       { group_id, name }
  *   anuncio_novo     { group_id, titulos[], descricoes[], url, caminho1?, caminho2?, paused? }
  *   anuncio_status   { ad: "grupo~anúncio", status }
+ *   anuncio_editar   { ad, titulos[], descricoes[], url, caminho1?, caminho2? }   troca os textos do anúncio que já existe
+ *   anuncio_ia       { ad }                                 a IA lê o desempenho de cada texto e sugere o que trocar (não altera nada)
+ *   recurso_novo     { tipo: 'sitelink' | 'destaque', texto, desc1?, desc2?, url? }
+ *   recurso_remover  { resource }
  *   local_novo       { geo_id, excluir }
  *   local_remover    { id, confirmar_mundo? }
  *
@@ -46,6 +54,8 @@ export async function GET(request: Request) {
   try {
     const what = q.get('ver');
     if (what === 'anuncios') { const ads = await readAds(ctx, campaignId); await addUsage(1).catch(() => {}); return NextResponse.json({ allowed: true, ads }); }
+    if (what === 'anuncio') { const ad = await readAdDetail(ctx, campaignId, q.get('ad') || ''); await addUsage(ad.calls).catch(() => {}); return NextResponse.json({ allowed: true, ad, ai: aiEnabled() }); }
+    if (what === 'recursos') { const r = await readCampaignAssets(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, assets: r.assets }); }
     if (what === 'locais') { const r = await readLocations(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, locations: r.locations }); }
     const rows = await search(ctx, `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.target_cpa_micros FROM ad_group WHERE campaign.id = ${Number(campaignId)} AND ad_group.status != 'REMOVED'`);
     await addUsage(1).catch(() => {});
@@ -119,6 +129,29 @@ export async function POST(request: Request) {
       const r = await setAdStatus(ctx, campaignId, String(body.ad || ''), status);
       kind = status === 'PAUSED' ? 'pausar_anuncio' : 'ativar_anuncio'; target = r.label; key = r.resource; calls = r.calls;
       await patch('ad', String(body.ad), { status });
+    } else if (action === 'anuncio_editar') {
+      const r = await updateAd(ctx, campaignId, String(body.ad || ''), {
+        titulos: list(body.titulos, 20), descricoes: list(body.descricoes, 8), url: String(body.url || ''), caminho1: String(body.caminho1 || '').trim(), caminho2: String(body.caminho2 || '').trim(),
+      });
+      target = r.label; key = String(body.ad); calls = r.calls;
+      // No espelho: os textos novos, e a análise do Google recomeça.
+      const { data: old } = await db.from('google_ads_entities').select('details').eq('product_id', productId).eq('level', 'ad').eq('entity_id', String(body.ad)).maybeSingle();
+      await patch('ad', String(body.ad), { name: r.titles[0], details: { ...(old?.details || {}), final_url: String(body.url || '').trim(), path1: String(body.caminho1 || '').trim() || null, path2: String(body.caminho2 || '').trim() || null,
+        headlines: r.titles.map(text => ({ text })), descriptions: r.descs.map(text => ({ text })), approval: 'UNDER_REVIEW', ad_strength: 'PENDING' } });
+    } else if (action === 'anuncio_ia') {
+      // Só lê e sugere: não altera nada no Google e não entra no registro de alterações.
+      if (!aiEnabled()) return NextResponse.json({ error: 'A IA está desligada no servidor.' }, { status: 409 });
+      const [ad, assets] = await Promise.all([readAdDetail(ctx, campaignId, String(body.ad || '')), readCampaignAssets(ctx, campaignId)]);
+      await addUsage(ad.calls + assets.calls).catch(() => {});
+      const name = String(access.product.name || '');
+      const advice = await adviseAd({ userId: user.id, productId }, { funnel: /\[(FF|FUNDO)\]/i.test(name) ? 'fundo' : 'topo', campaign: name, group: ad.group, titulos: ad.titulos, descricoes: ad.descricoes, tem_numeros: ad.tem_numeros, assets: assets.assets });
+      return NextResponse.json({ success: true, advice });
+    } else if (action === 'recurso_novo') {
+      const r = await addCampaignAsset(ctx, campaignId, { tipo: body.tipo === 'destaque' ? 'destaque' : 'sitelink', texto: String(body.texto || ''), desc1: String(body.desc1 || ''), desc2: String(body.desc2 || ''), url: String(body.url || '') });
+      target = r.label; calls = r.calls; extra = { assets: r.assets };
+    } else if (action === 'recurso_remover') {
+      const r = await removeCampaignAsset(ctx, campaignId, String(body.resource || ''));
+      target = r.label; key = String(body.resource); calls = r.calls; extra = { assets: r.assets };
     } else if (action === 'local_novo') {
       const r = await addLocation(ctx, campaignId, String(body.geo_id || ''), body.excluir === true);
       target = r.label; key = String(body.geo_id); calls = r.calls; extra = { locations: r.locations };

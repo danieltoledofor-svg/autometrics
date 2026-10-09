@@ -17,7 +17,7 @@ const DONE: Record<string, [string, string]> = { negativa: ['Negativa criada', '
 /** Montagem da campanha (lib/googleAds/manage): feito, sem valor e sem desfazer por aqui. */
 const MADE: Record<string, string> = {
   palavra_nova: 'Palavra-chave incluída', ativar_palavra: 'Palavra-chave reativada', grupo_novo: 'Grupo criado', pausar_grupo: 'Grupo pausado', ativar_grupo: 'Grupo reativado',
-  grupo_nome: 'Grupo renomeado', anuncio_novo: 'Anúncio criado', pausar_anuncio: 'Anúncio pausado', ativar_anuncio: 'Anúncio reativado', local_novo: 'Local', local_remover: 'Local',
+  grupo_nome: 'Grupo renomeado', anuncio_novo: 'Anúncio criado', pausar_anuncio: 'Anúncio pausado', ativar_anuncio: 'Anúncio reativado', local_novo: 'Local', local_remover: 'Local', anuncio_editar: 'Anúncio alterado', recurso_novo: 'Recurso incluído', recurso_remover: 'Recurso',
 };
 const when = (iso: string) => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
 

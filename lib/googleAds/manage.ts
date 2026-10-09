@@ -277,3 +277,142 @@ export async function removeLocation(ctx: AdsContext, campaignId: string, criter
   const after = await readLocations(ctx, campaignId);
   return { label: `${target.nome} (${target.excluido ? 'deixou de ser excluído' : 'saiu da campanha'})`, locations: after.locations, calls: 6 };
 }
+
+// ── Edição do anúncio, com o desempenho de cada texto ────────────────────────
+
+export interface AdText { texto: string; pin: string | null; impressoes: number; cliques: number; conversoes: number; nota: string | null }
+
+/**
+ * Um anúncio de pesquisa responsivo com cada título e descrição ao lado do que rendeu nos últimos 30 dias.
+ * O Google mostra combinações dos textos: impressões e cliques de cada um dizem quanto ele entra nas
+ * combinações e se quem vê clica. A nota do Google (melhor, bom, baixo) vem quando ele ainda a informa.
+ */
+export async function readAdDetail(ctx: AdsContext, campaignId: string, adKey: string) {
+  if (!/^\d+~\d+$/.test(adKey)) throw new Error('Anúncio não reconhecido.');
+  const [groupId, adId] = adKey.split('~');
+  const where = `campaign.id = ${Number(campaignId)} AND ad_group.id = ${Number(groupId)} AND ad_group_ad.ad.id = ${Number(adId)}`;
+  const [adRows, perf, labels] = await Promise.all([
+    search(ctx, `
+      SELECT ad_group.name, ad_group_ad.status, ad_group_ad.ad.type, ad_group_ad.ad.final_urls, ad_group_ad.ad_strength, ad_group_ad.policy_summary.approval_status,
+             ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
+             ad_group_ad.ad.responsive_search_ad.path1, ad_group_ad.ad.responsive_search_ad.path2
+      FROM ad_group_ad WHERE ${where}`),
+    search(ctx, `
+      SELECT ad_group_ad_asset_view.field_type, asset.text_asset.text, metrics.impressions, metrics.clicks, metrics.conversions
+      FROM ad_group_ad_asset_view WHERE ${where} AND segments.date DURING LAST_30_DAYS`).catch(() => [] as any[]),
+    search(ctx, `
+      SELECT ad_group_ad_asset_view.field_type, ad_group_ad_asset_view.performance_label, ad_group_ad_asset_view.enabled, asset.text_asset.text
+      FROM ad_group_ad_asset_view WHERE ${where}`).catch(() => [] as any[]),
+  ]);
+  const row = adRows[0], a = row?.adGroupAd?.ad;
+  if (!a || row.adGroupAd.status === 'REMOVED') throw new Error('Este anúncio não existe mais na campanha.');
+  if (a.type !== 'RESPONSIVE_SEARCH_AD') throw new Error('Só o anúncio de pesquisa responsivo pode ser editado por aqui.');
+  const keyOf = (type: string, text: string) => `${type}|${String(text || '').trim().toLowerCase()}`;
+  const numbers = new Map<string, { impressoes: number; cliques: number; conversoes: number }>();
+  for (const r of perf) {
+    const k = keyOf(r.adGroupAdAssetView?.fieldType, r.asset?.textAsset?.text), cur = numbers.get(k) || { impressoes: 0, cliques: 0, conversoes: 0 };
+    cur.impressoes += Number(r.metrics?.impressions) || 0; cur.cliques += Number(r.metrics?.clicks) || 0; cur.conversoes += Number(r.metrics?.conversions) || 0;
+    numbers.set(k, cur);
+  }
+  const NOTE: Record<string, string> = { BEST: 'melhor', GOOD: 'bom', LOW: 'baixo', LEARNING: 'aprendendo', PENDING: 'em análise' };
+  const note = new Map<string, string>();
+  for (const r of labels) { const l = NOTE[r.adGroupAdAssetView?.performanceLabel]; if (l && r.adGroupAdAssetView?.enabled !== false) note.set(keyOf(r.adGroupAdAssetView?.fieldType, r.asset?.textAsset?.text), l); }
+  const rsa = a.responsiveSearchAd || {};
+  const texts = (list: any[], type: string): AdText[] => (list || []).map(x => ({
+    texto: String(x.text || ''), pin: x.pinnedField || null, nota: note.get(keyOf(type, x.text)) || null,
+    ...(numbers.get(keyOf(type, x.text)) || { impressoes: 0, cliques: 0, conversoes: 0 }),
+  }));
+  return {
+    id: adKey, group_id: groupId, group: String(row.adGroup?.name || ''), status: String(row.adGroupAd.status || ''),
+    forca: String(row.adGroupAd.adStrength || ''), aprovacao: String(row.adGroupAd.policySummary?.approvalStatus || ''),
+    url: String(a.finalUrls?.[0] || ''), caminho1: String(rsa.path1 || ''), caminho2: String(rsa.path2 || ''),
+    titulos: texts(rsa.headlines, 'HEADLINE'), descricoes: texts(rsa.descriptions, 'DESCRIPTION'),
+    tem_numeros: perf.length > 0, calls: 3,
+  };
+}
+
+/** Troca os textos de um anúncio que já existe. O que estava fixado numa posição continua fixado, se o texto for o mesmo. */
+export async function updateAd(ctx: AdsContext, campaignId: string, adKey: string, input: AdInput) {
+  const problem = adProblem(input);
+  if (problem) throw new Error(problem);
+  const before = await readAdDetail(ctx, campaignId, adKey);
+  const titles = input.titulos.map(clean).filter(Boolean), descs = input.descricoes.map(clean).filter(Boolean);
+  const pinOf = new Map([...before.titulos, ...before.descricoes].filter(t => t.pin).map(t => [t.texto.trim().toLowerCase(), t.pin!]));
+  const asset = (text: string) => ({ text, ...(pinOf.has(text.toLowerCase()) ? { pinnedField: pinOf.get(text.toLowerCase()) } : {}) });
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const mask: string[] = [], ad: Record<string, any> = { resourceName: `customers/${ctx.customerId}/ads/${adKey.split('~')[1]}` }, rsa: Record<string, any> = {};
+  if (!same(titles, before.titulos.map(t => t.texto.trim()))) { rsa.headlines = titles.map(asset); mask.push('responsive_search_ad.headlines'); }
+  if (!same(descs, before.descricoes.map(t => t.texto.trim()))) { rsa.descriptions = descs.map(asset); mask.push('responsive_search_ad.descriptions'); }
+  const p1 = (input.caminho1 || '').trim(), p2 = p1 ? (input.caminho2 || '').trim() : '';
+  if (p1 !== before.caminho1) { rsa.path1 = p1; mask.push('responsive_search_ad.path1'); }
+  if (p2 !== before.caminho2) { rsa.path2 = p2; mask.push('responsive_search_ad.path2'); }
+  if (clean(input.url) !== before.url) { ad.finalUrls = [clean(input.url)]; mask.push('final_urls'); }
+  if (!mask.length) throw new Error('Nada mudou no anúncio.');
+  if (Object.keys(rsa).length) ad.responsiveSearchAd = rsa;
+  const operations = [{ update: ad, updateMask: mask.join(',') }];
+  await mutate(ctx, 'ads', operations, true);
+  await mutate(ctx, 'ads', operations, false);
+  const removed = before.titulos.filter(t => !titles.includes(t.texto.trim())).length + before.descricoes.filter(t => !descs.includes(t.texto.trim())).length;
+  const added = titles.filter(t => !before.titulos.some(b => b.texto.trim() === t)).length + descs.filter(t => !before.descricoes.some(b => b.texto.trim() === t)).length;
+  return { label: `${titles[0]} (grupo ${before.group}): ${added} ${added === 1 ? 'texto novo' : 'textos novos'}, ${removed} ${removed === 1 ? 'retirado' : 'retirados'}${mask.includes('final_urls') ? ', página trocada' : ''}`, titles, descs, calls: before.calls + 2 };
+}
+
+// ── Sitelinks e frases de destaque da campanha ──────────────────────────────
+
+export interface CampaignAsset { resource: string; tipo: 'sitelink' | 'destaque'; texto: string; desc1: string; desc2: string; url: string; impressoes: number; cliques: number }
+
+export async function readCampaignAssets(ctx: AdsContext, campaignId: string): Promise<{ assets: CampaignAsset[]; calls: number }> {
+  const id = Number(campaignId), types = `campaign_asset.field_type IN ('SITELINK', 'CALLOUT')`;
+  const [rows, perf] = await Promise.all([
+    search(ctx, `
+      SELECT campaign_asset.resource_name, campaign_asset.field_type, campaign_asset.status, asset.final_urls,
+             asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2, asset.callout_asset.callout_text
+      FROM campaign_asset WHERE campaign.id = ${id} AND campaign_asset.status != 'REMOVED' AND ${types}`),
+    search(ctx, `SELECT campaign_asset.resource_name, metrics.impressions, metrics.clicks FROM campaign_asset WHERE campaign.id = ${id} AND ${types} AND segments.date DURING LAST_30_DAYS`).catch(() => [] as any[]),
+  ]);
+  const numbers = new Map<string, { impressoes: number; cliques: number }>();
+  for (const r of perf) { const k = r.campaignAsset?.resourceName, cur = numbers.get(k) || { impressoes: 0, cliques: 0 }; cur.impressoes += Number(r.metrics?.impressions) || 0; cur.cliques += Number(r.metrics?.clicks) || 0; numbers.set(k, cur); }
+  const assets = rows.map(r => {
+    const ca = r.campaignAsset || {}, as = r.asset || {}, link = ca.fieldType === 'SITELINK';
+    return {
+      resource: String(ca.resourceName || ''), tipo: (link ? 'sitelink' : 'destaque') as CampaignAsset['tipo'],
+      texto: String(link ? as.sitelinkAsset?.linkText || '' : as.calloutAsset?.calloutText || ''), desc1: String(as.sitelinkAsset?.description1 || ''), desc2: String(as.sitelinkAsset?.description2 || ''),
+      url: String(as.finalUrls?.[0] || ''), ...(numbers.get(ca.resourceName) || { impressoes: 0, cliques: 0 }),
+    };
+  }).filter(x => x.resource && x.texto).sort((x, y) => x.tipo.localeCompare(y.tipo) || y.impressoes - x.impressoes || x.texto.localeCompare(y.texto));
+  return { assets, calls: 2 };
+}
+
+/** Sitelink ou frase de destaque novo, sempre no nível da campanha (para ir junto em cada cópia). */
+export async function addCampaignAsset(ctx: AdsContext, campaignId: string, input: { tipo: 'sitelink' | 'destaque'; texto: string; desc1?: string; desc2?: string; url?: string }) {
+  const text = clean(input.texto), d1 = clean(input.desc1), d2 = clean(input.desc2), url = clean(input.url);
+  const link = input.tipo === 'sitelink';
+  if (!text || count(text) > 25) throw new Error(`O texto ${link ? 'do sitelink' : 'da frase de destaque'} tem de 1 a 25 letras.`);
+  if (link) {
+    if ((d1 && !d2) || (!d1 && d2)) throw new Error('As duas linhas de descrição do sitelink vão juntas (ou nenhuma).');
+    if (count(d1) > 35 || count(d2) > 35) throw new Error('Cada linha de descrição do sitelink tem até 35 letras.');
+    if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(url)) throw new Error('A página do sitelink precisa começar com https://');
+  }
+  const { assets } = await readCampaignAssets(ctx, campaignId);
+  if (assets.some(a => a.tipo === input.tipo && a.texto.toLowerCase() === text.toLowerCase())) throw new Error(`A campanha já tem ${link ? 'um sitelink' : 'uma frase de destaque'} com este texto.`);
+  const cid = ctx.customerId, asset = `customers/${cid}/assets/-1`;
+  await both(ctx, [
+    { assetOperation: { create: link ? { resourceName: asset, finalUrls: [url], sitelinkAsset: { linkText: text, ...(d1 && d2 ? { description1: d1, description2: d2 } : {}) } } : { resourceName: asset, calloutAsset: { calloutText: text } } } },
+    { campaignAssetOperation: { create: { campaign: `customers/${cid}/campaigns/${campaignId}`, asset, fieldType: link ? 'SITELINK' : 'CALLOUT' } } },
+  ]);
+  const after = await readCampaignAssets(ctx, campaignId);
+  return { label: `${link ? 'Sitelink' : 'Frase de destaque'} "${text}"`, assets: after.assets, calls: 8 };
+}
+
+/** Tira um sitelink ou uma frase de destaque da campanha. O recurso continua na conta; só deixa de valer nesta campanha. */
+export async function removeCampaignAsset(ctx: AdsContext, campaignId: string, resource: string) {
+  if (!new RegExp(`^customers/${ctx.customerId}/campaignAssets/${Number(campaignId)}~\\d+~(SITELINK|CALLOUT)$`).test(resource)) throw new Error('Recurso não reconhecido.');
+  const { assets } = await readCampaignAssets(ctx, campaignId);
+  const target = assets.find(a => a.resource === resource);
+  if (!target) throw new Error('Este recurso não está mais na campanha.');
+  const operations = [{ remove: resource }];
+  await mutate(ctx, 'campaignAssets', operations, true);
+  await mutate(ctx, 'campaignAssets', operations, false);
+  const after = await readCampaignAssets(ctx, campaignId);
+  return { label: `${target.tipo === 'sitelink' ? 'Sitelink' : 'Frase de destaque'} "${target.texto}" retirado`, assets: after.assets, calls: 6 };
+}
