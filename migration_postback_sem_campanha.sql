@@ -31,3 +31,6 @@ ALTER TABLE public.postback_unmatched ADD COLUMN IF NOT EXISTS last_try_at TIMES
 ALTER TABLE public.postback_unmatched ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;   -- quando a campanha foi achada e a venda entrou
 ALTER TABLE public.postback_unmatched ADD COLUMN IF NOT EXISTS product_id UUID;
 CREATE INDEX IF NOT EXISTS idx_postback_unmatched_pending ON public.postback_unmatched (created_at) WHERE resolved_at IS NULL;
+
+-- O que a segunda tentativa fez em cada postback (quantas consultas, o que o Google respondeu).
+ALTER TABLE public.postback_unmatched ADD COLUMN IF NOT EXISTS note TEXT;
