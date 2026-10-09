@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     const what = q.get('ver');
     if (what === 'anuncios') { const ads = await readAds(ctx, campaignId); await addUsage(1).catch(() => {}); return NextResponse.json({ allowed: true, ads }); }
     if (what === 'anuncio') { const ad = await readAdDetail(ctx, campaignId, q.get('ad') || ''); await addUsage(ad.calls).catch(() => {}); return NextResponse.json({ allowed: true, ad, ai: aiEnabled() }); }
-    if (what === 'recursos') { const r = await readCampaignAssets(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, assets: r.assets }); }
+    if (what === 'recursos') { const r = await readCampaignAssets(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, assets: r.assets, aviso: r.aviso }); }
     if (what === 'locais') { const r = await readLocations(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, locations: r.locations }); }
     const rows = await search(ctx, `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.target_cpa_micros FROM ad_group WHERE campaign.id = ${Number(campaignId)} AND ad_group.status != 'REMOVED'`);
     await addUsage(1).catch(() => {});

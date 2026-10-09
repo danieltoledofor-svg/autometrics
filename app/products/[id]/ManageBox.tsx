@@ -211,6 +211,7 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
       const map = new Map<string, TextStat>();
       for (const t of [...body.ad.titulos, ...body.ad.descricoes]) map.set(String(t.texto).trim().toLowerCase(), t);
       setStats(map); setHasNumbers(!!body.ad.tem_numeros); setCanAi(!!body.ai);
+      if (body.ad.aviso) setAiError(`O Google não entregou os números por texto: ${body.ad.aviso}`);
       // Em edição vale o que está no Google agora, não o que a coleta guardou.
       if (mode === 'editar') { setTitles(pad(body.ad.titulos.map((t: any) => t.texto), 15)); setDescs(pad(body.ad.descricoes.map((t: any) => t.texto), 4)); setUrl(body.ad.url); setPath1(body.ad.caminho1); setPath2(body.ad.caminho2); }
     });
@@ -369,7 +370,10 @@ export function AssetsBox({ manage, ui, productId, defaultUrl, onClose }: { mana
   const [link, setLink] = useState({ texto: '', desc1: '', desc2: '', url: defaultUrl });
   const [callout, setCallout] = useState('');
   useEffect(() => {
-    manage.call(`/api/google-ads/manage?product_id=${productId}&ver=recursos`).then(({ ok, body }) => { if (ok && body.assets) setAssets(body.assets); else setError(body.error || 'O Google não respondeu.'); });
+    manage.call(`/api/google-ads/manage?product_id=${productId}&ver=recursos`).then(({ ok, body }) => {
+      if (ok && body.assets) { setAssets(body.assets); if (body.aviso) setResult({ ok: false, text: `O Google não entregou as impressões e os cliques: ${body.aviso}` }); }
+      else setError(body.error || 'O Google não respondeu.');
+    });
   }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (key: string, action: string, payload: Record<string, any>, after?: () => void) => {

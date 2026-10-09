@@ -291,17 +291,18 @@ export async function readAdDetail(ctx: AdsContext, campaignId: string, adKey: s
   if (!/^\d+~\d+$/.test(adKey)) throw new Error('Anúncio não reconhecido.');
   const [groupId, adId] = adKey.split('~');
   const where = `campaign.id = ${Number(campaignId)} AND ad_group.id = ${Number(groupId)} AND ad_group_ad.ad.id = ${Number(adId)}`;
+  let warning = '';                                              // por que os números por texto não vieram, quando o Google recusa a consulta
   const [adRows, perf, labels] = await Promise.all([
     search(ctx, `
-      SELECT ad_group.name, ad_group_ad.status, ad_group_ad.ad.type, ad_group_ad.ad.final_urls, ad_group_ad.ad_strength, ad_group_ad.policy_summary.approval_status,
+      SELECT campaign.id, ad_group.id, ad_group_ad.ad.id, ad_group.name, ad_group_ad.status, ad_group_ad.ad.type, ad_group_ad.ad.final_urls, ad_group_ad.ad_strength, ad_group_ad.policy_summary.approval_status,
              ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
              ad_group_ad.ad.responsive_search_ad.path1, ad_group_ad.ad.responsive_search_ad.path2
       FROM ad_group_ad WHERE ${where}`),
     search(ctx, `
-      SELECT ad_group_ad_asset_view.field_type, asset.text_asset.text, metrics.impressions, metrics.clicks, metrics.conversions
-      FROM ad_group_ad_asset_view WHERE ${where} AND segments.date DURING LAST_30_DAYS`).catch(() => [] as any[]),
+      SELECT campaign.id, ad_group.id, ad_group_ad.ad.id, ad_group_ad_asset_view.field_type, asset.text_asset.text, metrics.impressions, metrics.clicks, metrics.conversions
+      FROM ad_group_ad_asset_view WHERE ${where} AND segments.date DURING LAST_30_DAYS`).catch((e: any) => { warning = String(e?.message || e).slice(0, 200); return [] as any[]; }),
     search(ctx, `
-      SELECT ad_group_ad_asset_view.field_type, ad_group_ad_asset_view.performance_label, ad_group_ad_asset_view.enabled, asset.text_asset.text
+      SELECT campaign.id, ad_group.id, ad_group_ad.ad.id, ad_group_ad_asset_view.field_type, ad_group_ad_asset_view.performance_label, ad_group_ad_asset_view.enabled, asset.text_asset.text
       FROM ad_group_ad_asset_view WHERE ${where}`).catch(() => [] as any[]),
   ]);
   const row = adRows[0], a = row?.adGroupAd?.ad;
@@ -327,7 +328,7 @@ export async function readAdDetail(ctx: AdsContext, campaignId: string, adKey: s
     forca: String(row.adGroupAd.adStrength || ''), aprovacao: String(row.adGroupAd.policySummary?.approvalStatus || ''),
     url: String(a.finalUrls?.[0] || ''), caminho1: String(rsa.path1 || ''), caminho2: String(rsa.path2 || ''),
     titulos: texts(rsa.headlines, 'HEADLINE'), descricoes: texts(rsa.descriptions, 'DESCRIPTION'),
-    tem_numeros: perf.length > 0, calls: 3,
+    tem_numeros: perf.length > 0, aviso: warning, calls: 3,
   };
 }
 
@@ -361,14 +362,16 @@ export async function updateAd(ctx: AdsContext, campaignId: string, adKey: strin
 
 export interface CampaignAsset { resource: string; tipo: 'sitelink' | 'destaque'; texto: string; desc1: string; desc2: string; url: string; impressoes: number; cliques: number }
 
-export async function readCampaignAssets(ctx: AdsContext, campaignId: string): Promise<{ assets: CampaignAsset[]; calls: number }> {
+// Nas consultas de campaign_asset o Google exige campaign.id no SELECT quando ele está no WHERE.
+export async function readCampaignAssets(ctx: AdsContext, campaignId: string): Promise<{ assets: CampaignAsset[]; aviso: string; calls: number }> {
+  let warning = '';
   const id = Number(campaignId), types = `campaign_asset.field_type IN ('SITELINK', 'CALLOUT')`;
   const [rows, perf] = await Promise.all([
     search(ctx, `
-      SELECT campaign_asset.resource_name, campaign_asset.field_type, campaign_asset.status, asset.final_urls,
+      SELECT campaign.id, campaign_asset.resource_name, campaign_asset.field_type, campaign_asset.status, asset.final_urls,
              asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2, asset.callout_asset.callout_text
       FROM campaign_asset WHERE campaign.id = ${id} AND campaign_asset.status != 'REMOVED' AND ${types}`),
-    search(ctx, `SELECT campaign_asset.resource_name, metrics.impressions, metrics.clicks FROM campaign_asset WHERE campaign.id = ${id} AND ${types} AND segments.date DURING LAST_30_DAYS`).catch(() => [] as any[]),
+    search(ctx, `SELECT campaign.id, campaign_asset.resource_name, campaign_asset.field_type, metrics.impressions, metrics.clicks FROM campaign_asset WHERE campaign.id = ${id} AND ${types} AND segments.date DURING LAST_30_DAYS`).catch((e: any) => { warning = String(e?.message || e).slice(0, 200); return [] as any[]; }),
   ]);
   const numbers = new Map<string, { impressoes: number; cliques: number }>();
   for (const r of perf) { const k = r.campaignAsset?.resourceName, cur = numbers.get(k) || { impressoes: 0, cliques: 0 }; cur.impressoes += Number(r.metrics?.impressions) || 0; cur.cliques += Number(r.metrics?.clicks) || 0; numbers.set(k, cur); }
@@ -380,7 +383,7 @@ export async function readCampaignAssets(ctx: AdsContext, campaignId: string): P
       url: String(as.finalUrls?.[0] || ''), ...(numbers.get(ca.resourceName) || { impressoes: 0, cliques: 0 }),
     };
   }).filter(x => x.resource && x.texto).sort((x, y) => x.tipo.localeCompare(y.tipo) || y.impressoes - x.impressoes || x.texto.localeCompare(y.texto));
-  return { assets, calls: 2 };
+  return { assets, aviso: warning, calls: 2 };
 }
 
 /** Sitelink ou frase de destaque novo, sempre no nível da campanha (para ir junto em cada cópia). */
