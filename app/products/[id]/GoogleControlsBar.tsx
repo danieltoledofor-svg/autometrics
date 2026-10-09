@@ -14,6 +14,11 @@ const KIND: Record<string, string> = { meta_cpa: 'Meta de CPA', meta_cpa_grupo: 
 const MONEY = new Set(['meta_cpa', 'limite_cpc', 'orcamento']);
 /** Feito ou desfeito, sem valor: negativa de termo e pausa de palavra-chave. */
 const DONE: Record<string, [string, string]> = { negativa: ['Negativa criada', 'Negativa removida'], pausar_palavra: ['Palavra-chave pausada', 'Palavra-chave reativada'] };
+/** Montagem da campanha (lib/googleAds/manage): feito, sem valor e sem desfazer por aqui. */
+const MADE: Record<string, string> = {
+  palavra_nova: 'Palavra-chave incluída', ativar_palavra: 'Palavra-chave reativada', grupo_novo: 'Grupo criado', pausar_grupo: 'Grupo pausado', ativar_grupo: 'Grupo reativado',
+  grupo_nome: 'Grupo renomeado', anuncio_novo: 'Anúncio criado', pausar_anuncio: 'Anúncio pausado', ativar_anuncio: 'Anúncio reativado', local_novo: 'Local', local_remover: 'Local',
+};
 const when = (iso: string) => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
 
 export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { isDark: boolean; bgCard: string; borderCol: string; textHead: string; textMuted: string } }) {
@@ -33,7 +38,7 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
   const symbol = currency === 'BRL' ? 'R$' : currency === 'EUR' ? '€' : 'US$';
   const money = (v: number | null) => (v === null ? 'sem valor' : `${symbol} ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
   const show = (kind: string, v: number | null) => (kind === 'meta_cpa_grupo' ? (v ? money(v) : 'a da campanha') : MONEY.has(kind) ? money(v) : adjustText(v) === '—' ? 'sem ajuste' : adjustText(v));
-  const describe = (h: any) => (DONE[h.kind] ? `${DONE[h.kind][h.undo_of ? 1 : 0]}: ${h.target}`
+  const describe = (h: any) => (MADE[h.kind] ? `${MADE[h.kind]}: ${h.target}` : DONE[h.kind] ? `${DONE[h.kind][h.undo_of ? 1 : 0]}: ${h.target}`
     : `${MONEY.has(h.kind) ? KIND[h.kind] : `${KIND[h.kind] || h.kind} ${h.target}`}: de ${show(h.kind, h.previous_value === null ? null : Number(h.previous_value))} para ${show(h.kind, Number(h.new_value))}${h.undo_of ? ' (desfazendo)' : ''}`);
   const main = controls.filter(c => MONEY.has(c.kind));
   const field = `w-28 rounded-lg border px-2 py-1.5 text-right text-sm tabular-nums outline-none focus:border-indigo-500 ${isDark ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`;
