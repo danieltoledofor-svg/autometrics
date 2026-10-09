@@ -9,6 +9,7 @@ import type { CustomColumnsApi } from '@/app/components/metrics/useCustomColumns
 import type { CampaignDay, DayRow } from '@/lib/metrics/dimension';
 import { useGoogleControls } from './useGoogleControls';
 import { CpaCell } from './BidCell';
+import { AdForm, AddButton, GroupForm, KeywordForm, ResultLine, RowAction, useManage, type AdSeed, type ManageGroup, type Result } from './ManageBox';
 
 /**
  * Abas de grupos de anúncios, anúncios e palavras-chave.
@@ -95,7 +96,7 @@ const TITLES: Record<EntityLevel, string> = {
 };
 
 /** Leituras recentes, para trocar de aba sem esperar o banco de novo. */
-const cache = new Map<string, { at: number; entities: Entity[]; metrics: any[] }>();
+const cache = new Map<string, { at: number; reload: number; entities: Entity[]; metrics: any[] }>();
 
 async function fetchAll(query: () => any) {
   const out: any[] = [];
@@ -120,12 +121,19 @@ export function GoogleAdsEntitiesTab(props: Props) {
   // Meta de CPA de cada grupo, lida do Google (só para os logins que podem alterar).
   const google = useGoogleControls(productId, level === 'ad_group');
   const symbol = google.currency === 'BRL' ? 'R$' : google.currency === 'EUR' ? '€' : 'US$';
+  // Montagem da campanha pelo Autometrics (só para os logins liberados): formulário aberto, linha ocupada e o resultado.
+  const manage = useManage(supabase, productId);
+  const [form, setForm] = useState<null | { type: 'grupo'; copyFrom?: ManageGroup; rename?: ManageGroup } | { type: 'anuncio'; seed?: AdSeed } | { type: 'palavra' }>(null);
+  const [rowBusy, setRowBusy] = useState('');
+  const [rowResult, setRowResult] = useState<Result>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => { setForm(null); setRowResult(null); }, [level]);
 
   useEffect(() => {
     if (!productId || !startDate || !endDate) return;
     const key = `${productId}|${startDate}|${endDate}`;
     const hit = cache.get(key);
-    if (hit && Date.now() - hit.at < 60_000) {
+    if (hit && hit.reload === reload && Date.now() - hit.at < 60_000) {
       setEntities(hit.entities); setMetrics(hit.metrics); setLoading(false); setError(null);
       return;
     }
@@ -144,13 +152,13 @@ export function GoogleAdsEntitiesTab(props: Props) {
         .catch(() => loadMetrics(base)),
     ]).then(([ents, mets]) => {
       if (cancelled) return;
-      cache.set(key, { at: Date.now(), entities: ents, metrics: mets });
+      cache.set(key, { at: Date.now(), reload, entities: ents, metrics: mets });
       setEntities(ents); setMetrics(mets); setError(null);
     }).catch((e: any) => {
       if (!cancelled) setError(e?.message || 'Erro ao carregar');
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [supabase, productId, startDate, endDate]);
+  }, [supabase, productId, startDate, endDate, reload]);
 
   const adGroups = useMemo(
     () => entities.filter(e => e.level === 'ad_group').sort((a, b) => a.name.localeCompare(b.name)),
@@ -260,6 +268,41 @@ export function GoogleAdsEntitiesTab(props: Props) {
     });
   }
 
+  // Ações de cada linha: pausar ou reativar, e duplicar grupo e anúncio. O Google confere antes de valer.
+  const NOUN: Record<EntityLevel, [string, string, string]> = { ad_group: ['grupo', 'grupo_status', 'group_id'], ad: ['anúncio', 'anuncio_status', 'ad'], keyword: ['palavra-chave', 'palavra_status', 'keyword'] };
+  const toggleStatus = async (i: DimItem) => {
+    const pause = i.status === 'ENABLED', [noun, action, field] = NOUN[level];
+    const label = level === 'keyword' ? keywordLabel(i.name, i.details?.match_type) : level === 'ad' ? (i.details?.headlines?.[0]?.text || i.name) : i.name;
+    if (!window.confirm(`${pause ? 'Pausar' : 'Reativar'} ${noun === 'palavra-chave' ? 'a' : 'o'} ${noun} "${label}" no Google Ads?`)) return;
+    setRowBusy(i.entity_id); setRowResult(null);
+    const r = await manage.send(action, { [field]: i.entity_id, status: pause ? 'PAUSED' : 'ENABLED' });
+    setRowBusy('');
+    setRowResult({ ok: r.ok, text: r.ok ? `${pause ? 'Pausado' : 'Reativado'}: ${r.text}.` : r.text });
+    if (r.ok) { setEntities(list => list.map(e => (e.level === level && e.entity_id === i.entity_id ? { ...e, status: pause ? 'PAUSED' : 'ENABLED' } : e))); if (level === 'ad_group') manage.loadGroups(); cache.clear(); }
+  };
+  const groupOf = (id: string): ManageGroup => manage.groups.find(g => g.id === id) || { id, nome: adGroupName.get(id) || `Grupo ${id}`, status: 'ENABLED', meta_cpa: null };
+  const seedOf = (i: DimItem): AdSeed => ({
+    titulos: (i.details?.headlines || []).map((h: any) => String(h.text || '')), descricoes: (i.details?.descriptions || []).map((h: any) => String(h.text || '')),
+    url: String(i.details?.final_url || ''), caminho1: String(i.details?.path1 || ''), caminho2: String(i.details?.path2 || ''), group_id: String(i.ad_group_id || ''),
+  });
+  if (manage.allowed) dims.push({
+    key: 'acoes', label: 'Ações',
+    render: i => i.status === 'REMOVED' ? <span className={`text-xs ${textMuted}`}>—</span> : (
+      <span className="inline-flex gap-3">
+        {level === 'ad_group' && <RowAction label="Renomear" onClick={() => setForm({ type: 'grupo', rename: groupOf(i.entity_id) })} />}
+        {level === 'ad_group' && <RowAction label="Duplicar" onClick={() => setForm({ type: 'grupo', copyFrom: groupOf(i.entity_id) })} />}
+        {level === 'ad' && i.details?.type === 'RESPONSIVE_SEARCH_AD' && <RowAction label="Duplicar" onClick={() => setForm({ type: 'anuncio', seed: seedOf(i) })} />}
+        <RowAction label={i.status === 'ENABLED' ? 'Pausar' : 'Reativar'} busy={rowBusy === i.entity_id} onClick={() => toggleStatus(i)} danger={i.status === 'ENABLED'} />
+      </span>
+    ),
+  });
+  const done = () => { cache.clear(); setReload(n => n + 1); };
+  // Anúncio novo do zero já vem com a página e os caminhos de um anúncio do grupo escolhido na tela.
+  const blankAd = (): AdSeed | undefined => {
+    const base = entities.find(e => e.level === 'ad' && e.status !== 'REMOVED' && (!props.adGroupFilter || e.ad_group_id === props.adGroupFilter));
+    return base ? { ...seedOf(base as any), titulos: [], descricoes: [], group_id: props.adGroupFilter || String(base.ad_group_id || '') } : undefined;
+  };
+
   const renderName = (i: DimItem, open: boolean, toggle: () => void) => {
     const d = i.details || {};
     if (level === 'ad_group') return (
@@ -336,6 +379,11 @@ export function GoogleAdsEntitiesTab(props: Props) {
     : 'Nada coletado ainda. Este nível vem pela conexão com a API (Integração → Google Ads) e chega na próxima coleta completa, em até uma hora.';
 
   return (
+    <div className="space-y-4">
+    {manage.allowed && form?.type === 'grupo' && <GroupForm key={`${form.copyFrom?.id || ''}${form.rename?.id || ''}`} manage={manage} ui={ui} copyFrom={form.copyFrom} rename={form.rename} onClose={() => setForm(null)} onDone={done} />}
+    {manage.allowed && form?.type === 'anuncio' && <AdForm key={(form.seed?.titulos || []).join('|')} manage={manage} ui={ui} seed={form.seed} onClose={() => setForm(null)} onDone={done} />}
+    {manage.allowed && form?.type === 'palavra' && <KeywordForm manage={manage} ui={ui} groupId={props.adGroupFilter || undefined} onClose={() => setForm(null)} onDone={done} />}
+    <ResultLine result={rowResult} />
     <DimensionTable
       tableId={level}
       title={TITLES[level]}
@@ -355,6 +403,9 @@ export function GoogleAdsEntitiesTab(props: Props) {
       empty={empty}
       footnote="Conversões (Google) são as que o Google mede. As colunas com ≈ distribuem as vendas reais do dia (postback e lançamento manual) pelas conversões do Google de cada item, ou pelos cliques quando o Google ainda não contou nenhuma."
       toolbar={<>
+        {manage.allowed && !isPmax && level === 'ad_group' && <AddButton label="Novo grupo" ui={ui} onClick={() => setForm({ type: 'grupo' })} />}
+        {manage.allowed && !isPmax && level === 'ad' && <AddButton label="Novo anúncio" ui={ui} onClick={() => setForm({ type: 'anuncio', seed: blankAd() })} />}
+        {manage.allowed && !isPmax && level === 'keyword' && <AddButton label="Palavra-chave" ui={ui} onClick={() => setForm({ type: 'palavra' })} />}
         {level !== 'ad_group' && adGroups.length > 0 && (
           <select value={props.adGroupFilter} onChange={e => props.onAdGroupFilter(e.target.value)} className={`${selectCls} max-w-[240px]`}>
             <option value="">Todos os grupos</option>
@@ -368,5 +419,6 @@ export function GoogleAdsEntitiesTab(props: Props) {
         </select>
       </>}
     />
+    </div>
   );
 }

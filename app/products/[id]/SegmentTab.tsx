@@ -8,6 +8,7 @@ import type { CustomColumnsApi } from '@/app/components/metrics/useCustomColumns
 import type { CampaignDay, DayRow } from '@/lib/metrics/dimension';
 import { useGoogleControls, type GoogleControl } from './useGoogleControls';
 import { BidCell } from './BidCell';
+import { KeywordForm, LocationsBox, ResultLine, RowAction, useManage, type Result } from './ManageBox';
 
 /**
  * Termos de pesquisa, públicos e locais, no período da tela.
@@ -111,6 +112,18 @@ export function SegmentTab(props: Props) {
   const [termView, setTermView] = useState<TermView>('term_keyword');
   // Ajuste de lance de cada linha, lido do Google (só para os logins que podem alterar).
   const google = useGoogleControls(productId, kind !== 'search_terms');
+  // Montagem da campanha (só para os logins liberados): termo que vira palavra-chave ou negativa, e os locais.
+  const manage = useManage(supabase, productId, kind !== 'audiences');
+  const [termForm, setTermForm] = useState<string | null>(null);
+  const [rowBusy, setRowBusy] = useState('');
+  const [rowResult, setRowResult] = useState<Result>(null);
+  const negate = async (term: string, match: 'EXACT' | 'PHRASE') => {
+    if (!window.confirm(`Negativar ${match === 'EXACT' ? `[${term}]` : `"${term}"`} na campanha? O anúncio deixa de aparecer para ${match === 'EXACT' ? 'essa busca exata' : 'buscas que contêm essa frase'}.`)) return;
+    setRowBusy(`${term}|${match}`); setRowResult(null);
+    const r = await manage.send('negativa', { text: term, match }, 'edit');
+    setRowBusy('');
+    setRowResult({ ok: r.ok, text: r.ok ? `Negativa criada: ${r.text}. Para desfazer, use a lista "Alterações feitas por aqui", na Visão Geral.` : r.text });
+  };
 
   useEffect(() => {
     if (!productId || !startDate || !endDate) return;
@@ -216,6 +229,17 @@ export function SegmentTab(props: Props) {
     dims.push({ key: 'n_terms', label: 'Termos', align: 'right', value: i => i.terms.size, render: i => muted(String(i.terms.size)) });
   }
 
+  if (kind === 'search_terms' && manage.allowed && termView !== 'keyword') dims.push({
+    key: 'acoes', label: 'Ações',
+    render: i => (
+      <span className="inline-flex gap-3">
+        <RowAction label="+ Palavra-chave" onClick={() => { setRowResult(null); setTermForm(String(i.raw)); }} />
+        <RowAction label="Negativar exata" busy={rowBusy === `${i.raw}|EXACT`} onClick={() => negate(String(i.raw), 'EXACT')} danger />
+        <RowAction label="Negativar frase" busy={rowBusy === `${i.raw}|PHRASE`} onClick={() => negate(String(i.raw), 'PHRASE')} danger />
+      </span>
+    ),
+  });
+
   // Coluna "Ajuste de lance", como no Google: aparelho, idade, gênero, renda e local.
   const BID_KIND: Record<string, string> = { Age: 'idade', Gender: 'genero', Device: 'aparelho', Income: 'renda' };
   const controlOf = (i: DimItem): GoogleControl | undefined => {
@@ -248,6 +272,10 @@ export function SegmentTab(props: Props) {
       : null;
 
   return (
+    <div className="space-y-4">
+    {kind === 'locations' && <LocationsBox manage={manage} ui={ui} productId={productId} />}
+    {kind === 'search_terms' && manage.allowed && termForm !== null && <KeywordForm key={termForm} manage={manage} ui={ui} initial={termForm} onClose={() => setTermForm(null)} onDone={() => {}} />}
+    {kind === 'search_terms' && <ResultLine result={rowResult} />}
     <DimensionTable
       tableId={kind === 'search_terms' ? `search_terms_${termView}` : kind}
       dimensionColumns={dims}
@@ -283,5 +311,6 @@ export function SegmentTab(props: Props) {
         ? 'Até 200 termos por campanha e por dia, os de mais impressões. As colunas com ≈ distribuem as vendas reais do dia pelas conversões do Google de cada termo (ou pelos cliques).'
         : 'As colunas com ≈ distribuem as vendas reais do dia pelas conversões do Google de cada linha (ou pelos cliques quando o Google ainda não contou nenhuma).'}
     />
+    </div>
   );
 }
