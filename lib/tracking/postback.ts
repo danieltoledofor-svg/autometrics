@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { notifySaleNow } from '@/lib/alerts/saleNow';
+import { clockOf, dayInClock } from './platformClock';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -19,11 +20,13 @@ export function serverDay(d = new Date()): string {
 /**
  * Processa um postback de venda, checkout, clique ou reembolso: acha a campanha, grava o evento e soma no dia.
  *
+ * A venda entra no dia em que aconteceu no relógio da plataforma (lib/tracking/platformClock.ts).
+ *
  * `replay` é a segunda tentativa de um postback que não tinha achado a campanha
- * (lib/tracking/unmatched.ts): o dia é o da venda original, e se a campanha
+ * (lib/tracking/unmatched.ts): `at` é a hora em que a venda chegou, e se a campanha
  * continuar sem ser achada nada é guardado de novo.
  */
-export async function processPostback(searchParams: URLSearchParams, userId: string, replay?: { day: string }): Promise<Response> {
+export async function processPostback(searchParams: URLSearchParams, userId: string, replay?: { at: string }): Promise<Response> {
     try {
 
         // Modo teste: resolve a campanha e responde em JSON o que seria gravado,
@@ -228,15 +231,6 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
             return new Response('OK', { status: 200, headers: corsHeaders });
         }
 
-        const today = replay?.day || (() => {
-            const d = new Date();
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-        })();
-
-        // ── 2. Deduplicação ────────────────────────────────────────────
         // Detecção da plataforma de origem
         const source =
             searchParams.get('source') ||
@@ -247,6 +241,12 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
             searchParams.has('sid5') || searchParams.has('sid1') ? 'Digistore' :
             'Plataforma');
 
+        // O dia da venda é o do relógio da plataforma. Antes de migration_relogio_plataformas.sql
+        // a coluna não existe e vale o padrão de cada plataforma.
+        const { data: settings } = await supabase.from('user_settings').select('platform_clocks').eq('user_id', userId).maybeSingle();
+        const today = dayInClock(clockOf(source, settings?.platform_clocks), replay ? new Date(replay.at) : new Date());
+
+        // ── 2. Deduplicação ────────────────────────────────────────────
         if (tid) {
             const row = { product_id: product.id, transaction_id: tid, event_type: event, amount, currency, source };
             // click_id e ref_ids ligam a venda ao clique; antes de
@@ -317,6 +317,9 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
 
         if (upsertError) {
             console.error('[Postback] Erro no upsert:', upsertError.message);
+            // A venda já estava guardada: sem desfazer, o reenvio da plataforma seria tratado como
+            // repetido e a venda nunca somaria na campanha.
+            if (tid) await supabase.from('postback_events').delete().eq('product_id', product.id).eq('transaction_id', tid).eq('event_type', event).then(() => null, () => null);
             return new Response('DB_ERROR', { status: 500, headers: corsHeaders });
         }
 

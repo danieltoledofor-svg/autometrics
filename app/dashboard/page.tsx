@@ -16,7 +16,8 @@ import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { useDayInput, isValidDay } from '@/lib/useDayInput';
-import SaleAlertNotification from './SaleAlertNotification';
+import { saleMoney } from '@/app/components/SaleAlerts';
+import { closeAllSales, closeSale, usePendingSales } from '@/lib/saleAlerts';
 import { Logo } from '@/app/components/Logo';
 import { resolveCampaignStatus, resolveProductStatus, STATUS_SEVERITY, type CampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal, type QuickEntryTarget } from '@/app/components/QuickEntryModal';
@@ -576,6 +577,9 @@ export default function DashboardPage() {
   }, [metrics, products, loading, selectedMcc, todayStr]);
   const openAlerts = spendAlerts.filter(a => !seenAlerts.includes(a.id));
 
+  // Vendas que chegaram e ainda não foram marcadas como vistas (lib/saleAlerts.ts).
+  const pendingSales = usePendingSales();
+
   // A coleta roda de hora em hora: o painel aberto relê os dados a cada 20
   // minutos, para o alerta aparecer sem precisar recarregar a página.
   useEffect(() => {
@@ -832,6 +836,32 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
+
+        {/* ── VENDAS NOVAS ── ficam aqui até serem marcadas como vistas */}
+        {pendingSales.length > 0 && (
+          <div className={`rounded-xl border mb-4 overflow-hidden ${isDark ? 'bg-emerald-500/5 border-emerald-500/40' : 'bg-emerald-50 border-emerald-300'}`}>
+            <div className="flex items-center gap-2 px-4 pt-3 pb-1 text-emerald-500">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider">🎉 {pendingSales.length === 1 ? '1 venda nova' : `${pendingSales.length} vendas novas`}</span>
+              {pendingSales.length > 1 && (
+                <button onClick={closeAllSales} className="ml-auto text-[11px] font-bold hover:underline">Marcar todas como vistas</button>
+              )}
+            </div>
+            {pendingSales.map(s => (
+              <div key={s.id} className={`flex items-center gap-3 px-4 py-2 border-t ${isDark ? 'border-emerald-500/20' : 'border-emerald-200'}`}>
+                <div className="flex-1 min-w-0">
+                  <Link href={`/products/${s.productId}`} target="_blank" rel="noopener noreferrer" className={`text-[13px] font-semibold break-words hover:underline ${textHead}`}>{s.productName}</Link>
+                  <div className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <b className="text-emerald-500">{saleMoney(s.amount, s.currency)}</b> · {s.platform} · {new Date(s.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às')}
+                  </div>
+                </div>
+                <button onClick={() => closeSale(s.id)}
+                  className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-bold border ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-white'}`}>
+                  Visto
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ── ALERTAS DE GASTO ── */}
         {openAlerts.length > 0 && (
@@ -1385,7 +1415,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <SaleAlertNotification products={products} isDark={isDark} />
     </div>
   );
 }

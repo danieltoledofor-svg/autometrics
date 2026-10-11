@@ -1,19 +1,38 @@
 "use client";
 
-import React, { useState } from 'react';
-import { Check, Copy, Zap } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Check, Clock, Copy, Zap } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
+import { CLOCK_OPTIONS, clockOf, timeInClock } from '@/lib/tracking/platformClock';
 import { ConversionUploadCard } from '@/app/integration/ConversionUploadCard';
 import { UrlBuilder } from './UrlBuilder';
 
 /**
  * Aba Instalação do Rastreamento (antes "Conversão Automática", na Integração):
- * o script das páginas, a URL de postback de cada plataforma de venda e o
- * envio das vendas ao Google.
+ * o script das páginas, a URL de postback de cada plataforma de venda, o
+ * relógio de cada plataforma e o envio das vendas ao Google.
  */
 export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string }) {
   const [convTracker, setConvTracker] = useState<'flowtracking'>('flowtracking');
   const [convPlatform, setConvPlatform] = useState<'buygoods' | 'clickbank' | 'digistore' | 'gurumedia' | 'jvzoo' | 'maxweb' | 'mediascalers' | 'smartadv'>('buygoods');
   const [copiedPostback, setCopiedPostback] = useState<string | null>(null);
+  // Relógio de cada plataforma (lib/tracking/platformClock.ts): a venda entra no dia em que aconteceu nele.
+  const [clocks, setClocks] = useState<Record<string, string>>({});
+  const [clockNote, setClockNote] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from('user_settings').select('platform_clocks').eq('user_id', userId).maybeSingle()
+      .then(({ data }) => { if (data?.platform_clocks && typeof data.platform_clocks === 'object') setClocks(data.platform_clocks); });
+  }, [userId]);
+  const saveClock = async (platform: string, zone: string) => {
+    const next = { ...clocks, [platform]: zone };
+    setClocks(next);
+    setClockNote(null);
+    const { error } = await supabase.from('user_settings').upsert({ user_id: userId, platform_clocks: next }, { onConflict: 'user_id' });
+    setClockNote(error
+      ? { ok: false, text: 'Não foi possível salvar. Falta rodar o arquivo migration_relogio_plataformas.sql no Supabase.' }
+      : { ok: true, text: 'Salvo. Vale para as próximas vendas.' });
+  };
   const copyPostback = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopiedPostback(key);
@@ -243,6 +262,23 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
         <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
           {plat.steps.map((s, i) => <li key={i}>{s}</li>)}
         </ol>
+      </div>
+
+      {/* RELÓGIO DA PLATAFORMA */}
+      <div className={`rounded-xl p-6 border ${bgCard}`}>
+        <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${textHead}`}><Clock size={16} className="text-indigo-400" /> Relógio da {plat.name}</h3>
+        <p className={`text-xs mb-3 ${textMuted}`}>
+          A venda entra no dia em que aconteceu no relógio da {plat.name}, para o dia do AutoMetrics fechar igual ao relatório dela.
+          Uma venda perto da meia-noite pode cair num dia diferente do de Brasília.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <select value={clockOf(convPlatform, clocks)} onChange={e => saveClock(convPlatform, e.target.value)}
+            className={`text-xs font-bold rounded-lg px-3 py-2 border outline-none ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-white border-slate-300 text-slate-800'}`}>
+            {CLOCK_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <span className={`text-xs ${textMuted}`}>Agora na {plat.name}: <strong className={textHead}>{timeInClock(clockOf(convPlatform, clocks))}</strong></span>
+        </div>
+        {clockNote && <p className={`text-xs mt-3 ${clockNote.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{clockNote.text}</p>}
       </div>
 
       <ConversionUploadCard isDark={isDark} />

@@ -1,33 +1,46 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { X } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { SALE_EVENT, closeSale, startSaleAlerts, usePendingSales, type PendingSale } from '@/lib/saleAlerts';
 
-interface SaleNotification {
-  id: string;
-  platform: string;
-  amount: number;
-  currency: string;
-  productName: string;
-  campaignName: string;
-}
-
-interface Props {
-  products: any[];
-  isDark: boolean;
-}
+/**
+ * Aviso de venda em qualquer tela (fica no layout). A venda que chega com o
+ * Autometrics aberto ganha um cartão e o som; as que chegaram com ele fechado
+ * viram um lembrete que leva à Dashboard, onde a lista completa fica no alto.
+ * A lógica mora em lib/saleAlerts.ts.
+ */
 
 const SOUND_URL = '/sounds/nova-venda.mp3';
 const SOUND_THROTTLE_MS = 3000;   // várias vendas juntas não viram barulho
+const MAX_CARDS = 5;
 
-export default function SaleAlertNotification({ products, isDark }: Props) {
-  const [notifications, setNotifications] = useState<SaleNotification[]>([]);
+export const saleMoney = (amount: number, currency: string, digits = 2) => {
+  try {
+    return new Intl.NumberFormat(currency === 'BRL' ? 'pt-BR' : currency === 'EUR' ? 'de-DE' : 'en-US',
+      { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
+  } catch { return `${currency} ${amount.toFixed(digits)}`; }   // moeda que o navegador não conhece
+};
+
+export default function SaleAlerts() {
+  const pending = usePendingSales();
+  const pathname = usePathname();
+  const [isDark, setIsDark] = useState(true);
+  const [reminderClosed, setReminderClosed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSoundRef = useRef(0);
 
-  const dismiss = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+  useEffect(() => startSaleAlerts(), []);
+
+  // O tema vive em cada página, espelhado no <html data-theme>.
+  useEffect(() => {
+    const read = () => setIsDark(document.documentElement.dataset.theme !== 'light');
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
   }, []);
 
   // O navegador só libera áudio depois de alguma interação na página, então o
@@ -64,72 +77,41 @@ export default function SaleAlertNotification({ products, isDark }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!products.length) return;
+    window.addEventListener(SALE_EVENT, playSound);
+    return () => window.removeEventListener(SALE_EVENT, playSound);
+  }, [playSound]);
 
-    const productMap = new Map(products.map(p => [p.id, p]));
-    const productIds = new Set(products.map(p => p.id));
-
-    const channel = supabase
-      .channel('sale-alerts')
-      .on(
-        'postgres_changes' as any,
-        { event: 'INSERT', schema: 'public', table: 'postback_events' },
-        (payload: any) => {
-          const row = payload.new;
-          if (row.event_type !== 'sale') return;
-          if (!productIds.has(row.product_id)) return;
-
-          const product = productMap.get(row.product_id);
-          setNotifications(prev =>
-            [
-              {
-                id: row.id ?? `${Date.now()}-${Math.random()}`,
-                platform: row.source || 'Plataforma',
-                amount: Number(row.amount ?? 0),
-                currency: (row.currency || 'BRL').toUpperCase(),
-                productName: product?.name || 'Produto desconhecido',
-                campaignName: product?.google_ads_campaign_name || '',
-              },
-              ...prev,
-            ].slice(0, 5)
-          );
-          playSound();
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [products, playSound]);
-
-  if (!notifications.length) return null;
+  const cards = pending.filter(s => s.fresh).slice(0, MAX_CARDS);
+  // Vendas que chegaram com o Autometrics fechado: a lista está no alto da Dashboard.
+  const waiting = pending.length - cards.length;
+  const showReminder = waiting > 0 && !reminderClosed && pathname !== '/dashboard';
+  if (!cards.length && !showReminder) return null;
 
   return (
     <div className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 flex flex-col gap-3 w-[19rem] md:w-[21rem] pointer-events-none">
-      {notifications.map(n => (
-        <NotificationCard key={n.id} notification={n} onDismiss={dismiss} isDark={isDark} />
-      ))}
+      {showReminder && (
+        <div className={`pointer-events-auto flex items-center gap-3 rounded-2xl border shadow-2xl px-4 py-3 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
+          <span className="text-xl leading-none">🎉</span>
+          <Link href="/dashboard" className={`flex-1 min-w-0 text-[13px] font-bold leading-snug hover:underline ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            {waiting === 1 ? '1 venda nova para ver' : `${waiting} vendas novas para ver`}
+            <span className="block text-[11.5px] font-normal text-slate-500">Abrir a Dashboard</span>
+          </Link>
+          <button onClick={() => setReminderClosed(true)} title="Fechar"
+            className={`p-1 rounded-lg transition-colors ${isDark ? 'text-slate-600 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
+      {cards.map(s => <SaleCard key={s.id} sale={s} isDark={isDark} />)}
     </div>
   );
 }
 
-function NotificationCard({
-  notification,
-  onDismiss,
-  isDark,
-}: {
-  notification: SaleNotification;
-  onDismiss: (id: string) => void;
-  isDark: boolean;
-}) {
-  // Sem fechamento automático: o cartão fica até o usuário clicar no ✕.
+function SaleCard({ sale, isDark }: { sale: PendingSale; isDark: boolean }) {
+  // Sem fechamento automático: o cartão fica até o usuário clicar no ✕, e fechar marca a venda como vista.
 
   // Valor cheio no bloco verde só cabe até 6 dígitos; acima disso, sem centavos.
-  const fmt = (digits: number) =>
-    new Intl.NumberFormat(
-      notification.currency === 'BRL' ? 'pt-BR' : notification.currency === 'EUR' ? 'de-DE' : 'en-US',
-      { style: 'currency', currency: notification.currency, minimumFractionDigits: digits, maximumFractionDigits: digits }
-    ).format(notification.amount);
-  const amountText = notification.amount >= 10000 ? fmt(0) : fmt(2);
+  const amountText = saleMoney(sale.amount, sale.currency, sale.amount >= 10000 ? 0 : 2);
 
   return (
     <>
@@ -166,10 +148,10 @@ function NotificationCard({
             <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
               isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'
             }`}>
-              {notification.platform}
+              {sale.platform}
             </span>
             <button
-              onClick={() => onDismiss(notification.id)}
+              onClick={() => closeSale(sale.id)}
               className={`ml-auto -mt-1 -mr-1 p-1 rounded-lg transition-colors ${
                 isDark ? 'text-slate-600 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
               }`}
@@ -180,11 +162,11 @@ function NotificationCard({
           </div>
 
           <p className={`text-[13px] font-bold leading-snug break-words ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            {notification.productName}
+            {sale.productName}
           </p>
-          {notification.campaignName && (
+          {sale.campaignName && sale.campaignName !== sale.productName && (
             <p className="text-[11.5px] leading-snug mt-0.5 break-words text-slate-500">
-              {notification.campaignName}
+              {sale.campaignName}
             </p>
           )}
         </div>

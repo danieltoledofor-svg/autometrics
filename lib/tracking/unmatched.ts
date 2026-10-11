@@ -14,7 +14,7 @@ import { processPostback, serverDay } from './postback';
  *   2. se não achar, pergunta ao Google, uma conta e um dia por consulta, com um teto por rodada:
  *      primeiro as contas das campanhas que usam a palavra-chave da venda, voltando 35 dias
  *      (quem compra muitas vezes clicou dias antes); depois as outras contas com gasto, 3 dias;
- *   3. achou: o postback é repetido com a campanha certa, no dia da venda.
+ *   3. achou: o postback é repetido com a campanha certa, no dia em que a venda chegou (relógio da plataforma).
  * A procura no que já está guardado se repete por 72 horas; a pergunta ao Google para quando todas as
  * contas e dias foram vistos. O que foi feito em cada postback fica escrito em `note`.
  */
@@ -124,7 +124,7 @@ export async function retryUnmatched(deadline: number) {
       if (campaignId && productId) {
         const params = new URLSearchParams(row.query || '');
         params.set('campaign_id', campaignId);
-        const res = await processPostback(params, row.user_id, { day: saleDay });
+        const res = await processPostback(params, row.user_id, { at: row.created_at });
         if (res.status === 200) {
           await save(row.id, { resolved_at: new Date().toISOString(), product_id: productId, tries: (Number(row.tries) || 0) + 1, note: note || 'Clique achado no que a coleta do Google já tinha guardado.' });
           report.resolved++;

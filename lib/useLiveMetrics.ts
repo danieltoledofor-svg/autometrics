@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { SALE_EVENT } from '@/lib/saleAlerts';
 
 /**
  * Venda nova (ou custo novo) na tela sem recarregar a página.
  *
  * A cada 30 segundos, com a aba à vista, pede só as linhas de ontem e de hoje
  * de daily_metrics que mudaram desde a última olhada e troca essas linhas na
- * lista da tela. Voltar para a aba olha na hora. É uma consulta pequena: o
- * banco só devolve as linhas das campanhas do próprio usuário.
+ * lista da tela. Voltar para a aba olha na hora, e venda que acabou de chegar
+ * (aviso de lib/saleAlerts.ts) também. É uma consulta pequena: o banco só
+ * devolve as linhas das campanhas do próprio usuário.
  *
  * `accept` diz quais linhas interessam à tela (campanhas carregadas, período
  * escolhido); `productId` restringe a uma campanha.
@@ -52,6 +54,13 @@ export function useLiveMetrics(
     };
     const timer = setInterval(look, 30 * 1000);
     document.addEventListener('visibilitychange', look);
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', look); };
+    // A venda é guardada um instante antes de somar no dia: olha logo depois, e de novo por garantia.
+    const waits = new Set<ReturnType<typeof setTimeout>>();
+    const onSale = () => { for (const ms of [1500, 6000]) { const t = setTimeout(() => { waits.delete(t); look(); }, ms); waits.add(t); } };
+    window.addEventListener(SALE_EVENT, onSale);
+    return () => {
+      clearInterval(timer); document.removeEventListener('visibilitychange', look);
+      window.removeEventListener(SALE_EVENT, onSale); waits.forEach(clearTimeout);
+    };
   }, [client, enabled, setRows]);
 }

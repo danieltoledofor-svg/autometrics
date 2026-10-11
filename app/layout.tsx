@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 // 1. Certifique-se de ter o arquivo 'globals.css' na pasta 'app'.
 // 2. Quando estiver no seu computador, DESCOMENTE a linha abaixo (apague as duas barras //).
  import "./globals.css"; 
+import SaleAlerts from "./components/SaleAlerts";
 export const metadata: Metadata = {
   title: "AutoMetrics",
   description: "Dashboard Financeiro",
@@ -44,6 +45,8 @@ export default function RootLayout({
           } catch (e) {}
         `}} />
         {children}
+        {/* Aviso de venda em qualquer tela */}
+        <SaleAlerts />
       </body>
     </html>
   );
