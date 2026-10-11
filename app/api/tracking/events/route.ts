@@ -17,5 +17,5 @@ export async function GET(request: Request) {
   const period = readPeriod(q);
   if ('error' in period) return NextResponse.json({ error: period.error }, { status: 400 });
   const type = q.get('type') === 'checkout' ? 'checkout' : 'sale';
-  return NextResponse.json({ from: period.from, to: period.to, ...(await listEvents(supabaseAdmin(), user.id, period.since, period.until, type)) });
+  return NextResponse.json({ from: period.from, to: period.to, ...(await listEvents(supabaseAdmin(), user.id, period.since, period.until, period, type)) });
 }

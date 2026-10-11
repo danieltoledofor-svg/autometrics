@@ -1,21 +1,26 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchAll } from '@/lib/analysis/compute';
+import { clockStamp, inDays, userClocks, widen } from './eventDays';
 
 /**
  * Do clique à venda em todas as campanhas de um usuário, entre dois instantes.
  * Cliques e páginas vêm do script das páginas; as vendas, do postback da
  * plataforma. A venda conta quando aconteceu e é atribuída ao clique que a
  * gerou, mesmo que ele seja de antes do período. Só lê do banco.
+ *
+ * Vendas e checkouts contam no dia do relógio da plataforma (`days`, em
+ * lib/tracking/eventDays.ts), como no painel; os cliques, no dia de Brasília.
  */
 
 const DEVICE: Record<string, string> = { MOBILE: 'Celular', DESKTOP: 'Computador', TABLET: 'Tablet' };
 
 type Row = { key: string; id?: string; clicks: number; video: number; checkout: number; sales: number; value: number };
 
-export async function trackingOverview(db: SupabaseClient, userId: string, since: string, until: string) {
-  let clicks: any[], pages: any[], events: any[], products: any[];
+export async function trackingOverview(db: SupabaseClient, userId: string, since: string, until: string, days: { from: string; to: string }) {
+  let clicks: any[], pages: any[], events: any[], products: any[], clocks: Awaited<ReturnType<typeof userClocks>>;
+  const wide = widen(since, until);
   try {
-    [clicks, pages, events, products] = await Promise.all([
+    [clicks, pages, events, products, clocks] = await Promise.all([
       fetchAll((a, b) => db.from('tracking_clicks')
         .select('click_id, product_id, gclid, keyword, device, created_at')
         .eq('user_id', userId).gte('created_at', since).lt('created_at', until).order('created_at').range(a, b)),
@@ -25,15 +30,16 @@ export async function trackingOverview(db: SupabaseClient, userId: string, since
       // postback_events não tem o dono: filtra depois pelas campanhas do usuário.
       fetchAll((a, b) => db.from('postback_events')
         .select('click_id, product_id, event_type, amount, currency, source, created_at')
-        .in('event_type', ['sale', 'checkout']).gte('created_at', since).lt('created_at', until).order('created_at').range(a, b)),
+        .in('event_type', ['sale', 'checkout']).gte('created_at', wide.since).lt('created_at', wide.until).order('created_at').range(a, b)),
       fetchAll((a, b) => db.from('products').select('id, name, google_ads_campaign_name').eq('user_id', userId).order('id').range(a, b)),
+      userClocks(db, userId),
     ]);
   } catch {
     return null;                                                  // tabelas do rastreamento ainda não criadas
   }
 
   const productName = new Map<string, string>(products.map(p => [p.id, p.google_ads_campaign_name || p.name || 'Campanha sem nome']));
-  events = events.filter(e => productName.has(e.product_id));
+  events = events.filter(e => productName.has(e.product_id) && inDays(e, clocks, days.from, days.to));
   const sales = events.filter(e => e.event_type === 'sale');
 
   // Cliques de antes do período que venderam dentro dele.
@@ -97,7 +103,7 @@ export async function trackingOverview(db: SupabaseClient, userId: string, since
     const click = s.click_id ? byId.get(s.click_id) || null : null;
     const p = click ? path.get(click.click_id) : null;
     return {
-      at: s.created_at, amount: Number(s.amount) || 0, currency: String(s.currency || 'USD').toUpperCase(), source: s.source || '',
+      at: s.created_at, at_text: clockStamp(s, clocks), amount: Number(s.amount) || 0, currency: String(s.currency || 'USD').toUpperCase(), source: s.source || '',
       product_id: s.product_id, campaign: productName.get(s.product_id) || '',
       linked: !!click, keyword: click?.keyword || '', device: click ? DEVICE[click.device] || '' : '',
       click_at: click?.created_at || null, pages: p ? p.urls.size : 0, checkout: !!p?.checkout,

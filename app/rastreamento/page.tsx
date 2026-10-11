@@ -289,7 +289,7 @@ export default function TrackingPage() {
                           <span className={muted}> · </span>
                           <Link href={`/products/${s.product_id}`} className={`${head} hover:text-indigo-400 hover:underline`}>{s.campaign}</Link>
                         </div>
-                        <div className={`text-xs tabular-nums ${muted}`}>{when(s.at)}{s.source ? ` · ${s.source}` : ''}</div>
+                        <div className={`text-xs tabular-nums ${muted}`}>{s.at_text || when(s.at)}{s.source ? ` · ${s.source}` : ''}</div>
                       </div>
                       <div className={`text-xs mt-1 ${muted}`}>
                         {s.linked

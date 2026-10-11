@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
  *
  * GET ?period=today|d3|d7|custom[&from=AAAA-MM-DD&to=AAAA-MM-DD]
  *
- * Os dias são os de Brasília.
+ * Os dias das visitas são os de Brasília; os das vendas, os do relógio de cada plataforma.
  */
 
 export async function GET(request: Request) {
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   if ('error' in period) return NextResponse.json({ error: period.error }, { status: 400 });
   const { from, to, since, until } = period;
 
-  const overview = await trackingOverview(supabaseAdmin(), user.id, since, until);
+  const overview = await trackingOverview(supabaseAdmin(), user.id, since, until, { from, to });
   if (!overview) return NextResponse.json({ ready: false, error: 'O rastreamento ainda não foi ligado nesta conta.' });
   return NextResponse.json({ ready: true, from, to, ...overview });
 }

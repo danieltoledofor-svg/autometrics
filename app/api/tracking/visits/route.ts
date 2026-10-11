@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   const period = readPeriod(q);
   if ('error' in period) return NextResponse.json({ error: period.error }, { status: 400 });
-  const result = await listVisits(db, user.id, period.since, period.until, {
+  const result = await listVisits(db, user.id, period.since, period.until, period, {
     productId: q.get('product_id') || undefined, traffic: q.get('traffic') || undefined, device: q.get('device') || undefined,
     q: q.get('q') || undefined, bought: q.get('bought') === '1', bots: q.get('bots') === '1', page: Number(q.get('page')) || 0,
   });

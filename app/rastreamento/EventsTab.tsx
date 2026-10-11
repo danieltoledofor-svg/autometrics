@@ -54,6 +54,8 @@ export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 
         {sale && stat('Valor vendido', values.length ? values.map(([c, v]) => money(v, c)).join(' + ') : money(0))}
       </div>
 
+      <p className={`text-xs ${muted}`}>Dia e hora no relógio de cada plataforma (Instalação → Relógio), o mesmo dia em que {sale ? 'a venda' : 'o checkout'} entra no painel.</p>
+
       {data.total === 0 ? (
         <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>
           {sale ? 'Nenhuma venda neste período.' : 'Nenhum checkout avisado pela plataforma neste período. Confira se o postback do Autometrics na plataforma também está marcado para o evento de checkout.'}
@@ -78,7 +80,7 @@ export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 
               <tbody>
                 {data.events.map((e: any, i: number) => (
                   <tr key={i}>
-                    <td className={`${td} tabular-nums whitespace-nowrap`}>{when(e.at)}</td>
+                    <td className={`${td} tabular-nums whitespace-nowrap`}>{e.at_text || when(e.at)}</td>
                     {sale && <td className={`${td} ${head} text-right tabular-nums font-bold whitespace-nowrap`}>{money(e.amount, e.currency)}</td>}
                     <td className={`${td} max-w-[260px] truncate`} title={e.campaign}><Link href={`/products/${e.product_id}`} className={`${head} hover:text-indigo-400 hover:underline`}>{e.campaign}</Link></td>
                     <td className={`${td} max-w-[200px] truncate`}>{e.click?.keyword || <span className={muted}>—</span>}</td>
