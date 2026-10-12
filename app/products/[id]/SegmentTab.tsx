@@ -114,7 +114,15 @@ export function SegmentTab(props: Props) {
   const google = useGoogleControls(productId, kind !== 'search_terms');
   // Montagem da campanha (só para os logins liberados): termo que vira palavra-chave ou negativa, e os locais.
   const manage = useManage(supabase, productId, kind !== 'audiences');
-  const [termForm, setTermForm] = useState<string | null>(null);
+  // Lista de termos que vão virar palavra-chave, uma por linha: cada "+ Palavra-chave" junta mais um, e o pedido é um só.
+  const [termList, setTermList] = useState<string | null>(null);
+  const listed = new Set((termList || '').split('\n').map(l => l.trim().toLowerCase()).filter(Boolean));
+  const toggleTerm = (term: string) => setTermList(current => {
+    const lines = (current || '').split('\n').map(l => l.trim()).filter(Boolean);
+    const at = lines.findIndex(l => l.toLowerCase() === term.trim().toLowerCase());
+    if (at >= 0) lines.splice(at, 1); else lines.push(term.trim());
+    return lines.join('\n');
+  });
   const [rowBusy, setRowBusy] = useState('');
   const [rowResult, setRowResult] = useState<Result>(null);
   const negate = async (term: string, match: 'EXACT' | 'PHRASE') => {
@@ -233,7 +241,7 @@ export function SegmentTab(props: Props) {
     key: 'acoes', label: 'Ações',
     render: i => (
       <span className="inline-flex gap-3">
-        <RowAction label="+ Palavra-chave" onClick={() => { setRowResult(null); setTermForm(String(i.raw)); }} />
+        <RowAction label={listed.has(String(i.raw).trim().toLowerCase()) ? '✓ Na lista' : '+ Palavra-chave'} onClick={() => { setRowResult(null); toggleTerm(String(i.raw)); }} />
         <RowAction label="Negativar exata" busy={rowBusy === `${i.raw}|EXACT`} onClick={() => negate(String(i.raw), 'EXACT')} danger />
         <RowAction label="Negativar frase" busy={rowBusy === `${i.raw}|PHRASE`} onClick={() => negate(String(i.raw), 'PHRASE')} danger />
       </span>
@@ -274,7 +282,7 @@ export function SegmentTab(props: Props) {
   return (
     <div className="space-y-4">
     {kind === 'locations' && <LocationsBox manage={manage} ui={ui} productId={productId} />}
-    {kind === 'search_terms' && manage.allowed && termForm !== null && <KeywordForm key={termForm} manage={manage} ui={ui} initial={termForm} onClose={() => setTermForm(null)} onDone={() => {}} />}
+    {kind === 'search_terms' && manage.allowed && termList !== null && <div className="sticky top-2 z-20 shadow-xl rounded-xl"><KeywordForm manage={manage} ui={ui} list={termList} onList={setTermList} onClose={() => setTermList(null)} onDone={() => {}} /></div>}
     {kind === 'search_terms' && <ResultLine result={rowResult} />}
     <DimensionTable
       tableId={kind === 'search_terms' ? `search_terms_${termView}` : kind}

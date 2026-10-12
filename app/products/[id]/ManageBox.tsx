@@ -134,9 +134,16 @@ export function GroupForm({ manage, ui, copyFrom, rename, onClose, onDone }: { m
 
 // ── Palavras-chave novas (também a partir de um termo de pesquisa) ───────────
 
-export function KeywordForm({ manage, ui, initial, groupId, onClose, onDone }: { manage: Manage; ui: Ui; initial?: string; groupId?: string; onClose: () => void; onDone: () => void }) {
+/**
+ * `list` e `onList` deixam a lista nas mãos de quem abriu o formulário: na aba de termos, cada clique em
+ * "+ Palavra-chave" junta mais um termo à lista, e o pedido ao Google é um só.
+ */
+export function KeywordForm({ manage, ui, initial, list, onList, groupId, onClose, onDone }: { manage: Manage; ui: Ui; initial?: string; list?: string; onList?: (text: string) => void; groupId?: string; onClose: () => void; onDone: () => void }) {
   const s = styles(ui);
-  const [text, setText] = useState(initial || '');
+  const [own, setOwn] = useState(initial || '');
+  const fromTerms = list !== undefined;
+  const text = fromTerms ? list : own;
+  const setText = (v: string) => (onList ? onList(v) : setOwn(v));
   const [match, setMatch] = useState('PHRASE');
   const [group, setGroup] = useState(groupId || manage.groups.find(g => g.status === 'ENABLED')?.id || manage.groups[0]?.id || '');
   const [busy, setBusy] = useState(false);
@@ -148,12 +155,12 @@ export function KeywordForm({ manage, ui, initial, groupId, onClose, onDone }: {
     setBusy(true); setResult(null);
     const r = await manage.send('palavra_nova', { group_id: group, texts: lines, match });
     setBusy(false);
-    setResult({ ok: r.ok, text: r.ok ? `Incluída: ${r.text}${r.body.skipped ? `. ${r.body.skipped} já ${r.body.skipped === 1 ? 'estava' : 'estavam'} no grupo.` : ''}` : r.text });
+    setResult({ ok: r.ok, text: r.ok ? `${lines.length > 1 ? 'Incluídas' : 'Incluída'}: ${r.text}${r.body.skipped ? `. ${r.body.skipped} já ${r.body.skipped === 1 ? 'estava' : 'estavam'} no grupo.` : ''}` : r.text });
     if (r.ok) { setText(''); onDone(); }
   };
   return (
-    <Frame title={initial ? 'Incluir o termo como palavra-chave' : 'Novas palavras-chave'} onClose={onClose} ui={ui}>
-      <textarea value={text} onChange={e => setText(e.target.value)} rows={initial ? 1 : 3} placeholder="Uma palavra-chave por linha" aria-label="Palavras-chave novas" className={`${s.input} w-full font-mono`} />
+    <Frame title={fromTerms ? `Incluir termos como palavras-chave${lines.length ? ` · ${lines.length} na lista` : ''}` : initial ? 'Incluir o termo como palavra-chave' : 'Novas palavras-chave'} onClose={onClose} ui={ui}>
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={fromTerms ? Math.min(10, Math.max(2, text.split('\n').length)) : initial ? 1 : 3} placeholder="Uma palavra-chave por linha" aria-label="Palavras-chave novas" className={`${s.input} w-full font-mono`} />
       <div className="flex flex-wrap items-center gap-2">
         <select value={match} onChange={e => setMatch(e.target.value)} aria-label="Tipo de correspondência" className={s.input}>
           <option value="PHRASE">Frase: &quot;palavra&quot;</option><option value="EXACT">Exata: [palavra]</option><option value="BROAD">Ampla: palavra</option>
@@ -161,7 +168,7 @@ export function KeywordForm({ manage, ui, initial, groupId, onClose, onDone }: {
         <GroupSelect groups={manage.groups} value={group} onChange={setGroup} cls={`${s.input} max-w-[260px]`} />
         <button onClick={submit} disabled={busy || !lines.length || !group} className={s.solid}>{busy && <Loader2 size={13} className="animate-spin" />} Incluir {lines.length > 1 ? `${lines.length} palavras-chave` : 'palavra-chave'}</button>
       </div>
-      <div className={`text-[11px] ${ui.textMuted}`}>Escreva só o texto, sem aspas nem colchetes: o tipo escolhido cuida disso. A palavra-chave entra ativa.</div>
+      <div className={`text-[11px] ${ui.textMuted}`}>{fromTerms ? 'Clique em "+ Palavra-chave" em outros termos da tabela para juntar à lista, ou escreva uma por linha, e peça tudo de uma vez. ' : ''}Escreva só o texto, sem aspas nem colchetes: o tipo escolhido cuida disso. A palavra-chave entra ativa.</div>
       <ResultLine result={result} />
     </Frame>
   );

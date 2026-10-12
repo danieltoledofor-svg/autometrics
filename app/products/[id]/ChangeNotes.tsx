@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 
@@ -8,7 +9,10 @@ import type { Ui } from '@/app/components/metrics/ColumnPicker';
  * Alterações feitas na campanha e o que aconteceu depois (lib/analysis/changes).
  * Na aba Análise aparecem todas; nas outras abas, só as daquela área
  * (grupos, palavras-chave, anúncios…), para ver o efeito ao lado dos dados.
+ * Nas abas de dados a lista pode ser ocultada; a escolha fica guardada no navegador.
  */
+
+const HIDDEN = 'autometrics_alteracoes_ocultas';
 
 export type ChangeArea = 'campanha' | 'grupos' | 'palavras' | 'anuncios' | 'recursos' | 'segmentacao';
 
@@ -40,6 +44,9 @@ export function ChangeNotes({ productId, ui, areas, events, limit = 6 }: {
 }) {
   const [loaded, setLoaded] = useState<any[] | null>(events || null);
   const [all, setAll] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => { try { setHidden(!!areas && localStorage.getItem(HIDDEN) === '1'); } catch { /* sem armazenamento */ } }, [areas]);
+  const toggleHidden = () => setHidden(v => { try { localStorage.setItem(HIDDEN, v ? '0' : '1'); } catch { /* sem armazenamento */ } return !v; });
   useEffect(() => {
     if (events) { setLoaded(events); return; }
     let alive = true;
@@ -55,10 +62,19 @@ export function ChangeNotes({ productId, ui, areas, events, limit = 6 }: {
   if (!loaded || (areas && !list.length)) return null;
 
   return (
-    <div className={`${bgCard} border ${borderCol} rounded-xl p-4 mb-4`}>
-      <div className={`text-[11px] uppercase tracking-wider font-extrabold ${textMuted} mb-1`}>
-        {areas ? 'Alterações feitas aqui e o que aconteceu depois' : 'Alterações feitas na campanha e o que aconteceu depois'}
+    <div className={`${bgCard} border ${borderCol} rounded-xl mb-4 ${hidden ? 'px-4 py-2.5' : 'p-4'}`}>
+      <div className={`flex items-center justify-between gap-3 ${hidden ? '' : 'mb-1'}`}>
+        <div className={`text-[11px] uppercase tracking-wider font-extrabold ${textMuted}`}>
+          {areas ? 'Alterações feitas aqui e o que aconteceu depois' : 'Alterações feitas na campanha e o que aconteceu depois'}
+          {hidden && <span className="font-bold normal-case tracking-normal"> · {list.length} {list.length === 1 ? 'data' : 'datas'}</span>}
+        </div>
+        {areas && (
+          <button onClick={toggleHidden} className="inline-flex items-center gap-1 text-xs font-bold text-indigo-400 hover:underline whitespace-nowrap shrink-0">
+            {hidden ? <>Mostrar <ChevronDown size={13} /></> : <>Ocultar <ChevronUp size={13} /></>}
+          </button>
+        )}
       </div>
+      {hidden ? null : <>
       <div className={`text-[11px] ${textMuted} mb-2`}>
         Compara os 7 dias antes com os 3 e os 7 dias depois. O número é da campanha inteira, não de cada alteração sozinha.
       </div>
@@ -90,6 +106,7 @@ export function ChangeNotes({ productId, ui, areas, events, limit = 6 }: {
           )}
         </div>
       )}
+      </>}
     </div>
   );
 }
