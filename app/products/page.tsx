@@ -39,7 +39,6 @@ import {
   ChevronRight, ChevronDown, ArrowLeft, Package, FileText, CheckCircle2, XCircle, ArrowDownWideNarrow, Sparkles, Route
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
-import { resolveProductStatus, type StatusKey } from '@/lib/campaignStatus';
 import Link from 'next/link';
 import { canEdit } from '@/lib/googleAds/editors';
 import { useRouter } from 'next/navigation';
@@ -48,7 +47,7 @@ import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { isValidDay } from '@/lib/useDayInput';
-import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type MetricSort } from '@/lib/metricSort';
+import { CampaignTable, LEVELS, loadLevel, loadSort, saveLevel, saveSort, type Level, type Sort } from './CampaignTable';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,8 +74,9 @@ export default function ProductsPage() {
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   
   // Filtros de Visualização
-  const [statusFilter, setStatusFilter] = useState<'ALL' | StatusKey>('ALL');
-  const [metricSort, setMetricSort] = useState<MetricSort>('cost');
+  // O que cada linha da tabela é (campanha, conta ou MCC) e a coluna que ordena.
+  const [level, setLevel] = useState<Level>('campaigns');
+  const [sort, setSort] = useState<Sort>({ key: 'cost', desc: true });
   const [rates, setRates] = useState({ USD: 5.60, EUR: 6.00 }); 
   const [showHidden, setShowHidden] = useState(false);
   
@@ -92,7 +92,6 @@ export default function ProductsPage() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // Novos Estados (Enhancements)
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [copiedPostback, setCopiedPostback] = useState<string | null>(null);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
@@ -111,30 +110,17 @@ export default function ProductsPage() {
       if (savedTheme) { setTheme(savedTheme); }
     applyTheme(savedTheme || 'dark');
 
-      // Carrega Filtro de Status Salvo
-      // 'active'/'paused' são os valores antigos, de antes do status vir do Google.
-      const savedStatus = localStorage.getItem('autometrics_products_status_filter');
-      const LEGACY: Record<string, StatusKey> = { active: 'ativo', paused: 'pausado' };
-      if (savedStatus === 'ALL' || savedStatus === 'ativo' || savedStatus === 'pausado' || savedStatus === 'suspenso') {
-        setStatusFilter(savedStatus);
-      } else if (savedStatus && LEGACY[savedStatus]) {
-        setStatusFilter(LEGACY[savedStatus]);
-      }
+      setLevel(loadLevel());
+      setSort(loadSort());
 
-      setMetricSort(loadMetricSort());
-
-      // Mesmas cotações do dashboard: sem elas, ordenar uma conta em USD contra
-      // outra em BRL compararia 100 dólares com 100 reais.
+      // Mesmas cotações do dashboard: sem elas, ordenar ou somar uma conta em USD
+      // com outra em BRL misturaria 100 dólares com 100 reais.
       const d = parseFloat(localStorage.getItem('autometrics_manual_dollar') || '');
       const e = parseFloat(localStorage.getItem('autometrics_manual_euro') || '');
       setRates({
         USD: Number.isFinite(d) && d > 0 ? d : 5.60,
         EUR: Number.isFinite(e) && e > 0 ? e : 6.00,
       });
-
-      // Carrega View Mode
-      const savedViewMode = localStorage.getItem('autometrics_products_view_mode') as 'grid' | 'table';
-      if (savedViewMode) setViewMode(savedViewMode);
 
       // Carrega Filtro de Data Salvo
       const savedDateFilter = localStorage.getItem('autometrics_products_date_filter') || '7d';
@@ -172,11 +158,6 @@ export default function ProductsPage() {
     applyTheme(newTheme);
   };
 
-  const changeStatusFilter = (newStatus: 'ALL' | StatusKey) => {
-    setStatusFilter(newStatus);
-    localStorage.setItem('autometrics_products_status_filter', newStatus);
-  };
-
   const handleDateFilterChange = (newFilter: string) => {
     setDateFilter(newFilter);
     localStorage.setItem('autometrics_products_date_filter', newFilter);
@@ -197,24 +178,6 @@ export default function ProductsPage() {
     localStorage.setItem('autometrics_products_custom_end', customEndDate);
     if (userId) fetchProducts(userId, 'custom', customStartDate, customEndDate);
     setIsCustomDateModalOpen(false);
-  };
-
-  const getPeriodLabel = () => {
-    switch(dateFilter) {
-      case 'today': return 'Hoje';
-      case 'yesterday': return 'Ontem';
-      case '7d': return '7D';
-      case '14d': return '14D';
-      case 'this_month': return 'Mês';
-      case 'custom': return 'Personalizado';
-      default: return '7D';
-    }
-  };
-  const periodLabel = getPeriodLabel();
-
-  const handleViewModeChange = (mode: 'grid' | 'table') => {
-    setViewMode(mode);
-    localStorage.setItem('autometrics_products_view_mode', mode);
   };
 
   const handleLogout = async () => {
@@ -291,13 +254,13 @@ export default function ProductsPage() {
            let p = 0;
            let m = true;
            while(m) {
-              const { data: c } = await supabase.from('daily_metrics').select('product_id, cost, conversion_value').in('product_id', idChunk).gte('date', startDateStr).lte('date', endDateStr).range(p*1000, (p+1)*1000-1);
+              const { data: c } = await supabase.from('daily_metrics').select('product_id, cost, conversion_value, impressions, clicks').in('product_id', idChunk).gte('date', startDateStr).lte('date', endDateStr).range(p*1000, (p+1)*1000-1);
               if (c && c.length > 0) { metricsData.push(...c); if (c.length < 1000) m = false; else p++; } else m = false;
            }
        }
        
-       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number}> = {};
-       prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, profit: 0, roi: 0 });
+       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, impressions: number, clicks: number, budget: number}> = {};
+       prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, profit: 0, roi: 0, impressions: 0, clicks: 0, budget: 0 });
        
        if (metricsData) {
          metricsData.forEach(m => {
@@ -305,6 +268,8 @@ export default function ProductsPage() {
             const r = Number(m.conversion_value || 0);
             metricsMap[m.product_id].cost += c;
             metricsMap[m.product_id].revenue += r;
+            metricsMap[m.product_id].impressions += Number(m.impressions || 0);
+            metricsMap[m.product_id].clicks += Number(m.clicks || 0);
          });
        }
 
@@ -317,10 +282,13 @@ export default function ProductsPage() {
        statusWindow.setDate(today.getDate() - 7);
        const statusFrom = getLocalYYYYMMDD(statusWindow);
        const statusMap: Record<string, { date: string; effective_status?: string; campaign_status?: string; campaign_status_reasons?: string }> = {};
+       // Orçamento diário: o Google só informa o de hoje, e a coleta grava no dia em que leu.
+       // Vale o mais recente dos últimos 7 dias.
+       const budgetMap: Record<string, { date: string; value: number }> = {};
 
        // As colunas novas só existem depois da migration; até lá o PostgREST
        // recusa a query inteira, então cai para as colunas antigas.
-       const STATUS_COLS_FULL = 'product_id, date, campaign_status, effective_status, campaign_status_reasons';
+       const STATUS_COLS_FULL = 'product_id, date, campaign_status, effective_status, campaign_status_reasons, budget_micros';
        const STATUS_COLS_LEGACY = 'product_id, date, campaign_status';
        let statusCols = STATUS_COLS_FULL;
 
@@ -342,6 +310,8 @@ export default function ProductsPage() {
           ((st || []) as any[]).forEach((r: any) => {
              const cur = statusMap[r.product_id];
              if (!cur || r.date > cur.date) statusMap[r.product_id] = r;
+             const budget = Number(r.budget_micros || 0) / 1000000;
+             if (budget > 0 && (!budgetMap[r.product_id] || r.date > budgetMap[r.product_id].date)) budgetMap[r.product_id] = { date: r.date, value: budget };
           });
        }
 
@@ -349,6 +319,7 @@ export default function ProductsPage() {
           const m = metricsMap[p.id];
           m.profit = m.revenue - m.cost;
           if (m.cost > 0) m.roi = (m.profit / m.cost) * 100;
+          m.budget = budgetMap[p.id]?.value || 0;
           const latest = statusMap[p.id];
           return {
             ...p,
@@ -498,8 +469,6 @@ export default function ProductsPage() {
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesHidden = showHidden ? true : !p.is_hidden;
-    const matchesStatus = statusFilter === 'ALL' || resolveProductStatus(p).key === statusFilter;
-    
     let matchesContext = true;
     if (selectedAccount) {
        matchesContext = (p.account_name || 'Sem Conta') === selectedAccount && (selectedMcc ? (p.mcc_name || 'Outras') === selectedMcc : true);
@@ -507,7 +476,7 @@ export default function ProductsPage() {
        matchesContext = (p.mcc_name || 'Outras') === selectedMcc;
     }
 
-    return matchesSearch && matchesContext && matchesHidden && matchesStatus;
+    return matchesSearch && matchesContext && matchesHidden;
   });
 
   const toggleMccExpand = (mccName: string) => { setExpandedMccs(prev => prev.includes(mccName) ? prev.filter(m => m !== mccName) : [...prev, mccName]); };
@@ -555,61 +524,8 @@ export default function ProductsPage() {
 
   const handleReload = () => { if (userId) fetchProducts(userId, dateFilter, customStartDate, customEndDate); };
 
-  // --- GRUPOS DE PRODUTOS ---
-  const groupedProducts = useMemo(() => {
-    const groups: Record<string, any[]> = {};
-    filteredProducts.forEach(p => {
-      const key = `${p.mcc_name || 'Sem MCC'} • ${p.account_name || 'Sem Conta'}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(p);
-    });
-
-    // Normaliza para BRL antes de comparar: cada conta tem sua moeda.
-    const toBRL = (value: number, currency?: string) =>
-      currency === 'USD' ? value * rates.USD : currency === 'EUR' ? value * rates.EUR : value;
-
-    const metricOf = (p: any) => {
-      const m = p.metrics7d || {};
-      return {
-        cost: toBRL(Number(m.cost) || 0, p.currency),
-        revenue: toBRL(Number(m.revenue) || 0, p.currency),
-        profit: toBRL(Number(m.profit) || 0, p.currency),
-      };
-    };
-
-    // Dentro de cada conta, a campanha que mais pesa na métrica vem antes...
-    Object.keys(groups).forEach(key => {
-      groups[key] = sortByMetric(groups[key], metricSort, metricOf);
-    });
-
-    // ...e as contas também: ordenar só por dentro deixava no topo da tela um
-    // grupo alfabeticamente sortudo, e a lista parecia não ter ordenado nada.
-    const entries = Object.entries(groups).map(([name, prods]) => {
-      const total = prods.reduce((acc: any, p: any) => {
-        const m = metricOf(p);
-        return { cost: acc.cost + m.cost, revenue: acc.revenue + m.revenue, profit: acc.profit + m.profit };
-      }, { cost: 0, revenue: 0, profit: 0 });
-      return { name, prods, total };
-    });
-
-    return sortByMetric(entries, metricSort, e => e.total).map(e => [e.name, e.prods] as [string, any[]]);
-  }, [filteredProducts, metricSort, rates]);
-
-  const renderPlatformBadge = (product: any) => {
-     const p = (product.platform || '').toLowerCase();
-     if (p.includes('clickbank')) return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#1b2649] text-white font-black text-[9px] shrink-0 shadow-inner">CB</div>;
-     if (p.includes('cartpanda')) return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#2D03FC] text-white font-black text-[9px] shrink-0 shadow-inner">CP</div>;
-     if (p.includes('maxweb'))    return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#F8A826] text-white font-black text-[9px] shrink-0 shadow-inner">MW</div>;
-     if (p.includes('digistore')) return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#003970] text-white font-black text-[9px] shrink-0 shadow-inner">DS</div>;
-     if (p.includes('gurumedia')) return <div className="px-2 py-1 rounded w-10 flex justify-center items-center bg-[#4caf50] text-white font-black text-[9px] shrink-0 shadow-inner">GM</div>;
-     
-     // Fallback text badge for Currency
-     const curText = product.currency === 'USD' ? 'USD' : product.currency === 'EUR' ? 'EUR' : 'BRL';
-     const curColor = product.currency === 'USD' ? 'bg-indigo-500/10 text-indigo-500' : product.currency === 'EUR' ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500';
-     return <div className={`px-2 py-1 rounded flex items-center justify-center w-10 shrink-0 ${curColor}`}><span className="font-bold text-[9px]">{curText}</span></div>;
-  };
-
-  const formatMoney = (val: number, currency = 'BRL') => new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(val);
+  const changeLevel = (l: Level) => { setLevel(l); saveLevel(l); };
+  const changeSort = (next: Sort) => { setSort(next); saveSort(next); };
 
   // Estilos
   const isDark = theme === 'dark';
@@ -740,30 +656,11 @@ export default function ProductsPage() {
              <div className="pl-3 text-slate-500"><Search size={18} /></div>
              <input type="text" placeholder="Buscar campanha..." className={`bg-transparent flex-1 outline-none min-w-[120px] px-2 md:px-0 placeholder:text-slate-600 ${textHead}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
              
-             {/* Filtro de Status */}
-             <div className={`flex flex-wrap items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                <button onClick={() => changeStatusFilter('ALL')} className={`flex-1 md:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'ALL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`}>Todos</button>
-                <button onClick={() => changeStatusFilter('ativo')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'ativo' ? 'bg-emerald-500/20 text-emerald-500' : 'text-slate-500 hover:text-emerald-500'}`}><PlayCircle size={12} /> Ativos</button>
-                <button onClick={() => changeStatusFilter('pausado')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'pausado' ? 'bg-amber-500/20 text-amber-500' : 'text-slate-500 hover:text-amber-500'}`}><PauseCircle size={12} /> Pausados</button>
-                <button onClick={() => changeStatusFilter('suspenso')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'suspenso' ? 'bg-rose-500/20 text-rose-500' : 'text-slate-500 hover:text-rose-500'}`}><AlertTriangle size={12} /> Suspensos e sem veicular</button>
-             </div>
-
-             {/* Ordenação por métrica do período */}
-             <div className={`flex flex-wrap items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                <ArrowDownWideNarrow size={14} className="text-slate-500 mr-1 shrink-0" />
-                {METRIC_SORTS.map(opt => (
-                  <button
-                    key={opt.key}
-                    onClick={() => { setMetricSort(opt.key); saveMetricSort(opt.key); }}
-                    className={`flex-1 md:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      metricSort === opt.key
-                        ? (isDark ? 'bg-slate-800 ' : 'bg-slate-200 ') + opt.color
-                        : 'text-slate-500 hover:text-slate-400'
-                    }`}
-                    title={`Maior ${opt.label.toLowerCase()} primeiro`}
-                  >
-                    {opt.label}
-                  </button>
+             {/* O que cada linha da tabela é */}
+             <div className={`flex items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                {LEVELS.map(l => (
+                  <button key={l.key} onClick={() => changeLevel(l.key)} aria-pressed={level === l.key}
+                    className={`flex-1 md:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${level === l.key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`}>{l.label}</button>
                 ))}
              </div>
 
@@ -785,11 +682,6 @@ export default function ProductsPage() {
                <ChevronDown size={14} className="text-slate-500 absolute right-2 pointer-events-none" />
              </div>
 
-             <div className={`flex items-center gap-1 px-2 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'} hidden md:flex`}>
-                <button onClick={() => handleViewModeChange('grid')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Grid View"><LayoutGrid size={16}/></button>
-                <button onClick={() => handleViewModeChange('table')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'table' ? (isDark?'bg-slate-800 text-white':'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`} title="Table View"><List size={16}/></button>
-             </div>
-
              <button onClick={handleReload} className={`p-2 rounded-lg transition-colors hidden md:block mr-1 ${hoverItem}`} title="Recarregar"><RefreshCw size={18} className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
            
@@ -802,119 +694,19 @@ export default function ProductsPage() {
         ) : filteredProducts.length === 0 ? (
            <div className={`flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed rounded-xl ${isDark ? 'border-slate-800' : 'border-slate-300'}`}><Layers size={32} className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada com os filtros atuais.</p></div>
         ) : (
-          <div className="space-y-8 pb-32">
-             {groupedProducts.map(([groupName, groupProds]) => (
-                <div key={groupName} className="space-y-4">
-                   <h2 className={`text-sm font-bold flex items-center gap-2 ${textMuted} uppercase tracking-wider pl-2 border-l-2 ${isDark?'border-slate-800':'border-slate-300'}`}><Folder size={16}/> {groupName} <span className="text-xs bg-slate-500/10 px-2 py-0.5 rounded-full">{groupProds.length}</span></h2>
-                   
-                   {viewMode === 'grid' ? (
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                       {groupProds.map(product => {
-                         const isSelected = selectedProducts.includes(product.id);
-                         const m7d = product.metrics7d || {cost:0, revenue:0, roi:0};
-                         return (
-                           <div key={product.id} className={`border rounded-xl transition-all relative overflow-hidden flex flex-col ${product.is_hidden ? (isDark ? 'bg-black border-slate-800 opacity-60' : 'bg-slate-100 border-slate-300 opacity-60') : `${bgCard} hover:border-indigo-500/50`} ${isSelected ? 'ring-2 ring-indigo-500 border-transparent shadow-lg shadow-indigo-500/10' : ''}`}>
-                             <div className="p-5 flex-1 cursor-pointer" onClick={() => router.push(`/products/${product.id}`)}>
-                               <div className="absolute top-4 right-4 flex gap-1 z-10" onClick={e=>e.stopPropagation()}>
-                                  {(() => {
-                                    const st = resolveProductStatus(product);
-                                    return (
-                                      <span className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold border ${st.badge}`} title={st.hint}>
-                                        {st.key === 'ativo' ? <PlayCircle size={12} /> : st.key === 'suspenso' ? <AlertTriangle size={12} /> : <PauseCircle size={12} />}
-                                        {st.label}
-                                      </span>
-                                    );
-                                  })()}
-                                  <CampaignStatusToggle product={product} isDark={isDark} onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
-                                  <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'bg-emerald-500 text-white' : (isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black')}`} title="Copiar Postback">{copiedPostback === product.id ? <Check size={14}/> : <Copy size={14}/>}</button>
-                                  <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'bg-amber-500/20 text-amber-500' : (isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black')}`} title={product.is_hidden ? "Restaurar" : "Arquivar"}>{product.is_hidden ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-                                  <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-slate-800 text-slate-500 hover:bg-rose-500 hover:text-white' : 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'}`} title="Excluir"><Trash2 size={14} /></button>
-                               </div>
-
-                               <div className="flex items-center gap-2 mb-3 pr-36">
-                                 <button onClick={(e)=>toggleSelectProduct(product.id, e)} className={`${isSelected ? 'text-indigo-500' : 'text-slate-300 hover:text-slate-400'}`}>{isSelected ? <CheckSquare size={16}/> : <Square size={16}/>}</button>
-                                 {renderPlatformBadge(product)}
-                               </div>
-                               
-                               <h3 className={`text-sm font-bold mb-1 transition-colors line-clamp-2 ${textHead} group-hover:text-indigo-500`}>{product.name}</h3>
-                               <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono"><Hash size={10}/><span className="truncate max-w-[200px]">{product.campaign_id}</span></div>
-                             </div>
-
-                             {/* Métricas 7D Footer Compacto */}
-                             <div className={`px-4 py-3 border-t flex flex-col gap-2 ${isDark ? 'border-slate-800/50 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
-                               <div className="flex justify-between items-center text-xs">
-                                  <span className="text-slate-500 font-medium tracking-wide">Receita</span>
-                                  <span className={`font-mono font-medium ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.revenue, product.currency)}</span>
-                               </div>
-                               <div className="flex justify-between items-center text-xs">
-                                  <span className="text-slate-500 font-medium tracking-wide">Custo</span>
-                                  <span className={`font-mono font-medium ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.cost, product.currency)}</span>
-                               </div>
-                               <div className="flex justify-between items-center mt-1 pt-2 border-t border-dashed border-slate-300/20">
-                                  <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark?'text-white':'text-black'}`}>Lucro ({periodLabel})</span>
-                                  <span className={`font-mono font-bold text-sm ${(m7d.revenue - m7d.cost) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney((m7d.revenue - m7d.cost), product.currency)}</span>
-                               </div>
-                             </div>
-                           </div>
-                         );
-                       })}
-                     </div>
-                   ) : (
-                     <div className={`border rounded-xl flex overflow-hidden overflow-x-auto ${bgCard}`}>
-                       <table className="w-full text-left border-collapse min-w-[800px] whitespace-nowrap">
-                         <thead>
-                           <tr className={`text-xs uppercase tracking-wider ${isDark ? 'bg-slate-900/50 text-slate-500' : 'bg-slate-50 text-slate-500'} border-b ${borderCol}`}>
-                             <th className="p-3 w-10 text-center"><button onClick={() => handleSelectAll(groupProds.map(p=>p.id))} className="text-slate-400 hover:text-indigo-500">{groupProds.length > 0 && groupProds.every(p => selectedProducts.includes(p.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}</button></th>
-                             <th className="p-3 w-12 text-center">Plat.</th>
-                             <th className="p-3">Campanha</th>
-                             <th className="p-3">{periodLabel} Receita</th>
-                             <th className="p-3">{periodLabel} Custo</th>
-                             <th className="p-3">{periodLabel} Lucro</th>
-                             <th className="p-3 text-right">Ações</th>
-                           </tr>
-                         </thead>
-                         <tbody className="divide-y divide-inherit">
-                           {groupProds.map(product => {
-                             const isSelected = selectedProducts.includes(product.id);
-                             const m7d = product.metrics7d || {cost:0, revenue:0, roi:0};
-                             return (
-                               <tr key={product.id} className={`transition-colors cursor-pointer ${isSelected ? (isDark?'bg-indigo-500/10':'bg-indigo-50') : hoverItem}`} onClick={() => router.push(`/products/${product.id}`)}>
-                                 <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={(e)=>toggleSelectProduct(product.id, e)} className={`${isSelected ? 'text-indigo-500' : 'text-slate-300 hover:text-slate-400'}`}>{isSelected ? <CheckSquare size={16}/> : <Square size={16}/>}</button></td>
-                                 <td className="p-3 py-2 flex justify-center">{renderPlatformBadge(product)}</td>
-                                 <td className="p-3">
-                                   <div className="flex items-center gap-2">
-                                     {(() => {
-                                       const st = resolveProductStatus(product);
-                                       const Icon = st.key === 'ativo' ? PlayCircle : st.key === 'suspenso' ? AlertTriangle : PauseCircle;
-                                       return <Icon size={14} className={`${st.text} shrink-0`} aria-label={st.label} />;
-                                     })()}
-                                     <span className={`font-bold text-sm ${textHead} break-words`} title={product.name}>{product.name}</span>
-                                     {product.is_hidden && <EyeOff size={12} className="text-amber-500 shrink-0"/>}
-                                   </div>
-                                   <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono mt-0.5 break-all" title={product.campaign_id}>
-                                      <Hash size={10} /> {product.campaign_id}
-                                   </div>
-                                 </td>
-                                 <td className={`p-3 font-mono text-xs ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.revenue, product.currency)}</td>
-                                 <td className={`p-3 font-mono text-xs ${isDark?'text-slate-200':'text-slate-900'}`}>{formatMoney(m7d.cost, product.currency)}</td>
-                                 <td className="p-3"><span className={`font-mono text-xs font-bold ${(m7d.revenue - m7d.cost) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(m7d.revenue - m7d.cost, product.currency)}</span></td>
-                                 <td className="p-3 text-right" onClick={e=>e.stopPropagation()}>
-                                   <div className="flex justify-end gap-1">
-                                      <CampaignStatusToggle product={product} isDark={isDark} onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
-                                      <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'text-emerald-500 bg-emerald-500/10' : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200')}`} title="Copiar Postback">{copiedPostback === product.id ? <Check size={14}/> : <Copy size={14}/>}</button>
-                                      <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors hover:text-rose-500 ${isDark ? 'text-slate-400 hover:bg-rose-500/20' : 'text-slate-500 hover:bg-rose-100'}`} title="Excluir"><Trash2 size={14} /></button>
-                                   </div>
-                                 </td>
-                               </tr>
-                             )
-                           })}
-                         </tbody>
-                       </table>
-                     </div>
-                   )}
-                </div>
-             ))}
-          </div>
+          <CampaignTable products={filteredProducts} level={level} sort={sort} onSort={changeSort} rates={rates} isDark={isDark}
+            selected={selectedProducts} onToggleSelect={toggleSelectProduct} onSelectAll={handleSelectAll}
+            onOpen={product => router.push(`/products/${product.id}`)}
+            onPickAccount={(mcc, account) => { handleSelectAccount(mcc, account); changeLevel('campaigns'); }}
+            onPickMcc={mcc => { handleSelectMcc(mcc); changeLevel('accounts'); }}
+            actions={product => (
+              <>
+                <CampaignStatusToggle product={product} isDark={isDark} onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
+                <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'text-emerald-500 bg-emerald-500/10' : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200')}`} title="Copiar Postback">{copiedPostback === product.id ? <Check size={14}/> : <Copy size={14}/>}</button>
+                <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'text-amber-500 bg-amber-500/10' : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200')}`} title={product.is_hidden ? 'Restaurar' : 'Ocultar'}>{product.is_hidden ? <Eye size={14}/> : <EyeOff size={14}/>}</button>
+                <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors hover:text-rose-500 ${isDark ? 'text-slate-400 hover:bg-rose-500/20' : 'text-slate-500 hover:bg-rose-100'}`} title="Excluir"><Trash2 size={14} /></button>
+              </>
+            )} />
         )}
 
         {/* BULK ACTION BAR */}
