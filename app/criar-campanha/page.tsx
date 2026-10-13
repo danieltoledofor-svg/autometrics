@@ -157,7 +157,8 @@ export default function CampaignBuilderPage() {
 
         {list?.allowed && step === 1 && draft && (
           <StepCampaign draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} languages={languages} reloadLanguages={() => setLanguages(null)} onNext={() => setStep(2)}
-            findPlaces={async text => (await api(`/api/campaign-builder?local=${encodeURIComponent(text)}`)).body} />
+            findPlaces={async text => (await api(`/api/campaign-builder?local=${encodeURIComponent(text)}`)).body}
+            findManyPlaces={async names => (await api('/api/campaign-builder', { action: 'locais', nomes: names })).body} />
         )}
         {list?.allowed && step === 2 && draft && <StepAd draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} api={api} onNext={() => setStep(3)} />}
         {list?.allowed && step === 3 && draft && <StepWhere draft={draft} setDraft={setDraft} css={css} api={api} onNext={() => setStep(4)} />}

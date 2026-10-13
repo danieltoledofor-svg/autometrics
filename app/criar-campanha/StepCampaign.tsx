@@ -43,13 +43,16 @@ function NumberField({ value, onChange, css, width = 'w-28', placeholder, label 
   );
 }
 
-export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languages, reloadLanguages, onNext }: {
+export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findManyPlaces, languages, reloadLanguages, onNext }: {
   draft: Draft; setDraft: (fn: (d: Draft) => Draft) => void; symbol: string; css: Css;
   /** Idiomas que o Google aceita. null = ainda carregando ou a lista não veio. */
   languages: { id: string; nome: string }[] | null;
   /** A lista de idiomas não veio: tenta de novo. */
   reloadLanguages?: () => void;
-  findPlaces: (text: string) => Promise<{ places?: { id: string; nome: string; tipo: string }[]; error?: string }>; onNext: () => void;
+  findPlaces: (text: string) => Promise<{ places?: { id: string; nome: string; tipo: string }[]; error?: string }>;
+  /** Vários nomes de uma vez: o que o Google achou para cada um e os nomes que ele não achou. */
+  findManyPlaces: (names: string[]) => Promise<{ places?: { pedido: string; id: string; nome: string; tipo: string }[]; missing?: string[]; error?: string }>;
+  onNext: () => void;
 }) {
   const { isDark, card, head, muted, line, soft, label } = css;
   const [placeText, setPlaceText] = useState('');
@@ -57,6 +60,12 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languag
   const [searching, setSearching] = useState(false);
   const [placeError, setPlaceError] = useState('');
   const [negatives, setNegatives] = useState('');
+  // Lista de países colada: um por linha, ou separados por vírgula ou ponto e vírgula.
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkBusy, setBulkBusy] = useState<'' | 'incluir' | 'excluir'>('');
+  const [bulkResult, setBulkResult] = useState<{ ok: string; missing: string[]; error: string } | null>(null);
+  const bulkNames = [...new Set(bulkText.split(/[\n,;]/).map(x => x.trim()).filter(Boolean))];
   const [langText, setLangText] = useState('');
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }));
   const problems = campaignProblems(draft);
@@ -87,6 +96,17 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languag
   const addPlace = (p: { id: string; nome: string }, excluido: boolean) => {
     setDraft(d => ({ ...d, locais: [...d.locais.filter(l => l.id !== p.id), { id: p.id, nome: p.nome, excluido }] }));
     setPlaceText(''); placeInput.current?.focus();
+  };
+  const addMany = async (excluido: boolean) => {
+    setBulkBusy(excluido ? 'excluir' : 'incluir'); setBulkResult(null);
+    const res = await findManyPlaces(bulkNames).catch(() => ({ error: 'A busca de locais não respondeu.' } as Awaited<ReturnType<typeof findManyPlaces>>));
+    const found = res.places || [];
+    if (found.length) setDraft(d => ({ ...d, locais: [...d.locais.filter(l => !found.some(f => f.id === l.id)), ...found.filter((f, i) => found.findIndex(x => x.id === f.id) === i).map(f => ({ id: f.id, nome: f.nome, excluido }))] }));
+    const n = new Set(found.map(f => f.id)).size;
+    setBulkResult({ ok: n ? `${n} ${n === 1 ? 'local' : 'locais'} ${excluido ? (n === 1 ? 'excluído' : 'excluídos') : (n === 1 ? 'incluído' : 'incluídos')}.` : '', missing: res.missing || [], error: res.error || '' });
+    // Fica no campo só o que não foi achado, para corrigir e tentar de novo.
+    if (!res.error) setBulkText((res.missing || []).join('\n'));
+    setBulkBusy('');
   };
   // Idiomas: primeiro os que começam com o que foi digitado, depois os que contêm.
   const langQuery = plain(langText);
@@ -188,6 +208,23 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languag
         </div>
         {placeText.trim().length < 2 && <div className={`text-xs ${muted}`}>Os locais aparecem enquanto você digita, a partir da segunda letra.</div>}
         {placeError && !searching && <div className="text-xs text-amber-500">{placeError}</div>}
+        {!bulkOpen ? (
+          <button onClick={() => setBulkOpen(true)} className={`text-xs font-bold inline-flex items-center gap-1 ${muted} hover:text-indigo-400`}><Plus size={13} /> Colar uma lista de países</button>
+        ) : (
+          <div className={`rounded-lg border ${line} p-3 space-y-2`}>
+            <div className={`text-xs ${muted}`}>Um país por linha, ou separados por vírgula. Vale o nome em português, em inglês ou a sigla (Brasil, Brazil ou BR).</div>
+            <textarea value={bulkText} onChange={e => { setBulkText(e.target.value); setBulkResult(null); }} rows={4} placeholder={'Estados Unidos\nCanadá\nReino Unido\nAustrália'} aria-label="Lista de países"
+              className={`w-full rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => addMany(false)} disabled={!bulkNames.length || bulkBusy !== ''} className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${line} ${head} hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-40 inline-flex items-center gap-1.5`}>{bulkBusy === 'incluir' && <Loader2 size={12} className="animate-spin" />} Incluir {bulkNames.length > 1 ? `os ${bulkNames.length}` : ''}</button>
+              <button onClick={() => addMany(true)} disabled={!bulkNames.length || bulkBusy !== ''} className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${line} ${head} hover:border-rose-500 hover:text-rose-400 disabled:opacity-40 inline-flex items-center gap-1.5`}>{bulkBusy === 'excluir' && <Loader2 size={12} className="animate-spin" />} Excluir {bulkNames.length > 1 ? `os ${bulkNames.length}` : ''}</button>
+              <button onClick={() => { setBulkOpen(false); setBulkText(''); setBulkResult(null); }} className={`text-xs ${muted} hover:text-indigo-400`}>Fechar</button>
+            </div>
+            {bulkResult?.ok && <div className="text-xs text-emerald-500">{bulkResult.ok}</div>}
+            {bulkResult?.error && <div className="text-xs text-amber-500">{bulkResult.error}</div>}
+            {!!bulkResult?.missing.length && <div className="text-xs text-amber-500">O Google não achou: {bulkResult.missing.join(', ')}. Eles continuam no campo acima: confira a grafia e tente de novo.</div>}
+          </div>
+        )}
         {places.length > 0 && (
           <div className={`rounded-lg border ${line} divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
             {places.map(p => (

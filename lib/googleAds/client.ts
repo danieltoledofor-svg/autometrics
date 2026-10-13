@@ -393,6 +393,30 @@ export async function suggestLocations(refreshToken: string, text: string): Prom
     .map((g: any) => ({ id: String(g.id), nome: placeName(g), tipo: g.targetType || '' }));
 }
 
+/**
+ * Vários nomes de uma vez (até 25 por pedido, o limite do Google). Para cada nome, o melhor local que o
+ * Google sugeriu, com preferência para país: é o que serve para colar uma lista de países.
+ */
+export async function suggestManyLocations(refreshToken: string, names: string[]): Promise<Map<string, { id: string; nome: string; tipo: string }>> {
+  const out = new Map<string, { id: string; nome: string; tipo: string }>();
+  for (let i = 0; i < names.length; i += 25) {
+    const res = await fetch(`${API_BASE}/geoTargetConstants:suggest`, {
+      method: 'POST',
+      headers: await headers({ refreshToken }),
+      body: JSON.stringify({ locale: 'pt', locationNames: { names: names.slice(i, i + 25) } }),
+    });
+    if (!res.ok) throw await readError(res);
+    const data = await res.json();
+    for (const s of data.geoTargetConstantSuggestions || []) {
+      const g = s.geoTargetConstant || {}, asked = String(s.searchTerm || '');
+      if (!g.id || g.status === 'REMOVAL_PLANNED' || !asked) continue;
+      const current = out.get(asked);
+      if (!current || (current.tipo !== 'Country' && g.targetType === 'Country')) out.set(asked, { id: String(g.id), nome: placeName(g), tipo: g.targetType || '' });
+    }
+  }
+  return out;
+}
+
 export function cleanCustomerId(id: string | number): string {
   return String(id).replace(/\D/g, '');
 }

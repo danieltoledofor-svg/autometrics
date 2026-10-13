@@ -15,6 +15,31 @@ export function countryName(code?: string | null): string {
   try { const n = regions?.of(c); return n && n !== c ? n : ''; } catch { return ''; }
 }
 
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+/** Nome de país (em português ou em inglês) → sigla. Montado uma vez, a partir dos nomes que o próprio JavaScript conhece. */
+let countryIndex: Map<string, string> | null = null;
+const ALIASES: Record<string, string> = { eua: 'US', usa: 'US', 'estados unidos da america': 'US', uk: 'GB', inglaterra: 'GB', 'gra bretanha': 'GB', 'great britain': 'GB', england: 'GB', holanda: 'NL', holland: 'NL', 'coreia': 'KR', korea: 'KR', russia: 'RU', 'emirados arabes': 'AE', uae: 'AE', 'republica tcheca': 'CZ', 'czech republic': 'CZ', turquia: 'TR', turkey: 'TR' };
+
+/** "Estados Unidos", "united states", "EUA" ou "US" → "US". Vazio quando o texto não é um país conhecido. */
+export function countryCode(text?: string | null): string {
+  const raw = String(text || '').trim();
+  if (!countryIndex) {
+    countryIndex = new Map();
+    let english: Intl.DisplayNames | null = null;
+    try { english = new Intl.DisplayNames(['en'], { type: 'region' }); } catch { /* sem nomes em inglês */ }
+    // A primeira sigla de cada nome é a que vale: "Reino Unido" é GB, e UK é só um apelido que o JavaScript também aceita.
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    for (const a of letters) for (const b of letters) {
+      const code = a + b;
+      for (const names of [regions, english]) { try { const n = names?.of(code); if (n && n !== code && !countryIndex.has(fold(n))) countryIndex.set(fold(n), code); } catch { /* sigla que não é país */ } }
+    }
+    for (const [name, code] of Object.entries(ALIASES)) countryIndex.set(name, code);
+  }
+  const byName = countryIndex.get(fold(raw));
+  if (byName) return byName;
+  return /^[A-Za-z]{2}$/.test(raw) && countryName(raw) ? raw.toUpperCase() : '';
+}
+
 /** País em português; estado ou cidade com o nome do Google e o país em português ("Texas, Estados Unidos"). */
 export function placeName(g: { name?: string; canonicalName?: string; countryCode?: string; targetType?: string }): string {
   const country = countryName(g.countryCode);

@@ -3,8 +3,8 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { addUsage } from '@/lib/googleAds/sync';
 import { campaignAccess, canEdit } from '@/lib/googleAds/edit';
 import { readTemplate } from '@/lib/campaignBuilder/template';
-import { search, suggestLocations, type AdsContext } from '@/lib/googleAds/client';
-import { languageName } from '@/lib/campaignBuilder/names';
+import { search, suggestLocations, suggestManyLocations, type AdsContext } from '@/lib/googleAds/client';
+import { countryCode, countryName, languageName } from '@/lib/campaignBuilder/names';
 import { similarCampaigns } from '@/lib/campaignBuilder/similar';
 import { extractOffer, generateResources, type Funnel, type Offer } from '@/lib/campaignBuilder/resources';
 import { readPageSource } from '@/lib/campaignBuilder/pageSource';
@@ -28,6 +28,7 @@ export const maxDuration = 60;
  * GET ?contas=1            contas ativas do usuário, com a MCC e as campanhas que estão rodando em cada uma
  * GET ?metas=<conta>       metas de conversão personalizadas que aquela conta enxerga
  * GET ?parecidas=<trecho>  o que mais converteu nas campanhas do usuário com esse trecho no nome
+ * POST { action: 'locais', nomes }              vários países de uma vez: acha cada um no Google e diz quais não achou
  * POST { action: 'oferta', url, fonte? }         lê o código-fonte da página do produto (preço, garantia, frete…) com a IA;
  *                                                `fonte` é o código colado pelo usuário, quando a página recusa o servidor
  * POST { action: 'recursos', funil, … }          títulos, descrições, sitelinks e frases de destaque pela IA
@@ -245,6 +246,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ result });
     } catch (e: any) {
       return NextResponse.json({ result: { ok: false, ensaio, campanha_id: null, situacao: null, problemas: [{ onde: 'Google', texto: `O Google não respondeu ao pedido: ${String(e.message).slice(0, 300)}`, corrigir: 'Tente de novo em alguns minutos.' }], avisos: [], calls: 0, itens: 0 } });
+    }
+  }
+
+  // Lista de países colada pelo usuário. Quem é país conhecido (nome em português, em inglês ou sigla) é
+  // achado pela sigla, numa consulta só e sem ambiguidade; o resto vai para a busca por nome do Google.
+  if (body.action === 'locais') {
+    const asked: string[] = [...new Set<string>((Array.isArray(body.nomes) ? body.nomes : []).map((n: any) => String(n || '').trim().slice(0, 80)).filter(Boolean))].slice(0, 250);
+    if (!asked.length) return NextResponse.json({ error: 'Informe pelo menos um país.' }, { status: 400 });
+    const ctx = await accountContext(user.id);
+    if (!ctx) return NextResponse.json({ error: 'Nenhuma ligação ativa com o Google. Reconecte em Integração.' }, { status: 409 });
+    try {
+      const found = new Map<string, { id: string; nome: string; tipo: string }>();
+      const codeOf = new Map(asked.map(n => [n, countryCode(n)] as const).filter(([, c]) => c));
+      const codes = [...new Set(codeOf.values())];
+      let calls = 0;
+      if (codes.length) {
+        calls++;
+        // Se esta consulta falhar, todos os nomes seguem para a busca por nome, logo abaixo.
+        const rows = await search(ctx, `SELECT geo_target_constant.id, geo_target_constant.country_code, geo_target_constant.status FROM geo_target_constant WHERE geo_target_constant.target_type = 'Country' AND geo_target_constant.country_code IN (${codes.map(c => `'${c}'`).join(',')})`).catch(() => []);
+        const idOf = new Map(rows.map(r => r.geoTargetConstant || {}).filter(g => g.id && g.status !== 'REMOVAL_PLANNED').map(g => [String(g.countryCode), String(g.id)]));
+        for (const [name, code] of codeOf) if (idOf.has(code)) found.set(name, { id: idOf.get(code)!, nome: countryName(code) || name, tipo: 'Country' });
+      }
+      const rest = asked.filter(n => !found.has(n));
+      if (rest.length) {
+        calls += Math.ceil(rest.length / 25);
+        const suggested = await suggestManyLocations(ctx.refreshToken, rest);
+        for (const n of rest) { const hit = suggested.get(n); if (hit) found.set(n, hit); }
+      }
+      await addUsage(calls).catch(() => {});
+      return NextResponse.json({ places: asked.filter(n => found.has(n)).map(n => ({ pedido: n, ...found.get(n)! })), missing: asked.filter(n => !found.has(n)) });
+    } catch (e: any) {
+      return NextResponse.json({ error: `O Google não respondeu: ${e.message}` }, { status: 502 });
     }
   }
 
