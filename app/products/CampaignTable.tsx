@@ -33,13 +33,13 @@ export function loadLevel(): Level {
 }
 export function saveLevel(l: Level) { try { localStorage.setItem(LEVEL_KEY, l); } catch { /* sem armazenamento */ } }
 
-type Tone = 'ativo' | 'pausado' | 'suspenso' | 'sem_veicular';
-const DOT: Record<Tone, string> = { ativo: 'bg-emerald-500', pausado: 'bg-slate-500', suspenso: 'bg-rose-500', sem_veicular: 'bg-amber-500' };
+export type Tone = 'ativo' | 'pausado' | 'suspenso' | 'sem_veicular';
+export const DOT: Record<Tone, string> = { ativo: 'bg-emerald-500', pausado: 'bg-slate-500', suspenso: 'bg-rose-500', sem_veicular: 'bg-amber-500' };
 const TONE_LABEL: Record<Tone, [string, string]> = { ativo: ['ativa', 'ativas'], pausado: ['pausada', 'pausadas'], suspenso: ['suspensa', 'suspensas'], sem_veicular: ['sem veicular', 'sem veicular'] };
 /** Ativas primeiro, depois o que pede atenção, pausadas por último: é o desempate da ordenação. */
 const TONE_ORDER: Record<Tone, number> = { ativo: 0, sem_veicular: 1, suspenso: 2, pausado: 3 };
 
-function toneOf(product: any): { tone: Tone; title: string } {
+export function toneOf(product: any): { tone: Tone; title: string } {
   const st = resolveProductStatus(product);
   const tone: Tone = st.key === 'suspenso' ? (st.label === 'Sem veicular' ? 'sem_veicular' : 'suspenso') : st.key;
   return { tone, title: `${st.label}: ${st.hint}` };
@@ -160,9 +160,6 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
     <div className="space-y-2 pb-32">
       <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-xs ${muted} px-1`}>
         <span className={head}>{products.length} {products.length === 1 ? 'campanha' : 'campanhas'}</span>
-        {(Object.keys(tally) as Tone[]).filter(t => tally[t]).map(t => (
-          <span key={t} className="inline-flex items-center gap-1.5">{dot(t, TONE_LABEL[t][1])}{tally[t]} {TONE_LABEL[t][tally[t] === 1 ? 0 : 1]}</span>
-        ))}
       </div>
       <div className={`border rounded-xl overflow-x-auto ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
         {level === 'campaigns' ? (

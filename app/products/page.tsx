@@ -47,7 +47,7 @@ import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { isValidDay } from '@/lib/useDayInput';
-import { CampaignTable, LEVELS, loadLevel, loadSort, saveLevel, saveSort, type Level, type Sort } from './CampaignTable';
+import { CampaignTable, DOT, LEVELS, loadLevel, loadSort, saveLevel, saveSort, toneOf, type Level, type Sort, type Tone } from './CampaignTable';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -77,6 +77,8 @@ export default function ProductsPage() {
   // O que cada linha da tabela é (campanha, conta ou MCC) e a coluna que ordena.
   const [level, setLevel] = useState<Level>('campaigns');
   const [sort, setSort] = useState<Sort>({ key: 'cost', desc: true });
+  // Situação que a tabela mostra: todas, ou só uma.
+  const [statusFilter, setStatusFilter] = useState<'ALL' | Tone>('ALL');
   const [rates, setRates] = useState({ USD: 5.60, EUR: 6.00 }); 
   const [showHidden, setShowHidden] = useState(false);
   
@@ -110,6 +112,10 @@ export default function ProductsPage() {
       if (savedTheme) { setTheme(savedTheme); }
     applyTheme(savedTheme || 'dark');
 
+      // 'active'/'paused' são os valores antigos, de antes do status vir do Google.
+      const savedStatus = localStorage.getItem('autometrics_products_status_filter') || '';
+      const STATUS: Record<string, Tone> = { ativo: 'ativo', pausado: 'pausado', suspenso: 'suspenso', sem_veicular: 'sem_veicular', active: 'ativo', paused: 'pausado' };
+      if (STATUS[savedStatus]) setStatusFilter(STATUS[savedStatus]);
       setLevel(loadLevel());
       setSort(loadSort());
 
@@ -542,6 +548,12 @@ export default function ProductsPage() {
 
   const handleReload = () => { if (userId) fetchProducts(userId, dateFilter, customStartDate, customEndDate); };
 
+  const changeStatusFilter = (next: 'ALL' | Tone) => { setStatusFilter(next); localStorage.setItem('autometrics_products_status_filter', next); };
+  // Quantas campanhas há em cada situação, antes de filtrar por situação: é o número de cada botão.
+  const statusCount: Record<Tone, number> = { ativo: 0, pausado: 0, suspenso: 0, sem_veicular: 0 };
+  for (const p of filteredProducts) statusCount[toneOf(p).tone]++;
+  const shownProducts = statusFilter === 'ALL' ? filteredProducts : filteredProducts.filter(p => toneOf(p).tone === statusFilter);
+
   const changeLevel = (l: Level) => { setLevel(l); saveLevel(l); };
   const changeSort = (next: Sort) => { setSort(next); saveSort(next); };
 
@@ -674,6 +686,16 @@ export default function ProductsPage() {
              <div className="pl-3 text-slate-500"><Search size={18} /></div>
              <input type="text" placeholder="Buscar campanha..." className={`bg-transparent flex-1 outline-none min-w-[120px] px-2 md:px-0 placeholder:text-slate-600 ${textHead}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
              
+             {/* Situação das campanhas */}
+             <div className={`flex flex-wrap items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                {([['ALL', 'Todas'], ['ativo', 'Ativas'], ['pausado', 'Pausadas'], ['suspenso', 'Suspensas'], ['sem_veicular', 'Sem veicular']] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => changeStatusFilter(key)} aria-pressed={statusFilter === key}
+                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${statusFilter === key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`}>
+                    {key !== 'ALL' && <span className={`w-2 h-2 rounded-full ${DOT[key]}`} />}{label} <span className="font-normal tabular-nums opacity-70">{key === 'ALL' ? filteredProducts.length : statusCount[key]}</span>
+                  </button>
+                ))}
+             </div>
+
              {/* O que cada linha da tabela é */}
              <div className={`flex items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                 {LEVELS.map(l => (
@@ -709,10 +731,10 @@ export default function ProductsPage() {
         {/* GRID OU TABELA DE PRODUTOS */}
         {loading && products.length === 0 ? (
           <div className="flex justify-center items-center h-64 text-slate-500">Carregando produtos...</div>
-        ) : filteredProducts.length === 0 ? (
+        ) : shownProducts.length === 0 ? (
            <div className={`flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed rounded-xl ${isDark ? 'border-slate-800' : 'border-slate-300'}`}><Layers size={32} className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada com os filtros atuais.</p></div>
         ) : (
-          <CampaignTable products={filteredProducts} level={level} sort={sort} onSort={changeSort} rates={rates} isDark={isDark}
+          <CampaignTable products={shownProducts} level={level} sort={sort} onSort={changeSort} rates={rates} isDark={isDark}
             selected={selectedProducts} onToggleSelect={toggleSelectProduct} onSelectAll={handleSelectAll}
             onOpen={product => router.push(`/products/${product.id}`)}
             onPickAccount={(mcc, account) => { handleSelectAccount(mcc, account); changeLevel('campaigns'); }}
