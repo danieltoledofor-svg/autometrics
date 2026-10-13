@@ -84,11 +84,6 @@ export default function ProductsPage() {
   
   const [expandedMccs, setExpandedMccs] = useState<string[]>([]);
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newProduct, setNewProduct] = useState({ 
-    name: '', campaign_name: '', platform: '', currency: 'BRL', status: 'active', account_name: 'Manual', mcc_name: 'Manual' 
-  });
-  const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState('');
   const [canCreate, setCanCreate] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -535,20 +530,6 @@ export default function ProductsPage() {
     await supabase.from('products').update({ is_hidden: newHidden }).eq('id', product.id);
   };
 
-  const handleSave = async () => {
-    if (!newProduct.name || !newProduct.campaign_name) return alert("Preencha campos.");
-    setSaving(true);
-    const { data, error } = await supabase.from('products').insert([{ ...newProduct, user_id: userId }]).select();
-    if (error) alert('Erro: ' + error.message);
-    else if (data) { 
-        setProducts([data[0], ...products]); 
-        setIsModalOpen(false); 
-        const newMcc = data[0].mcc_name || 'Manual';
-        if (!expandedMccs.includes(newMcc)) setExpandedMccs([...expandedMccs, newMcc]);
-    }
-    setSaving(false);
-  };
-
   const handleReload = () => { if (userId) fetchProducts(userId, dateFilter, customStartDate, customEndDate); };
 
   // Clicar numa situação marca ou desmarca; "Todas" limpa a escolha. Marcar as quatro é o mesmo que todas.
@@ -707,8 +688,7 @@ export default function ProductsPage() {
           
           <div className="flex flex-wrap gap-3">
              <button onClick={toggleTheme} className={`hidden md:block p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
-             {canCreate && <Link href="/criar-campanha" className={`flex-1 md:flex-none justify-center px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 border ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-500' : 'border-slate-300 text-slate-700 hover:border-indigo-500'}`}><Plus size={18} /> Criar campanha no Google</Link>}
-             <button onClick={() => setIsModalOpen(true)} className="flex-1 md:flex-none justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Plus size={18} /> Novo Produto</button>
+             {canCreate && <Link href="/criar-campanha" className="flex-1 md:flex-none justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg"><Plus size={18} /> Criar campanha no Google</Link>}
           </div>
         </div>
 
@@ -827,20 +807,6 @@ export default function ProductsPage() {
                   <input type="date" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} style={isDark ? {colorScheme: 'dark'} : {}} value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
                 </div>
                 <button onClick={handleCustomDateApply} className="w-full bg-indigo-600 py-3 rounded-lg text-white font-bold hover:bg-indigo-700">Aplicar</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Novo Produto */}
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className={`rounded-xl w-full max-w-lg p-6 shadow-2xl border ${bgCard}`}>
-              <div className="flex justify-between items-center mb-6"><h2 className={`text-xl font-bold ${textHead}`}>Novo Produto Manual</h2><button onClick={() => setIsModalOpen(false)}><X size={24} className="text-slate-400 hover:text-indigo-500" /></button></div>
-              <div className="space-y-4">
-                <input type="text" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} placeholder="Nome do Produto" value={newProduct.name} onChange={e=>setNewProduct({...newProduct, name: e.target.value})} />
-                <input type="text" className={`w-full border rounded-lg p-3 outline-none ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} placeholder="Campanha Google Ads (Exato)" value={newProduct.campaign_name} onChange={e=>setNewProduct({...newProduct, campaign_name: e.target.value})} />
-                <button onClick={handleSave} className="w-full bg-indigo-600 py-3 rounded-lg text-white font-bold hover:bg-indigo-700">{saving ? 'Salvando...' : 'Salvar'}</button>
               </div>
             </div>
           </div>
