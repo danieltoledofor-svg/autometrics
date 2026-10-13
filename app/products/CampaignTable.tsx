@@ -191,7 +191,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
                       <button onClick={() => onPickAccount(p.mcc_name || 'Outras', p.account_name || 'Sem Conta')} title="Ver só esta conta" className={`block w-full text-left truncate ${text} hover:text-indigo-400`}>{p.account_name || 'Sem Conta'}</button>
                       <div className={`text-[11px] truncate ${muted}`}>{p.mcc_name || 'Outras'}</div>
                     </td>
-                    {num(n.budget, n.budget ? money(n.budget, p.currency) : '—')}
+                    <td className={`px-3 text-right tabular-nums ${n.budget ? text : zero}`} title={p.metrics7d?.budgetDate ? `Lido do Google em ${String(p.metrics7d.budgetDate).split('-').reverse().join('/')}` : undefined}>{n.budget ? money(n.budget, p.currency) : '—'}</td>
                     {numbers(n, p.currency)}
                     <td className="px-2" onClick={e => e.stopPropagation()}><div className="flex justify-end gap-1">{actions(p)}</div></td>
                   </tr>

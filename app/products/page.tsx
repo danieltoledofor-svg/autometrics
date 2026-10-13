@@ -259,7 +259,7 @@ export default function ProductsPage() {
            }
        }
        
-       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, impressions: number, clicks: number, budget: number}> = {};
+       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, impressions: number, clicks: number, budget: number, budgetDate?: string}> = {};
        prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, profit: 0, roi: 0, impressions: 0, clicks: 0, budget: 0 });
        
        if (metricsData) {
@@ -283,7 +283,7 @@ export default function ProductsPage() {
        const statusFrom = getLocalYYYYMMDD(statusWindow);
        const statusMap: Record<string, { date: string; effective_status?: string; campaign_status?: string; campaign_status_reasons?: string }> = {};
        // Orçamento diário: o Google só informa o de hoje, e a coleta grava no dia em que leu.
-       // Vale o mais recente dos últimos 7 dias.
+       // Vale a leitura mais recente.
        const budgetMap: Record<string, { date: string; value: number }> = {};
 
        // As colunas novas só existem depois da migration; até lá o PostgREST
@@ -315,11 +315,29 @@ export default function ProductsPage() {
           });
        }
 
+       // Campanha sem leitura nos últimos 7 dias (pausada há mais tempo): vale o orçamento da última
+       // vez em que foi lida, sem limite de dias. As linhas vêm da mais nova para a mais antiga, e a
+       // busca de cada lote para quando todas as campanhas dele já têm valor.
+       if (statusCols === STATUS_COLS_FULL) {
+          const missing = productIds.filter((id: string) => !budgetMap[id]);
+          for (let i = 0; i < missing.length; i += chunkSize) {
+             const idChunk = missing.slice(i, i + chunkSize);
+             for (let page = 0; ; page++) {
+                const { data: old } = await supabase.from('daily_metrics').select('product_id, date, budget_micros')
+                  .in('product_id', idChunk).gt('budget_micros', 0).lt('date', statusFrom)
+                  .order('date', { ascending: false }).range(page * 1000, (page + 1) * 1000 - 1);
+                ((old || []) as any[]).forEach((r: any) => { if (!budgetMap[r.product_id]) budgetMap[r.product_id] = { date: r.date, value: Number(r.budget_micros) / 1000000 }; });
+                if (!old || old.length < 1000 || idChunk.every((id: string) => budgetMap[id])) break;
+             }
+          }
+       }
+
        const finalProducts = prodData.map((p: any) => {
           const m = metricsMap[p.id];
           m.profit = m.revenue - m.cost;
           if (m.cost > 0) m.roi = (m.profit / m.cost) * 100;
           m.budget = budgetMap[p.id]?.value || 0;
+          m.budgetDate = budgetMap[p.id]?.date || '';
           const latest = statusMap[p.id];
           return {
             ...p,
