@@ -525,6 +525,9 @@ export default function ProductsPage() {
      localStorage.setItem('autometrics_selected_mcc', 'all');
   };
 
+  /** Tira só a conta e continua na MCC dela. */
+  const clearAccount = () => { setSelectedAccount(null); localStorage.removeItem('autometrics_products_account'); };
+
   const toggleProductVisibility = async (product: any, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     const newHidden = !product.is_hidden;
@@ -675,7 +678,30 @@ export default function ProductsPage() {
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
-            <div className={`flex flex-wrap items-center gap-2 text-xs ${textMuted} mb-1`}>{selectedMcc ? (<><span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedMcc}</span>{selectedAccount && <><ChevronRight size={12}/> <span className={`px-2 py-0.5 rounded text-indigo-500 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>{selectedAccount}</span></>}</>) : (<span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>Todas as MCCs</span>)}</div>
+            {/* O que a tabela está mostrando. Com MCC ou conta escolhida, cada etiqueta tem um ✕ e há um botão que volta a mostrar tudo. */}
+            <div className={`flex flex-wrap items-center gap-2 text-xs ${textMuted} mb-1`}>
+              {!selectedMcc && !selectedAccount ? (
+                <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>Todas as MCCs</span>
+              ) : (
+                <>
+                  {selectedMcc && (
+                    <span className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>
+                      MCC: <b className={textHead}>{selectedMcc}</b>
+                      <button onClick={resetFilters} aria-label={`Tirar a MCC ${selectedMcc}`} title="Tirar esta MCC" className="p-0.5 rounded hover:text-rose-500"><X size={12} /></button>
+                    </span>
+                  )}
+                  {selectedAccount && (
+                    <span className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>
+                      Conta: <b className="text-indigo-500">{selectedAccount}</b>
+                      <button onClick={clearAccount} aria-label={`Tirar a conta ${selectedAccount}`} title="Tirar esta conta e ficar na MCC" className="p-0.5 rounded hover:text-rose-500"><X size={12} /></button>
+                    </span>
+                  )}
+                  <button onClick={resetFilters} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border font-bold transition-colors ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-500 hover:text-indigo-300' : 'border-slate-300 text-slate-700 hover:border-indigo-500 hover:text-indigo-700'}`}>
+                    <X size={12} /> Limpar e ver todas as MCCs
+                  </button>
+                </>
+              )}
+            </div>
             <h1 className={`text-2xl font-bold flex flex-wrap items-center gap-2 ${textHead}`}>{selectedAccount || selectedMcc || 'Gerenciador de Campanhas'}</h1>
           </div>
           
