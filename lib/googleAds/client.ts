@@ -330,7 +330,15 @@ export async function ingestSale(refreshToken: string, where: { conversionCustom
 }
 
 /** Remove os hífens de "123-456-7890". */
-export interface MutateProblem { message: string; code: string; operation: number | null; field: string }
+export interface MutateProblem {
+  message: string; code: string; operation: number | null; field: string;
+  /** Família do erro no Google (criterionError, policyViolationError…). */
+  kind: string;
+  /** O valor que o Google apontou como causa (o texto da palavra-chave, por exemplo). */
+  trigger: string;
+  /** Quando é política de anúncios: o nome e a descrição que o Google dá, e se ele aceita pedido de exceção. */
+  policy: { name: string; description: string; exemptible: boolean } | null;
+}
 
 /**
  * Várias alterações de tipos diferentes num pedido só (orçamento, campanha,
@@ -355,14 +363,20 @@ export async function mutateAll(ctx: AdsContext, mutateOperations: any[], valida
     for (const e of detail.errors || []) {
       const path: any[] = e.location?.fieldPathElements || [];
       const op = path.find(x => x.fieldName === 'mutate_operations' || x.fieldName === 'operations');
+      const violation = e.details?.policyViolationDetails, topics: any[] = e.details?.policyFindingDetails?.policyTopicEntries || [];
+      const trigger = e.trigger || {};
       problems.push({
         message: e.message || 'O Google recusou.', code: String(Object.values(e.errorCode || {})[0] || ''),
+        kind: String(Object.keys(e.errorCode || {})[0] || ''),
+        trigger: String(trigger.stringValue ?? trigger.int64Value ?? trigger.doubleValue ?? violation?.key?.violatingText ?? ''),
+        policy: violation ? { name: String(violation.externalPolicyName || violation.key?.policyName || ''), description: String(violation.externalPolicyDescription || ''), exemptible: violation.isExemptible === true }
+          : topics.length ? { name: topics.map(t => String(t.topic || '')).filter(Boolean).join(', '), description: '', exemptible: false } : null,
         operation: op && op.index !== undefined ? Number(op.index) : null,
         field: path.filter(x => x !== op).map(x => (x.index !== undefined ? `${x.fieldName}[${x.index}]` : x.fieldName)).join('.'),
       });
     }
   }
-  if (!problems.length) problems.push({ message: err?.message || text.slice(0, 300) || `HTTP ${res.status}`, code: err?.status || '', operation: null, field: '' });
+  if (!problems.length) problems.push({ message: err?.message || text.slice(0, 300) || `HTTP ${res.status}`, code: err?.status || '', operation: null, field: '', kind: '', trigger: '', policy: null });
   return { results: [], problems };
 }
 

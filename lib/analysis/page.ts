@@ -33,8 +33,8 @@ export function landingUrl(c: Computed): string | null {
   return [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 }
 
-/** Texto da página com as marcas de seção (id/classe) que dizem a intenção do trecho. */
-export async function fetchPageText(url: string): Promise<string> {
+/** O código-fonte da página, como o "exibir código-fonte" do navegador: um pedido só, sem rodar nada dela. */
+export async function fetchPageHtml(url: string): Promise<string> {
   const res = await fetch(url, {
     // Página de afiliado costuma recusar o que não parece navegador.
     headers: {
@@ -46,7 +46,11 @@ export async function fetchPageText(url: string): Promise<string> {
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error(`a página respondeu ${res.status}`);
-  const html = (await res.text()).slice(0, 2_000_000);
+  return (await res.text()).slice(0, 3_000_000);
+}
+
+/** Texto de um código-fonte, com as marcas de seção (id) e de título que dizem a intenção de cada trecho. */
+export function htmlToText(html: string, max = 14_000): string {
   return html
     .replace(/<(script|style|noscript|svg|iframe)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<(section|div|article|header|footer)\b[^>]*\bid="([^"]+)"[^>]*>/gi, '\n[seção $2]\n')
@@ -58,7 +62,12 @@ export async function fetchPageText(url: string): Promise<string> {
     .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(Number(d)))
     .replace(/&#x([0-9a-f]+);/gi, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim()
-    .slice(0, 14_000);
+    .slice(0, max);
+}
+
+/** Texto da página com as marcas de seção (id/classe) que dizem a intenção do trecho. */
+export async function fetchPageText(url: string): Promise<string> {
+  return htmlToText((await fetchPageHtml(url)).slice(0, 2_000_000));
 }
 
 export function pageHash(pageText: string, transcript: string, c: Computed): string {

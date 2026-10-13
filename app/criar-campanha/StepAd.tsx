@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Check, Loader2, Plus, Sparkles, X } from 'lucide-react';
-import { AD_MAX, adProblems, type Draft } from '@/lib/campaignBuilder/draft';
+import { Check, Loader2, Plus, Sparkles, Trash2, Undo2, X } from 'lucide-react';
+import { AD_MAX, adProblems, keywordProblem, type Draft } from '@/lib/campaignBuilder/draft';
 import { LIMITS, VARIATIONS, count, type Item, type Offer, type ResourceKind } from '@/lib/campaignBuilder/rules';
 import type { Similar, SimilarRow } from '@/lib/campaignBuilder/similar';
 import { Block, type Css } from './StepCampaign';
@@ -81,6 +81,11 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [newKeywords, setNewKeywords] = useState('');
+  /** As palavras-chave que estavam na campanha antes do último "Limpar todas", para poder voltar atrás. */
+  const [cleared, setCleared] = useState<Draft['palavras'] | null>(null);
+  /** Código-fonte colado pelo usuário, para quando a página recusa a leitura. Não fica guardado no rascunho. */
+  const [source, setSource] = useState('');
+  const [pasting, setPasting] = useState(false);
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }));
   const setAd = (patch: Partial<Draft['anuncio']>) => setDraft(d => ({ ...d, anuncio: { ...d.anuncio, ...patch } }));
   const setIa = (patch: Partial<Draft['ia']>) => setDraft(d => ({ ...d, ia: { ...d.ia, ...patch } }));
@@ -104,8 +109,9 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
     setSimilar(body.similar);
   });
   const readOffer = () => run('oferta', async () => {
-    const { ok, body } = await api('/api/campaign-builder', { action: 'oferta', url: draft.ia.url });
-    if (!ok || !body.offer) return body.error || 'Não foi possível ler a página.';
+    const { ok, body } = await api('/api/campaign-builder', { action: 'oferta', url: draft.ia.url, fonte: source });
+    if (body.blocked) setPasting(true);
+    if (!ok || !body.offer) return `${body.error || 'Não foi possível ler a página.'}${body.blocked ? ' Cole o código-fonte dela no campo abaixo e leia de novo.' : ''}`;
     // O que a página não diz continua como estava (ou em branco): a IA não pode inventar.
     const read = Object.fromEntries(Object.entries(body.offer).filter(([k, v]) => k !== 'idioma_pagina' && v !== '' && v !== null && v !== false));
     setOffer(read as Partial<Offer>);
@@ -113,11 +119,11 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
   const generate = () => run('recursos', async () => {
     const payload = draft.funil === 'fundo'
       ? { action: 'recursos', funil: 'fundo', oferta: { ...o, idioma: draft.ia.idioma, pais: draft.ia.pais } }
-      : { action: 'recursos', funil: 'topo', topo: { url: draft.ia.url, idioma: draft.ia.idioma, pais: draft.ia.pais, vsl: draft.ia.vsl, palavras: draft.palavras.map(keyword), termos: (similar?.termos || []).map(t => t.texto) } };
+      : { action: 'recursos', funil: 'topo', topo: { url: draft.ia.url, fonte: source, idioma: draft.ia.idioma, pais: draft.ia.pais, vsl: draft.ia.vsl, palavras: draft.palavras.map(keyword), termos: (similar?.termos || []).map(t => t.texto) } };
     const { ok, body } = await api('/api/campaign-builder', payload);
     if (!ok || !body.pack) return body.error || 'A IA não respondeu. Tente de novo.';
     set({ sugestoes: body.pack });
-    if (draft.funil === 'topo' && body.page_read === false && draft.ia.url.trim()) return 'A página não pôde ser lida; a IA escreveu só com as palavras-chave, os termos e a transcrição.';
+    if (draft.funil === 'topo' && body.page_read === false && draft.ia.url.trim()) { setPasting(true); return 'O código da página não pôde ser baixado; a IA escreveu só com as palavras-chave, os termos e a transcrição. Cole o código-fonte no campo abaixo e gere de novo.'; }
   });
 
   const addKeywords = (list: { texto: string; tipo: string }[]) => setDraft(d => {
@@ -221,23 +227,44 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
       <Block css={css} title={`Palavras-chave (${draft.palavras.length})`} hint='Valem para todos os grupos. Uma por linha ou separadas por vírgula: [colchetes] para exata, "aspas" para frase; sem nada, ampla.'>
         <div className="flex flex-wrap gap-1.5">
           {draft.palavras.map((k, i) => (
-            <span key={i} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${line} ${head}`}>{keyword(k)} <span className={muted}>· {MATCH[k.tipo] || k.tipo}</span>
+            <span key={i} title={keywordProblem(k.texto) || undefined} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${keywordProblem(k.texto) ? 'border-rose-500/70' : line} ${head}`}>{keyword(k)} <span className={muted}>· {MATCH[k.tipo] || k.tipo}</span>
               <button onClick={() => set({ palavras: draft.palavras.filter((_, j) => j !== i) })} aria-label={`Remover a palavra-chave ${k.texto}`} className={`${muted} hover:text-rose-400`}><X size={12} /></button></span>
           ))}
           {!draft.palavras.length && <span className={`text-xs ${muted}`}>nenhuma</span>}
         </div>
+        {(draft.palavras.length > 0 || cleared) && (
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            {draft.palavras.length > 0 && (
+              <button onClick={() => { setCleared(draft.palavras); set({ palavras: [] }); }} className={`font-bold inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border ${line} ${muted} hover:text-rose-400 hover:border-rose-500/60`}>
+                <Trash2 size={13} /> Limpar todas ({draft.palavras.length})
+              </button>
+            )}
+            {cleared && !draft.palavras.length && (
+              <>
+                <span className={muted}>{cleared.length} {cleared.length === 1 ? 'palavra-chave foi tirada' : 'palavras-chave foram tiradas'}.</span>
+                <button onClick={() => { set({ palavras: cleared }); setCleared(null); }} className="font-bold inline-flex items-center gap-1 text-indigo-400 hover:underline"><Undo2 size={13} /> Desfazer</button>
+              </>
+            )}
+          </div>
+        )}
         <div className="flex gap-2 items-end">
           <textarea value={newKeywords} onChange={e => setNewKeywords(e.target.value)} rows={2} placeholder={'baking soda recipe\n"baking soda shot"\n[fizzclean]'} aria-label="Novas palavras-chave" className={`flex-1 resize-y ${field}`} />
-          <button onClick={() => { addKeywords(parseKeywords(newKeywords)); setNewKeywords(''); }} disabled={!newKeywords.trim()} className={`px-3 py-2 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-40`}>Adicionar</button>
+          <button onClick={() => { addKeywords(parseKeywords(newKeywords)); setNewKeywords(''); setCleared(null); }} disabled={!newKeywords.trim()} className={`px-3 py-2 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-40`}>Adicionar</button>
         </div>
       </Block>
 
       <Block css={css} title={`Recursos escritos pela IA · ${draft.funil === 'fundo' ? 'fundo de funil' : 'topo de funil'}`}
-        hint={draft.funil === 'fundo' ? 'A IA usa só os valores abaixo: o que ficar em branco não entra no anúncio e nada é calculado. Cada pedido é uma consulta paga à IA (poucos centavos).' : 'A IA lê a página, a transcrição da VSL, as palavras-chave e os termos que mais converteram nas campanhas parecidas (busque acima antes). Cada pedido é uma consulta paga à IA (poucos centavos).'}>
+        hint={draft.funil === 'fundo' ? 'A página é lida pelo código-fonte, para achar preço, garantia e frete mesmo quando não estão no texto. A IA usa só os valores abaixo: o que ficar em branco não entra no anúncio e nada é calculado. Cada pedido é uma consulta paga à IA (poucos centavos).' : 'A IA lê o código-fonte da página, a transcrição da VSL, as palavras-chave e os termos que mais converteram nas campanhas parecidas (busque acima antes). Cada pedido é uma consulta paga à IA (poucos centavos).'}>
         <div className="flex gap-2">
           <input value={draft.ia.url} onChange={e => setIa({ url: e.target.value })} placeholder={draft.funil === 'fundo' ? 'Página do produto: https://…' : 'Página do anúncio: https://…'} aria-label="Página para a IA ler" className={`flex-1 ${field}`} />
           {draft.funil === 'fundo' && <button onClick={readOffer} disabled={busy !== '' || !/^https?:\/\//i.test(draft.ia.url.trim())} className={`px-3 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-40 inline-flex items-center gap-1.5`}>{busy === 'oferta' && <Loader2 size={12} className="animate-spin" />} Ler a página</button>}
         </div>
+        {pasting ? (
+          <div className="space-y-1">
+            <textarea value={source} onChange={e => setSource(e.target.value.slice(0, 3_000_000))} rows={3} spellCheck={false} placeholder="Cole aqui o código-fonte da página. No navegador: abra a página, aperte Ctrl+U (no Mac, ⌥⌘U), selecione tudo, copie e cole." aria-label="Código-fonte da página" className={`w-full resize-y font-mono !text-[11px] ${field}`} />
+            <div className={`text-xs ${muted}`}>{source.trim().length > 200 ? `Código colado (${Math.round(source.length / 1000).toLocaleString('pt-BR')} mil letras): a leitura usa este código, e não baixa a página.` : 'Em branco, o Autometrics baixa o código da página sozinho.'} <button onClick={() => { setSource(''); setPasting(false); }} className="text-indigo-400 hover:underline">{source ? 'Apagar e fechar' : 'Fechar'}</button></div>
+          </div>
+        ) : <button onClick={() => setPasting(true)} className={`text-xs ${muted} hover:text-indigo-400 underline decoration-dotted text-left`}>A página bloqueia a leitura? Cole o código-fonte dela</button>}
         <div className="grid grid-cols-2 gap-2">
           <input value={draft.ia.idioma} onChange={e => setIa({ idioma: e.target.value })} placeholder="Idioma do anúncio: inglês" aria-label="Idioma do anúncio" className={field} />
           <input value={draft.ia.pais} onChange={e => setIa({ pais: e.target.value })} placeholder={draft.funil === 'fundo' ? 'País (sigla): US, CA, BR…' : 'País: Estados Unidos'} aria-label="País do anúncio" className={field} />

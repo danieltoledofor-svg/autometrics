@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Plus, Search, X } from 'lucide-react';
 import { campaignProblems, type Draft } from '@/lib/campaignBuilder/draft';
 import { TRACKERS } from '@/lib/campaignBuilder/url';
@@ -17,6 +17,9 @@ export interface Css { isDark: boolean; card: string; head: string; muted: strin
 /** Os que aparecem antes de digitar. */
 const COMMON_LANGUAGES = ['Inglês', 'Português', 'Espanhol', 'Francês', 'Alemão', 'Italiano', 'Holandês'];
 const PLACE: Record<string, string> = { Country: 'país', State: 'estado', Province: 'província', Region: 'região', City: 'cidade', County: 'condado', 'Postal Code': 'CEP', DMA: 'região de mídia' };
+
+/** Sem acento e em minúsculas: "ingles" acha "Inglês". */
+const plain = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 const toNumber = (text: string) => { const v = Number(String(text).replace(',', '.')); return text.trim() === '' || !Number.isFinite(v) ? null : v; };
 
@@ -40,10 +43,12 @@ function NumberField({ value, onChange, css, width = 'w-28', placeholder, label 
   );
 }
 
-export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languages, onNext }: {
+export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languages, reloadLanguages, onNext }: {
   draft: Draft; setDraft: (fn: (d: Draft) => Draft) => void; symbol: string; css: Css;
   /** Idiomas que o Google aceita. null = ainda carregando ou a lista não veio. */
   languages: { id: string; nome: string }[] | null;
+  /** A lista de idiomas não veio: tenta de novo. */
+  reloadLanguages?: () => void;
   findPlaces: (text: string) => Promise<{ places?: { id: string; nome: string; tipo: string }[]; error?: string }>; onNext: () => void;
 }) {
   const { isDark, card, head, muted, line, soft, label } = css;
@@ -56,18 +61,39 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languag
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }));
   const problems = campaignProblems(draft);
 
-  const search = async () => {
-    if (placeText.trim().length < 2) return;
-    setSearching(true); setPlaceError('');
-    const res = await findPlaces(placeText.trim());
-    setPlaces(res.places || []);
-    setPlaceError(res.error || (res.places?.length ? '' : 'Nenhum local com esse nome.'));
-    setSearching(false);
-  };
+  // Os locais aparecem enquanto o usuário digita: a busca sai um instante depois da última letra,
+  // e só a resposta do texto que está no campo é mostrada. O que já foi buscado não vai ao Google de novo.
+  const placeCache = useRef(new Map<string, { id: string; nome: string; tipo: string }[]>());
+  const placeInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const text = placeText.trim(), key = plain(text);
+    if (text.length < 2) { setPlaces([]); setPlaceError(''); setSearching(false); return; }
+    const show = (list: { id: string; nome: string; tipo: string }[]) => { setPlaces(list); setPlaceError(list.length ? '' : 'Nenhum local com esse nome. Tente o nome em inglês ou mais letras.'); setSearching(false); };
+    const hit = placeCache.current.get(key);
+    if (hit) { show(hit); return; }
+    let current = true;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      const res = await findPlaces(text).catch(() => ({ error: 'A busca de locais não respondeu.' } as { places?: { id: string; nome: string; tipo: string }[]; error?: string }));
+      if (!current) return;
+      if (res.error) { setPlaces([]); setPlaceError(res.error); setSearching(false); return; }
+      placeCache.current.set(key, res.places || []);
+      show(res.places || []);
+    }, 350);
+    return () => { current = false; clearTimeout(timer); };
+    // findPlaces é recriada a cada desenho da tela; a busca depende só do texto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placeText]);
   const addPlace = (p: { id: string; nome: string }, excluido: boolean) => {
     setDraft(d => ({ ...d, locais: [...d.locais.filter(l => l.id !== p.id), { id: p.id, nome: p.nome, excluido }] }));
-    setPlaces([]); setPlaceText('');
+    setPlaceText(''); placeInput.current?.focus();
   };
+  // Idiomas: primeiro os que começam com o que foi digitado, depois os que contêm.
+  const langQuery = plain(langText);
+  const langMatches = (languages || []).filter(l => !draft.idiomas.some(i => i.id === l.id))
+    .filter(l => (langQuery ? plain(l.nome).includes(langQuery) : COMMON_LANGUAGES.includes(l.nome)))
+    .sort((a, b) => Number(plain(b.nome).startsWith(langQuery)) - Number(plain(a.nome).startsWith(langQuery))).slice(0, 24);
+  const addLanguage = (l: { id: string; nome: string }) => { set({ idiomas: [...draft.idiomas, l] }); setLangText(''); };
   const addNegatives = () => {
     const list = negatives.split(/[\n,]/).map(x => x.trim()).filter(Boolean).map(raw => {
       const exact = raw.match(/^\[(.+)\]$/), phrase = raw.match(/^"(.+)"$/);
@@ -154,17 +180,14 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languag
             </div>
           </div>
         ))}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
-            <input value={placeText} onChange={e => setPlaceText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') search(); }} placeholder="País, estado ou cidade" aria-label="Procurar local"
-              className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-3 py-2 text-[13px] outline-none focus:border-indigo-500`} />
-          </div>
-          <button onClick={search} disabled={searching || placeText.trim().length < 2} className={`px-3 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-40 inline-flex items-center gap-1.5`}>
-            {searching && <Loader2 size={12} className="animate-spin" />} Procurar
-          </button>
+        <div className="relative">
+          <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
+          <input ref={placeInput} value={placeText} onChange={e => setPlaceText(e.target.value)} placeholder="Comece a digitar: país, estado ou cidade" aria-label="Procurar local" autoComplete="off"
+            className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-9 py-2 text-[13px] outline-none focus:border-indigo-500`} />
+          {searching && <Loader2 size={14} className={`absolute right-3 top-1/2 -translate-y-1/2 animate-spin ${muted}`} />}
         </div>
-        {placeError && <div className="text-xs text-amber-500">{placeError}</div>}
+        {placeText.trim().length < 2 && <div className={`text-xs ${muted}`}>Os locais aparecem enquanto você digita, a partir da segunda letra.</div>}
+        {placeError && !searching && <div className="text-xs text-amber-500">{placeError}</div>}
         {places.length > 0 && (
           <div className={`rounded-lg border ${line} divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
             {places.map(p => (
@@ -188,17 +211,23 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, languag
           ))}
           {!draft.idiomas.length && <span className={`text-xs ${muted}`}>todos os idiomas</span>}
         </div>
-        {languages ? (
+        {languages?.length ? (
           <>
-            <input value={langText} onChange={e => setLangText(e.target.value)} placeholder="Procurar idioma: inglês, espanhol, francês…" aria-label="Procurar idioma"
-              className={`w-full rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500`} />
-            <div className="flex flex-wrap gap-1.5">
-              {languages.filter(l => !draft.idiomas.some(i => i.id === l.id))
-                .filter(l => (langText.trim() ? l.nome.toLowerCase().includes(langText.trim().toLowerCase()) : COMMON_LANGUAGES.includes(l.nome)))
-                .slice(0, 24).map(l => <button key={l.id} onClick={() => { set({ idiomas: [...draft.idiomas, l] }); setLangText(''); }} className={choice(false)}>{l.nome}</button>)}
+            <div className="relative">
+              <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
+              <input value={langText} onChange={e => setLangText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && langQuery && langMatches[0]) addLanguage(langMatches[0]); }}
+                placeholder="Comece a digitar: inglês, espanhol, francês…" aria-label="Procurar idioma" autoComplete="off"
+                className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-3 py-2 text-[13px] outline-none focus:border-indigo-500`} />
             </div>
-            {!langText.trim() && <div className={`text-xs ${muted}`}>Aparecem os mais usados; digite para achar qualquer outro dos {languages.length}.</div>}
+            <div className="flex flex-wrap gap-1.5">
+              {langMatches.map((l, i) => <button key={l.id} onClick={() => addLanguage(l)} className={`${choice(false)} ${langQuery && i === 0 ? '!border-indigo-500' : ''}`}>{l.nome}</button>)}
+            </div>
+            <div className={`text-xs ${langQuery && !langMatches.length ? 'text-amber-500' : muted}`}>
+              {!langQuery ? `Aparecem os mais usados; digite para achar qualquer outro dos ${languages.length}.` : langMatches.length ? 'Clique no idioma, ou aperte Enter para escolher o primeiro.' : 'Nenhum idioma com esse nome.'}
+            </div>
           </>
+        ) : languages ? (
+          <div className="text-xs text-amber-500">A lista de idiomas do Google não veio. {reloadLanguages && <button onClick={reloadLanguages} className="font-bold text-indigo-400 hover:underline">Tentar de novo</button>}</div>
         ) : <div className={`text-xs ${muted}`}>Carregando os idiomas do Google…</div>}
       </Block>
 

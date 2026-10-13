@@ -95,7 +95,7 @@ export interface TopContext {
   termos?: string[];
   /** Palavras-chave da campanha nova. */
   palavras?: string[];
-  pagina?: string;               // texto da página
+  pagina?: string;               // o que o código-fonte da página diz (lib/campaignBuilder/pageSource)
   vsl?: string;                  // transcrição da VSL
 }
 
@@ -184,7 +184,7 @@ export function userForTop(c: TopContext): string {
     `GRUPOS DE BUSCA (do mais importante para o menos):\n${groups.join('\n') || '(não vieram separados: monte você de 3 a 6 grupos pela intenção de quem busca, a partir das palavras-chave e dos termos abaixo)'}`,
     `PALAVRAS-CHAVE DA CAMPANHA:\n${(c.palavras || []).slice(0, 30).join(' · ') || '(não informadas)'}`,
     `TERMOS DE PESQUISA QUE MAIS CONVERTERAM EM CAMPANHAS PARECIDAS:\n${(c.termos || []).slice(0, 40).join(' · ') || '(sem histórico)'}`,
-    `PÁGINA (começo):\n${String(c.pagina || '(não enviada)').slice(0, 6000)}`,
+    `PÁGINA (código-fonte, separado em blocos: cabeçalho, dados declarados, texto, botões, imagens):\n${String(c.pagina || '(não enviada)').slice(0, 16000)}`,
     `VSL (transcrição, começo):\n${String(c.vsl || '(não enviada)').slice(0, 9000)}`,
   ].join('\n\n');
 }

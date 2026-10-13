@@ -34,20 +34,26 @@ export async function generateResources(ids: { userId: string; productId?: strin
 
 // ── Leitura da página do produto (fundo de funil) ───────────────────────────
 
-const EXTRACT_SYSTEM = `Você lê o texto de uma página de produto e devolve só o que está ESCRITO nela. Não calcule, não deduza e não invente: o que não estiver escrito de forma literal volta vazio.
+const EXTRACT_SYSTEM = `Você lê o código-fonte de uma página de produto, já separado em blocos (cabeçalho, dados declarados no código, texto da página, botões, textos das imagens e trechos de código), e devolve só o que está ESCRITO nele. Não calcule, não deduza e não invente: o que não estiver escrito de forma literal volta vazio.
+
+Como ler:
+- O preço pode estar só nos dados declarados ou nos trechos de código, e não no texto: vale do mesmo jeito. Se houver vários preços (1, 3 e 6 frascos, por exemplo), use o menor preço por unidade que estiver escrito.
+- Garantia só conta com o número de dias escrito. Frete só conta se a página disser.
+- "oficial" é true só se a página se apresenta como site oficial ou loja oficial do produto.
 
 Responda só com JSON:
-{"produto": "nome do produto", "idioma_pagina": "idioma em que a página está escrita", "preco": "preço atual como aparece", "preco_original": "preço de antes, só se aparecer", "desconto_valor": "valor do desconto, só se escrito", "desconto_pct": "percentual, só se escrito", "frete": "gratis | rapido | vazio", "garantia_dias": número ou null, "oficial": true ou false}`;
+{"produto": "nome do produto", "idioma_pagina": "idioma em que a página está escrita", "moeda": "código da moeda dos preços (USD, EUR, BRL…), só se der para saber pelo símbolo ou pelo código", "preco": "preço atual como aparece", "preco_original": "preço de antes, só se aparecer", "desconto_valor": "valor do desconto, só se escrito", "desconto_pct": "percentual, só se escrito", "frete": "gratis | rapido | imediato | expresso | vazio", "garantia_dias": número ou null, "oficial": true ou false}`;
 
-/** O que a página revela sozinha; o resto (país, idioma do anúncio, moeda, tons) o usuário confirma na tela. */
-export async function extractOffer(ids: { userId: string }, pageText: string): Promise<Partial<Offer> & { idioma_pagina?: string }> {
-  const raw = await askJson<any>({ fn: 'recursos', userId: ids.userId, system: EXTRACT_SYSTEM, user: `PÁGINA:\n${pageText.slice(0, 12000)}`, maxTokens: 800 });
+/** O que a página revela sozinha; o resto (país, idioma do anúncio, tons) o usuário confirma na tela. */
+export async function extractOffer(ids: { userId: string }, pageSource: string): Promise<Partial<Offer> & { idioma_pagina?: string }> {
+  const raw = await askJson<any>({ fn: 'recursos', userId: ids.userId, system: EXTRACT_SYSTEM, user: `CÓDIGO-FONTE DA PÁGINA:\n${pageSource.slice(0, 30000)}`, maxTokens: 800 });
   const text = (v: any) => String(v ?? '').trim().slice(0, 80);
   const days = Number(raw?.garantia_dias);
   return {
-    produto: text(raw?.produto), idioma_pagina: text(raw?.idioma_pagina), preco: text(raw?.preco), preco_original: text(raw?.preco_original),
+    produto: text(raw?.produto), idioma_pagina: text(raw?.idioma_pagina), moeda: /^[A-Za-z]{3}$/.test(text(raw?.moeda)) ? text(raw?.moeda).toUpperCase() : '',
+    preco: text(raw?.preco), preco_original: text(raw?.preco_original),
     desconto_valor: text(raw?.desconto_valor), desconto_pct: text(raw?.desconto_pct),
-    frete: raw?.frete === 'gratis' || raw?.frete === 'rapido' ? raw.frete : '',
+    frete: ['gratis', 'rapido', 'imediato', 'expresso'].includes(raw?.frete) ? raw.frete : '',
     garantia_dias: Number.isFinite(days) && days > 0 ? days : null, oficial: raw?.oficial === true,
   };
 }

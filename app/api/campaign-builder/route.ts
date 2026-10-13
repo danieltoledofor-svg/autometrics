@@ -7,7 +7,8 @@ import { search, suggestLocations, type AdsContext } from '@/lib/googleAds/clien
 import { languageName } from '@/lib/campaignBuilder/names';
 import { similarCampaigns } from '@/lib/campaignBuilder/similar';
 import { extractOffer, generateResources, type Funnel, type Offer } from '@/lib/campaignBuilder/resources';
-import { fetchPageText } from '@/lib/analysis/page';
+import { readPageSource } from '@/lib/campaignBuilder/pageSource';
+import { improveProblems } from '@/lib/campaignBuilder/explain';
 import { aiEnabled } from '@/lib/ai/openrouter';
 import { createCampaign } from '@/lib/campaignBuilder/create';
 import type { Draft } from '@/lib/campaignBuilder/draft';
@@ -27,9 +28,10 @@ export const maxDuration = 60;
  * GET ?contas=1            contas ativas do usuário, com a MCC e as campanhas que estão rodando em cada uma
  * GET ?metas=<conta>       metas de conversão personalizadas que aquela conta enxerga
  * GET ?parecidas=<trecho>  o que mais converteu nas campanhas do usuário com esse trecho no nome
- * POST { action: 'oferta', url }                 lê a página do produto (preço, garantia, frete…) com a IA
+ * POST { action: 'oferta', url, fonte? }         lê o código-fonte da página do produto (preço, garantia, frete…) com a IA;
+ *                                                `fonte` é o código colado pelo usuário, quando a página recusa o servidor
  * POST { action: 'recursos', funil, … }          títulos, descrições, sitelinks e frases de destaque pela IA
- * POST { action: 'criar', draft, linha, ensaio }  ensaia (ou cria, pausada) uma campanha em uma conta
+ * POST { action: 'criar', draft, linha, ensaio }  ensaia (ou cria, já ativa) uma campanha em uma conta; o que o Google recusar volta explicado pela IA
  *
  * Só para os logins liberados (lib/googleAds/edit).
  */
@@ -232,28 +234,34 @@ export async function POST(request: Request) {
     try {
       const result = await createCampaign(ctx, draft, { url: String(line.url || '').trim(), nome: name, conta_id: accountId, meta_id: line.meta_id ? String(line.meta_id) : null }, ensaio);
       await addUsage(result.calls).catch(() => {});
+      // O que o Google recusou volta explicado: o que é e como corrigir.
+      if (!result.ok && aiEnabled()) result.problemas = await improveProblems(user.id, result.problemas);
       if (!ensaio) {
         await supabaseAdmin().from('google_ads_actions').insert({
           user_id: user.id, customer_id: accountId, campaign_id: result.campanha_id, action: 'criar', kind: 'campanha', target: name,
-          new_status: result.ok ? 'PAUSED' : null, ok: result.ok, error: result.ok ? (result.avisos.join(' | ') || null) : result.problemas.map(p => `${p.onde}: ${p.texto}`).join(' | ').slice(0, 1000),
+          new_status: result.ok ? (result.situacao || 'ENABLED') : null, ok: result.ok, error: result.ok ? (result.avisos.join(' | ') || null) : result.problemas.map(p => `${p.onde}: ${p.texto}`).join(' | ').slice(0, 1000),
         }).then(() => null, () => null);
       }
       return NextResponse.json({ result });
     } catch (e: any) {
-      return NextResponse.json({ result: { ok: false, ensaio, campanha_id: null, problemas: [{ onde: 'Google', texto: String(e.message).slice(0, 300) }], avisos: [], calls: 0, itens: 0 } });
+      return NextResponse.json({ result: { ok: false, ensaio, campanha_id: null, situacao: null, problemas: [{ onde: 'Google', texto: `O Google não respondeu ao pedido: ${String(e.message).slice(0, 300)}`, corrigir: 'Tente de novo em alguns minutos.' }], avisos: [], calls: 0, itens: 0 } });
     }
   }
 
   if (!aiEnabled()) return NextResponse.json({ error: 'A IA está desligada no servidor.' }, { status: 409 });
-  const pageOf = async (url: any) => {
-    const u = String(url || '').trim();
+  // A página é lida pelo código-fonte. `fonte` = código colado pelo usuário, que vale no lugar do download.
+  const pageOf = async (url: any, fonte?: any) => {
+    const u = String(url || '').trim(), pasted = String(fonte || '').slice(0, 3_000_000);
+    if (pasted.trim().length > 200) return readPageSource(u, pasted);
     if (!/^https?:\/\//i.test(u)) return '';
-    return fetchPageText(u.split('?')[0]);
+    return readPageSource(u.split('?')[0]);
   };
 
   try {
     if (body.action === 'oferta') {
-      const text = await pageOf(body.url);
+      let text = '';
+      try { text = await pageOf(body.url, body.fonte); }
+      catch (e: any) { return NextResponse.json({ error: `Não deu para baixar o código da página (${e.message}).`, blocked: true }, { status: 502 }); }
       if (!text) return NextResponse.json({ error: 'Informe o endereço da página do produto, começando com https://' }, { status: 400 });
       return NextResponse.json({ offer: await extractOffer({ userId: user.id }, text) });
     }
@@ -273,7 +281,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ pack: await generateResources({ userId: user.id }, 'fundo', offer) });
       }
       const t = body.topo || {};
-      const page = await pageOf(t.url).catch(() => '');
+      const page = await pageOf(t.url, t.fonte).catch(() => '');
       const list = (v: any, max: number) => (Array.isArray(v) ? v : []).map(x => text(x, 80)).filter(Boolean).slice(0, max);
       return NextResponse.json({
         page_read: !!page,

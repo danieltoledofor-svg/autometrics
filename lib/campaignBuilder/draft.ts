@@ -127,11 +127,22 @@ export function launchPlan(d: Draft): { url: string; nome: string; conta: Draft[
 /** Quanto cabe em um anúncio de pesquisa responsivo e em uma campanha. */
 export const AD_MAX = { titulos: 15, descricoes: 4, sitelinks: 20, destaques: 20, caminho: 15 };
 
+/** O que o Google recusa numa palavra-chave e dá para ver antes de enviar: tamanho, número de palavras e símbolos. */
+export function keywordProblem(text: string): string | null {
+  const t = String(text || '').trim();
+  if (count(t) > 80) return `${count(t)} letras, o Google aceita até 80`;
+  if (t.split(/\s+/).length > 10) return `${t.split(/\s+/).length} palavras, o Google aceita até 10`;
+  const symbol = t.match(/[!@%*^=;<>{}~|\\]/);
+  if (symbol) return `o Google não aceita o símbolo ${symbol[0]} em palavra-chave`;
+  return null;
+}
+
 /** O que falta no passo Anúncio. As letras são contadas aqui, do mesmo jeito que o Google conta. */
 export function adProblems(d: Draft): string[] {
   const out: string[] = [];
   const f = d.funil, bad = (kind: Parameters<typeof problemOf>[1], text: string) => problemOf(f, kind, text);
   if (!d.palavras.length) out.push('Inclua pelo menos uma palavra-chave.');
+  for (const k of d.palavras) { const p = keywordProblem(k.texto); if (p) { out.push(`Palavra-chave "${k.texto.slice(0, 40)}": ${p}.`); break; } }
   const titles = d.anuncio.titulos.filter(t => t.trim()), descs = d.anuncio.descricoes.filter(t => t.trim());
   if (titles.length < 3) out.push('O anúncio precisa de pelo menos 3 títulos.');
   if (titles.length > AD_MAX.titulos) out.push(`O anúncio aceita até ${AD_MAX.titulos} títulos.`);

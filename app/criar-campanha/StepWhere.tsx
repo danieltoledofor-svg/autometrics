@@ -234,7 +234,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
 
       {plan.length > 0 && (
         <div className={`${card} border rounded-xl p-4 space-y-2`}>
-          <div className={`text-sm font-bold ${head}`}>O que este lançamento cria <span className={`text-xs font-normal ${muted}`}>· {plan.length} {plan.length === 1 ? 'campanha' : 'campanhas'}, todas pausadas</span></div>
+          <div className={`text-sm font-bold ${head}`}>O que este lançamento cria <span className={`text-xs font-normal ${muted}`}>· {plan.length} {plan.length === 1 ? 'campanha' : 'campanhas'}, que já nascem ativas</span></div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
               <thead><tr className={`text-left text-[11px] uppercase tracking-wide ${muted}`}><th className="py-1.5 pr-3 font-semibold">Campanha</th><th className="py-1.5 pr-3 font-semibold">MCC › conta</th><th className="py-1.5 pr-3 font-semibold">Meta</th><th className="py-1.5 font-semibold">Página</th></tr></thead>

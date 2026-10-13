@@ -18,7 +18,7 @@ import { StepReview } from './StepReview';
  * existe e ler tudo dela do Google, para servir de modelo (a leitura não altera
  * nada), ou começar do zero. Depois: a configuração da campanha, o anúncio,
  * onde subir e a conferência, que ensaia no Google e, com a confirmação do
- * usuário, cria as campanhas pausadas.
+ * usuário, cria as campanhas, que já nascem ativas.
  * Só para os logins liberados.
  */
 
@@ -137,7 +137,7 @@ export default function CampaignBuilderPage() {
           <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border ${line} ${muted} hover:text-indigo-400`}><ArrowLeft size={16} /></Link>
           <div>
             <h1 className={`text-xl font-extrabold ${head}`}>Criar campanha</h1>
-            <div className={`text-xs ${muted}`}>Rede de Pesquisa · em construção: o ensaio não cria nada; a criação só acontece no passo 5, com a sua confirmação, e tudo nasce pausado</div>
+            <div className={`text-xs ${muted}`}>Rede de Pesquisa · o ensaio não cria nada; a criação só acontece no passo 5, com a sua confirmação, e a campanha já nasce ativa</div>
           </div>
         </div>
 
@@ -156,12 +156,12 @@ export default function CampaignBuilderPage() {
         {list && list.allowed === false && <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}>O criador de campanhas ainda não está liberado para este login.</div>}
 
         {list?.allowed && step === 1 && draft && (
-          <StepCampaign draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} languages={languages} onNext={() => setStep(2)}
+          <StepCampaign draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} languages={languages} reloadLanguages={() => setLanguages(null)} onNext={() => setStep(2)}
             findPlaces={async text => (await api(`/api/campaign-builder?local=${encodeURIComponent(text)}`)).body} />
         )}
         {list?.allowed && step === 2 && draft && <StepAd draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} api={api} onNext={() => setStep(3)} />}
         {list?.allowed && step === 3 && draft && <StepWhere draft={draft} setDraft={setDraft} css={css} api={api} onNext={() => setStep(4)} />}
-        {list?.allowed && step === 4 && draft && <StepReview draft={draft} css={css} api={api} goTo={setStep} />}
+        {list?.allowed && step === 4 && draft && <StepReview draft={draft} setDraft={setDraft} css={css} api={api} goTo={setStep} />}
 
         {list?.allowed && step === 0 && (
           <div className={`${card} border rounded-xl p-4 space-y-3`}>
