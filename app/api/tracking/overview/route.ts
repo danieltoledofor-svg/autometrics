@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Tela de Rastreamento: do clique à venda, em todas as campanhas do usuário.
  *
- * GET ?period=today|d3|d7|custom[&from=AAAA-MM-DD&to=AAAA-MM-DD]
+ * GET ?period=today|yesterday|d3|d7|custom[&from=AAAA-MM-DD&to=AAAA-MM-DD]
  *
  * Os dias das visitas são os de Brasília; os das vendas, os do relógio de cada plataforma.
  */

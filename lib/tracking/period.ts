@@ -1,6 +1,6 @@
 /**
  * Período das telas de rastreamento, nos dias de Brasília.
- * ?period=today|d3|d7|custom[&from=AAAA-MM-DD&to=AAAA-MM-DD]
+ * ?period=today|yesterday|d3|d7|custom[&from=AAAA-MM-DD&to=AAAA-MM-DD]
  */
 
 const BRT = 3 * 3600000;                                          // Brasília = UTC−3, sem horário de verão
@@ -17,6 +17,8 @@ export function readPeriod(q: URLSearchParams): { from: string; to: string; sinc
     from = q.get('from')!; to = q.get('to')!;
     if (from > to) [from, to] = [to, from];
     if (dayStart(to) - dayStart(from) > 92 * DAY) return { error: 'Escolha um período de até 3 meses.' };
+  } else if (period === 'yesterday') {
+    from = to = new Date(dayStart(to) - BRT - DAY).toISOString().slice(0, 10);
   } else {
     const back = period === 'today' ? 0 : period === 'd3' ? 2 : 6;
     from = new Date(dayStart(to) - BRT - back * DAY).toISOString().slice(0, 10);

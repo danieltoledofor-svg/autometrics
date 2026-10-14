@@ -34,6 +34,14 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [open, setOpen] = useState<any>(null);
+  // O detalhe abre acima da tabela: ao abrir, a tela rola até ele e o foco vai para lá.
+  const detailRef = useRef<HTMLDivElement>(null);
+  const openId = open?.click_id;
+  useEffect(() => {
+    if (!openId || !detailRef.current) return;
+    detailRef.current.focus({ preventScroll: true });
+    detailRef.current.scrollIntoView({ block: 'start' });
+  }, [openId]);
   const [opening, setOpening] = useState('');
   const request = useRef(0);
 
@@ -66,7 +74,7 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
   );
 
   const detail = open && (
-    <div className={`${card} border rounded-xl p-4 space-y-4`}>
+    <div ref={detailRef} tabIndex={-1} aria-label="Detalhe da visita" className={`${card} border rounded-xl p-4 space-y-4 scroll-mt-4 focus:outline-none`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className={`text-sm font-bold ${head}`}>Visita de {when(open.created_at)}{place(open) ? ` · ${place(open)}` : ''}</div>

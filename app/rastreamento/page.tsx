@@ -27,7 +27,7 @@ const TABS = [
 type Tab = (typeof TABS)[number]['key'];
 
 const PERIODS = [
-  { key: 'today', label: 'Hoje' }, { key: 'd3', label: '3 dias' }, { key: 'd7', label: '7 dias' }, { key: 'custom', label: 'Personalizado' },
+  { key: 'today', label: 'Hoje' }, { key: 'yesterday', label: 'Ontem' }, { key: 'd3', label: '3 dias' }, { key: 'd7', label: '7 dias' }, { key: 'custom', label: 'Personalizado' },
 ];
 const VIEWS = [
   { key: 'campaigns', label: 'Por campanha', column: 'Campanha' },
@@ -179,15 +179,17 @@ export default function TrackingPage() {
             <h1 className={`text-2xl font-bold ${head}`}>Rastreamento</h1>
             <div className={`text-sm ${muted}`}>Do clique no anúncio até a venda, em todas as suas campanhas</div>
           </div>
-          {tab !== 'install' && <div className={`flex items-center gap-1 p-1 rounded-lg border ${line} flex-wrap`}>
+          {/* No celular, os períodos vão para uma linha própria, abaixo do título (order-last + w-full). */}
+          {tab !== 'install' && <div className={`order-last w-full sm:order-none sm:w-auto flex items-center gap-1 p-1 rounded-lg border ${line} flex-wrap`}>
             {PERIODS.map(p => (
               <button key={p.key} onClick={() => setPeriod(p.key)} aria-pressed={period === p.key}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${period === p.key ? tabOn : `${muted} hover:text-slate-300`}`}>
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${period === p.key ? tabOn : `${muted} ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`}>
                 {p.label}
               </button>
             ))}
           </div>}
-          <button onClick={() => { const next = isDark ? 'light' : 'dark'; setTheme(next); localStorage.setItem('autometrics_theme', next); }} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={muted}>
+          <button onClick={() => { const next = isDark ? 'light' : 'dark'; setTheme(next); localStorage.setItem('autometrics_theme', next); }} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
+            className={`shrink-0 w-10 h-10 flex items-center justify-center rounded-xl border transition-colors ${isDark ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:text-black hover:bg-slate-100'}`}>
             {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
           </button>
         </div>
@@ -243,7 +245,7 @@ export default function TrackingPage() {
                   <div className="flex flex-wrap items-center gap-1 p-3">
                     {VIEWS.map(v => (
                       <button key={v.key} onClick={() => setView(v.key)} aria-pressed={view === v.key}
-                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${view === v.key ? tabOn : `${muted} hover:text-slate-300`}`}>
+                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${view === v.key ? tabOn : `${muted} ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`}>
                         {v.label}
                       </button>
                     ))}
