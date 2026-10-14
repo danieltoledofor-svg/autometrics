@@ -658,7 +658,7 @@ export default function ProductDetailPage() {
       </aside>
 
       {/* ── MAIN ── */}
-      <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pb-24 md:pb-8">
+      <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pb-40 md:pb-8">
 
         {/* MOBILE HEADER */}
         <div className={`md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-3 border-b backdrop-blur-md ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
@@ -1225,18 +1225,19 @@ export default function ProductDetailPage() {
         </div>{/* end p-4 md:p-6 */}
       </main>
 
-      {/* FAB — Lançamento Rápido */}
+      {/* FAB — Lançamento Rápido: redondo e só com o ícone, para não cobrir a lista */}
       <button
         onClick={() => setShowManualEntry(true)}
-        className="md:hidden fixed bottom-24 right-4 z-30 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-900/40 transition-all"
+        aria-label="Lançamento Rápido"
+        title="Lançamento Rápido"
+        className="md:hidden fixed bottom-24 right-4 z-30 w-12 h-12 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg shadow-indigo-900/40 transition-colors"
       >
-        <FileText size={18} aria-hidden="true" />
-        <span className="text-sm">Lançamento Rápido</span>
+        <FileText size={20} aria-hidden="true" />
       </button>
 
       {/* BOTTOM NAV */}
-      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md pb-[max(1.25rem,env(safe-area-inset-bottom))] ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
-        <div className="flex justify-around pt-2">
+      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+        <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {[
             { href: '/dashboard', icon: <LayoutGrid size={22} aria-hidden="true" />, label: 'Dashboard' },
             { href: '/planning', icon: <Target size={22} aria-hidden="true" />, label: 'Metas' },
@@ -1245,9 +1246,10 @@ export default function ProductDetailPage() {
             { href: '/rastreamento', icon: <Route size={22} aria-hidden="true" />, label: 'Rastreio' },
             { href: '/integration', icon: <Settings size={22} aria-hidden="true" />, label: 'Integração' },
           ].map(item => (
-            <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-0.5 px-3 py-1 ${(item as any).active ? 'text-indigo-500' : textMuted}`}>
+            <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${(item as any).active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
               {item.icon}
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <span className="text-[9px] font-bold tracking-wide">{item.label}</span>
+              {(item as any).active && <div className="w-1 h-1 rounded-full bg-indigo-500" />}
             </Link>
           ))}
         </div>
