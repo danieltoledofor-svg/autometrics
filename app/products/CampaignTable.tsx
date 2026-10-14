@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from 'react';
+import Link from 'next/link';
 import { ArrowDown, ArrowUp, CheckSquare, EyeOff, Square } from 'lucide-react';
 import { resolveProductStatus } from '@/lib/campaignStatus';
 
@@ -53,11 +54,12 @@ const numsOf = (p: any): Nums => {
 };
 const MONEY: (keyof Nums)[] = ['cost', 'revenue', 'profit', 'budget'];
 
-export function CampaignTable({ products, level, sort, onSort, rates, isDark, selected, onToggleSelect, onSelectAll, onOpen, onPickAccount, onPickMcc, actions }: {
+export function CampaignTable({ products, level, sort, onSort, rates, isDark, selected, onToggleSelect, onSelectAll, onOpen, hrefOf, onPickAccount, onPickMcc, actions }: {
   /** Campanhas já filtradas pela busca, pela conta escolhida e por ocultas. */
   products: any[]; level: Level; sort: Sort; onSort: (s: Sort) => void; rates: { USD: number; EUR: number }; isDark: boolean;
   selected: string[]; onToggleSelect: (id: string, e: React.MouseEvent) => void; onSelectAll: (ids: string[]) => void;
-  onOpen: (product: any) => void; onPickAccount: (mcc: string, account: string) => void; onPickMcc: (mcc: string) => void;
+  /** onOpen é o clique na linha; hrefOf é o endereço do link no nome da campanha. */
+  onOpen: (product: any) => void; hrefOf: (product: any) => string; onPickAccount: (mcc: string, account: string) => void; onPickMcc: (mcc: string) => void;
   actions: (product: any) => React.ReactNode;
 }) {
   const head = isDark ? 'text-white' : 'text-slate-900';
@@ -133,7 +135,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
     <th className={`px-3 py-2.5 font-semibold ${align === 'right' ? 'text-right' : 'text-left'} ${sep ? `border-l ${line}` : ''}`} aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
       <button onClick={() => onSort({ key, desc: sort.key === key ? !sort.desc : key !== 'name' })} title={`Ordenar por ${label.toLowerCase()}`}
         className={`inline-flex items-center gap-1 uppercase tracking-wider ${sort.key === key ? head : `${muted} hover:text-indigo-400`}`}>
-        {align === 'right' && sort.key === key && (sort.desc ? <ArrowDown size={11} /> : <ArrowUp size={11} />)}{label}{align === 'left' && sort.key === key && (sort.desc ? <ArrowDown size={11} /> : <ArrowUp size={11} />)}
+        {align === 'right' && sort.key === key && (sort.desc ? <ArrowDown size={11} aria-hidden="true" /> : <ArrowUp size={11} aria-hidden="true" />)}{label}{align === 'left' && sort.key === key && (sort.desc ? <ArrowDown size={11} aria-hidden="true" /> : <ArrowUp size={11} aria-hidden="true" />)}
       </button>
     </th>
   );
@@ -167,7 +169,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
             <colgroup><col className="w-10" /><col className="w-6" /><col /><col className="w-[140px]" /><col className="w-[112px]" />{numberCols}<col className="w-[124px]" /></colgroup>
             <thead>
               <tr className={`text-[11px] border-b ${line} ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
-                <th className="py-2.5 text-center"><button onClick={() => onSelectAll(ids)} aria-label="Selecionar todas" className="text-slate-400 hover:text-indigo-500 align-middle">{allSelected ? <CheckSquare size={15} /> : <Square size={15} />}</button></th>
+                <th className="py-2.5 text-center"><button onClick={() => onSelectAll(ids)} aria-label="Selecionar todas" className="text-slate-400 hover:text-indigo-500 align-middle">{allSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></th>
                 <th />
                 {th('name', 'Campanha', 'left')}
                 <th className={`px-3 py-2.5 text-left font-semibold uppercase tracking-wider ${muted}`}>Conta</th>
@@ -181,9 +183,10 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
                 const isSelected = selected.includes(p.id);
                 return (
                   <tr key={p.id} onClick={() => onOpen(p)} className={`h-12 border-b ${line} cursor-pointer transition-colors ${isSelected ? (isDark ? 'bg-indigo-500/10' : 'bg-indigo-50') : hover} ${p.is_hidden ? 'opacity-60' : ''}`}>
-                    <td className="text-center" onClick={e => e.stopPropagation()}><button onClick={e => onToggleSelect(p.id, e)} aria-label={`Selecionar ${p.name}`} className={`align-middle ${isSelected ? 'text-indigo-500' : 'text-slate-400 hover:text-slate-300'}`}>{isSelected ? <CheckSquare size={15} /> : <Square size={15} />}</button></td>
+                    <td className="text-center" onClick={e => e.stopPropagation()}><button onClick={e => onToggleSelect(p.id, e)} aria-label={`Selecionar ${p.name}`} className={`align-middle ${isSelected ? 'text-indigo-500' : 'text-slate-400 hover:text-slate-300'}`}>{isSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></td>
                     <td className="text-center">{dot(tone, title)}</td>
-                    <td className="px-3"><div className="flex items-center gap-1.5 min-w-0"><span className={`line-clamp-2 leading-tight break-words font-medium ${link}`} title={`${p.name}${p.campaign_id ? ` · nº ${p.campaign_id}` : ''}`}>{p.name}</span>{p.is_hidden && <EyeOff size={12} className="text-amber-500 shrink-0" aria-label="Oculta" />}</div></td>
+                    {/* O nome é um link de verdade: abre pelo teclado e aceita Cmd/Ctrl+clique para nova aba. A linha inteira continua abrindo com o mouse. */}
+                    <td className="px-3"><div className="flex items-center gap-1.5 min-w-0"><Link href={hrefOf(p)} onClick={e => e.stopPropagation()} className={`line-clamp-2 leading-tight break-words font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`} title={`${p.name}${p.campaign_id ? ` · nº ${p.campaign_id}` : ''}`}>{p.name}</Link>{p.is_hidden && <><EyeOff size={12} aria-hidden="true" className="text-amber-500 shrink-0" /><span className="sr-only">(oculta)</span></>}</div></td>
                     <td className="px-3" onClick={e => e.stopPropagation()}>
                       <button onClick={() => onPickAccount(p.mcc_name || 'Outras', p.account_name || 'Sem Conta')} title="Ver só esta conta" className={`block w-full text-left truncate ${text} hover:text-indigo-400`}>{p.account_name || 'Sem Conta'}</button>
                       <div className={`text-[11px] truncate ${muted}`}>{p.mcc_name || 'Outras'}</div>
@@ -222,7 +225,9 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
                   className={`h-12 border-b ${line} cursor-pointer transition-colors ${hover}`}>
                   <td className="text-center">{dot(g.tone, TONE_LABEL[g.tone][0])}</td>
                   <td className="px-3">
-                    <div className={`truncate font-medium ${link}`}>{g.name}</div>
+                    {/* A linha abre com o mouse; o botão é o caminho pelo teclado. */}
+                    <button type="button" onClick={e => { e.stopPropagation(); level === 'mccs' ? onPickMcc(g.mcc) : onPickAccount(g.mcc, g.name); }}
+                      className={`block w-full text-left truncate font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`}>{g.name}</button>
                     <div className={`text-[11px] truncate ${muted}`}>{level === 'mccs' ? `${g.accounts} ${g.accounts === 1 ? 'conta' : 'contas'}` : [g.id, g.mcc].filter(Boolean).join(' · ')}</div>
                   </td>
                   <td className={`px-3 text-right tabular-nums ${g.active ? text : zero}`}>{g.active} de {g.list.length} {g.active === 1 ? 'ativa' : 'ativas'}</td>

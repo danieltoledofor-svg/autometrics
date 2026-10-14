@@ -67,8 +67,9 @@ export function CampaignStatusToggle({ product, isDark, onChanged }: Props) {
 
   return (
     <button onClick={handleClick} disabled={loading} className={`p-1.5 rounded-lg transition-colors disabled:opacity-60 ${tone}`}
-      title={isPaused ? 'Ativar no Google Ads' : 'Pausar no Google Ads'}>
-      {loading ? <Loader2 size={14} className="animate-spin" /> : isPaused ? <Play size={14} /> : <Pause size={14} />}
+      title={isPaused ? 'Ativar no Google Ads' : 'Pausar no Google Ads'}
+      aria-label={`${isPaused ? 'Ativar' : 'Pausar'} ${product.name} no Google Ads`}>
+      {loading ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : isPaused ? <Play size={14} aria-hidden="true" /> : <Pause size={14} aria-hidden="true" />}
     </button>
   );
 }
