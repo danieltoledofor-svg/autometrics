@@ -109,9 +109,9 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
   const field = `rounded-lg border ${line} ${isDark ? 'bg-slate-950 text-white' : 'bg-white text-slate-900'} px-2 py-1 text-[13px] outline-none focus:border-indigo-500`;
   const ghost = `px-3 py-1.5 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-50`;
   const solid = 'bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50 inline-flex items-center gap-1.5';
-  const spin = (a: string) => busy === a && <Loader2 size={12} className="animate-spin" />;
+  const spin = (a: string) => busy === a && <Loader2 size={12} aria-hidden="true" className="animate-spin" />;
 
-  if (!state) return <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} className="animate-spin" /> Carregando…</div>;
+  if (!state) return <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Carregando…</div>;
   const link = state.bot && state.code ? `https://t.me/${state.bot}?start=${state.code}` : '';
 
   const Switch = ({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) => (
@@ -126,7 +126,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
       {/* ── Ligação com o bot ── */}
       <div className={`${card} border rounded-xl p-5`}>
         <div className="flex items-center gap-2 mb-1">
-          <Send size={16} className="text-sky-500" />
+          <Send size={16} aria-hidden="true" className="text-sky-500" />
           <span className={`text-base font-bold ${head}`}>Telegram</span>
           {state.linked && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${state.enabled ? 'bg-emerald-500/15 text-emerald-500' : 'bg-slate-500/15 text-slate-400'}`}>{state.enabled ? 'Ligado' : 'Pausado'}</span>}
         </div>
@@ -161,10 +161,10 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
             <span className={`text-[13px] ${head} mr-auto`}>Conversa: <b>{state.chat_name || 'Telegram'}</b></span>
             <button onClick={() => run('test', {}, 'Mensagem de teste enviada.')} disabled={!!busy} className={solid}>{spin('test')} Enviar teste</button>
             <button onClick={() => run('toggle', { enabled: !state.enabled })} disabled={!!busy} className={ghost}>{state.enabled ? 'Pausar todos os alertas' : 'Voltar a avisar'}</button>
-            <button onClick={() => run('unlink', {}, 'Ligação desfeita.')} disabled={!!busy} className={ghost}>Desligar</button>
+            <button onClick={() => { if (confirm('Desligar o Telegram? Os avisos param de chegar até você ligar de novo, com um código novo.')) run('unlink', {}, 'Ligação desfeita.'); }} disabled={!!busy} className={ghost}>Desligar</button>
           </div>
         )}
-        {message && <div className={`text-xs mt-3 ${message.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{message.text}</div>}
+        <div aria-live="polite">{message && <div className={`text-xs mt-3 ${message.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{message.text}</div>}</div>
       </div>
 
       {/* ── Alertas ── */}
@@ -228,18 +228,18 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
                   <div className={`text-sm font-bold ${r.on ? head : muted}`}>{r.name}</div>
                   <div className={`text-xs ${muted}`}>{describeRule(r)}</div>
                 </div>
-                <button onClick={() => setManual({ index: i, rule: { ...r, min_cost: r.min_cost || '' } })} aria-label={`Editar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10"><Pencil size={14} /></button>
-                <button onClick={() => setRules(rules.filter((_, k) => k !== i))} aria-label={`Apagar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"><Trash2 size={14} /></button>
+                <button onClick={() => setManual({ index: i, rule: { ...r, min_cost: r.min_cost || '' } })} aria-label={`Editar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10"><Pencil size={14} aria-hidden="true" /></button>
+                <button onClick={() => { if (confirm(`Apagar a regra "${r.name}"?`)) setRules(rules.filter((_, k) => k !== i)); }} aria-label={`Apagar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"><Trash2 size={14} aria-hidden="true" /></button>
               </div>
             ))}
 
             <div className="mt-2">
-              <textarea value={ruleText} onChange={e => setRuleText(e.target.value)} rows={2}
+              <textarea value={ruleText} onChange={e => setRuleText(e.target.value)} rows={2} aria-label="Descreva a regra de aviso"
                 placeholder="Me avise quando o CPA dos últimos 3 dias passar de 70% do valor da venda nas campanhas BP"
                 className={`${field} w-full !py-2 resize-y`} />
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <button onClick={askRule} disabled={drafting || !ruleText.trim()} className={solid}>
-                  {drafting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Montar a regra com a IA
+                  {drafting ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Sparkles size={12} aria-hidden="true" />} Montar a regra com a IA
                 </button>
                 <span className={`text-[11px] ${muted}`}>Dá para pedir CPA, custo, vendas, receita, resultado, retorno, cliques, custo por clique e CTR; em valor fixo ou em % do valor de uma venda ou da meta de CPA.</span>
               </div>
@@ -322,9 +322,9 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
                 {settings.quiet.on && (
                   <div className={`flex items-center gap-2 text-xs ${muted} mt-2.5`}>
                     Das
-                    <select value={settings.quiet.from} onChange={e => change({ ...settings, quiet: { ...settings.quiet, from: Number(e.target.value) } })} className={field}>{HOURS.map(h => <option key={h} value={h}>{h}h</option>)}</select>
+                    <select value={settings.quiet.from} aria-label="Silêncio começa às" onChange={e => change({ ...settings, quiet: { ...settings.quiet, from: Number(e.target.value) } })} className={field}>{HOURS.map(h => <option key={h} value={h}>{h}h</option>)}</select>
                     às
-                    <select value={settings.quiet.to} onChange={e => change({ ...settings, quiet: { ...settings.quiet, to: Number(e.target.value) } })} className={field}>{HOURS.map(h => <option key={h} value={h}>{h}h</option>)}</select>
+                    <select value={settings.quiet.to} aria-label="Silêncio termina às" onChange={e => change({ ...settings, quiet: { ...settings.quiet, to: Number(e.target.value) } })} className={field}>{HOURS.map(h => <option key={h} value={h}>{h}h</option>)}</select>
                   </div>
                 )}
               </div>

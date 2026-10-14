@@ -224,7 +224,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
     setOpenGroups(prev => prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]);
 
   if (loading) {
-    return <div className={`${card} rounded-xl p-6 border flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} className="animate-spin" /> Carregando conexão com o Google Ads…</div>;
+    return <div className={`${card} rounded-xl p-6 border flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Carregando conexão com o Google Ads…</div>;
   }
 
   return (
@@ -232,7 +232,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
       <div className={`p-6 border-b ${rowBorder} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
         <div>
           <h3 className={`font-bold flex items-center gap-2 ${textHead}`}>
-            <Plug size={18} className="text-indigo-500" /> Google Ads API
+            <Plug size={18} aria-hidden="true" className="text-indigo-500" /> Google Ads API
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400">Recomendado</span>
           </h3>
           <p className={`text-sm mt-1 ${muted}`}>
@@ -242,29 +242,31 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
         <div className="flex gap-2 shrink-0">
           {accounts.length > 0 && (
             <button onClick={syncEverything} disabled={!!syncAll || !!busy} className={btnGhost + ' flex items-center gap-1.5'}>
-              <RefreshCw size={14} className={syncAll ? 'animate-spin' : ''} />
+              <RefreshCw size={14} aria-hidden="true" className={syncAll ? 'animate-spin' : ''} />
               {syncAll ? `${syncAll.done}/${syncAll.total}` : 'Sincronizar tudo'}
             </button>
           )}
           <button onClick={connect} disabled={!configured || !!setupError || busy === 'connect'}
             className="px-4 py-2 rounded-lg text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 disabled:opacity-50">
-            {busy === 'connect' ? <Loader2 size={16} className="animate-spin" /> : <Plug size={16} />}
+            {busy === 'connect' ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Plug size={16} aria-hidden="true" />}
             {connections.length ? 'Conectar outra conta Google' : 'Conectar Google Ads'}
           </button>
         </div>
       </div>
 
+      <div aria-live="polite">
       {notice && (
         <div className={`mx-6 mt-4 p-3 rounded-lg text-sm flex items-start gap-2 ${notice.kind === 'ok' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-          {notice.kind === 'ok' ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <AlertCircle size={16} className="mt-0.5 shrink-0" />}
+          {notice.kind === 'ok' ? <CheckCircle2 size={16} aria-hidden="true" className="mt-0.5 shrink-0" /> : <AlertCircle size={16} aria-hidden="true" className="mt-0.5 shrink-0" />}
           <span className="flex-1 break-words">{notice.text}</span>
           <button onClick={() => setNotice(null)} className="text-xs opacity-70 hover:opacity-100">fechar</button>
         </div>
       )}
+      </div>
 
       {(setupError || !configured) && (
         <div className="mx-6 mt-4 p-3 rounded-lg text-sm bg-amber-500/10 text-amber-500 flex items-start gap-2">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <AlertCircle size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
           <span>{setupError || 'Faltam as credenciais do Google no servidor (GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET e GOOGLE_ADS_TOKEN_KEY).'}</span>
         </div>
       )}
@@ -284,7 +286,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
         {connections.map(c => (
           <div key={c.id} className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${rowBorder}`}>
             <div className="flex items-center gap-2 min-w-0">
-              <ShieldCheck size={16} className={c.status === 'ok' ? 'text-emerald-500' : 'text-rose-500'} />
+              <ShieldCheck size={16} aria-hidden="true" className={c.status === 'ok' ? 'text-emerald-500' : 'text-rose-500'} />
               <span className={`text-sm font-bold truncate ${textHead}`}>{c.google_email}</span>
               {c.status !== 'ok' && <span className="text-xs text-rose-500 font-bold">autorização expirada — reconecte</span>}
             </div>
@@ -292,8 +294,8 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
               <button onClick={() => refreshAccounts(c.id)} disabled={!!busy} className={btnGhost}>
                 {busy === `refresh-${c.id}` ? 'Buscando…' : 'Atualizar contas'}
               </button>
-              <button onClick={() => disconnect(c)} disabled={!!busy} className={`${btnGhost} hover:!text-rose-500`} title="Desconectar">
-                <Trash2 size={14} />
+              <button onClick={() => disconnect(c)} disabled={!!busy} className={`${btnGhost} hover:!text-rose-500`} title="Desconectar" aria-label={`Desconectar ${c.google_email}`}>
+                <Trash2 size={14} aria-hidden="true" />
               </button>
             </div>
             {c.last_error && <p className="w-full text-xs text-amber-500 break-words">{c.last_error}</p>}
@@ -303,7 +305,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
         {accounts.length > 0 && (
           <label className={`flex items-center gap-2 text-xs cursor-pointer ${muted}`}>
             <input type="checkbox" checked={showInactive} onChange={() => setShowInactive(v => !v)} className="accent-indigo-600 w-3.5 h-3.5" />
-            {showInactive ? <Eye size={13} /> : <EyeOff size={13} />}
+            {showInactive ? <Eye size={13} aria-hidden="true" /> : <EyeOff size={13} aria-hidden="true" />}
             Mostrar contas suspensas e canceladas
           </label>
         )}
@@ -315,10 +317,11 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
             <div key={g.name} className={`rounded-lg border ${rowBorder} overflow-hidden`}>
               <button
                 onClick={() => toggleGroup(g.name)}
+                aria-expanded={aberto}
                 className={`w-full p-3 flex items-center gap-3 text-left transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}
               >
-                {aberto ? <ChevronDown size={16} className="text-slate-500 shrink-0" /> : <ChevronRight size={16} className="text-slate-500 shrink-0" />}
-                <Folder size={15} className="text-indigo-500 shrink-0" />
+                {aberto ? <ChevronDown size={16} aria-hidden="true" className="text-slate-500 shrink-0" /> : <ChevronRight size={16} aria-hidden="true" className="text-slate-500 shrink-0" />}
+                <Folder size={15} aria-hidden="true" className="text-indigo-500 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-bold truncate ${textHead}`}>{g.name}</p>
                   <p className={`text-[11px] ${muted}`}>
@@ -329,8 +332,8 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
                 <div className={`text-xs text-right shrink-0 ${muted}`}>
                   {g.coletando > 0 && (
                     <>
-                      <p className="flex items-center justify-end gap-1"><Clock size={12} /> {timeAgo(g.ultima)}</p>
-                      <p>hoje {g.moeda} {g.custoHoje.toFixed(2)}</p>
+                      <p className="flex items-center justify-end gap-1"><Clock size={12} aria-hidden="true" /> {timeAgo(g.ultima)}</p>
+                      <p>hoje {g.moeda} {g.custoHoje.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </>
                   )}
                 </div>
@@ -351,7 +354,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
                       <div key={a.id} className="p-3 flex flex-wrap items-center gap-3">
                         <input type="checkbox" checked={a.sync_enabled} onChange={() => toggleSync(a)}
                           className="accent-indigo-600 w-4 h-4 cursor-pointer"
-                          title={a.sync_enabled ? 'Coleta ligada' : 'Coleta desligada'} />
+                          title={a.sync_enabled ? 'Coleta ligada' : 'Coleta desligada'} aria-label={`Coletar a conta ${a.name}`} />
                         <div className="flex-1 min-w-[180px]">
                           <p className={`text-sm font-bold ${textHead} ${closed ? 'opacity-60' : ''}`}>
                             {a.name}
@@ -361,14 +364,14 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
                         </div>
                         <div className={`text-xs text-right ${muted}`}>
                           <p className={`flex items-center justify-end gap-1 ${statusColor}`}>
-                            <Clock size={12} /> {timeAgo(a.last_sync_at)}{a.last_sync_status ? ` · ${a.last_sync_status}` : ''}
+                            <Clock size={12} aria-hidden="true" /> {timeAgo(a.last_sync_at)}{a.last_sync_status ? ` · ${a.last_sync_status}` : ''}
                           </p>
                           {s && typeof s.cost_today === 'number' && (
-                            <p>{s.enabled_campaigns} campanha(s) ativa(s) · hoje {a.currency_code} {s.cost_today.toFixed(2)}</p>
+                            <p>{s.enabled_campaigns} campanha(s) ativa(s) · hoje {a.currency_code} {s.cost_today.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                           )}
                         </div>
-                        <button onClick={() => syncAccount(a)} disabled={!!busy || !!syncAll || closed} className={btnGhost} title="Sincronizar agora">
-                          <RefreshCw size={14} className={busy === `sync-${a.id}` ? 'animate-spin' : ''} />
+                        <button onClick={() => syncAccount(a)} disabled={!!busy || !!syncAll || closed} className={btnGhost} title="Sincronizar agora" aria-label={`Sincronizar ${a.name} agora`}>
+                          <RefreshCw size={14} aria-hidden="true" className={busy === `sync-${a.id}` ? 'animate-spin' : ''} />
                         </button>
                         {(() => {
                           const r = reconcileLine(a);

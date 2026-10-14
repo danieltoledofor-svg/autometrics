@@ -739,15 +739,15 @@ ${commonFunctions}`;
           <Logo />
         </div>
         <nav className="flex-1 px-2 py-4 space-y-2">
-          <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20}/> Dashboard</Link>
-          <Link href="/planning" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Target size={20}/> Metas</Link>
-          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20}/> Campanhas</Link>
-          <Link href="/analise-ia" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Sparkles size={20} /> Análise de IA</Link>
-          <Link href="/rastreamento" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Route size={20} /> Rastreamento</Link>
-          <Link href="/integration" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Settings size={20}/> Integração</Link>
+          <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20} aria-hidden="true"/> Dashboard</Link>
+          <Link href="/planning" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Target size={20} aria-hidden="true"/> Metas</Link>
+          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20} aria-hidden="true"/> Campanhas</Link>
+          <Link href="/analise-ia" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Sparkles size={20} aria-hidden="true" /> Análise de IA</Link>
+          <Link href="/rastreamento" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Route size={20} aria-hidden="true" /> Rastreamento</Link>
+          <Link href="/integration" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Settings size={20} aria-hidden="true"/> Integração</Link>
         </nav>
         <div className="p-4 border-t border-inherit">
-          <button onClick={handleLogout} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold w-full transition-colors text-rose-500 ${isDark ? 'hover:bg-slate-900' : 'hover:bg-slate-100'}`}><LogOut size={20}/> Sair ({userEmail.split('@')[0]})</button>
+          <button onClick={handleLogout} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold w-full transition-colors text-rose-500 ${isDark ? 'hover:bg-slate-900' : 'hover:bg-slate-100'}`}><LogOut size={20} aria-hidden="true"/> Sair ({userEmail.split('@')[0]})</button>
         </div>
       </aside>
 
@@ -758,8 +758,8 @@ ${commonFunctions}`;
         {/* HEADER */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-slate-900 hover:bg-slate-800 text-slate-400' : 'bg-white border border-slate-200 text-slate-600'}`}>
-              <ArrowLeft size={20} />
+            <Link href="/dashboard" aria-label="Voltar para a Dashboard" className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-slate-900 hover:bg-slate-800 text-slate-400' : 'bg-white border border-slate-200 text-slate-600'}`}>
+              <ArrowLeft size={20} aria-hidden="true" />
             </Link>
             <div>
               <h1 className={`text-2xl font-bold flex items-center gap-2 ${textHead}`}>
@@ -768,22 +768,24 @@ ${commonFunctions}`;
               <p className={`text-sm ${textMuted}`}>Configure as conexões da sua conta.</p>
             </div>
           </div>
-          <button onClick={toggleTheme} className={`p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>
+            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
           </button>
         </div>
 
         {/* TAB NAV */}
         <div className={`flex gap-1 p-1 rounded-xl mb-8 overflow-x-auto custom-scrollbar ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-200'}`}>
           {([
-            { key: 'google', icon: <Code size={15} />, label: 'Google Ads' },
-            { key: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb' },
-            { key: 'telegram', icon: <Send size={15} />, label: 'Telegram' },
-            { key: 'cartoes', icon: <CreditCard size={15} />, label: 'Cartões' },
+            { key: 'google', icon: <Code size={15} aria-hidden="true" />, label: 'Google Ads' },
+            { key: 'vturb', icon: <Tv2 size={15} aria-hidden="true" />, label: 'VTurb' },
+            { key: 'telegram', icon: <Send size={15} aria-hidden="true" />, label: 'Telegram' },
+            { key: 'cartoes', icon: <CreditCard size={15} aria-hidden="true" />, label: 'Cartões' },
           ] as const).map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
+              aria-label={tab.label}
+              aria-pressed={activeTab === tab.key}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key
                 ? 'bg-indigo-600 text-white shadow-lg'
                 : `${textMuted} hover:text-white`
@@ -824,12 +826,12 @@ ${commonFunctions}`;
                       Tipo de Conta Google
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <button onClick={() => setAccountType('mcc')} className={`p-4 rounded-xl border-2 text-left transition-all ${accountType === 'mcc' ? 'border-indigo-500 bg-indigo-500/10' : `${borderCol} hover:border-indigo-300`}`}>
-                        <div className="flex justify-between items-start mb-2"><Globe className={accountType === 'mcc' ? 'text-indigo-400' : 'text-slate-400'} size={24} />{accountType === 'mcc' && <Check size={16} className="text-indigo-500" />}</div>
+                      <button onClick={() => setAccountType('mcc')} aria-pressed={accountType === 'mcc'} className={`p-4 rounded-xl border-2 text-left transition-all ${accountType === 'mcc' ? 'border-indigo-500 bg-indigo-500/10' : `${borderCol} hover:border-indigo-300`}`}>
+                        <div className="flex justify-between items-start mb-2"><Globe className={accountType === 'mcc' ? 'text-indigo-400' : 'text-slate-400'} size={24} />{accountType === 'mcc' && <Check size={16} aria-hidden="true" className="text-indigo-500" />}</div>
                         <p className={`font-bold ${textHead}`}>Agência / MCC</p><p className={`text-xs mt-1 ${textMuted}`}>Várias sub-contas.</p>
                       </button>
-                      <button onClick={() => setAccountType('single')} className={`p-4 rounded-xl border-2 text-left transition-all ${accountType === 'single' ? 'border-indigo-500 bg-indigo-500/10' : `${borderCol} hover:border-indigo-300`}`}>
-                        <div className="flex justify-between items-start mb-2"><Store className={accountType === 'single' ? 'text-indigo-400' : 'text-slate-400'} size={24} />{accountType === 'single' && <Check size={16} className="text-indigo-500" />}</div>
+                      <button onClick={() => setAccountType('single')} aria-pressed={accountType === 'single'} className={`p-4 rounded-xl border-2 text-left transition-all ${accountType === 'single' ? 'border-indigo-500 bg-indigo-500/10' : `${borderCol} hover:border-indigo-300`}`}>
+                        <div className="flex justify-between items-start mb-2"><Store className={accountType === 'single' ? 'text-indigo-400' : 'text-slate-400'} size={24} />{accountType === 'single' && <Check size={16} aria-hidden="true" className="text-indigo-500" />}</div>
                         <p className={`font-bold ${textHead}`}>Conta Única</p><p className={`text-xs mt-1 ${textMuted}`}>Conta isolada.</p>
                       </button>
                     </div>
@@ -839,21 +841,21 @@ ${commonFunctions}`;
                     <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2 ${textHead}`}><span className="bg-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white">2</span> Identificação</h3>
                     <div className="space-y-4">
                       <div>
-                        <label className={`block text-xs font-bold mb-2 ${textMuted}`}>{accountType === 'mcc' ? 'Nome da MCC' : 'Nome da Loja'}</label>
-                        <input type="text" className={`w-full p-4 rounded-lg outline-none border transition-colors ${isDark ? 'bg-slate-950 border-slate-700 text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-300 text-black focus:border-indigo-500'}`} placeholder="Ex: Minha Loja" value={identifierName} onChange={(e) => setIdentifierName(e.target.value)} />
+                        <label htmlFor="script-identifier" className={`block text-xs font-bold mb-2 ${textMuted}`}>{accountType === 'mcc' ? 'Nome da MCC' : 'Nome da Loja'}</label>
+                        <input id="script-identifier" type="text" className={`w-full p-4 rounded-lg outline-none border transition-colors ${isDark ? 'bg-slate-950 border-slate-700 text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-300 text-black focus:border-indigo-500'}`} placeholder="Ex: Minha Loja" value={identifierName} onChange={(e) => setIdentifierName(e.target.value)} />
                       </div>
                       <div>
-                        <label className={`block text-xs font-bold mb-2 ${textMuted}`}>Data Inicial</label>
-                        <input type="date" className={`w-full p-4 rounded-lg outline-none border transition-colors ${isDark ? 'bg-slate-950 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-300 text-black'}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                        <label htmlFor="script-start-date" className={`block text-xs font-bold mb-2 ${textMuted}`}>Data Inicial</label>
+                        <input id="script-start-date" type="date" className={`w-full p-4 rounded-lg outline-none border transition-colors ${isDark ? 'bg-slate-950 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-300 text-black'}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                       </div>
                     </div>
                   </div>
-                  <button onClick={handleGenerateScript} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"><Code size={20} /> Gerar Script</button>
+                  <button onClick={handleGenerateScript} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"><Code size={20} aria-hidden="true" /> Gerar Script</button>
                 </div>
 
                 <div className="space-y-6">
                   <div className={`${bgCard} rounded-xl p-6 border`}>
-                    <h3 className={`font-bold mb-4 flex items-center gap-2 ${textHead}`}><Zap size={18} className="text-amber-400" /> Instalação</h3>
+                    <h3 className={`font-bold mb-4 flex items-center gap-2 ${textHead}`}><Zap size={18} aria-hidden="true" className="text-amber-400" /> Instalação</h3>
                     <ol className={`space-y-4 text-sm list-decimal pl-4 ${textMuted}`}>
                       <li>Abra sua conta do Google Ads.</li>
                       <li>Vá em <strong>Ferramentas e Configurações</strong> {'>'} <strong>Ações em Massa</strong> {'>'} <strong>Scripts</strong>.</li>
@@ -876,10 +878,10 @@ ${commonFunctions}`;
               <div className={`${bgCard} rounded-xl overflow-hidden shadow-2xl border`}>
                 <div className={`px-6 py-4 border-b flex justify-between items-center gap-4 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                   <div className="flex items-center gap-4">
-                    <button onClick={() => setGeneratedScript(null)} className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-white border text-slate-600 hover:bg-slate-100'}`}><ArrowLeft size={18} /></button>
+                    <button onClick={() => setGeneratedScript(null)} aria-label="Voltar e gerar outro script" className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-white border text-slate-600 hover:bg-slate-100'}`}><ArrowLeft size={18} aria-hidden="true" /></button>
                     <div><h3 className={`font-bold text-sm ${textHead}`}>Script Pronto</h3><p className="text-xs text-emerald-500">{identifierName}</p></div>
                   </div>
-                  <button onClick={copyToClipboard} className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-bold transition-all ${copied ? 'bg-emerald-500 text-white' : (isDark ? 'bg-white text-black' : 'bg-slate-900 text-white')}`}>{copied ? <Check size={18} /> : <Copy size={18} />} {copied ? 'Copiado!' : 'Copiar'}</button>
+                  <button onClick={copyToClipboard} className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-bold transition-all ${copied ? 'bg-emerald-500 text-white' : (isDark ? 'bg-white text-black' : 'bg-slate-900 text-white')}`}>{copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />} {copied ? 'Copiado!' : 'Copiar'}</button>
                 </div>
                 <div className="p-0 overflow-x-auto bg-[#0d1117]"><pre className="font-mono text-xs text-slate-300 leading-relaxed p-6 min-h-[400px]">{generatedScript}</pre></div>
               </div>
@@ -892,7 +894,7 @@ ${commonFunctions}`;
         {activeTab === 'vturb' && userId && (
           <div className={`rounded-xl p-6 border ${bgCard}`}>
             <div className="flex items-center gap-3 mb-1">
-              <Tv2 size={20} className="text-purple-500" />
+              <Tv2 size={20} aria-hidden="true" className="text-purple-500" />
               <h2 className={`text-lg font-bold ${textHead}`}>VTurb Analytics — Token de API</h2>
             </div>
             <p className={`text-sm ${textMuted} mb-5`}>
@@ -912,28 +914,29 @@ ${commonFunctions}`;
 
             <div className="flex items-center gap-3">
               <div className={`flex-1 flex items-center gap-2 rounded-xl border px-4 py-3 transition-colors ${isDark ? 'bg-slate-950 border-slate-700 focus-within:border-purple-500' : 'bg-white border-slate-200 focus-within:border-purple-400'}`}>
-                <Key size={16} className="text-purple-400 shrink-0" />
+                <Key size={16} aria-hidden="true" className="text-purple-400 shrink-0" />
                 <input
                   type={vturbTokenVisible ? 'text' : 'password'}
                   value={vturbTokenInput}
                   onChange={e => setVturbTokenInput(e.target.value)}
-                  placeholder="Cole seu token VTurb aqui..."
+                  placeholder="Cole seu token VTurb aqui…"
+                  aria-label="Token de API da VTurb"
                   className={`flex-1 bg-transparent outline-none text-sm font-mono ${textHead} placeholder:text-slate-500`}
                 />
-                <button onClick={() => setVturbTokenVisible(v => !v)} className={`p-1 rounded transition-colors ${isDark ? 'text-slate-500 hover:text-white' : 'text-slate-400 hover:text-black'}`} title={vturbTokenVisible ? 'Ocultar token' : 'Mostrar token'}>
-                  {vturbTokenVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+                <button onClick={() => setVturbTokenVisible(v => !v)} className={`p-1 rounded transition-colors ${isDark ? 'text-slate-500 hover:text-white' : 'text-slate-400 hover:text-black'}`} title={vturbTokenVisible ? 'Ocultar token' : 'Mostrar token'} aria-label={vturbTokenVisible ? 'Ocultar token' : 'Mostrar token'}>
+                  {vturbTokenVisible ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
                 </button>
               </div>
               <button onClick={saveVturbToken} disabled={vturbTokenSaving || !vturbTokenInput.trim()}
                 className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all shrink-0 ${vturbTokenSaved ? 'bg-emerald-500 text-white' : 'bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed'}`}>
-                {vturbTokenSaved ? <CheckCircle2 size={16} /> : <Save size={16} />}
-                {vturbTokenSaving ? 'Salvando...' : vturbTokenSaved ? 'Salvo!' : 'Salvar'}
+                {vturbTokenSaved ? <CheckCircle2 size={16} aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
+                {vturbTokenSaving ? 'Salvando…' : vturbTokenSaved ? 'Salvo!' : 'Salvar'}
               </button>
             </div>
 
             {vturbToken && (
               <div className={`mt-4 flex items-center gap-2 text-xs p-3 rounded-lg border ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
-                <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                <CheckCircle2 size={14} aria-hidden="true" className="text-emerald-400 shrink-0" />
                 <span className="text-emerald-400 font-medium">Token configurado</span>
                 <span className={`font-mono ${textMuted}`}>{vturbToken.slice(0, 8)}{'•'.repeat(Math.min(20, vturbToken.length - 8))}</span>
               </div>
@@ -957,7 +960,7 @@ ${commonFunctions}`;
             { href: '/integration', Icon: Settings, label: 'Integração', active: true },
           ].map(({ href, Icon, label, active }) => (
             <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-              <Icon size={22}/>
+              <Icon size={22} aria-hidden="true"/>
               <span className="text-[9px] font-bold tracking-wide">{label}</span>
               {active && <div className="w-1 h-1 rounded-full bg-indigo-500"/>}
             </Link>

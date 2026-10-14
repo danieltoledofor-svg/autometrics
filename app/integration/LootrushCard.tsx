@@ -41,7 +41,7 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
   const solid = 'bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2';
   const ghost = `px-4 py-2 rounded-lg border text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2 ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-400' : 'border-slate-300 text-slate-700 hover:border-indigo-500'}`;
   const input = `flex-1 min-w-0 rounded-lg border px-3 py-2 text-[13px] ${isDark ? 'bg-slate-950 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'}`;
-  const spin = (name: string) => busy === name && <Loader2 size={13} className="animate-spin" />;
+  const spin = (name: string) => busy === name && <Loader2 size={13} aria-hidden="true" className="animate-spin" />;
 
   const apply = (body: any) => {
     setState(body);
@@ -67,13 +67,13 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
   const saveGroups = () => run('grupos', { groups: picked }, b => (picked.length ? `Grupos salvos. Primeira leitura feita: ${b.result?.read ?? 0} cobranças dos últimos 70 dias.` : 'Nenhum grupo marcado: nada será lido.'));
   const disconnect = () => { if (window.confirm('Desligar a LootRush? A chave e as cobranças guardadas aqui são apagadas. Nada muda na LootRush.')) run('desligar', {}, () => 'LootRush desligada.').then(() => setAvailable(null)); };
 
-  if (!state) return <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}><Loader2 size={14} className="inline animate-spin mr-2" />Carregando…</div>;
+  if (!state) return <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}><Loader2 size={14} aria-hidden="true" className="inline animate-spin mr-2" />Carregando…</div>;
   const savedIds = (state.groups || []).map((g: any) => g.id).sort().join(','), dirty = [...picked].sort().join(',') !== savedIds;
 
   return (
     <div className={`${card} border rounded-xl p-5 space-y-4`}>
       <div>
-        <div className={`text-base font-bold flex items-center gap-2 ${head}`}><CreditCard size={17} /> LootRush</div>
+        <div className={`text-base font-bold flex items-center gap-2 ${head}`}><CreditCard size={17} aria-hidden="true" /> LootRush</div>
         <div className={`text-[13px] mt-1 ${muted}`}>
           Acompanha as cobranças dos seus cartões: avisa no Telegram cada cobrança, cobrança recusada e código de verificação do Google, e confere em Metas o cobrado com o gasto de cada conta do Google.
         </div>
@@ -105,7 +105,7 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
           </div>
           <div>
             <div className={`text-xs font-bold mb-1 ${head}`}>Grupos de cartões para acompanhar</div>
-            {!available ? <div className={`text-xs ${muted}`}><Loader2 size={12} className="inline animate-spin mr-1" /> lendo os grupos na LootRush…</div>
+            {!available ? <div className={`text-xs ${muted}`}><Loader2 size={12} aria-hidden="true" className="inline animate-spin mr-1" /> lendo os grupos na LootRush…</div>
               : !available.length ? <div className="text-xs text-amber-500">Esta chave não enxerga nenhum grupo de cartões. Crie o grupo na LootRush e volte aqui.</div>
                 : available.map(g => (
                   <label key={g.id} className={`flex items-center gap-2 py-1.5 text-[13px] cursor-pointer ${head}`}>
@@ -125,7 +125,7 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
           <div className={`text-[11px] ${muted}`}>Os avisos destes cartões são ligados e desligados na aba Telegram, em Alertas. A conferência fica em Metas.</div>
         </>
       )}
-      {message && <div className={`text-xs ${message.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{message.text}</div>}
+      <div aria-live="polite">{message && <div className={`text-xs ${message.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{message.text}</div>}</div>
     </div>
   );
 }

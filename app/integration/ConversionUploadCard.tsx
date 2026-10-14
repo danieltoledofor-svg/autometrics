@@ -77,7 +77,7 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${head}`}>
-            <UploadCloud size={18} className="text-indigo-400" /> Enviar as vendas ao Google
+            <UploadCloud size={18} aria-hidden="true" className="text-indigo-400" /> Enviar as vendas ao Google
           </h3>
           <p className={`text-xs mt-2 ${muted}`}>
             Cada venda ligada a um clique é enviada à conta do Google onde o clique aconteceu, com o valor da comissão.
@@ -94,7 +94,7 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
 
       {state.ready === false && <p className="text-xs mt-3 text-amber-500">Falta rodar a migração do envio ao Google no Supabase.</p>}
       {error && <p className="text-xs mt-3 text-rose-500">{error}</p>}
-      {busy && <p className={`text-xs mt-3 flex items-center gap-1.5 ${muted}`}><Loader2 size={12} className="animate-spin" /> Salvando…</p>}
+      {busy && <p className={`text-xs mt-3 flex items-center gap-1.5 ${muted}`}><Loader2 size={12} aria-hidden="true" className="animate-spin" /> Salvando…</p>}
 
       {state.ready !== false && on && (
         <div className={`mt-4 p-3 rounded-lg border ${state.needs_auth ? 'border-amber-500/40 bg-amber-500/5' : line}`}>
@@ -108,7 +108,7 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
               {state.emails.map((e: any) => (
                 <div key={e.email} className="flex flex-wrap items-center gap-x-2 text-xs">
                   {e.authorized
-                    ? <span className="inline-flex items-center gap-1 text-emerald-500 font-bold"><Check size={13} /> Autorizado</span>
+                    ? <span className="inline-flex items-center gap-1 text-emerald-500 font-bold"><Check size={13} aria-hidden="true" /> Autorizado</span>
                     : <span className="text-amber-500 font-bold">Falta autorizar</span>}
                   <span className={head}>{e.email}</span>
                   {e.note && <span className={muted}>· {e.note}</span>}
