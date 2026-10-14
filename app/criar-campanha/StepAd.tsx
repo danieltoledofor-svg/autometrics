@@ -41,11 +41,11 @@ function Lines({ items, onChange, kind, max, funil, css, placeholder, add }: {
           <input value={t} onChange={e => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} placeholder={placeholder} aria-label={`${add} ${i + 1}`}
             className={`flex-1 rounded-lg border ${count(t) > limit ? 'border-rose-500/70' : css.line} ${css.soft} ${css.head} px-3 py-1.5 text-[13px] outline-none focus:border-indigo-500`} />
           <Counter text={t} max={limit} css={css} />
-          <button onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label={`Remover ${add.toLowerCase()} ${i + 1}`} className={`${css.muted} hover:text-rose-400`}><X size={14} /></button>
+          <button onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label={`Remover ${add.toLowerCase()} ${i + 1}`} className={`${css.muted} hover:text-rose-400`}><X size={14} aria-hidden="true" /></button>
         </div>
       ))}
       {items.length < max
-        ? <button onClick={() => onChange([...items, ''])} className={`text-xs font-bold inline-flex items-center gap-1 ${css.muted} hover:text-indigo-400`}><Plus size={13} /> {add}</button>
+        ? <button onClick={() => onChange([...items, ''])} className={`text-xs font-bold inline-flex items-center gap-1 ${css.muted} hover:text-indigo-400`}><Plus size={13} aria-hidden="true" /> {add}</button>
         : <div className={`text-xs ${css.muted}`}>Limite de {max} atingido.</div>}
     </div>
   );
@@ -66,7 +66,7 @@ function Pick({ on, full, onClick, css, wide, children }: { on: boolean; full?: 
     <button onClick={onClick} disabled={!on && !!full} aria-pressed={on}
       title={on ? 'Está na campanha nova. Clique para tirar.' : full ? 'O limite deste tipo foi atingido. Tire um para usar este.' : 'Não está na campanha nova. Clique para usar.'}
       className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded border text-left ${wide ? 'w-full' : 'shrink-0'} ${children ? '' : 'font-bold'} ${tone}`}>
-      {on ? <Check size={13} className="shrink-0" /> : <Plus size={13} className="shrink-0" />}{children || label}
+      {on ? <Check size={13} aria-hidden="true" className="shrink-0" /> : <Plus size={13} aria-hidden="true" className="shrink-0" />}{children || label}
     </button>
   );
 }
@@ -178,7 +178,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
       <Block css={css} title="O que mais converteu nas suas campanhas parecidas" hint="Aqui você escolhe o que copiar das suas campanhas que já venderam. Só as suas campanhas, últimos 30 dias, com as conversões que o Google contou. O Google não informa conversão por título, então os títulos aparecem dentro dos anúncios que mais converteram.">
         <div className="flex gap-2">
           <input value={draft.ia.parecidas} onChange={e => setIa({ parecidas: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') findSimilar(); }} placeholder="Trecho do nome: [WL], ALKAMELT…" aria-label="Trecho do nome das campanhas parecidas" className={`flex-1 ${field}`} />
-          <button onClick={findSimilar} disabled={busy !== '' || draft.ia.parecidas.trim().length < 2} className={solid}>{busy === 'parecidas' && <Loader2 size={12} className="animate-spin" />} Buscar</button>
+          <button onClick={findSimilar} disabled={busy !== '' || draft.ia.parecidas.trim().length < 2} className={solid}>{busy === 'parecidas' && <Loader2 size={12} aria-hidden="true" className="animate-spin" />} Buscar</button>
         </div>
         {similar && (
           <div className="space-y-4">
@@ -228,7 +228,8 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
         <div className="flex flex-wrap gap-1.5">
           {draft.palavras.map((k, i) => (
             <span key={i} title={keywordProblem(k.texto) || undefined} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${keywordProblem(k.texto) ? 'border-rose-500/70' : line} ${head}`}>{keyword(k)} <span className={muted}>· {MATCH[k.tipo] || k.tipo}</span>
-              <button onClick={() => set({ palavras: draft.palavras.filter((_, j) => j !== i) })} aria-label={`Remover a palavra-chave ${k.texto}`} className={`${muted} hover:text-rose-400`}><X size={12} /></button></span>
+              {keywordProblem(k.texto) && <span className="sr-only">({keywordProblem(k.texto)})</span>}
+              <button onClick={() => set({ palavras: draft.palavras.filter((_, j) => j !== i) })} aria-label={`Remover a palavra-chave ${k.texto}`} className={`${muted} hover:text-rose-400`}><X size={12} aria-hidden="true" /></button></span>
           ))}
           {!draft.palavras.length && <span className={`text-xs ${muted}`}>nenhuma</span>}
         </div>
@@ -236,13 +237,13 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
           <div className="flex flex-wrap items-center gap-3 text-xs">
             {draft.palavras.length > 0 && (
               <button onClick={() => { setCleared(draft.palavras); set({ palavras: [] }); }} className={`font-bold inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border ${line} ${muted} hover:text-rose-400 hover:border-rose-500/60`}>
-                <Trash2 size={13} /> Limpar todas ({draft.palavras.length})
+                <Trash2 size={13} aria-hidden="true" /> Limpar todas ({draft.palavras.length})
               </button>
             )}
             {cleared && !draft.palavras.length && (
               <>
                 <span className={muted}>{cleared.length} {cleared.length === 1 ? 'palavra-chave foi tirada' : 'palavras-chave foram tiradas'}.</span>
-                <button onClick={() => { set({ palavras: cleared }); setCleared(null); }} className="font-bold inline-flex items-center gap-1 text-indigo-400 hover:underline"><Undo2 size={13} /> Desfazer</button>
+                <button onClick={() => { set({ palavras: cleared }); setCleared(null); }} className="font-bold inline-flex items-center gap-1 text-indigo-400 hover:underline"><Undo2 size={13} aria-hidden="true" /> Desfazer</button>
               </>
             )}
           </div>
@@ -257,7 +258,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
         hint={draft.funil === 'fundo' ? 'A página é lida pelo código-fonte, para achar preço, garantia e frete mesmo quando não estão no texto. A IA usa só os valores abaixo: o que ficar em branco não entra no anúncio e nada é calculado. Cada pedido é uma consulta paga à IA (poucos centavos).' : 'A IA lê o código-fonte da página, a transcrição da VSL, as palavras-chave e os termos que mais converteram nas campanhas parecidas (busque acima antes). Cada pedido é uma consulta paga à IA (poucos centavos).'}>
         <div className="flex gap-2">
           <input value={draft.ia.url} onChange={e => setIa({ url: e.target.value })} placeholder={draft.funil === 'fundo' ? 'Página do produto: https://…' : 'Página do anúncio: https://…'} aria-label="Página para a IA ler" className={`flex-1 ${field}`} />
-          {draft.funil === 'fundo' && <button onClick={readOffer} disabled={busy !== '' || !/^https?:\/\//i.test(draft.ia.url.trim())} className={`px-3 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-40 inline-flex items-center gap-1.5`}>{busy === 'oferta' && <Loader2 size={12} className="animate-spin" />} Ler a página</button>}
+          {draft.funil === 'fundo' && <button onClick={readOffer} disabled={busy !== '' || !/^https?:\/\//i.test(draft.ia.url.trim())} className={`px-3 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-40 inline-flex items-center gap-1.5`}>{busy === 'oferta' && <Loader2 size={12} aria-hidden="true" className="animate-spin" />} Ler a página</button>}
         </div>
         {pasting ? (
           <div className="space-y-1">
@@ -289,7 +290,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(VARIATIONS).map(([n, v]) => {
                   const num = Number(n), list = o.variacoes || [0], on = list.includes(num);
-                  return <button key={n} title={v.tom} onClick={() => setOffer({ variacoes: on ? list.filter(x => x !== num) : [...list, num] })}
+                  return <button key={n} title={v.tom} aria-pressed={on} onClick={() => setOffer({ variacoes: on ? list.filter(x => x !== num) : [...list, num] })}
                     className={`px-2.5 py-1 text-xs font-semibold rounded-lg border ${on ? 'bg-indigo-600 border-indigo-600 text-white' : `${line} ${muted}`}`}>{v.nome}</button>;
                 })}
               </div>
@@ -299,7 +300,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
           <textarea value={draft.ia.vsl} onChange={e => setIa({ vsl: e.target.value })} rows={3} maxLength={20000} placeholder="Transcrição da VSL (opcional, mas é o que faz o anúncio falar a mesma língua do vídeo)" aria-label="Transcrição da VSL" className={`w-full resize-y ${field}`} />
         )}
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={generate} disabled={busy !== '' || (draft.funil === 'fundo' && !String(o.produto || '').trim())} className={solid}>{busy === 'recursos' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {pack ? 'Gerar de novo' : 'Gerar recursos'}</button>
+          <button onClick={generate} disabled={busy !== '' || (draft.funil === 'fundo' && !String(o.produto || '').trim())} className={solid}>{busy === 'recursos' ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Sparkles size={13} aria-hidden="true" />} {pack ? 'Gerar de novo' : 'Gerar recursos'}</button>
           {busy === 'recursos' && <span className={`text-xs ${muted}`}>A IA está escrevendo e as letras estão sendo conferidas; leva até um minuto.</span>}
           {pack && busy === '' && <span className={`text-xs ${muted}`}>{pack.titulos.length} títulos, {pack.descricoes.length} descrições, {pack.sitelinks.length} sitelinks e {pack.destaques.length} frases{pack.descartados ? ` · ${pack.descartados} fora da regra foram descartados` : ''}</span>}
         </div>
@@ -345,14 +346,14 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
             <div key={i} className={`rounded-lg border ${line} p-2.5 space-y-1.5`}>
               <div className="flex items-center gap-2">
                 <input value={s.texto} onChange={e => patch({ texto: e.target.value })} placeholder="Texto do sitelink" aria-label={`Texto do sitelink ${i + 1}`} className={`flex-1 ${field}`} /><Counter text={s.texto} max={25} css={css} />
-                <button onClick={() => set({ sitelinks: draft.sitelinks.filter((_, j) => j !== i) })} aria-label={`Remover o sitelink ${i + 1}`} className={`${muted} hover:text-rose-400`}><X size={14} /></button>
+                <button onClick={() => set({ sitelinks: draft.sitelinks.filter((_, j) => j !== i) })} aria-label={`Remover o sitelink ${i + 1}`} className={`${muted} hover:text-rose-400`}><X size={14} aria-hidden="true" /></button>
               </div>
               <div className="flex items-center gap-2"><input value={s.desc1} onChange={e => patch({ desc1: e.target.value })} placeholder="Linha de descrição 1" aria-label={`Descrição 1 do sitelink ${i + 1}`} className={`flex-1 ${field}`} /><Counter text={s.desc1} max={35} css={css} /><span className="w-[14px]" /></div>
               <div className="flex items-center gap-2"><input value={s.desc2} onChange={e => patch({ desc2: e.target.value })} placeholder="Linha de descrição 2" aria-label={`Descrição 2 do sitelink ${i + 1}`} className={`flex-1 ${field}`} /><Counter text={s.desc2} max={35} css={css} /><span className="w-[14px]" /></div>
             </div>
           );
         })}
-        {draft.sitelinks.length < AD_MAX.sitelinks && <button onClick={() => set({ sitelinks: [...draft.sitelinks, { texto: '', desc1: '', desc2: '' }] })} className={`text-xs font-bold inline-flex items-center gap-1 ${muted} hover:text-indigo-400`}><Plus size={13} /> Sitelink</button>}
+        {draft.sitelinks.length < AD_MAX.sitelinks && <button onClick={() => set({ sitelinks: [...draft.sitelinks, { texto: '', desc1: '', desc2: '' }] })} className={`text-xs font-bold inline-flex items-center gap-1 ${muted} hover:text-indigo-400`}><Plus size={13} aria-hidden="true" /> Sitelink</button>}
       </Block>
 
       <Block css={css} title={`Frases de destaque (${draft.destaques.length})`} hint="Criadas no nível da campanha. Até 25 letras cada.">

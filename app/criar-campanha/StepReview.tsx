@@ -102,13 +102,13 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
             <div key={i} className={`rounded-lg border ${line} ${soft} p-3 space-y-1.5`}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <div className={`text-[13px] font-bold ${head}`}>{r.nome}</div>
-                <div className="text-xs font-bold inline-flex items-center gap-1.5">
-                  {done ? <span className={done.endsWith('|pausada') ? warn : good}><Check size={13} className="inline" /> criada{done.endsWith('|pausada') ? ', mas pausada' : done.endsWith('|ativa') ? ', ativa' : ''}{/^\d/.test(done) ? ` · nº ${done.split('|')[0]}` : ''}</span>
+                <div className="text-xs font-bold inline-flex items-center gap-1.5" aria-live="polite">
+                  {done ? <span className={done.endsWith('|pausada') ? warn : good}><Check size={13} aria-hidden="true" className="inline" /> criada{done.endsWith('|pausada') ? ', mas pausada' : done.endsWith('|ativa') ? ', ativa' : ''}{/^\d/.test(done) ? ` · nº ${done.split('|')[0]}` : ''}</span>
                     : !s ? <span className={muted}>ainda não ensaiada</span>
-                      : s.fase === 'ensaiando' ? <span className={muted}><Loader2 size={12} className="inline animate-spin" /> ensaiando…</span>
-                        : s.fase === 'criando' ? <span className={muted}><Loader2 size={12} className="inline animate-spin" /> criando…</span>
-                          : s.fase === 'aceita' ? <span className={good}><Check size={13} className="inline" /> o Google aceita</span>
-                            : <span className={bad}><X size={13} className="inline" /> {s.fase === 'recusada' ? 'recusada no ensaio' : 'não foi criada'}</span>}
+                      : s.fase === 'ensaiando' ? <span className={muted}><Loader2 size={12} aria-hidden="true" className="inline animate-spin" /> ensaiando…</span>
+                        : s.fase === 'criando' ? <span className={muted}><Loader2 size={12} aria-hidden="true" className="inline animate-spin" /> criando…</span>
+                          : s.fase === 'aceita' ? <span className={good}><Check size={13} aria-hidden="true" className="inline" /> o Google aceita</span>
+                            : <span className={bad}><X size={13} aria-hidden="true" className="inline" /> {s.fase === 'recusada' ? 'recusada no ensaio' : 'não foi criada'}</span>}
                 </div>
               </div>
               <div className={`text-xs ${muted} break-all`}>{r.conta.mcc} › {r.conta.nome} ({dashed(r.conta.id)}) · meta {r.conta.meta_nome || 'não usa'} · {r.url.replace(/^https?:\/\//, '')}</div>
@@ -149,7 +149,7 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
           <>
             <div className="flex flex-wrap items-center gap-3">
               <button onClick={rehearse} disabled={running !== ''} className={`px-4 py-2 rounded-lg border text-xs font-bold inline-flex items-center gap-2 disabled:opacity-40 ${isDark ? 'border-slate-600 text-slate-100 hover:border-indigo-400' : 'border-slate-300 text-slate-800 hover:border-indigo-500'}`}>
-                {running === 'ensaio' && <Loader2 size={13} className="animate-spin" />} 1. Ensaiar no Google ({pending.length})
+                {running === 'ensaio' && <Loader2 size={13} aria-hidden="true" className="animate-spin" />} 1. Ensaiar no Google ({pending.length})
               </button>
               <span className={`text-xs ${stale ? warn : muted}`}>{stale ? 'O rascunho mudou depois do último ensaio: ensaie de novo. ' : ''}{accepted.length ? `${accepted.length} de ${pending.length} aceitas.` : 'Não cria nada.'}{items ? ` Cada campanha leva ${items} itens; o ensaio e a criação contam na cota diária do Google.` : ''}</span>
             </div>
@@ -159,7 +159,7 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
                   <input type="checkbox" className="mt-0.5" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
                   <span>Entendi: isto cria {accepted.length} {accepted.length === 1 ? 'campanha de verdade' : 'campanhas de verdade'} nas contas acima, e elas já nascem ATIVAS: começam a gastar assim que o Google aprovar os anúncios. Não dá para desfazer por aqui; para pausar ou apagar, é no Google Ads ou na tela de Campanhas.</span>
                 </label>
-                <button onClick={create} disabled={!agreed || running !== ''} className={solid}>{running === 'criar' && <Loader2 size={13} className="animate-spin" />} 2. Criar {accepted.length === 1 ? 'a campanha aceita' : `as ${accepted.length} aceitas`}, já ativas</button>
+                <button onClick={create} disabled={!agreed || running !== ''} className={solid}>{running === 'criar' && <Loader2 size={13} aria-hidden="true" className="animate-spin" />} 2. Criar {accepted.length === 1 ? 'a campanha aceita' : `as ${accepted.length} aceitas`}, já ativas</button>
               </div>
             )}
           </>

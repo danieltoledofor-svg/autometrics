@@ -134,7 +134,7 @@ export default function CampaignBuilderPage() {
     <div className={`min-h-screen ${page}`}>
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
         <div className="flex items-center gap-3">
-          <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border ${line} ${muted} hover:text-indigo-400`}><ArrowLeft size={16} /></Link>
+          <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border ${line} ${muted} hover:text-indigo-400`}><ArrowLeft size={16} aria-hidden="true" /></Link>
           <div>
             <h1 className={`text-xl font-extrabold ${head}`}>Criar campanha</h1>
             <div className={`text-xs ${muted}`}>Rede de Pesquisa · o ensaio não cria nada; a criação só acontece no passo 5, com a sua confirmação, e a campanha já nasce ativa</div>
@@ -189,13 +189,13 @@ export default function CampaignBuilderPage() {
               </div>
             )}
             <div className="relative">
-              <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
+              <Search size={14} aria-hidden="true" className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
               <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Nome da campanha, da conta ou da MCC" aria-label="Procurar campanha"
                 className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-3 py-2 text-[13px] outline-none focus:border-indigo-500`} />
             </div>
             <div className={`max-h-64 overflow-y-auto rounded-lg border ${line} divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
               {shown.map((c: any) => (
-                <button key={c.id} onClick={() => setPicked(c.id)} className={`w-full text-left px-3 py-2 text-[13px] ${picked === c.id ? 'bg-indigo-600/15' : ''} ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}>
+                <button key={c.id} onClick={() => setPicked(c.id)} aria-pressed={picked === c.id} className={`w-full text-left px-3 py-2 text-[13px] ${picked === c.id ? 'bg-indigo-600/15' : ''} ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}>
                   <span className={head}>{c.name}</span>
                   <span className={`block text-xs ${muted}`}>{[c.account, c.mcc].filter(Boolean).join(' · ') || 'conta sem nome'}</span>
                 </button>
@@ -205,12 +205,12 @@ export default function CampaignBuilderPage() {
             <div className="flex items-center gap-3">
               <button disabled={!picked || reading} onClick={() => read(`/api/campaign-builder?product_id=${picked}`)}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2">
-                {reading && <Loader2 size={13} className="animate-spin" />} Ler do Google
+                {reading && <Loader2 size={13} aria-hidden="true" className="animate-spin" />} Ler do Google
               </button>
               <button onClick={() => start(emptyDraft(), 'USD')} className={`px-4 py-2 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400`}>Começar do zero</button>
               {(list.campaigns || []).length > 40 && !filter && <span className={`text-xs ${muted}`}>Mostrando 40 de {list.campaigns.length}; use a busca.</span>}
             </div>
-            {error && <div className="text-xs text-rose-500">{error}</div>}
+            <div aria-live="polite">{error && <div className="text-xs text-rose-500">{error}</div>}</div>
           </div>
         )}
 

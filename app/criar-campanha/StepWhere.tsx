@@ -48,7 +48,7 @@ function AccountPicker({ accounts, picked, elsewhere, onToggle, hidden, onHide, 
     <div className={`rounded-lg border ${line} ${soft} p-2.5 space-y-2`}>
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[220px]">
-          <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
+          <Search size={14} aria-hidden="true" className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
           <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Nome da MCC, da conta ou o número" aria-label="Procurar MCC ou conta"
             className={`w-full rounded-lg border ${line} ${isDark ? 'bg-slate-900' : 'bg-white'} ${head} pl-9 pr-3 py-1.5 text-[13px] outline-none focus:border-indigo-500`} />
         </div>
@@ -73,7 +73,7 @@ function AccountPicker({ accounts, picked, elsewhere, onToggle, hidden, onHide, 
                   {(elsewhere.get(a.id) || 0) > 0 && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${line} ${muted}`}>outra página deste lançamento</span>}
                   <button onClick={() => onHide(a.id, !hidden.has(a.id))} title={hidden.has(a.id) ? 'Voltar a mostrar esta conta' : 'Esconder esta conta da lista (por exemplo, se ela está suspensa)'}
                     className={`shrink-0 text-[11px] inline-flex items-center gap-1 ${muted} hover:text-rose-400 ${hidden.has(a.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}>
-                    <EyeOff size={12} /> {hidden.has(a.id) ? 'mostrar' : 'esconder'}
+                    <EyeOff size={12} aria-hidden="true" /> {hidden.has(a.id) ? 'mostrar' : 'esconder'}
                   </button>
                 </div>
               ))}
@@ -168,7 +168,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
           <div key={i} className={`${card} border rounded-xl p-4 space-y-3`}>
             <div className="flex items-center justify-between gap-3">
               <div className={`text-sm font-bold ${head}`}>Página {i + 1} <span className={`text-xs font-normal ${muted}`}>· {p.contas.length ? `${p.contas.length} ${p.contas.length === 1 ? 'campanha' : 'campanhas'}` : 'nenhuma conta escolhida'}</span></div>
-              {draft.paginas.length > 1 && <button onClick={() => { setPages(pages => pages.filter((_, j) => j !== i)); setOpen(null); }} className={`text-xs inline-flex items-center gap-1 ${muted} hover:text-rose-400`}><X size={13} /> Tirar esta página</button>}
+              {draft.paginas.length > 1 && <button onClick={() => { setPages(pages => pages.filter((_, j) => j !== i)); setOpen(null); }} className={`text-xs inline-flex items-center gap-1 ${muted} hover:text-rose-400`}><X size={13} aria-hidden="true" /> Tirar esta página</button>}
             </div>
             <div className="grid md:grid-cols-2 gap-2">
               <div><div className={`text-xs ${muted} mb-1`}>Endereço da página</div>
@@ -185,26 +185,26 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
                   const a = byId.get(id), c = draft.contas.find(x => x.id === id);
                   return (
                     <span key={id} className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded border ${chip}`}>
-                      <Check size={12} /> {c?.mcc ? `${c.mcc} › ` : ''}{c?.nome || dashed(id)}
+                      <Check size={12} aria-hidden="true" /> {c?.mcc ? `${c.mcc} › ` : ''}{c?.nome || dashed(id)}
                       {a && a.ativas.length > 0 && <span className={warn} title={`Rodando agora: ${a.ativas.slice(0, 6).join(' · ')}`}>· {running(a)}</span>}
-                      <button onClick={() => toggle(i, [{ id }], false)} aria-label={`Tirar a conta ${c?.nome || id}`} className="hover:text-rose-400"><X size={12} /></button>
+                      <button onClick={() => toggle(i, [{ id }], false)} aria-label={`Tirar a conta ${c?.nome || id}`} className="hover:text-rose-400"><X size={12} aria-hidden="true" /></button>
                     </span>
                   );
                 })}
                 <button onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i}
                   className={`text-xs font-bold px-2.5 py-1 rounded border inline-flex items-center gap-1 ${isDark ? 'border-slate-600 text-slate-100 hover:border-indigo-400' : 'border-slate-300 text-slate-800 hover:border-indigo-500'}`}>
-                  {open === i ? 'Fechar a lista de contas' : <><Plus size={13} /> Escolher MCC e contas</>}
+                  {open === i ? 'Fechar a lista de contas' : <><Plus size={13} aria-hidden="true" /> Escolher MCC e contas</>}
                 </button>
               </div>
             </div>
             {open === i && (accounts
               ? <AccountPicker accounts={accounts} picked={picked} elsewhere={elsewhere} hidden={hidden} onHide={hide} css={css} onToggle={(list, on) => toggle(i, list, on)} />
-              : <div className={`text-xs ${muted} flex items-center gap-2`}><Loader2 size={13} className="animate-spin" /> Carregando as contas…</div>)}
+              : <div className={`text-xs ${muted} flex items-center gap-2`}><Loader2 size={13} aria-hidden="true" className="animate-spin" /> Carregando as contas…</div>)}
           </div>
         );
       })}
       <button onClick={() => { setPages(pages => [...pages, { url: '', nome: draft.nome, contas: [] }]); setOpen(draft.paginas.length); }}
-        className={`w-full rounded-xl border border-dashed ${line} py-3 text-xs font-bold inline-flex items-center justify-center gap-1.5 ${muted} hover:text-indigo-400 hover:border-indigo-500`}><Plus size={14} /> Outra página, para outras contas</button>
+        className={`w-full rounded-xl border border-dashed ${line} py-3 text-xs font-bold inline-flex items-center justify-center gap-1.5 ${muted} hover:text-indigo-400 hover:border-indigo-500`}><Plus size={14} aria-hidden="true" /> Outra página, para outras contas</button>
 
       {draft.contas.length > 0 && (
         <div className={`${card} border rounded-xl p-4 space-y-3`}>
@@ -217,7 +217,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
             return (
               <div key={c.id} className={`flex flex-wrap items-center gap-2 py-1.5 border-t ${line} text-[13px]`}>
                 <div className="flex-1 min-w-[200px]"><span className={head}>{c.nome}</span> <span className={`text-xs ${muted}`}>· {c.mcc} · {dashed(c.id)}</span></div>
-                {g?.loading || !g ? <span className={`text-xs ${muted} inline-flex items-center gap-1.5`}><Loader2 size={12} className="animate-spin" /> lendo as metas…</span>
+                {g?.loading || !g ? <span className={`text-xs ${muted} inline-flex items-center gap-1.5`}><Loader2 size={12} aria-hidden="true" className="animate-spin" /> lendo as metas…</span>
                   : g.error ? <span className="text-xs text-rose-500 max-w-[320px]">{g.error}</span>
                     : g.list?.length ? (
                       <select value={c.meta_id || ''} onChange={e => setGoal(c.id, e.target.value)} aria-label={`Meta de conversão de ${c.nome}`}
