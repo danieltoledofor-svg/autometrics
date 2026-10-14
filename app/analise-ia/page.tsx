@@ -244,14 +244,14 @@ export default function PatternsPage() {
               className={href === '/analise-ia'
                 ? 'w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20'
                 : `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-              <Icon size={20} /> <span className="font-medium">{label}</span>
+              <Icon size={20} aria-hidden="true" /> <span className="font-medium">{label}</span>
             </Link>
           ))}
         </nav>
         <div className="p-4 border-t border-inherit">
           <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/'; }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10">
-            <LogOut size={20} /> <span className="font-medium">Sair ({email.split('@')[0]})</span>
+            <LogOut size={20} aria-hidden="true" /> <span className="font-medium">Sair ({email.split('@')[0]})</span>
           </button>
         </div>
       </aside>
@@ -263,8 +263,8 @@ export default function PatternsPage() {
             <h1 className={`text-2xl font-bold ${head}`}>Análise de IA</h1>
             <div className={`text-sm ${muted}`}>O que se repete nas suas campanhas parecidas, e perguntas sobre elas</div>
           </div>
-          <button onClick={() => { const t = isDark ? 'light' : 'dark'; setTheme(t); localStorage.setItem('autometrics_theme', t); }} className={muted}>
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          <button onClick={() => { const t = isDark ? 'light' : 'dark'; setTheme(t); localStorage.setItem('autometrics_theme', t); }} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={muted}>
+            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
           </button>
         </div>
 
@@ -273,7 +273,7 @@ export default function PatternsPage() {
           <div className="flex flex-wrap gap-2">
             {[{ name: '', label: 'Todas as MCCs', count: data.options.mccs.reduce((n: number, m: any) => n + m.count, 0) },
               ...data.options.mccs.map((m: any) => ({ name: m.name, label: m.name, count: m.count }))].map((m: any) => (
-              <button key={m.name || 'todas'} onClick={() => setMcc(m.name)}
+              <button key={m.name || 'todas'} onClick={() => setMcc(m.name)} aria-pressed={mcc === m.name}
                 className={`text-left rounded-xl border px-3.5 py-2.5 min-w-[130px] transition-colors ${mcc === m.name ? chipOn : `${card} ${muted} hover:border-indigo-500/40`}`}>
                 <div className={`text-[13px] font-bold ${mcc === m.name ? '' : head}`}>{m.label}</div>
                 <div className="text-[11px] opacity-70 tabular-nums">{m.count} {m.count === 1 ? 'campanha' : 'campanhas'}</div>
@@ -286,18 +286,19 @@ export default function PatternsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <select value={(data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) ? tag.toUpperCase() : tag ? '__outro' : ''}
               onChange={e => { if (e.target.value !== '__outro') setTag(e.target.value); }}
+              aria-label="Conjunto de campanhas"
               className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] font-bold`}>
               <option value="">Todas as campanhas</option>
               {(data?.options?.tags || []).map((t: any) => <option key={t.tag} value={t.tag}>{t.tag} · {t.count}</option>)}
               {tag && !(data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) && <option value="__outro">Contém “{tag}”</option>}
             </select>
-            <input defaultValue="" placeholder="ou um trecho do nome" key={tag}
+            <input defaultValue="" placeholder="ou um trecho do nome" aria-label="Trecho do nome da campanha (Enter para usar)" key={tag}
               onKeyDown={e => { if (e.key === 'Enter') setTag((e.target as HTMLInputElement).value.trim()); }}
               onBlur={e => { const v = e.target.value.trim(); if (v) setTag(v); }}
               className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] w-44 outline-none focus:border-indigo-500`} />
             <div className={`flex items-center gap-1 p-1 rounded-lg border ${line} ml-auto flex-wrap`}>
               {PERIODS.map(p => (
-                <button key={p.key} onClick={() => setPeriod(p.key)}
+                <button key={p.key} onClick={() => setPeriod(p.key)} aria-pressed={period === p.key}
                   className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${period === p.key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-900') : `${muted} hover:text-slate-300`}`}>
                   {p.label}
                 </button>
@@ -307,10 +308,10 @@ export default function PatternsPage() {
           {custom && (
             <div className="flex flex-wrap items-center gap-2">
               <span className={`text-[11px] font-bold uppercase tracking-wide ${muted}`}>Período</span>
-              <input type="date" value={from} max={dayStr(0)} onChange={e => setFrom(e.target.value)}
+              <input type="date" aria-label="Data inicial" value={from} max={dayStr(0)} onChange={e => setFrom(e.target.value)}
                 className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} />
               <span className={`text-xs ${muted}`}>até</span>
-              <input type="date" value={to} max={dayStr(0)} onChange={e => setTo(e.target.value)}
+              <input type="date" aria-label="Data final" value={to} max={dayStr(0)} onChange={e => setTo(e.target.value)}
                 className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} />
             </div>
           )}
@@ -320,9 +321,9 @@ export default function PatternsPage() {
               {data.options.blocks.map((b: any) => {
                 const on = blocks.includes(b.id);
                 return (
-                  <button key={b.id} onClick={() => toggleBlock(b.id)}
+                  <button key={b.id} onClick={() => toggleBlock(b.id)} aria-pressed={on}
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-colors ${on ? chipOn : chipOff}`}>
-                    <Check size={12} className={on ? '' : 'opacity-0'} /> {b.name} <span className="opacity-60 font-medium tabular-nums">{b.count}</span>
+                    <Check size={12} aria-hidden="true" className={on ? '' : 'opacity-0'} /> {b.name} <span className="opacity-60 font-medium tabular-nums">{b.count}</span>
                   </button>
                 );
               })}
@@ -330,8 +331,8 @@ export default function PatternsPage() {
           )}
         </div>
 
-        {loading && !data && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} className="animate-spin" /> Calculando…</div>}
-        {error && <div className="text-sm text-rose-500">{error}</div>}
+        {loading && !data && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Calculando…</div>}
+        <div aria-live="polite">{error && <div className="text-sm text-rose-500">{error}</div>}</div>
         {data?.empty && <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>Nenhuma campanha com esse nome nos grupos marcados.</div>}
 
         {d && (
@@ -367,12 +368,12 @@ export default function PatternsPage() {
                 {data.ai && (
                   <button onClick={askAi} disabled={asking || !d.totals.cost}
                     className="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5">
-                    {asking ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {reading ? 'Refazer leitura da IA' : 'Pedir leitura da IA'}
+                    {asking ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Sparkles size={12} aria-hidden="true" />} {reading ? 'Refazer leitura da IA' : 'Pedir leitura da IA'}
                   </button>
                 )}
               </div>
               {fewSales && <div className={`text-xs ${warn}`}>Poucas vendas neste período ({qty(d.totals.sales)}): os números ainda são pequenos para concluir.</div>}
-              {aiError && <div className="text-xs text-rose-500">{aiError}</div>}
+              <div aria-live="polite">{aiError && <div className="text-xs text-rose-500">{aiError}</div>}</div>
               {reading && (
                 <div className={`rounded-lg border ${line} ${soft} p-3 space-y-2`}>
                   <div className={`text-[10.5px] uppercase tracking-wider font-bold ${muted}`}>✦ Leitura da IA</div>
@@ -392,6 +393,8 @@ export default function PatternsPage() {
             {data.ai && (
               <div className={`${card} border rounded-xl p-4 space-y-3`}>
                 <div className={title}>Pergunte à IA sobre este conjunto</div>
+                {/* As respostas chegam sozinhas: o leitor de tela lê quando aparecem. */}
+                <div aria-live="polite" className="space-y-3">
                 {chat.map((c, i) => (
                   <div key={i} className="space-y-1.5">
                     <div className={`text-[13px] font-bold ${head}`}>{c.q}</div>
@@ -402,15 +405,16 @@ export default function PatternsPage() {
                       : <button onClick={() => keep(i)} className="text-[11px] text-indigo-400 hover:underline">Guardar esta resposta na memória da IA</button>}
                   </div>
                 ))}
-                {askError && <div className="text-xs text-rose-500">{askError}</div>}
+                </div>
+                <div aria-live="polite">{askError && <div className="text-xs text-rose-500">{askError}</div>}</div>
                 <div className="flex gap-2 items-end">
-                  <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2} maxLength={1000}
+                  <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2} maxLength={1000} aria-label="Pergunta para a IA (Enter envia, Shift+Enter quebra a linha)"
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }}
                     placeholder="Qual campanha piorou mais nesta semana e em qual termo?"
                     className={`flex-1 rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
                   <button onClick={ask} disabled={answering || !question.trim()}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5">
-                    {answering ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Perguntar
+                    {answering ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Send size={13} aria-hidden="true" />} Perguntar
                   </button>
                 </div>
                 <div className={`text-[11px] ${muted}`}>
@@ -496,7 +500,7 @@ export default function PatternsPage() {
                         <td className={`${td} text-right ${r.melhorou ? good : muted}`}>{r.melhorou}</td>
                         <td className={`${td} text-right ${r.piorou ? bad : muted}`}>{r.piorou}</td>
                         <td className={`${td} text-right ${muted}`}>{r.igual}</td>
-                        <td className={`${td} text-right ${r.cpa_change === null ? muted : r.cpa_change <= 0 ? good : bad}`}>{r.cpa_change === null ? '—' : `${r.cpa_change > 0 ? '+' : ''}${r.cpa_change}%`}</td>
+                        <td className={`${td} text-right ${r.cpa_change === null ? muted : r.cpa_change <= 0 ? good : bad}`}>{r.cpa_change === null ? '—' : `${r.cpa_change > 0 ? '+' : ''}${Number(r.cpa_change).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}</td>
                         <td className={`${td} text-right ${muted}`}>{r.waiting}</td>
                       </tr>
                     ))}</tbody>
@@ -531,10 +535,11 @@ export default function PatternsPage() {
                     <tbody>{d.verdicts.map((v: any) => (
                       <tr key={v.id}>
                         <td className={`${td} max-w-[320px]`}>
-                          <Link href={`/products/${v.id}`} target="_blank" className={`font-medium ${head} hover:text-indigo-400 hover:underline`}>{v.name}</Link>
+                          <Link href={`/products/${v.id}`} target="_blank" rel="noopener noreferrer" className={`font-medium ${head} hover:text-indigo-400 hover:underline`}>{v.name}</Link>
                           {v.status && (
                             <span title={v.status.hint} className={`ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide align-middle ${v.status.badge}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${v.status.dot}`} />{v.status.label}
+                              {v.status.hint && <span className="sr-only">: {v.status.hint}</span>}
                             </span>
                           )}
                           <div className={`text-[11px] ${muted} whitespace-normal`}>{v.reason}</div>
@@ -565,7 +570,7 @@ export default function PatternsPage() {
             return (
               <Link key={href} href={href}
                 className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-                <Icon size={22} />
+                <Icon size={22} aria-hidden="true" />
                 <span className="text-[9px] font-bold tracking-wide">{short}</span>
                 {active && <div className="w-1 h-1 rounded-full bg-indigo-500" />}
               </Link>

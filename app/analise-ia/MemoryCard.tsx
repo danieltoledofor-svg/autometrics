@@ -60,7 +60,9 @@ export function MemoryCard({ api, tags, css, reloadKey }: { api: Api; tags: { ta
     setSaving(false);
   };
 
-  const remove = async (id: string) => {
+  // Apagar some com a anotação de vez: confirma antes.
+  const remove = async (id: string, title?: string) => {
+    if (!confirm(`Apagar${title ? ` "${title}"` : ' esta anotação'} da memória da IA? Não dá para desfazer.`)) return;
     await api(`/api/memory?id=${id}`, { method: 'DELETE' });
     await load();
   };
@@ -69,8 +71,8 @@ export function MemoryCard({ api, tags, css, reloadKey }: { api: Api; tags: { ta
 
   return (
     <div className={`${card} border rounded-xl p-4 space-y-3`}>
-      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 w-full text-left">
-        {open ? <ChevronDown size={14} className={muted} /> : <ChevronRight size={14} className={muted} />}
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open} className="flex items-center gap-2 w-full text-left">
+        {open ? <ChevronDown size={14} aria-hidden="true" className={muted} /> : <ChevronRight size={14} aria-hidden="true" className={muted} />}
         <span className={title}>Memória da IA</span>
         <span className={`text-xs ${muted}`}>{state?.ready ? `${state.items.length} ${state.items.length === 1 ? 'item guardado' : 'itens guardados'}` : ''}</span>
       </button>
@@ -82,44 +84,44 @@ export function MemoryCard({ api, tags, css, reloadKey }: { api: Api; tags: { ta
           Guarde aqui decisões que você tomou, regras suas e materiais de estudo. A IA lê isto antes de escrever a leitura de cada campanha, a leitura do grupo e as respostas às suas perguntas. Só você vê.
         </div>
         <div className="flex flex-wrap gap-2">
-          <select value={kind} onChange={e => setKind(e.target.value)} className={`${field} font-bold`}>
+          <select value={kind} onChange={e => setKind(e.target.value)} aria-label="Tipo de anotação" className={`${field} font-bold`}>
             {KINDS.map(k => <option key={k.key} value={k.key}>{k.label}</option>)}
           </select>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Título" maxLength={160} className={`${field} flex-1 min-w-[180px]`} />
-          <select value={scope} onChange={e => setScope(e.target.value)} className={field} title="Para quais campanhas esta anotação vale">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Título" aria-label="Título" maxLength={160} className={`${field} flex-1 min-w-[180px]`} />
+          <select value={scope} onChange={e => setScope(e.target.value)} className={field} title="Para quais campanhas esta anotação vale" aria-label="Para quais campanhas esta anotação vale">
             <option value="">Vale para todas as campanhas</option>
             {tags.map(t => <option key={t.tag} value={t.tag}>Só campanhas {t.tag}</option>)}
           </select>
         </div>
-        <textarea value={text} onChange={e => setText(e.target.value)} rows={4}
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={4} aria-label="Texto da anotação"
           placeholder="Ex.: Em campanha [WL], só subo o orçamento depois de 3 dias seguidos com CPA abaixo de US$ 120."
           className={`${field} w-full resize-y`} />
         <div className="flex flex-wrap items-center gap-2">
           <input ref={file} type="file" accept=".md,.txt,.markdown,text/plain,text/markdown" className="hidden"
             onChange={e => { pickFile(e.target.files?.[0]); e.target.value = ''; }} />
           <button onClick={() => file.current?.click()} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400`}>
-            <FileUp size={13} /> Enviar arquivo .md ou .txt
+            <FileUp size={13} aria-hidden="true" /> Enviar arquivo .md ou .txt
           </button>
           {text && <span className={`text-[11px] ${muted}`}>{text.length.toLocaleString('pt-BR')} caracteres</span>}
           <div className="flex-1" />
           <button onClick={save} disabled={saving || !text.trim()}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5">
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Guardar na memória
+            {saving ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Save size={12} aria-hidden="true" />} Guardar na memória
           </button>
         </div>
-        {message && <div className={`text-xs ${/Guardado/.test(message) ? 'text-emerald-500' : 'text-rose-500'}`}>{message}</div>}
+        <div aria-live="polite">{message && <div className={`text-xs ${/Guardado/.test(message) ? 'text-emerald-500' : 'text-rose-500'}`}>{message}</div>}</div>
 
         {state.items.length > 0 && (
           <div>
             {state.items.map(m => (
               <div key={m.id} className={`py-2 border-t ${line}`}>
                 <div className="flex items-start gap-2">
-                  <button onClick={() => setExpanded(x => (x === m.id ? null : m.id))} className="flex-1 min-w-0 text-left">
+                  <button onClick={() => setExpanded(x => (x === m.id ? null : m.id))} aria-expanded={expanded === m.id} className="flex-1 min-w-0 text-left">
                     <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${soft} ${muted} mr-2`}>{KIND_LABEL[m.kind] || 'Observação'}</span>
                     <span className={`text-[13px] font-medium ${head}`}>{m.title}</span>
                     <span className={`text-[11px] ${muted}`}> · {String(m.created_at).slice(0, 10).split('-').reverse().join('/')}{m.scope ? ` · só ${m.scope}` : ''}{m.summarized ? ` · resumo de ${m.chars.toLocaleString('pt-BR')} caracteres` : ''}</span>
                   </button>
-                  <button onClick={() => remove(m.id)} title="Apagar" className={`${muted} hover:text-rose-500 shrink-0`}><Trash2 size={13} /></button>
+                  <button onClick={() => remove(m.id, m.title)} title="Apagar" aria-label={`Apagar ${m.title} da memória`} className={`${muted} hover:text-rose-500 shrink-0`}><Trash2 size={13} aria-hidden="true" /></button>
                 </div>
                 {expanded === m.id && <div className={`mt-2 rounded-lg border ${line} ${soft} p-3 text-[12.5px] leading-relaxed whitespace-pre-wrap`}>{m.summary}</div>}
               </div>
