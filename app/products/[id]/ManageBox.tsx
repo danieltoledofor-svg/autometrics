@@ -486,7 +486,7 @@ export function LocationsBox({ manage, ui, productId }: { manage: Manage; ui: Ui
             {locations.map(l => (
               <span key={l.id} className={`inline-flex items-center gap-2 rounded-lg border ${ui.borderCol} px-2 py-1 text-[13px] ${ui.textHead}`}>
                 <span className={pill(l.excluido)}>{l.excluido ? 'excluído' : 'incluído'}</span>{l.nome}
-                <RowAction label="Tirar" busy={busy === `t${l.id}`} onClick={() => run(`t${l.id}`, 'local_remover', { id: l.id })} danger />
+                <RowAction label="Tirar" busy={busy === `t${l.id}`} onClick={() => { if (window.confirm(`Tirar "${l.nome}" da campanha no Google?`)) run(`t${l.id}`, 'local_remover', { id: l.id }); }} danger />
               </span>
             ))}
           </div>

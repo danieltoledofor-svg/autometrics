@@ -129,8 +129,8 @@ export function QuickEntryModal({ target, onClose, onSaved, manualDollar, isDark
   const textHead = isDark ? 'text-white' : 'text-slate-900';
   const inputCls = `w-full border rounded p-2 text-sm ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-black'}`;
   const field = (label: string, key: keyof typeof EMPTY, accent = 'text-slate-500', extra = '') => (
-    <div>
-      <label className={`text-[10px] uppercase font-bold ${accent}`}>{label}</label>
+    <label className="block">
+      <span className={`text-[10px] uppercase font-bold ${accent}`}>{label}</span>
       <input
         type="number"
         className={`${inputCls} ${extra}`}
@@ -138,20 +138,20 @@ export function QuickEntryModal({ target, onClose, onSaved, manualDollar, isDark
         value={data[key] === 0 ? '' : data[key]}
         onChange={e => setData({ ...data, [key]: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
       />
-    </div>
+    </label>
   );
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className={`${bgCard} border rounded-xl w-full max-w-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]`} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="quick-entry-title" className={`${bgCard} border rounded-xl w-full max-w-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]`} onClick={e => e.stopPropagation()}>
         <div className={`flex justify-between items-start gap-4 mb-6 border-b pb-4 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="min-w-0">
-            <h2 className={`text-xl font-bold ${textHead} flex items-center gap-2`}>
-              <FileText size={20} className="text-indigo-500" /> Lançamento Rápido
+            <h2 id="quick-entry-title" className={`text-xl font-bold ${textHead} flex items-center gap-2`}>
+              <FileText size={20} aria-hidden="true" className="text-indigo-500" /> Lançamento Rápido
             </h2>
             <p className="text-xs text-slate-500 mt-1 break-words">{target.productName}</p>
           </div>
-          <button onClick={onClose} className="shrink-0"><X size={24} className="text-slate-400 hover:text-white" /></button>
+          <button autoFocus onClick={onClose} aria-label="Fechar" className="shrink-0"><X size={24} aria-hidden="true" className="text-slate-400 hover:text-white" /></button>
         </div>
 
         <div className="space-y-6">
@@ -160,6 +160,7 @@ export function QuickEntryModal({ target, onClose, onSaved, manualDollar, isDark
               <label className="text-xs uppercase text-slate-500 font-bold">Data</label>
               <input
                 type="date"
+                aria-label="Data"
                 className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`}
                 value={data.date}
                 onChange={e => setData({ ...data, date: e.target.value })}
@@ -168,6 +169,7 @@ export function QuickEntryModal({ target, onClose, onSaved, manualDollar, isDark
             <div>
               <label className="text-xs uppercase text-slate-500 font-bold">Moeda</label>
               <select
+                aria-label="Moeda"
                 className={`w-full border rounded p-2 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-black'}`}
                 value={data.currency}
                 onChange={e => setData({ ...data, currency: e.target.value })}

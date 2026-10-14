@@ -477,7 +477,7 @@ export default function ProductDetailPage() {
   }, [metrics, viewCurrency, startDate, endDate, manualDollar]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
-  const formatPercent = (val: number) => `${val.toFixed(2)}%`;
+  const formatPercent = (val: number) => `${(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
   // Grupos/anúncios/palavras-chave vêm na moeda da conta: mesma conversão do custo.
   const entityFx = (() => {
     const cur = metrics[metrics.length - 1]?.currency || product?.currency || 'BRL';
@@ -485,7 +485,7 @@ export default function ProductDetailPage() {
     if (viewCurrency !== 'BRL' && cur === 'BRL') return 1 / liveDollar;
     return 1;
   })();
-  const formatShare = (val: number) => val === 0 ? '< 10%' : `${(val * 100).toFixed(2)}%`;
+  const formatShare = (val: number) => val === 0 ? '< 10%' : `${(val * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 
 
   const isDark = theme === 'dark';
@@ -637,12 +637,12 @@ export default function ProductDetailPage() {
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {[
-            { href: '/dashboard', icon: <LayoutGrid size={18} />, label: 'Dashboard' },
-            { href: '/planning', icon: <Target size={18} />, label: 'Metas' },
-            { href: '/products', icon: <Package size={18} />, label: 'Campanhas', active: true },
-            { href: '/analise-ia', icon: <Sparkles size={18} />, label: 'Análise de IA' },
-            { href: '/rastreamento', icon: <Route size={18} />, label: 'Rastreamento' },
-            { href: '/integration', icon: <Settings size={18} />, label: 'Integração' },
+            { href: '/dashboard', icon: <LayoutGrid size={18} aria-hidden="true" />, label: 'Dashboard' },
+            { href: '/planning', icon: <Target size={18} aria-hidden="true" />, label: 'Metas' },
+            { href: '/products', icon: <Package size={18} aria-hidden="true" />, label: 'Campanhas', active: true },
+            { href: '/analise-ia', icon: <Sparkles size={18} aria-hidden="true" />, label: 'Análise de IA' },
+            { href: '/rastreamento', icon: <Route size={18} aria-hidden="true" />, label: 'Rastreamento' },
+            { href: '/integration', icon: <Settings size={18} aria-hidden="true" />, label: 'Integração' },
           ].map(item => (
             <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${(item as any).active ? 'bg-indigo-600 text-white' : (isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-100')}`}>
               {item.icon} {item.label}
@@ -652,7 +652,7 @@ export default function ProductDetailPage() {
         <div className={`p-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className={`text-xs ${textMuted} mb-2 truncate`}>{userEmail}</div>
           <button onClick={handleLogout} className={`flex items-center gap-2 text-xs ${textMuted} hover:text-rose-400 transition-colors`}>
-            <LogOut size={14} /> Sair
+            <LogOut size={14} aria-hidden="true" /> Sair
           </button>
         </div>
       </aside>
@@ -662,22 +662,22 @@ export default function ProductDetailPage() {
 
         {/* MOBILE HEADER */}
         <div className={`md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-3 border-b backdrop-blur-md ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
-          <Link href="/products" className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
-            <ArrowLeft size={18} />
+          <Link href="/products" aria-label="Voltar para Campanhas" className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+            <ArrowLeft size={18} aria-hidden="true" />
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className={`text-sm font-bold truncate ${textHead}`}>{product.name}</h1>
             <span className={`text-[10px] ${textMuted}`}>{product.platform}</span>
           </div>
           <span className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold border ${headerStatus.badge}`} title={headerStatus.hint}>
-            {headerStatus.key === 'ativo' ? <PlayCircle size={10} /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={10} /> : <PauseCircle size={10} />}
+            {headerStatus.key === 'ativo' ? <PlayCircle size={10} aria-hidden="true" /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={10} aria-hidden="true" /> : <PauseCircle size={10} aria-hidden="true" />}
             {headerStatus.label}
           </span>
-          <button onClick={toggleTheme} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
-            {isDark ? <Sun size={16} /> : <Moon size={16} />}
+          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+            {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
           </button>
-          <button onClick={() => setShowFilterSheet(true)} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
-            <SlidersHorizontal size={16} />
+          <button onClick={() => setShowFilterSheet(true)} aria-label="Abrir filtros" aria-expanded={showFilterSheet} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+            <SlidersHorizontal size={16} aria-hidden="true" />
           </button>
         </div>
 
@@ -685,30 +685,30 @@ export default function ProductDetailPage() {
 
       <header className="hidden md:flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
         <div className="flex items-center gap-4">
-          <Link href="/products" className={`p-2 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
-            <ArrowLeft size={20} />
+          <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+            <ArrowLeft size={20} aria-hidden="true" />
           </Link>
           <div>
             <div className="flex items-center gap-3">
               <h1 className={`text-2xl font-bold ${textHead}`}>{product.name}</h1>
               <span className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${headerStatus.badge}`} title={headerStatus.hint}>
-                {headerStatus.key === 'ativo' ? <PlayCircle size={12} /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={12} /> : <PauseCircle size={12} />} {headerStatus.label}
+                {headerStatus.key === 'ativo' ? <PlayCircle size={12} aria-hidden="true" /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={12} aria-hidden="true" /> : <PauseCircle size={12} aria-hidden="true" />} {headerStatus.label}
               </span>
             </div>
-            <div className={`flex items-center gap-3 text-sm ${textMuted} mt-1`}><span className="flex items-center gap-1"><ExternalLink size={12} /> {product.platform}</span><span>•</span><span className={`font-mono text-xs px-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}><Hash size={10} /> {product.google_ads_campaign_id || 'N/A'}</span></div>
+            <div className={`flex items-center gap-3 text-sm ${textMuted} mt-1`}><span className="flex items-center gap-1"><ExternalLink size={12} aria-hidden="true" /> {product.platform}</span><span>•</span><span className={`font-mono text-xs px-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}><Hash size={10} aria-hidden="true" /> {product.google_ads_campaign_id || 'N/A'}</span></div>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
           <button onClick={() => setShowManualEntry(true)} className="flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-bold transition-all shadow-lg shadow-indigo-900/20 w-full sm:w-auto">
-            <FileText size={16} className="sm:w-3.5 sm:h-3.5" /> Lançamento Rápido
+            <FileText size={16} aria-hidden="true" className="sm:w-3.5 sm:h-3.5" /> Lançamento Rápido
           </button>
 
           {/* SELETOR DE DATA */}
           <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto gap-2 sm:gap-0`}>
             <div className="flex items-center justify-between sm:justify-start gap-2 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit">
               <div className="flex items-center gap-2 w-full">
-                <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"} />
+                <Calendar size={18} aria-hidden="true" className={isDark ? "text-white" : "text-indigo-600"} />
                 <select
                   className={`bg-transparent text-sm font-bold outline-none cursor-pointer text-right sm:text-left flex-1 sm:w-28 ${textHead}`}
                   value={dateRange}
@@ -727,14 +727,16 @@ export default function ProductDetailPage() {
             <div className="flex items-center justify-between sm:justify-start gap-2 px-2">
               <input
                 type="date"
-                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                aria-label="Data inicial"
+                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-indigo-500 ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                 value={startInput.value}
                 onChange={(e) => startInput.onChange(e.target.value)}
               />
               <span className="text-slate-500 text-xs">até</span>
               <input
                 type="date"
-                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                aria-label="Data final"
+                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-indigo-500 ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                 value={endInput.value}
                 onChange={(e) => endInput.onChange(e.target.value)}
               />
@@ -743,11 +745,11 @@ export default function ProductDetailPage() {
 
           <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-lg border gap-4 sm:gap-2 w-full sm:w-auto ${bgCard}`}>
             <div className={`flex rounded-md p-1 sm:p-0 ${isDark ? 'bg-black sm:bg-transparent' : 'bg-slate-100 sm:bg-transparent'} gap-1 w-full sm:w-auto`}>
-              <button onClick={() => toggleViewCurrency('USD')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
-              <button onClick={() => toggleViewCurrency('BRL')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
-              <button onClick={() => toggleViewCurrency('EUR')} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>EUR</button>
+              <button onClick={() => toggleViewCurrency('USD')} aria-pressed={viewCurrency === 'USD'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
+              <button onClick={() => toggleViewCurrency('BRL')} aria-pressed={viewCurrency === 'BRL'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
+              <button onClick={() => toggleViewCurrency('EUR')} aria-pressed={viewCurrency === 'EUR'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>EUR</button>
             </div>
-            <button onClick={toggleTheme} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} /> : <Moon size={18} />}</button>
+            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}</button>
           </div>
         </div>
       </header>
@@ -768,6 +770,7 @@ export default function ProductDetailPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
+            aria-pressed={activeTab === tab.id}
             className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}
           >
             {tab.label}
@@ -777,19 +780,20 @@ export default function ProductDetailPage() {
 
       <div className={`hidden md:flex overflow-x-auto custom-scrollbar gap-0 border-b ${borderCol} mb-8`}>
         {[
-          { id: 'ads', icon: <BarChart2 size={15} />, label: 'Visão Geral' },
-          { id: 'analysis', icon: <ListChecks size={15} />, label: 'Análise' },
-          { id: 'ad_groups', icon: <Layers size={15} />, label: 'Grupos de Anúncios' },
-          { id: 'ad_list', icon: <Megaphone size={15} />, label: 'Anúncios' },
-          { id: 'keywords', icon: <KeyRound size={15} />, label: 'Palavras-chave' },
-          { id: 'search_terms', icon: <FileText size={15} />, label: 'Termos de Pesquisa' },
-          { id: 'audiences', icon: <BarChart size={15} />, label: 'Públicos' },
-          { id: 'locations', icon: <Globe size={15} />, label: 'Locais' },
-          { id: 'vturb', icon: <Tv2 size={15} />, label: 'VTurb Analytics' },
+          { id: 'ads', icon: <BarChart2 size={15} aria-hidden="true" />, label: 'Visão Geral' },
+          { id: 'analysis', icon: <ListChecks size={15} aria-hidden="true" />, label: 'Análise' },
+          { id: 'ad_groups', icon: <Layers size={15} aria-hidden="true" />, label: 'Grupos de Anúncios' },
+          { id: 'ad_list', icon: <Megaphone size={15} aria-hidden="true" />, label: 'Anúncios' },
+          { id: 'keywords', icon: <KeyRound size={15} aria-hidden="true" />, label: 'Palavras-chave' },
+          { id: 'search_terms', icon: <FileText size={15} aria-hidden="true" />, label: 'Termos de Pesquisa' },
+          { id: 'audiences', icon: <BarChart size={15} aria-hidden="true" />, label: 'Públicos' },
+          { id: 'locations', icon: <Globe size={15} aria-hidden="true" />, label: 'Locais' },
+          { id: 'vturb', icon: <Tv2 size={15} aria-hidden="true" />, label: 'VTurb Analytics' },
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
+            aria-pressed={activeTab === tab.id}
             className={`flex items-center gap-2 px-5 py-3 text-sm font-bold border-b-2 whitespace-nowrap transition-all ${activeTab === tab.id
               ? 'border-indigo-500 text-indigo-400'
               : `border-transparent ${textMuted} hover:text-slate-300`
@@ -810,7 +814,7 @@ export default function ProductDetailPage() {
             { label: 'Receita', value: formatMoney(stats.revenue), color: '#3b82f6', data: chart.map(c => c.receita) },
             { label: 'Custo Ads', value: formatMoney(stats.cost), color: '#f97316', data: chart.map(c => c.custo) },
             { label: 'Lucro', value: formatMoney(stats.profit), color: stats.profit >= 0 ? '#10b981' : '#f43f5e', data: chart.map(c => c.lucro) },
-            { label: 'ROI', value: `${stats.roi.toFixed(1)}%`, color: '#6366f1', data: rows.map(r => r.roi) },
+            { label: 'ROI', value: `${stats.roi.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`, color: '#6366f1', data: rows.map(r => r.roi) },
             { label: 'CPA', value: formatMoney(globalCpa), color: '#06b6d4', data: rows.map(r => r.cpa) },
           ].map((kpi, i) => (
             <div key={i} className={`flex-shrink-0 w-[130px] ${bgCard} rounded-xl p-4 border-t-4`} style={{ borderTopColor: kpi.color }}>
@@ -836,7 +840,7 @@ export default function ProductDetailPage() {
           </div>
           <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-indigo-500`}>
             <p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p>
-            <p className="text-2xl font-bold text-indigo-500">{stats.roi.toFixed(1)}%</p>
+            <p className="text-2xl font-bold text-indigo-500">{stats.roi.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</p>
           </div>
           <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-cyan-500`}>
             <p className="text-slate-500 text-xs font-bold uppercase mb-2">CPA (Custo/Conv)</p>
@@ -878,7 +882,7 @@ export default function ProductDetailPage() {
                     </div>
                     <div className="text-left">
                       <p className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</p>
-                      <p className={`text-xs ${textMuted}`}>{row.conversions} conv · ROI {row.roi.toFixed(0)}%</p>
+                      <p className={`text-xs ${textMuted}`}>{row.conversions} conv · ROI {Math.round(row.roi).toLocaleString('pt-BR')}%</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -929,13 +933,13 @@ export default function ProductDetailPage() {
             <div className="flex items-center gap-2">
             <TableControls prefs={overviewPrefs} isDark={isDark} />
             <button onClick={() => setShowColumnModal(true)} className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded transition-colors border ${isDark ? 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700' : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border-slate-300'}`}>
-              <Columns size={14} /> Personalizar Colunas
+              <Columns size={14} aria-hidden="true" /> Personalizar Colunas
             </button>
             </div>
           </div>
           {revisoes && (
             <div className={`px-4 py-2.5 border-b flex items-center gap-2 flex-wrap text-xs ${borderCol} ${isDark ? 'bg-sky-500/10' : 'bg-sky-50'}`}>
-              <RefreshCw size={14} className="text-sky-400 shrink-0" />
+              <RefreshCw size={14} aria-hidden="true" className="text-sky-400 shrink-0" />
               <span className={isDark ? 'text-sky-300' : 'text-sky-700'}>
                 <strong>{revisoes.dias}</strong> {revisoes.dias === 1 ? 'dia teve' : 'dias tiveram'} o custo revisado pelo Google no período
                 {' — '}
@@ -1024,12 +1028,13 @@ export default function ProductDetailPage() {
                                 <button
                                   onClick={() => openNoteByKey(dateKey)}
                                   title={hasNote ? 'Ver/Editar anotação' : 'Adicionar anotação'}
+                                  aria-label={`${hasNote ? 'Ver ou editar a anotação' : 'Adicionar anotação'} de ${val}`}
                                   className={`rounded-md p-1 transition-colors ${hasNote
                                     ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20'
-                                    : `${textMuted} hover:text-indigo-400 hover:bg-indigo-400/10 opacity-0 group-hover:opacity-100`
+                                    : `${textMuted} hover:text-indigo-400 hover:bg-indigo-400/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100`
                                     }`}
                                 >
-                                  <NotebookPen size={13} />
+                                  <NotebookPen size={13} aria-hidden="true" />
                                 </button>
                                 {hasNote && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Tem anotação" />}
                               </div>
@@ -1038,12 +1043,12 @@ export default function ProductDetailPage() {
                           if (col.key === 'notes') return (
                             <td key={col.key} className={`${pad} ${bg} max-w-[200px]`} style={widthStyle(overviewPrefs.widths[col.key])}>
                               {hasNote
-                                ? <span className={`text-xs italic truncate block max-w-[180px] text-amber-400/80 cursor-pointer hover:text-amber-300`} title={notes[dateKey]} onClick={() => openNoteByKey(dateKey)}>{noteSummary(notes[dateKey])}</span>
+                                ? <span role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteByKey(dateKey); } }} className={`text-xs italic truncate block max-w-[180px] text-amber-400/80 cursor-pointer hover:text-amber-300`} title={notes[dateKey]} onClick={() => openNoteByKey(dateKey)}>{noteSummary(notes[dateKey])}</span>
                                 : <button onClick={() => openNoteByKey(dateKey)} className={`text-xs ${textMuted} hover:text-indigo-400 transition-colors`}>+ nota</button>
                               }
                             </td>
                           );
-                          if (col.key === 'campaign_status') content = <span className={`flex items-center justify-end gap-1.5 ${val === 'PAUSED' ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {val === 'PAUSED' ? <PauseCircle size={14} /> : <PlayCircle size={14} />}</span>;
+                          if (col.key === 'campaign_status') content = <span className={`flex items-center justify-end gap-1.5 ${val === 'PAUSED' ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {val === 'PAUSED' ? <PauseCircle size={14} aria-hidden="true" /> : <PlayCircle size={14} aria-hidden="true" />}</span>;
                           else if (col.type === 'status') {
                             const st = resolveCampaignStatus(row as any);
                             content = (
@@ -1051,12 +1056,12 @@ export default function ProductDetailPage() {
                                 title={st.hint}
                                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-bold whitespace-nowrap ${st.badge}`}
                               >
-                                {st.key === 'ativo' ? <PlayCircle size={12} /> : st.key === 'suspenso' ? <AlertTriangle size={12} /> : <PauseCircle size={12} />}
+                                {st.key === 'ativo' ? <PlayCircle size={12} aria-hidden="true" /> : st.key === 'suspenso' ? <AlertTriangle size={12} aria-hidden="true" /> : <PauseCircle size={12} aria-hidden="true" />}
                                 {st.label}
                               </span>
                             );
                           }
-                          else if (col.type === 'link') content = val ? <a href={val} target="_blank" className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14} /></a> : '-';
+                          else if (col.type === 'link') content = val ? <a href={val} target="_blank" rel="noopener noreferrer" aria-label="Abrir a página do anúncio" title={val} className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14} aria-hidden="true" /></a> : '-';
                           else if (col.format === 'currency') {
                             const revisado = col.key === 'cost' && row.revised_at && row.cost_previous != null;
                             const diff = revisado ? Number(row.cost) - Number(row.cost_previous) : 0;
@@ -1094,7 +1099,7 @@ export default function ProductDetailPage() {
                             <div className="sticky left-0 w-[calc(100vw-2rem)] max-w-3xl px-4 py-3">
                               <div className={`flex flex-col sm:flex-row items-stretch sm:items-start gap-3 p-3 rounded-xl border ${isDark ? 'bg-slate-950 border-amber-500/30' : 'bg-white border-amber-300'}`}>
                                 <div className="flex items-start gap-2 flex-1 min-w-0">
-                                  <NotebookPen size={16} className="text-amber-400 mt-1 shrink-0" />
+                                  <NotebookPen size={16} aria-hidden="true" className="text-amber-400 mt-1 shrink-0" />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-[10px] font-bold uppercase text-amber-400 mb-1">Anotação — {row.date}</p>
                                     <textarea
@@ -1113,12 +1118,12 @@ export default function ProductDetailPage() {
                                 <div className="flex flex-row sm:flex-col gap-2 shrink-0">
                                   <button onClick={() => saveNote(dateKey)}
                                     className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                                    <Check size={12} /> Salvar
+                                    <Check size={12} aria-hidden="true" /> Salvar
                                   </button>
                                   <button onClick={() => setEditingNote(null)}
                                     className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'
                                       }`}>
-                                    <X size={12} /> Fechar
+                                    <X size={12} aria-hidden="true" /> Fechar
                                   </button>
                                 </div>
                               </div>
@@ -1225,7 +1230,7 @@ export default function ProductDetailPage() {
         onClick={() => setShowManualEntry(true)}
         className="md:hidden fixed bottom-24 right-4 z-30 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-900/40 transition-all"
       >
-        <FileText size={18} />
+        <FileText size={18} aria-hidden="true" />
         <span className="text-sm">Lançamento Rápido</span>
       </button>
 
@@ -1233,12 +1238,12 @@ export default function ProductDetailPage() {
       <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md pb-[max(1.25rem,env(safe-area-inset-bottom))] ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
         <div className="flex justify-around pt-2">
           {[
-            { href: '/dashboard', icon: <LayoutGrid size={22} />, label: 'Dashboard' },
-            { href: '/planning', icon: <Target size={22} />, label: 'Metas' },
-            { href: '/products', icon: <Package size={22} />, label: 'Campanhas', active: true },
-            { href: '/analise-ia', icon: <Sparkles size={22} />, label: 'Análise IA' },
-            { href: '/rastreamento', icon: <Route size={22} />, label: 'Rastreio' },
-            { href: '/integration', icon: <Settings size={22} />, label: 'Integração' },
+            { href: '/dashboard', icon: <LayoutGrid size={22} aria-hidden="true" />, label: 'Dashboard' },
+            { href: '/planning', icon: <Target size={22} aria-hidden="true" />, label: 'Metas' },
+            { href: '/products', icon: <Package size={22} aria-hidden="true" />, label: 'Campanhas', active: true },
+            { href: '/analise-ia', icon: <Sparkles size={22} aria-hidden="true" />, label: 'Análise IA' },
+            { href: '/rastreamento', icon: <Route size={22} aria-hidden="true" />, label: 'Rastreio' },
+            { href: '/integration', icon: <Settings size={22} aria-hidden="true" />, label: 'Integração' },
           ].map(item => (
             <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-0.5 px-3 py-1 ${(item as any).active ? 'text-indigo-500' : textMuted}`}>
               {item.icon}
@@ -1252,11 +1257,12 @@ export default function ProductDetailPage() {
       {showFilterSheet && (
         <>
           <div className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setShowFilterSheet(false)} />
-          <div className={`md:hidden fixed bottom-0 inset-x-0 z-50 rounded-t-2xl border-t shadow-2xl ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))]`}>
+          <div role="dialog" aria-modal="true" aria-labelledby="detail-filter-title" onKeyDown={e => { if (e.key === 'Escape') setShowFilterSheet(false); }}
+            className={`md:hidden fixed bottom-0 inset-x-0 z-50 rounded-t-2xl border-t shadow-2xl ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))]`}>
             <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <h3 className={`font-bold ${textHead}`}>Filtros</h3>
-              <button onClick={() => setShowFilterSheet(false)}>
-                <X size={20} className={textMuted} />
+              <h3 id="detail-filter-title" className={`font-bold ${textHead}`}>Filtros</h3>
+              <button autoFocus onClick={() => setShowFilterSheet(false)} aria-label="Fechar filtros">
+                <X size={20} aria-hidden="true" className={textMuted} />
               </button>
             </div>
             <div className="p-4 space-y-5 overflow-y-auto max-h-[70vh]">
@@ -1276,19 +1282,19 @@ export default function ProductDetailPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>De</label>
-                  <input type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={startInput.value} onChange={e => startInput.onChange(e.target.value)} />
+                  <label htmlFor="detail-sheet-from" className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>De</label>
+                  <input id="detail-sheet-from" type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={startInput.value} onChange={e => startInput.onChange(e.target.value)} />
                 </div>
                 <div>
-                  <label className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>Até</label>
-                  <input type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={endInput.value} onChange={e => endInput.onChange(e.target.value)} />
+                  <label htmlFor="detail-sheet-to" className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>Até</label>
+                  <input id="detail-sheet-to" type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={endInput.value} onChange={e => endInput.onChange(e.target.value)} />
                 </div>
               </div>
               <div>
                 <label className={`text-xs font-bold uppercase ${textMuted} block mb-2`}>Moeda de Visualização</label>
                 <div className="flex gap-2">
                   {['USD', 'BRL', 'EUR'].map(cur => (
-                    <button key={cur} onClick={() => toggleViewCurrency(cur)} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewCurrency === cur ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}>{cur}</button>
+                    <button key={cur} onClick={() => toggleViewCurrency(cur)} aria-pressed={viewCurrency === cur} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewCurrency === cur ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}>{cur}</button>
                   ))}
                 </div>
               </div>

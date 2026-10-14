@@ -198,7 +198,7 @@ export function DimensionTable(props: Props) {
               {props.toolbar}
               <div className={`flex items-center gap-2 ${selectCls}`}>
                 <Search size={14} className={textMuted} />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar"
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar" aria-label="Buscar na tabela"
                   className={`bg-transparent outline-none text-sm w-32 ${isDark ? 'text-slate-200' : 'text-slate-800'}`} />
               </div>
               <button onClick={() => setPickerOpen(true)} className={`inline-flex items-center gap-2 text-sm font-semibold ${selectCls} ${textHead} hover:border-indigo-500`}>
