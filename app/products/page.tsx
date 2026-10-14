@@ -47,6 +47,9 @@ import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { isValidDay } from '@/lib/useDayInput';
+import { blockOf } from '@/lib/campaignGroups';
+import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
+import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
 import { CampaignTable, DOT, LEVELS, loadLevel, loadSort, saveLevel, saveSort, toneOf, type Level, type Sort, type Tone } from './CampaignTable';
 
 const supabase = createClient(
@@ -65,6 +68,8 @@ export default function ProductsPage() {
   const router = useRouter();
   const { authChecked } = useAuthGuard();
   const [products, setProducts] = useState<any[]>([]);
+  // Grupos de campanhas do usuário: os mesmos da Dashboard, com a mesma marcação.
+  const { groups, setGroups } = useCampaignGroups();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -495,7 +500,10 @@ export default function ProductsPage() {
        matchesContext = (p.mcc_name || 'Outras') === selectedMcc;
     }
 
-    return matchesSearch && matchesContext && matchesHidden;
+    // Grupo desmarcado fica fora da tabela, como na Dashboard.
+    const matchesGroup = !groups.hidden.includes(blockOf(p.name || '', groups.list));
+
+    return matchesSearch && matchesContext && matchesHidden && matchesGroup;
   });
 
   const toggleMccExpand = (mccName: string) => { setExpandedMccs(prev => prev.includes(mccName) ? prev.filter(m => m !== mccName) : [...prev, mccName]); };
@@ -543,6 +551,9 @@ export default function ProductsPage() {
   const statusCount: Record<Tone, number> = { ativo: 0, pausado: 0, suspenso: 0, sem_veicular: 0 };
   for (const p of filteredProducts) statusCount[toneOf(p).tone]++;
   const shownProducts = statusFilter.length ? filteredProducts.filter(p => statusFilter.includes(toneOf(p).tone)) : filteredProducts;
+
+  // Nomes para a barra de grupos contar quantas campanhas entram em cada um (ocultas só quando estão à mostra).
+  const campaignNames = useMemo(() => products.filter(p => showHidden || !p.is_hidden).map(p => p.name || ''), [products, showHidden]);
 
   const changeLevel = (l: Level) => { setLevel(l); saveLevel(l); };
   const changeSort = (next: Sort) => { setSort(next); saveSort(next); };
@@ -740,7 +751,9 @@ export default function ProductsPage() {
            {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 p-2 md:px-4 rounded-xl flex items-center justify-center gap-2 text-amber-500 text-xs font-bold animate-pulse"><AlertTriangle size={16} /> Exibindo Ocultos</div>}
         </div>
 
-        {/* GRID OU TABELA DE PRODUTOS */}
+        <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} />
+
+        {/* TABELA */}
         {loading && products.length === 0 ? (
           <div className="flex justify-center items-center h-64 text-slate-500">Carregando produtos...</div>
         ) : shownProducts.length === 0 ? (
