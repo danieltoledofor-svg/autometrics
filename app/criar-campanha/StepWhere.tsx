@@ -72,7 +72,7 @@ function AccountPicker({ accounts, picked, elsewhere, onToggle, hidden, onHide, 
                   {a.ativas.length > 0 && <span title={`Rodando agora: ${a.ativas.slice(0, 6).join(' · ')}`} className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${warn}`}>{running(a)}</span>}
                   {(elsewhere.get(a.id) || 0) > 0 && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${line} ${muted}`}>outra página deste lançamento</span>}
                   <button onClick={() => onHide(a.id, !hidden.has(a.id))} title={hidden.has(a.id) ? 'Voltar a mostrar esta conta' : 'Esconder esta conta da lista (por exemplo, se ela está suspensa)'}
-                    className={`shrink-0 text-[11px] inline-flex items-center gap-1 ${muted} hover:text-rose-400 ${hidden.has(a.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}>
+                    className={`shrink-0 text-[11px] inline-flex items-center gap-1 ${muted} hover:text-rose-400 ${hidden.has(a.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100'}`}>
                     <EyeOff size={12} aria-hidden="true" /> {hidden.has(a.id) ? 'mostrar' : 'esconder'}
                   </button>
                 </div>

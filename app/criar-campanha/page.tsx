@@ -141,13 +141,14 @@ export default function CampaignBuilderPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-1.5">
+        {/* No celular, só número e nome numa linha que rola para o lado; a descrição de cada passo aparece a partir do tablet. */}
+        <div className="flex gap-1.5 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-visible">
           {STEPS.map((s, i) => {
             const open = i === 0 || !!draft;
             return (
               <button key={s} disabled={!open} onClick={() => setStep(i)} aria-current={step === i ? 'step' : undefined}
-                className={`text-left rounded-lg border px-3 py-2 text-xs ${step === i ? 'border-indigo-500 text-indigo-400' : `${line} ${muted} ${open ? 'hover:border-indigo-500/50' : ''}`}`}>
-                <b className="block text-[13px]">{i + 1}. {s}</b>{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : i === 2 ? (draft ? 'palavras, textos e IA' : 'escolha um modelo') : i === 3 ? (draft ? 'páginas, MCCs e contas' : 'escolha um modelo') : (draft ? 'ensaio e criação' : 'escolha um modelo')}
+                className={`shrink-0 sm:shrink text-left rounded-lg border px-3 py-2 text-xs ${step === i ? 'border-indigo-500 text-indigo-400' : `${line} ${muted} ${open ? 'hover:border-indigo-500/50' : ''}`}`}>
+                <b className="block text-[13px] whitespace-nowrap sm:whitespace-normal">{i + 1}. {s}</b><span className="hidden sm:inline">{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : i === 2 ? (draft ? 'palavras, textos e IA' : 'escolha um modelo') : i === 3 ? (draft ? 'páginas, MCCs e contas' : 'escolha um modelo') : (draft ? 'ensaio e criação' : 'escolha um modelo')}</span>
               </button>
             );
           })}
