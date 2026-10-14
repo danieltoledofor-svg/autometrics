@@ -768,7 +768,7 @@ ${commonFunctions}`;
               <p className={`text-sm ${textMuted}`}>Configure as conexões da sua conta.</p>
             </div>
           </div>
-          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>
+          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>
             {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
           </button>
         </div>
@@ -784,15 +784,14 @@ ${commonFunctions}`;
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              aria-label={tab.label}
               aria-pressed={activeTab === tab.key}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key
+              className={`shrink-0 sm:shrink flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${activeTab === tab.key
                 ? 'bg-indigo-600 text-white shadow-lg'
-                : `${textMuted} hover:text-white`
+                : `${textMuted} ${isDark ? 'hover:text-white' : 'hover:text-slate-900'}`
                 }`}
             >
               {tab.icon}
-              <span className="hidden sm:inline">{tab.label}</span>
+              <span>{tab.label}</span>
             </button>
           ))}
         </div>
