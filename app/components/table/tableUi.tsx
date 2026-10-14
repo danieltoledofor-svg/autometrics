@@ -145,15 +145,15 @@ export function TableControls({ prefs, isDark }: { prefs: TablePrefsApi; isDark:
   return (
     <div className="flex items-center gap-2">
       <div className={`inline-flex rounded-lg border ${border} overflow-hidden`}>
-        <button title="Compacto" onClick={() => prefs.setDensity('compact')}
-          className={`px-2 py-1.5 ${prefs.density === 'compact' ? on : idle}`}><Rows4 size={14} /></button>
-        <button title="Confortável" onClick={() => prefs.setDensity('comfortable')}
-          className={`px-2 py-1.5 ${prefs.density === 'comfortable' ? on : idle}`}><Rows3 size={14} /></button>
+        <button title="Compacto" aria-label="Tabela compacta" aria-pressed={prefs.density === 'compact'} onClick={() => prefs.setDensity('compact')}
+          className={`px-2 py-1.5 ${prefs.density === 'compact' ? on : idle}`}><Rows4 size={14} aria-hidden="true" /></button>
+        <button title="Confortável" aria-label="Tabela confortável" aria-pressed={prefs.density === 'comfortable'} onClick={() => prefs.setDensity('comfortable')}
+          className={`px-2 py-1.5 ${prefs.density === 'comfortable' ? on : idle}`}><Rows3 size={14} aria-hidden="true" /></button>
       </div>
       {hasWidths && (
         <button onClick={prefs.resetWidths} title="Voltar as colunas ao tamanho do conteúdo"
           className={`inline-flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border ${border} ${idle}`}>
-          <RotateCcw size={12} /> Larguras
+          <RotateCcw size={12} aria-hidden="true" /> Larguras
         </button>
       )}
     </div>
