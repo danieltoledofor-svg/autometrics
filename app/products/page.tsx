@@ -395,7 +395,15 @@ export default function ProductsPage() {
   // --- AÇÕES DE EXCLUSÃO ---
   const handleDeleteMcc = async (mccName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Excluir MCC "${mccName}" e todas suas contas?`)) return;
+    // Apaga do painel todas as campanhas da MCC e, em cascata, o que foi guardado
+    // delas (análises, grupos, anúncios). Um clique errado no lixinho não basta:
+    // é preciso digitar o nome da MCC.
+    const total = products.filter(p => (p.mcc_name || 'Outras') === mccName).length;
+    const typed = prompt(
+      `Isto apaga do painel as ${total} ${total === 1 ? 'campanha' : 'campanhas'} da MCC "${mccName}" e tudo o que foi guardado delas (números, análises, anúncios). Não dá para desfazer.\n\nPara confirmar, digite o nome da MCC:`
+    );
+    if (typed === null) return;
+    if (typed.trim() !== mccName.trim()) { alert('O nome digitado não confere. Nada foi apagado.'); return; }
     const { error } = await supabase.from('products').delete().eq('user_id', userId).eq('mcc_name', mccName);
     if (!error) {
       setProducts(prev => prev.filter(p => p.mcc_name !== mccName));
@@ -562,6 +570,16 @@ export default function ProductsPage() {
   for (const p of filteredProducts) statusCount[toneOf(p).tone]++;
   const shownProducts = statusFilter.length ? filteredProducts.filter(p => statusFilter.includes(toneOf(p).tone)) : filteredProducts;
 
+  // Lista vazia por causa dos filtros: um botão desfaz busca, situação e MCC/conta.
+  // Os grupos ficam como estão — são escolha guardada, valem também na Dashboard.
+  const hasFilters = !!searchTerm || statusFilter.length > 0 || !!selectedMcc || !!selectedAccount;
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setStatusFilter([]);
+    localStorage.setItem('autometrics_products_status_filter', 'ALL');
+    resetFilters();
+  };
+
   // Nomes para a barra de grupos contar quantas campanhas entram em cada um (ocultas só quando estão à mostra).
   const campaignNames = useMemo(() => products.filter(p => showHidden || !p.is_hidden).map(p => p.name || ''), [products, showHidden]);
 
@@ -616,7 +634,7 @@ export default function ProductsPage() {
             <div className={`p-3 rounded-lg border mb-2 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Estrutura de Contas</p>
               <div className="flex justify-between items-center">
-                <button onClick={() => setShowHidden(!showHidden)} className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${showHidden ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'text-slate-500 border-transparent hover:bg-slate-800'}`}>
+                <button onClick={() => setShowHidden(!showHidden)} className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${showHidden ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : `text-slate-500 border-transparent ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-200'}`}`}>
                   {showHidden ? <Eye size={10} aria-hidden="true" /> : <EyeOff size={10} aria-hidden="true" />}
                   {showHidden ? 'Ver Ativos' : 'Ver Ocultos'}
                 </button>
@@ -655,7 +673,7 @@ export default function ProductsPage() {
                               <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 min-w-0 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
                                   <Briefcase size={12} aria-hidden="true" className="shrink-0"/> <span className={`break-all min-w-0 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
                               </button>
-                              <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 focus-visible:opacity-100 transition-opacity ml-1 ${isHidden ? 'text-amber-500 hover:text-amber-400' : 'text-slate-500 hover:text-slate-400'}`} title={isHidden ? "Restaurar Conta" : "Ocultar Conta"} aria-label={`${isHidden ? 'Restaurar' : 'Ocultar'} a conta ${acc}`}>
+                              <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 focus-visible:opacity-100 transition-opacity ml-1 ${isHidden ? 'text-amber-500 hover:text-amber-400' : `text-slate-500 ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`} title={isHidden ? "Restaurar Conta" : "Ocultar Conta"} aria-label={`${isHidden ? 'Restaurar' : 'Ocultar'} a conta ${acc}`}>
                                  {isHidden ? <Eye size={12} aria-hidden="true"/> : <EyeOff size={12} aria-hidden="true"/>}
                               </button>
                               <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 focus-visible:opacity-100 transition-opacity ml-0.5" title="Excluir" aria-label={`Excluir a conta ${acc}`}><Trash2 size={12} aria-hidden="true"/></button>
@@ -723,7 +741,7 @@ export default function ProductsPage() {
              <div className={`flex flex-wrap items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                 {([['ALL', 'Todas'], ['ativo', 'Ativas'], ['pausado', 'Pausadas'], ['suspenso', 'Suspensas'], ['sem_veicular', 'Sem veicular']] as const).map(([key, label]) => (
                   <button key={key} onClick={() => changeStatusFilter(key)} aria-pressed={key === 'ALL' ? !statusFilter.length : statusFilter.includes(key)}
-                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${(key === 'ALL' ? !statusFilter.length : statusFilter.includes(key)) ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`}>
+                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${(key === 'ALL' ? !statusFilter.length : statusFilter.includes(key)) ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : `text-slate-500 ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`}>
                     {key !== 'ALL' && <span className={`w-2 h-2 rounded-full ${DOT[key]}`} />}{label} <span className="font-normal tabular-nums opacity-70">{key === 'ALL' ? filteredProducts.length : statusCount[key]}</span>
                   </button>
                 ))}
@@ -733,7 +751,7 @@ export default function ProductsPage() {
              <div className={`flex items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                 {LEVELS.map(l => (
                   <button key={l.key} onClick={() => changeLevel(l.key)} aria-pressed={level === l.key}
-                    className={`flex-1 md:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${level === l.key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : 'text-slate-500 hover:text-slate-400'}`}>{l.label}</button>
+                    className={`flex-1 md:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${level === l.key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : `text-slate-500 ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`}>{l.label}</button>
                 ))}
              </div>
 
@@ -759,7 +777,7 @@ export default function ProductsPage() {
              <button onClick={handleReload} className={`p-2 rounded-lg transition-colors hidden md:block mr-1 ${hoverItem}`} title="Recarregar" aria-label="Recarregar"><RefreshCw size={18} aria-hidden="true" className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
            </div>
            
-           {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 p-2 md:px-4 rounded-xl flex items-center justify-center gap-2 text-amber-500 text-xs font-bold animate-pulse"><AlertTriangle size={16} aria-hidden="true" /> Exibindo Ocultos</div>}
+           {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 p-2 md:px-4 rounded-xl flex items-center justify-center gap-2 text-amber-500 text-xs font-bold"><AlertTriangle size={16} aria-hidden="true" /> Exibindo Ocultos</div>}
         </div>
 
         <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} />
@@ -768,7 +786,13 @@ export default function ProductsPage() {
         {loading && products.length === 0 ? (
           <div className="flex justify-center items-center h-64 text-slate-500">Carregando campanhas…</div>
         ) : shownProducts.length === 0 ? (
-           <div className={`flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed rounded-xl ${isDark ? 'border-slate-800' : 'border-slate-300'}`}><Layers size={32} aria-hidden="true" className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada com os filtros atuais.</p></div>
+           <div className={`flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed rounded-xl ${isDark ? 'border-slate-800' : 'border-slate-300'}`}><Layers size={32} aria-hidden="true" className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada com os filtros atuais.</p>
+             {hasFilters && (
+               <button onClick={clearAllFilters} className={`mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-500 hover:text-indigo-300' : 'border-slate-300 text-slate-700 hover:border-indigo-500 hover:text-indigo-700'}`}>
+                 <X size={12} aria-hidden="true" /> Limpar filtros
+               </button>
+             )}
+           </div>
         ) : (
           <CampaignTable products={shownProducts} level={level} sort={sort} onSort={changeSort} rates={rates} isDark={isDark}
             selected={selectedProducts} onToggleSelect={toggleSelectProduct} onSelectAll={handleSelectAll}
@@ -834,7 +858,7 @@ export default function ProductsPage() {
 
       {/* BOTTOM NAV */}
       <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
-        <div className="flex justify-around items-center px-2 pt-2 pb-5">
+        <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {[
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
             { href: '/planning', Icon: Target, label: 'Metas', active: false },
