@@ -136,17 +136,21 @@ export async function refreshConnectionAccounts(connection: { id: string; user_i
   if (accounts.length) {
     // Conta suspensa ou cancelada nasce com a coleta desligada: ela não responde
     // e cada tentativa ainda consome cota. Conta que já existe mantém a escolha
-    // do usuário, exceto quando o Google a derrubou — aí desliga.
+    // do usuário, exceto quando o Google a derrubou — aí desliga — e quando
+    // ela volta a ficar ativa: quem desligou foi o sistema, então religa.
     const { data: existentes } = await db.from('google_ads_accounts')
-      .select('customer_id').eq('user_id', connection.user_id);
-    const jaExiste = new Set((existentes || []).map(e => e.customer_id));
+      .select('customer_id, status').eq('user_id', connection.user_id);
+    const statusAnterior = new Map((existentes || []).map(e => [e.customer_id, String(e.status || '').toUpperCase()]));
+    const jaExiste = (a: DiscoveredAccount) => statusAnterior.has(a.customer_id);
+    const voltouAtiva = (a: DiscoveredAccount) => statusAnterior.get(a.customer_id) !== 'ENABLED';
     const base = (a: DiscoveredAccount) => ({ ...a, user_id: connection.user_id, connection_id: connection.id, updated_at: now });
 
-    const novas = accounts.filter(a => !jaExiste.has(a.customer_id)).map(a => ({ ...base(a), sync_enabled: a.status === 'ENABLED' }));
-    const antigasMortas = accounts.filter(a => jaExiste.has(a.customer_id) && a.status !== 'ENABLED').map(a => ({ ...base(a), sync_enabled: false }));
-    const antigasVivas = accounts.filter(a => jaExiste.has(a.customer_id) && a.status === 'ENABLED').map(base);
+    const novas = accounts.filter(a => !jaExiste(a)).map(a => ({ ...base(a), sync_enabled: a.status === 'ENABLED' }));
+    const antigasMortas = accounts.filter(a => jaExiste(a) && a.status !== 'ENABLED').map(a => ({ ...base(a), sync_enabled: false }));
+    const reativadas = accounts.filter(a => jaExiste(a) && a.status === 'ENABLED' && voltouAtiva(a)).map(a => ({ ...base(a), sync_enabled: true }));
+    const antigasVivas = accounts.filter(a => jaExiste(a) && a.status === 'ENABLED' && !voltouAtiva(a)).map(base);
 
-    for (const lote of [novas, antigasMortas, antigasVivas]) {
+    for (const lote of [novas, antigasMortas, reativadas, antigasVivas]) {
       if (!lote.length) continue;
       const { error } = await db.from('google_ads_accounts').upsert(lote, { onConflict: 'user_id,customer_id' });
       if (error) throw new Error('Erro ao salvar contas: ' + error.message);
@@ -160,6 +164,34 @@ export async function refreshConnectionAccounts(connection: { id: string; user_i
     .eq('id', connection.id);
 
   return { accounts, errors };
+}
+
+/**
+ * Conferência rápida entre as buscas completas: pergunta a cada MCC já
+ * conhecida da conexão quais contas ela tem e diz se apareceu alguma nova.
+ * Uma consulta por MCC — a busca completa custa uma por conta acessível.
+ * Conta nova acessada direto, sem MCC, continua esperando a busca completa.
+ */
+export async function hasNewAccounts(connection: { id: string; refresh_token_enc: string }): Promise<{ found: boolean; calls: number }> {
+  const db = supabaseAdmin();
+  const { data: conhecidas } = await db.from('google_ads_accounts')
+    .select('customer_id, login_customer_id').eq('connection_id', connection.id);
+  const ids = new Set((conhecidas || []).map(c => c.customer_id));
+  const mccs = [...new Set((conhecidas || [])
+    .filter(c => c.login_customer_id && c.login_customer_id !== c.customer_id)
+    .map(c => c.login_customer_id as string))];
+  if (!mccs.length) return { found: false, calls: 0 };
+
+  const refreshToken = decryptSecret(connection.refresh_token_enc);
+  let calls = 0;
+  for (const mcc of mccs) {
+    calls++;
+    const rows = await search({ refreshToken, customerId: mcc, loginCustomerId: mcc }, `
+      SELECT customer_client.id FROM customer_client
+      WHERE customer_client.level >= 1 AND customer_client.manager = FALSE`);
+    if (rows.some(r => !ids.has(cleanCustomerId(r.customerClient?.id)))) return { found: true, calls };
+  }
+  return { found: false, calls };
 }
 
 /** Mesmo efeito da rota /api/webhook/google-ads/accounts do script. */

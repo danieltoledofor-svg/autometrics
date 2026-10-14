@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
-import { syncAccountRecord, isDue, usageToday, DAILY_QUOTA } from '@/lib/googleAds/sync';
-import { refreshConnectionAccounts } from '@/lib/googleAds/accounts';
+import { syncAccountRecord, isDue, usageToday, addUsage, DAILY_QUOTA } from '@/lib/googleAds/sync';
+import { refreshConnectionAccounts, hasNewAccounts } from '@/lib/googleAds/accounts';
 import { isReconcileDue, reconcileAccountRecord, reconcileReady } from '@/lib/googleAds/reconcile';
 import { runDueAnalyses } from '@/lib/analysis/run';
 import { runDueVturb } from '@/lib/vturb/sync';
@@ -18,6 +18,11 @@ export const dynamic = 'force-dynamic';
 
 const TIME_BUDGET_MS = (Number(process.env.GOOGLE_ADS_SYNC_BUDGET_SEC) || 50) * 1000;
 const DISCOVERY_INTERVAL_MIN = 6 * 60;
+// Entre uma busca completa e outra, a cada hora pergunta às MCCs se entrou
+// conta nova (uma consulta por MCC). Guardado na memória do servidor: se ele
+// reinicia, a conferência só roda de novo mais cedo.
+const NEW_ACCOUNTS_CHECK_MIN = 60;
+const lastNewAccountsCheck = new Map<string, number>();
 
 function isCron(request: Request): boolean {
   const secret = process.env.GOOGLE_ADS_CRON_SECRET;
@@ -44,7 +49,19 @@ async function runCron() {
     .select('id, user_id, refresh_token_enc, last_discovery_at').eq('status', 'ok');
   for (const c of conns || []) {
     const age = c.last_discovery_at ? (Date.now() - new Date(c.last_discovery_at).getTime()) / 60000 : Infinity;
-    if (age < DISCOVERY_INTERVAL_MIN) continue;
+    if (age < DISCOVERY_INTERVAL_MIN) {
+      const checked = lastNewAccountsCheck.get(c.id) || 0;
+      if (age < NEW_ACCOUNTS_CHECK_MIN || Date.now() - checked < NEW_ACCOUNTS_CHECK_MIN * 60000) continue;
+      lastNewAccountsCheck.set(c.id, Date.now());
+      try {
+        const check = await hasNewAccounts(c);
+        await addUsage(check.calls).catch(() => {});
+        if (!check.found) continue;
+      } catch (e: any) {
+        report.discovery.push({ connection: c.id, check_error: e.message });
+        continue;
+      }
+    }
     try {
       const r = await refreshConnectionAccounts(c);
       report.discovery.push({ connection: c.id, accounts: r.accounts.length });

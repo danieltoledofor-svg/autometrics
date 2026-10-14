@@ -837,10 +837,20 @@ export async function addUsage(calls: number) {
   await supabaseAdmin().rpc('gads_add_usage', { p_day: quotaDay(), p_calls: calls });
 }
 
-/** Conta sem campanha ligada e sem gasto: consultar a cada 15 min só gasta cota. */
+/** Conta nova continua de hora em hora por 3 dias, mesmo sem campanha ligada. */
+const NEW_ACCOUNT_HOURS = 72;
+
+/**
+ * Conta sem campanha ligada e sem gasto: consultar de hora em hora só gasta cota.
+ * Fora disso ficam a conta recém-chegada e a que ainda não tem campanha
+ * nenhuma — é nelas que a primeira campanha costuma ser criada logo em
+ * seguida, e esperar 6 horas para vê-la é o que se quer evitar.
+ */
 function isIdle(acc: any) {
   const s = acc.last_sync_summary;
-  return s && s.enabled_campaigns === 0 && !s.cost_today;
+  if (!s || s.enabled_campaigns !== 0 || s.cost_today) return false;
+  if (!s.campaigns) return false;
+  return minutesSince(acc.created_at) >= NEW_ACCOUNT_HOURS * 60;
 }
 
 export function isDue(acc: any) {
