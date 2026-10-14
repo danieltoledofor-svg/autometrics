@@ -31,6 +31,55 @@ body {
   }
 }
 /* ─────────────────────────────────────────────────────────────────────────────
+   Tokens do guia visual (DESIGN.md, direção Linear). Canais RGB para o Tailwind
+   aceitar opacidade (bg-pos/10). O tema vem do <html data-theme>.
+   ───────────────────────────────────────────────────────────────────────────── */
+:root,
+:root[data-theme="dark"] {
+  --am-canvas: 8 9 10;
+  --am-surface-1: 15 16 17;
+  --am-surface-2: 20 21 22;
+  --am-surface-3: 28 29 31;
+  --am-line: 35 37 42;
+  --am-line-strong: 52 52 58;
+  --am-ink: 247 248 248;
+  --am-ink-muted: 208 214 224;
+  --am-ink-subtle: 138 143 152;
+  --am-ink-faint: 98 102 109;
+  --am-brand: 94 106 210;
+  --am-brand-hover: 130 143 255;
+  --am-brand-text: 154 163 239;
+  --am-pos: 39 166 68;
+  --am-neg: 235 87 87;
+  --am-warn: 226 179 64;
+  --am-chart-1: 124 134 224;
+  --am-chart-2: 217 145 63;
+  --am-chart-3: 39 166 68;
+}
+
+:root[data-theme="light"] {
+  --am-canvas: 247 248 249;
+  --am-surface-1: 255 255 255;
+  --am-surface-2: 242 243 245;
+  --am-surface-3: 233 235 239;
+  --am-line: 226 228 232;
+  --am-line-strong: 207 210 216;
+  --am-ink: 22 23 26;
+  --am-ink-muted: 60 64 73;
+  --am-ink-subtle: 98 102 111;
+  --am-ink-faint: 154 159 168;
+  --am-brand: 94 106 210;
+  --am-brand-hover: 75 86 190;
+  --am-brand-text: 75 86 190;
+  --am-pos: 29 127 56;
+  --am-neg: 201 58 58;
+  --am-warn: 147 99 15;
+  --am-chart-1: 94 106 210;
+  --am-chart-2: 194 122 40;
+  --am-chart-3: 29 127 56;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    Controles nativos (select, input date/time) no Windows.
 
    O popup de um <select> e o calendário de um <input type="date"> são desenhados
