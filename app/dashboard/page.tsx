@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Calendar, Sun, Moon, LayoutGrid, Package, Settings,
   LogOut, Target, ArrowUpRight, ArrowDownRight,
@@ -59,7 +59,7 @@ function SparklineSVG({ data, color }: { data: number[]; color: string }) {
   const gradId = `sg${color.replace(/[^a-z0-9]/gi, '')}`;
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: 'block' }}>
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{ display: 'block' }} aria-hidden="true">
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={color} stopOpacity="0.25" />
@@ -78,6 +78,14 @@ const DATE_PRESET_LABELS: Record<string, string> = {
   this_month: 'Este Mês', '30d': '30 Dias', last_month: 'Mês Passado',
 };
 const DATE_PRESETS = ['today', 'yesterday', '7d', 'this_month', '30d', 'last_month'] as const;
+
+/** ROI no formato brasileiro: "12,5%", "1.200%". */
+function formatPct(val: number, digits = 0) {
+  return new Intl.NumberFormat('pt-BR', { style: 'percent', minimumFractionDigits: digits, maximumFractionDigits: digits }).format((val || 0) / 100);
+}
+
+/** Contorno de foco para controles que tiram o contorno padrão. */
+const FOCUS_RING = 'rounded-md focus-visible:ring-2 focus-visible:ring-indigo-500';
 
 /**
  * Texto da marca de problema da conferência com o Google. Só existe para o
@@ -116,6 +124,9 @@ export default function DashboardPage() {
 
   const [selectedMcc, setSelectedMcc] = useState<string>('all');
   const [showFilterSheet, setShowFilterSheet] = useState(false);
+  // Ao abrir os filtros, o foco vai para dentro do painel (botão de fechar).
+  const filterCloseRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (showFilterSheet) filterCloseRef.current?.focus(); }, [showFilterSheet]);
   const { groups, setGroups } = useCampaignGroups();
 
   const [liveDollar, setLiveDollar] = useState(6.00);
@@ -636,23 +647,23 @@ export default function DashboardPage() {
 
         <nav className="flex-1 px-2 py-4 space-y-2">
           <Link href="/dashboard" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
-            <LayoutGrid size={20} /> <span className="font-medium">Dashboard</span>
+            <LayoutGrid size={20} aria-hidden="true" /> <span className="font-medium">Dashboard</span>
           </Link>
           <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-            <Target size={20} /> <span className="font-medium">Metas</span>
+            <Target size={20} aria-hidden="true" /> <span className="font-medium">Metas</span>
           </Link>
           <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-            <Package size={20} /> <span className="font-medium">Campanhas</span>
+            <Package size={20} aria-hidden="true" /> <span className="font-medium">Campanhas</span>
           </Link>
-          <Link href="/analise-ia" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Sparkles size={20} /> <span className="font-medium">Análise de IA</span></Link>
-          <Link href="/rastreamento" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Route size={20} /> <span className="font-medium">Rastreamento</span></Link>
+          <Link href="/analise-ia" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Sparkles size={20} aria-hidden="true" /> <span className="font-medium">Análise de IA</span></Link>
+          <Link href="/rastreamento" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Route size={20} aria-hidden="true" /> <span className="font-medium">Rastreamento</span></Link>
           <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-            <Settings size={20} /> <span className="font-medium">Integração</span>
+            <Settings size={20} aria-hidden="true" /> <span className="font-medium">Integração</span>
           </Link>
         </nav>
         <div className="p-4 border-t border-inherit">
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10">
-            <LogOut size={20} /> <span className="font-medium">Sair ({user?.email?.split('@')[0]})</span>
+            <LogOut size={20} aria-hidden="true" /> <span className="font-medium">Sair ({user?.email?.split('@')[0]})</span>
           </button>
         </div>
       </aside>
@@ -667,8 +678,8 @@ export default function DashboardPage() {
               <h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1>
               <p className={textMuted}>Acompanhe seus resultados consolidados.</p>
             </div>
-            <button onClick={toggleTheme} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>
-              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>
+              {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
             </button>
           </div>
           <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
@@ -676,9 +687,10 @@ export default function DashboardPage() {
               {availableMccs.length > 0 && (
                 <div className={`flex items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto`}>
                   <div className="flex items-center gap-2 px-2 w-full">
-                    <Target size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
+                    <Target size={18} aria-hidden="true" className={isDark ? "text-white" : "text-indigo-600"}/>
                     <select
-                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer flex-1 sm:w-32 ${textHead}`}
+                      aria-label="MCC ou conta"
+                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer flex-1 sm:w-32 ${FOCUS_RING} ${textHead}`}
                       value={selectedMcc}
                       onChange={(e) => handleMccChange(e.target.value)}
                     >
@@ -692,9 +704,10 @@ export default function DashboardPage() {
               <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto gap-2 sm:gap-0`}>
                 <div className="flex items-center justify-between sm:justify-start gap-2 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit">
                   <div className="flex items-center gap-2">
-                    <Calendar size={18} className={isDark ? "text-white" : "text-indigo-600"}/>
+                    <Calendar size={18} aria-hidden="true" className={isDark ? "text-white" : "text-indigo-600"}/>
                     <select
-                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${textHead} w-auto`}
+                      aria-label="Período"
+                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${FOCUS_RING} ${textHead} w-auto`}
                       value={dateRange}
                       onChange={(e) => handlePresetChange(e.target.value)}
                     >
@@ -711,14 +724,16 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between sm:justify-start gap-2 px-2">
                   <input
                     type="date"
-                    className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                    aria-label="Data inicial"
+                    className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${FOCUS_RING} ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                     value={startInput.value}
                     onChange={(e) => startInput.onChange(e.target.value)}
                   />
                   <span className="text-slate-500 text-xs">até</span>
                   <input
                     type="date"
-                    className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                    aria-label="Data final"
+                    className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${FOCUS_RING} ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                     value={endInput.value}
                     onChange={(e) => endInput.onChange(e.target.value)}
                   />
@@ -753,13 +768,13 @@ export default function DashboardPage() {
                       <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Dólar</span>
                       <div className="flex items-center gap-1 mt-0.5">
                         <span className="text-[10px] text-slate-500 font-bold">R$</span>
-                        <input type="text" inputMode="decimal"
+                        <input type="text" inputMode="decimal" aria-label="Meu dólar, em reais"
                           className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`}
                           value={dollarInput} onChange={(e) => handleDollarInputChange(e.target.value)} onBlur={handleDollarInputBlur}
                         />
                         <div className="flex flex-col gap-0.5 ml-0.5">
-                          <button type="button" onClick={() => handleDollarStep(0.01)} className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronUp size={12} /></button>
-                          <button type="button" onClick={() => handleDollarStep(-0.01)} className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronDown size={12} /></button>
+                          <button type="button" onClick={() => handleDollarStep(0.01)} aria-label="Subir o dólar em 1 centavo" className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronUp size={12} aria-hidden="true" /></button>
+                          <button type="button" onClick={() => handleDollarStep(-0.01)} aria-label="Baixar o dólar em 1 centavo" className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronDown size={12} aria-hidden="true" /></button>
                         </div>
                       </div>
                     </div>
@@ -775,13 +790,13 @@ export default function DashboardPage() {
                       <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Euro</span>
                       <div className="flex items-center gap-1 mt-0.5">
                         <span className="text-[10px] text-slate-500 font-bold">R$</span>
-                        <input type="text" inputMode="decimal"
+                        <input type="text" inputMode="decimal" aria-label="Meu euro, em reais"
                           className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`}
                           value={euroInput} onChange={(e) => handleEuroInputChange(e.target.value)} onBlur={handleEuroInputBlur}
                         />
                         <div className="flex flex-col gap-0.5 ml-0.5">
-                          <button type="button" onClick={() => handleEuroStep(0.01)} className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronUp size={12} /></button>
-                          <button type="button" onClick={() => handleEuroStep(-0.01)} className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronDown size={12} /></button>
+                          <button type="button" onClick={() => handleEuroStep(0.01)} aria-label="Subir o euro em 1 centavo" className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronUp size={12} aria-hidden="true" /></button>
+                          <button type="button" onClick={() => handleEuroStep(-0.01)} aria-label="Baixar o euro em 1 centavo" className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronDown size={12} aria-hidden="true" /></button>
                         </div>
                       </div>
                     </div>
@@ -789,9 +804,9 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <button type="button" onClick={toggleTheme}
+              <button type="button" onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
                 className={`hidden xl:flex items-center justify-center w-10 h-10 rounded-xl border ${isDark ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:text-black hover:bg-slate-100'} transition-all`}>
-                {isDark ? <Sun size={18} /> : <Moon size={18} />}
+                {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
               </button>
             </div>
           </div>
@@ -809,13 +824,13 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={toggleTheme}
+            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
               className={`w-9 h-9 flex items-center justify-center rounded-xl border ${bgCard} ${textMuted}`}>
-              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              {isDark ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
             </button>
-            <button onClick={() => setShowFilterSheet(true)}
+            <button onClick={() => setShowFilterSheet(true)} aria-label="Abrir filtros" aria-expanded={showFilterSheet}
               className={`w-9 h-9 flex items-center justify-center rounded-xl border ${isDark ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-indigo-50 border-indigo-200 text-indigo-600'}`}>
-              <SlidersHorizontal size={15} />
+              <SlidersHorizontal size={15} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -837,6 +852,8 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        {/* Vendas e alertas chegam sozinhos: o leitor de tela avisa quando aparecem. */}
+        <div aria-live="polite">
         {/* ── VENDAS NOVAS ── ficam aqui até serem marcadas como vistas */}
         {pendingSales.length > 0 && (
           <div className={`rounded-xl border mb-4 overflow-hidden ${isDark ? 'bg-emerald-500/5 border-emerald-500/40' : 'bg-emerald-50 border-emerald-300'}`}>
@@ -867,7 +884,7 @@ export default function DashboardPage() {
         {openAlerts.length > 0 && (
           <div className={`rounded-xl border mb-4 overflow-hidden ${isDark ? 'bg-amber-500/5 border-amber-500/40' : 'bg-amber-50 border-amber-300'}`}>
             <div className="flex items-center gap-2 px-4 pt-3 pb-1 text-amber-500">
-              <AlertTriangle size={15} />
+              <AlertTriangle size={15} aria-hidden="true" />
               <span className="text-[11px] font-extrabold uppercase tracking-wider">Gasto acima do normal hoje · {openAlerts.length} {openAlerts.length === 1 ? 'campanha' : 'campanhas'}</span>
             </div>
             {openAlerts.map(a => {
@@ -892,6 +909,7 @@ export default function DashboardPage() {
             })}
           </div>
         )}
+        </div>
 
         {/* ── MOBILE KPI GRID 2x2 (hidden on desktop) ── */}
         {processedData.totals && (
@@ -905,7 +923,7 @@ export default function DashboardPage() {
                   <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ background: color }} />
                   <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{label}</div>
                   <div className="text-sm font-bold font-mono leading-tight mb-1" style={{ color }}>
-                    {isRoi ? `${value.toFixed(1)}%` : formatMoney(value)}
+                    {isRoi ? formatPct(value, 1) : formatMoney(value)}
                   </div>
                   {data.length >= 2 && (
                     <div className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5 ${
@@ -927,7 +945,7 @@ export default function DashboardPage() {
             <div className={`${bgCard} border-t-4 border-t-blue-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
             <div className={`${bgCard} border-t-4 border-t-orange-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Custos Totais</p><p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.cost)}</p></div>
             <div className={`${bgCard} border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Lucro Líquido</p><p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p></div>
-            <div className={`${bgCard} border-t-4 border-t-indigo-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">ROI</p><p className="text-2xl font-bold text-indigo-500">{processedData.totals.roi.toFixed(1)}%</p></div>
+            <div className={`${bgCard} border-t-4 border-t-indigo-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">ROI</p><p className="text-2xl font-bold text-indigo-500">{formatPct(processedData.totals.roi, 1)}</p></div>
             <div className={`${bgCard} border-t-4 border-t-rose-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Reembolsos</p><p className="text-2xl font-bold text-rose-500">{formatMoney(processedData.totals.refunds)}</p></div>
           </div>
         ) : (
@@ -975,7 +993,7 @@ export default function DashboardPage() {
                     <td className="px-4 md:px-6 py-2.5 text-right font-bold text-blue-500 tabular-nums whitespace-nowrap">{formatMoney(blk.revenue)}</td>
                     <td className="px-4 md:px-6 py-2.5 text-right font-medium text-orange-500 tabular-nums whitespace-nowrap">{formatMoney(blk.cost)}</td>
                     <td className={`px-4 md:px-6 py-2.5 text-right font-bold tabular-nums whitespace-nowrap ${blk.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(blk.profit)}</td>
-                    <td className={`px-4 md:px-6 py-2.5 text-right font-bold tabular-nums ${blk.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{blk.roi.toFixed(0)}%</td>
+                    <td className={`px-4 md:px-6 py-2.5 text-right font-bold tabular-nums ${blk.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{formatPct(blk.roi)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1026,8 +1044,15 @@ export default function DashboardPage() {
                     <React.Fragment key={row.date}>
                       <tr onClick={() => toggleExpand(row.date)} className={`transition-colors cursor-pointer ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} ${isExpanded ? (isDark ? 'bg-slate-900' : 'bg-slate-50') : ''}`}>
                         <td className="px-6 py-4 text-center">
+                          {/* A linha inteira abre com o mouse; este botão é o caminho pelo teclado. */}
                           {Object.keys(row.accounts).length > 0 && (
-                            isExpanded ? <ArrowDownRight size={16} className="text-slate-500"/> : <ArrowUpRight size={16} className="text-slate-500"/>
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleExpand(row.date); }}
+                              aria-expanded={!!isExpanded}
+                              aria-label={`${isExpanded ? 'Fechar' : 'Abrir'} o dia ${formattedDate}`}
+                              className={`inline-flex p-1 ${FOCUS_RING}`}>
+                              {isExpanded ? <ArrowDownRight size={16} aria-hidden="true" className="text-slate-500"/> : <ArrowUpRight size={16} aria-hidden="true" className="text-slate-500"/>}
+                            </button>
                           )}
                         </td>
                         <td className={`px-6 py-4 font-bold ${textHead}`}>
@@ -1035,14 +1060,15 @@ export default function DashboardPage() {
                           {row.problems > 0 && (
                             <span title={`${row.problems} campanha(s) com valor que não confere com o Google. Abra o dia para ver.`}
                               className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-400 align-middle cursor-help">
-                              <AlertTriangle size={11} /> {row.problems}
+                              <AlertTriangle size={11} aria-hidden="true" /> {row.problems}
+                              <span className="sr-only">{row.problems === 1 ? 'campanha' : 'campanhas'} com valor que não confere com o Google</span>
                             </span>
                           )}
                         </td>
                         <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(row.revenue)}</td>
                         <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(row.cost)}</td>
                         <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
-                        <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{row.roi.toFixed(0)}%</td>
+                        <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{formatPct(row.roi)}</td>
                       </tr>
                       {isExpanded && (showBlocks ? row.blockList : [{ id: 'all', accountList: row.accountList }]).map((blk: any) => (
                       <React.Fragment key={blk.id}>
@@ -1053,7 +1079,7 @@ export default function DashboardPage() {
                           <td className="px-6 py-2 text-right text-[13px] font-bold tabular-nums text-blue-500">{formatMoney(blk.revenue)}</td>
                           <td className="px-6 py-2 text-right text-[13px] font-bold tabular-nums text-orange-500">{formatMoney(blk.cost)}</td>
                           <td className={`px-6 py-2 text-right text-[13px] font-bold tabular-nums ${blk.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(blk.profit)}</td>
-                          <td className={`px-6 py-2 text-right text-[13px] font-bold tabular-nums ${blk.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{blk.roi.toFixed(0)}%</td>
+                          <td className={`px-6 py-2 text-right text-[13px] font-bold tabular-nums ${blk.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{formatPct(blk.roi)}</td>
                         </tr>
                       )}
                       {(blk.accountList || []).map((acc: any) => (
@@ -1062,7 +1088,7 @@ export default function DashboardPage() {
                             <td></td>
                             {/* Conta: valores com cor cheia (sem transparência), em 13px. */}
                             <td className={`px-6 py-2 text-[13px] font-bold pl-10 flex items-center gap-2 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>
-                              <Settings size={12}/> <span>Conta: {acc.name}</span>
+                              <Settings size={12} aria-hidden="true"/> <span>Conta: {acc.name}</span>
                             </td>
                             <td className={`px-6 py-2 text-right text-[13px] font-medium tabular-nums ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatMoney(acc.revenue)}</td>
                             <td className={`px-6 py-2 text-right text-[13px] font-medium tabular-nums ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>{formatMoney(acc.cost)}</td>
@@ -1074,7 +1100,7 @@ export default function DashboardPage() {
                               <td></td>
                               <td className="px-6 py-2 pl-16 border-l-2 border-slate-800 ml-10">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <Package size={12} className="text-slate-500 shrink-0"/>
+                                  <Package size={12} aria-hidden="true" className="text-slate-500 shrink-0"/>
                                   {cmp.productId ? (
                                     <Link href={`/products/${cmp.productId}`} target="_blank" rel="noopener noreferrer" className={`text-[13px] font-semibold ${isDark ? 'text-slate-100 hover:text-indigo-400' : 'text-slate-800 hover:text-indigo-600'} hover:underline transition-colors cursor-pointer`}>
                                       {cmp.name}
@@ -1087,12 +1113,14 @@ export default function DashboardPage() {
                                     >
                                       <span className={`w-1.5 h-1.5 rounded-full ${cmp.status.dot}`} />
                                       {cmp.status.label}
+                                      {cmp.status.hint && <span className="sr-only">: {cmp.status.hint}</span>}
                                     </span>
                                   )}
                                   {cmp.problem && (
                                     <span title={cmp.problem.text}
                                       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-400 shrink-0 cursor-help">
-                                      <AlertTriangle size={11} /> não confere
+                                      <AlertTriangle size={11} aria-hidden="true" /> não confere
+                                      <span className="sr-only">: {cmp.problem.text}</span>
                                     </span>
                                   )}
                                 </div>
@@ -1108,7 +1136,7 @@ export default function DashboardPage() {
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
                                     title={`Lançar vendas de ${row.date}`}
                                   >
-                                    <FileText size={11} /> Lançar
+                                    <FileText size={11} aria-hidden="true" /> Lançar
                                   </button>
                                 )}
                               </td>
@@ -1144,28 +1172,30 @@ export default function DashboardPage() {
                   const isExpanded = expandedRows[row.date];
                   return (
                     <React.Fragment key={row.date}>
-                      <div
+                      <button
+                        type="button"
                         onClick={() => toggleExpand(row.date)}
-                        className={`flex items-center justify-between px-4 py-3 border-b ${borderCol} cursor-pointer transition-colors ${
+                        aria-expanded={!!isExpanded}
+                        className={`w-full text-left flex items-center justify-between px-4 py-3 border-b ${borderCol} cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
                           isDark ? 'active:bg-slate-800/70' : 'active:bg-slate-50'
                         } ${isExpanded ? (isDark ? 'bg-slate-900' : 'bg-slate-50') : ''}`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className={`text-[10px] w-4 text-slate-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                        <span className="flex items-center gap-3">
+                          <span aria-hidden="true" className={`block text-[10px] w-4 text-slate-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
                             {Object.keys(row.accounts).length > 0 ? '›' : ''}
-                          </div>
-                          <div>
-                            <div className={`text-sm font-bold ${textHead}`}>{fmt}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{formatMoney(row.cost)} custo</div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-bold text-blue-500 font-mono">{formatMoney(row.revenue)}</div>
-                          <div className={`text-[10px] font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {row.profit >= 0 ? '↑' : '↓'} ROI {row.roi?.toFixed(0)}%
-                          </div>
-                        </div>
-                      </div>
+                          </span>
+                          <span className="block">
+                            <span className={`block text-sm font-bold ${textHead}`}>{fmt}</span>
+                            <span className="block text-[10px] text-slate-500 font-mono">{formatMoney(row.cost)} custo</span>
+                          </span>
+                        </span>
+                        <span className="block text-right">
+                          <span className="block text-sm font-bold text-blue-500 font-mono">{formatMoney(row.revenue)}</span>
+                          <span className={`block text-[10px] font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            <span aria-hidden="true">{row.profit >= 0 ? '↑' : '↓'} </span>ROI {formatPct(row.roi)}
+                          </span>
+                        </span>
+                      </button>
 
                       {isExpanded && (showBlocks ? row.blockList : [{ id: 'all', accountList: row.accountList }]).map((blk: any) => (
                       <React.Fragment key={blk.id}>
@@ -1192,7 +1222,8 @@ export default function DashboardPage() {
                                   ) : cmp.name}
                                   {cmp.problem && (
                                     <span title={cmp.problem.text} className="ml-1.5 inline-flex align-middle text-amber-400">
-                                      <AlertTriangle size={12} />
+                                      <AlertTriangle size={12} aria-hidden="true" />
+                                      <span className="sr-only">Não confere com o Google: {cmp.problem.text}</span>
                                     </span>
                                   )}
                                 </span>
@@ -1212,7 +1243,7 @@ export default function DashboardPage() {
                                     onClick={(e) => { e.stopPropagation(); setQuickEntry({ productId: cmp.productId, productName: cmp.name, accountCurrency: cmp.currency, date: row.date }); }}
                                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 active:bg-emerald-500/20"
                                   >
-                                    <FileText size={11} /> Lançar
+                                    <FileText size={11} aria-hidden="true" /> Lançar
                                   </button>
                                 )}
                               </div>
@@ -1258,7 +1289,7 @@ export default function DashboardPage() {
                 active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'
               }`}
             >
-              <Icon size={22} />
+              <Icon size={22} aria-hidden="true" />
               <span className="text-[9px] font-bold tracking-wide">{label}</span>
               {active && <div className="w-1 h-1 rounded-full bg-indigo-500" />}
             </Link>
@@ -1267,7 +1298,10 @@ export default function DashboardPage() {
       </nav>
 
       {/* ─── FILTER BOTTOM SHEET (Concept 04) ─── */}
+      {/* Fechado, o painel fica fora do alcance do teclado e do leitor de tela (inert). */}
       <div
+        inert={!showFilterSheet}
+        onKeyDown={(e) => { if (e.key === 'Escape') setShowFilterSheet(false); }}
         className={`fixed inset-0 z-50 md:hidden transition-opacity duration-300 ${showFilterSheet ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       >
         {/* Backdrop */}
@@ -1276,7 +1310,8 @@ export default function DashboardPage() {
           onClick={() => setShowFilterSheet(false)}
         />
         {/* Sheet panel */}
-        <div className={`absolute bottom-0 inset-x-0 rounded-t-3xl border-t transition-transform duration-300 ease-out ${
+        <div role="dialog" aria-modal="true" aria-labelledby="filter-sheet-title"
+          className={`absolute bottom-0 inset-x-0 rounded-t-3xl border-t transition-transform duration-300 ease-out ${
           showFilterSheet ? 'translate-y-0' : 'translate-y-full'
         } ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
 
@@ -1287,10 +1322,10 @@ export default function DashboardPage() {
 
           {/* Close button */}
           <div className="flex items-center justify-between px-5 pb-3">
-            <h3 className={`text-base font-bold ${textHead}`}>Filtros</h3>
-            <button onClick={() => setShowFilterSheet(false)}
+            <h3 id="filter-sheet-title" className={`text-base font-bold ${textHead}`}>Filtros</h3>
+            <button ref={filterCloseRef} onClick={() => setShowFilterSheet(false)} aria-label="Fechar filtros"
               className={`w-8 h-8 flex items-center justify-center rounded-xl ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
-              <X size={15} />
+              <X size={15} aria-hidden="true" />
             </button>
           </div>
 
@@ -1317,29 +1352,29 @@ export default function DashboardPage() {
             <div className="mb-5">
               <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Datas Personalizadas</div>
               <div className="flex gap-3">
-                <div className="flex-1">
-                  <div className="text-[10px] text-slate-500 mb-1 font-medium">De</div>
+                <label className="flex-1 block">
+                  <span className="block text-[10px] text-slate-500 mb-1 font-medium">De</span>
                   <input type="date" value={startInput.value}
                     onChange={e => startInput.onChange(e.target.value)}
                     className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors ${isDark ? 'bg-slate-900 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
                   />
-                </div>
-                <div className="flex-1">
-                  <div className="text-[10px] text-slate-500 mb-1 font-medium">Até</div>
+                </label>
+                <label className="flex-1 block">
+                  <span className="block text-[10px] text-slate-500 mb-1 font-medium">Até</span>
                   <input type="date" value={endInput.value}
                     onChange={e => endInput.onChange(e.target.value)}
                     className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors ${isDark ? 'bg-slate-900 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
                   />
-                </div>
+                </label>
               </div>
             </div>
 
             {/* MCC */}
             {availableMccs.length > 0 && (
               <div className="mb-5">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">MCC / Conta</div>
-                <select value={selectedMcc} onChange={e => handleMccChange(e.target.value)}
-                  className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
+                <label htmlFor="filter-sheet-mcc" className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">MCC / Conta</label>
+                <select id="filter-sheet-mcc" value={selectedMcc} onChange={e => handleMccChange(e.target.value)}
+                  className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
                   <option value="all">Visão Geral (Todas)</option>
                   {availableMccs.map(mcc => <option key={mcc} value={mcc}>{mcc}</option>)}
                 </select>
@@ -1381,7 +1416,7 @@ export default function DashboardPage() {
                       <div className="text-[9px] font-bold text-blue-500 uppercase tracking-wider mb-1">Meu Câmbio</div>
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-slate-500 font-bold">R$</span>
-                        <input type="text" inputMode="decimal"
+                        <input type="text" inputMode="decimal" aria-label={`Meu ${rateConfig === 'USD' ? 'dólar' : 'euro'}, em reais`}
                           value={rateConfig === 'USD' ? dollarInput : euroInput}
                           onChange={e => rateConfig === 'USD' ? handleDollarInputChange(e.target.value) : handleEuroInputChange(e.target.value)}
                           onBlur={rateConfig === 'USD' ? handleDollarInputBlur : handleEuroInputBlur}
@@ -1391,12 +1426,14 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <button onClick={() => rateConfig === 'USD' ? handleDollarStep(0.01) : handleEuroStep(0.01)}
+                        aria-label={`Subir o ${rateConfig === 'USD' ? 'dólar' : 'euro'} em 1 centavo`}
                         className={`w-9 h-9 flex items-center justify-center rounded-xl ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300'} transition-colors`}>
-                        <ChevronUp size={15} />
+                        <ChevronUp size={15} aria-hidden="true" />
                       </button>
                       <button onClick={() => rateConfig === 'USD' ? handleDollarStep(-0.01) : handleEuroStep(-0.01)}
+                        aria-label={`Baixar o ${rateConfig === 'USD' ? 'dólar' : 'euro'} em 1 centavo`}
                         className={`w-9 h-9 flex items-center justify-center rounded-xl ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300'} transition-colors`}>
-                        <ChevronDown size={15} />
+                        <ChevronDown size={15} aria-hidden="true" />
                       </button>
                     </div>
                   </div>
