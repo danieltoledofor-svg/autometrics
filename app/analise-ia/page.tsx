@@ -263,18 +263,20 @@ export default function PatternsPage() {
             <h1 className={`text-2xl font-bold ${head}`}>Análise de IA</h1>
             <div className={`text-sm ${muted}`}>O que se repete nas suas campanhas parecidas, e perguntas sobre elas</div>
           </div>
-          <button onClick={() => { const t = isDark ? 'light' : 'dark'; setTheme(t); localStorage.setItem('autometrics_theme', t); }} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={muted}>
+          <button onClick={() => { const t = isDark ? 'light' : 'dark'; setTheme(t); localStorage.setItem('autometrics_theme', t); }} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
+            className={`shrink-0 w-10 h-10 flex items-center justify-center rounded-xl border transition-colors ${isDark ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:text-black hover:bg-slate-100'}`}>
             {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
           </button>
         </div>
 
         {/* Conjunto, período e blocos */}
         {(data?.options?.mccs || []).length > 1 && (
-          <div className="flex flex-wrap gap-2">
+          // No celular, uma linha que rola para o lado; a partir do tablet, quebra em várias linhas.
+          <div className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0">
             {[{ name: '', label: 'Todas as MCCs', count: data.options.mccs.reduce((n: number, m: any) => n + m.count, 0) },
               ...data.options.mccs.map((m: any) => ({ name: m.name, label: m.name, count: m.count }))].map((m: any) => (
               <button key={m.name || 'todas'} onClick={() => setMcc(m.name)} aria-pressed={mcc === m.name}
-                className={`text-left rounded-xl border px-3.5 py-2.5 min-w-[130px] transition-colors ${mcc === m.name ? chipOn : `${card} ${muted} hover:border-indigo-500/40`}`}>
+                className={`shrink-0 md:shrink text-left rounded-xl border px-3.5 py-2.5 min-w-[130px] transition-colors ${mcc === m.name ? chipOn : `${card} ${muted} hover:border-indigo-500/40`}`}>
                 <div className={`text-[13px] font-bold ${mcc === m.name ? '' : head}`}>{m.label}</div>
                 <div className="text-[11px] opacity-70 tabular-nums">{m.count} {m.count === 1 ? 'campanha' : 'campanhas'}</div>
               </button>
@@ -299,7 +301,7 @@ export default function PatternsPage() {
             <div className={`flex items-center gap-1 p-1 rounded-lg border ${line} ml-auto flex-wrap`}>
               {PERIODS.map(p => (
                 <button key={p.key} onClick={() => setPeriod(p.key)} aria-pressed={period === p.key}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${period === p.key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-900') : `${muted} hover:text-slate-300`}`}>
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${period === p.key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-900') : `${muted} ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`}>
                   {p.label}
                 </button>
               ))}
