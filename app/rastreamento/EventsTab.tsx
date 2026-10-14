@@ -39,7 +39,7 @@ export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 
 
   const { card, head, muted, th, td } = ui;
   if (error) return <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>;
-  if (!data) return <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} className="animate-spin" /> Carregando…</div>;
+  if (!data) return <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Carregando…</div>;
 
   const values = Object.entries(data.value as Record<string, number>).sort((a, b) => b[1] - a[1]);
   const stat = (label: string, value: React.ReactNode) => (
@@ -88,7 +88,7 @@ export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 
                     <td className={`${td} whitespace-nowrap`}>{e.click ? [DEVICE[e.click.device], e.click.os].filter(Boolean).join(' · ') : <span className={muted}>sem clique ligado</span>}</td>
                     <td className={`${td} tabular-nums whitespace-nowrap`}>{e.click ? gap(e.click.created_at, e.at) : <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>{e.source || <span className={muted}>—</span>}</td>
-                    {sale && <td className={`${td} whitespace-nowrap`}>{e.google ? <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${GOOGLE[e.google.status]?.cls || ''}`} title={e.google.reason || ''}>{GOOGLE[e.google.status]?.label || e.google.status}</span> : <span className={muted}>—</span>}</td>}
+                    {sale && <td className={`${td} whitespace-nowrap`}>{e.google ? <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${GOOGLE[e.google.status]?.cls || ''}`} title={e.google.reason || ''}>{GOOGLE[e.google.status]?.label || e.google.status}{e.google.reason && <span className="sr-only">: {e.google.reason}</span>}</span> : <span className={muted}>—</span>}</td>}
                   </tr>
                 ))}
               </tbody>

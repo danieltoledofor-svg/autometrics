@@ -183,7 +183,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
   const copyBtn = (text: string, key: string, label: string) => (
     <button onClick={() => copyPostback(text, key)}
       className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === key ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
-      {copiedPostback === key ? <Check size={12} /> : <Copy size={12} />}
+      {copiedPostback === key ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
       {copiedPostback === key ? 'Copiado!' : label}
     </button>
   );
@@ -192,7 +192,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     <div className="space-y-6">
       <div className={`rounded-xl p-6 border ${bgCard}`}>
         <div className="flex items-center gap-3 mb-1">
-          <Zap size={20} className="text-amber-400" />
+          <Zap size={20} aria-hidden="true" className="text-amber-400" />
           <h2 className={`text-lg font-bold ${textHead}`}>Conversão Automática</h2>
         </div>
         <p className={`text-sm ${textMuted} mb-5`}>
@@ -202,13 +202,13 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
 
         <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>Tracker</p>
         <div className="flex flex-wrap gap-2 mb-4">
-          <button onClick={() => setConvTracker('flowtracking')} className={subTabClass(convTracker === 'flowtracking')}>FlowTracking</button>
+          <button onClick={() => setConvTracker('flowtracking')} aria-pressed={convTracker === 'flowtracking'} className={subTabClass(convTracker === 'flowtracking')}>FlowTracking</button>
         </div>
 
         <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>Plataforma de venda</p>
         <div className="flex flex-wrap gap-2">
           {platformKeys.map(k => (
-            <button key={k} onClick={() => setConvPlatform(k)} className={subTabClass(convPlatform === k)}>{platforms[k].name}</button>
+            <button key={k} onClick={() => setConvPlatform(k)} aria-pressed={convPlatform === k} className={subTabClass(convPlatform === k)}>{platforms[k].name}</button>
           ))}
         </div>
       </div>
@@ -266,13 +266,13 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
 
       {/* RELÓGIO DA PLATAFORMA */}
       <div className={`rounded-xl p-6 border ${bgCard}`}>
-        <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${textHead}`}><Clock size={16} className="text-indigo-400" /> Relógio da {plat.name}</h3>
+        <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${textHead}`}><Clock size={16} aria-hidden="true" className="text-indigo-400" /> Relógio da {plat.name}</h3>
         <p className={`text-xs mb-3 ${textMuted}`}>
           A venda entra no dia em que aconteceu no relógio da {plat.name}, para o dia do AutoMetrics fechar igual ao relatório dela.
           Uma venda perto da meia-noite pode cair num dia diferente do de Brasília.
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          <select value={clockOf(convPlatform, clocks)} onChange={e => saveClock(convPlatform, e.target.value)}
+          <select value={clockOf(convPlatform, clocks)} onChange={e => saveClock(convPlatform, e.target.value)} aria-label={`Relógio da ${plat.name}`}
             className={`text-xs font-bold rounded-lg px-3 py-2 border outline-none ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-white border-slate-300 text-slate-800'}`}>
             {CLOCK_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>

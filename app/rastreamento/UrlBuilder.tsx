@@ -60,7 +60,7 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
     <div className="space-y-6">
       <div className={`rounded-xl p-6 border ${bgCard}`}>
         <div className="flex items-center gap-3 mb-1">
-          <LinkIcon size={20} className="text-emerald-500" />
+          <LinkIcon size={20} aria-hidden="true" className="text-emerald-500" />
           <h2 className={`text-lg font-bold ${textHead}`}>Construtor de URL</h2>
         </div>
         <p className={`text-sm ${textMuted} mb-5`}>
@@ -69,10 +69,11 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
 
         {/* URL BASE */}
         <div className="mb-5">
-          <label className={`block text-xs font-bold mb-2 ${textMuted}`}>Endereço da página (pré-venda ou página de vendas)</label>
+          <label htmlFor="url-builder-base" className={`block text-xs font-bold mb-2 ${textMuted}`}>Endereço da página (pré-venda ou página de vendas)</label>
           <div className={`flex items-center gap-2 rounded-xl border px-4 py-3 ${isDark ? 'bg-slate-950 border-slate-700 focus-within:border-emerald-500' : 'bg-white border-slate-200 focus-within:border-emerald-400'} transition-colors`}>
-            <ExternalLink size={15} className="text-emerald-400 shrink-0" />
+            <ExternalLink size={15} aria-hidden="true" className="text-emerald-400 shrink-0" />
             <input
+              id="url-builder-base"
               type="url"
               value={urlBase}
               onChange={e => setUrlBase(e.target.value)}
@@ -87,7 +88,7 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
           <div className="flex items-center justify-between mb-3">
             <p className={`text-xs font-bold uppercase ${textMuted}`}>Parâmetros</p>
             <button onClick={addParam} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}>
-              <Plus size={12} /> Adicionar
+              <Plus size={12} aria-hidden="true" /> Adicionar
             </button>
           </div>
 
@@ -107,6 +108,7 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
                   <input
                     type="text"
                     value={param.key}
+                    aria-label={`Nome do parâmetro ${idx + 1}`}
                     readOnly={param.locked}
                     onChange={e => updateParam(idx, 'key', e.target.value)}
                     className={`w-20 sm:w-28 bg-transparent outline-none text-xs font-mono ${param.locked ? textMuted : textHead} shrink-0`}
@@ -121,13 +123,14 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
                   <input
                     type="text"
                     value={param.value}
+                    aria-label={`Valor do parâmetro ${param.key || idx + 1}`}
                     onChange={e => updateParam(idx, 'value', e.target.value)}
                     className={`flex-1 min-w-[100px] bg-transparent outline-none text-xs font-mono ${textHead}`}
                   />
                   {/* Remove */}
                   {!param.locked && (
-                    <button onClick={() => removeParam(idx)} className="shrink-0 p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-auto">
-                      <Trash2 size={14} />
+                    <button onClick={() => removeParam(idx)} aria-label={`Remover o parâmetro ${param.key || idx + 1}`} className="shrink-0 p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-auto">
+                      <Trash2 size={14} aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -154,7 +157,7 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shrink-0 ${urlCopied ? 'bg-emerald-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-30 disabled:cursor-not-allowed'
               }`}
           >
-            {urlCopied ? <Check size={15} /> : <Copy size={15} />}
+            {urlCopied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
             {urlCopied ? 'Copiado!' : 'Copiar URL'}
           </button>
         </div>

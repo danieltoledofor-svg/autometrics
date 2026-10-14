@@ -72,7 +72,7 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
           <div className={`text-sm font-bold ${head}`}>Visita de {when(open.created_at)}{place(open) ? ` · ${place(open)}` : ''}</div>
           <div className={`text-xs mt-0.5 ${muted}`}>{open.campaign || 'Sem campanha ligada'}</div>
         </div>
-        <button onClick={() => setOpen(null)} aria-label="Fechar a visita" className={muted}><X size={18} /></button>
+        <button onClick={() => setOpen(null)} aria-label="Fechar a visita" className={muted}><X size={18} aria-hidden="true" /></button>
       </div>
       <div className="grid md:grid-cols-3 gap-x-6 gap-y-4">
         <div>
@@ -140,28 +140,28 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
   return (
     <div className="space-y-4">
       <div className={`${card} border rounded-xl p-3 flex flex-wrap items-center gap-2`}>
-        <select value={filters.product_id} onChange={e => change({ product_id: e.target.value })} className={`${field} max-w-[260px]`}>
+        <select value={filters.product_id} onChange={e => change({ product_id: e.target.value })} aria-label="Campanha" className={`${field} max-w-[260px]`}>
           <option value="">Todas as campanhas</option>
           {campaigns.filter(c => c.id).map(c => <option key={c.id} value={c.id}>{c.key}</option>)}
         </select>
-        <select value={filters.traffic} onChange={e => change({ traffic: e.target.value })} className={field}>
+        <select value={filters.traffic} onChange={e => change({ traffic: e.target.value })} aria-label="Origem" className={field}>
           <option value="">Toda origem</option>
           {Object.entries(TRAFFIC).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <select value={filters.device} onChange={e => change({ device: e.target.value })} className={field}>
+        <select value={filters.device} onChange={e => change({ device: e.target.value })} aria-label="Aparelho" className={field}>
           <option value="">Todo aparelho</option>
           {Object.entries(DEVICE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <input defaultValue={filters.q} placeholder="Palavra-chave, cidade, país ou IP"
+        <input defaultValue={filters.q} placeholder="Palavra-chave, cidade, país ou IP" aria-label="Buscar por palavra-chave, cidade, país ou IP (Enter para buscar)"
           onKeyDown={e => { if (e.key === 'Enter') change({ q: (e.target as HTMLInputElement).value.trim() }); }}
           onBlur={e => { const v = e.target.value.trim(); if (v !== filters.q) change({ q: v }); }}
           className={`${field} w-56`} />
-        <button onClick={() => change({ bought: !filters.bought })} className={chip(filters.bought)}>Só quem comprou</button>
-        <button onClick={() => change({ bots: !filters.bots })} className={chip(filters.bots)}>Mostrar robôs</button>
-        {loading && <Loader2 size={14} className={`animate-spin ${muted}`} />}
+        <button onClick={() => change({ bought: !filters.bought })} aria-pressed={filters.bought} className={chip(filters.bought)}>Só quem comprou</button>
+        <button onClick={() => change({ bots: !filters.bots })} aria-pressed={filters.bots} className={chip(filters.bots)}>Mostrar robôs</button>
+        {loading && <Loader2 size={14} aria-hidden="true" className={`animate-spin ${muted}`} />}
       </div>
 
-      {error && <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>}
+      <div aria-live="polite">{error && <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>}</div>
       {detail}
 
       {data && (
@@ -186,7 +186,10 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
                 {data.visits.map((v: any) => (
                   <tr key={v.click_id} onClick={() => show(v.click_id)}
                     className={`cursor-pointer transition-colors ${open?.click_id === v.click_id ? (ui.isDark ? 'bg-slate-800/60' : 'bg-indigo-50') : ui.isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}`}>
-                    <td className={`${td} tabular-nums whitespace-nowrap`}>{opening === v.click_id ? <Loader2 size={13} className="animate-spin" /> : when(v.created_at)}</td>
+                    <td className={`${td} tabular-nums whitespace-nowrap`}>{opening === v.click_id ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : (
+                      <button type="button" onClick={e => { e.stopPropagation(); show(v.click_id); }} aria-label={`Ver a visita de ${when(v.created_at)}`}
+                        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{when(v.created_at)}</button>
+                    )}</td>
                     <td className={`${td} ${head} max-w-[200px] truncate`} title={place(v)}>{place(v) || <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>{[DEVICE[v.device], v.os, v.browser].filter(Boolean).join(' · ') || <span className={muted}>—</span>}{v.is_bot ? <span className="text-amber-500"> · robô</span> : null}</td>
                     <td className={`${td} whitespace-nowrap`}>{TRAFFIC[v.traffic] || <span className={muted}>—</span>}</td>

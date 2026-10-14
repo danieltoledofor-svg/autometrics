@@ -160,14 +160,14 @@ export default function TrackingPage() {
               className={href === '/rastreamento'
                 ? 'w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20'
                 : `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-              <Icon size={20} /> <span className="font-medium">{label}</span>
+              <Icon size={20} aria-hidden="true" /> <span className="font-medium">{label}</span>
             </Link>
           ))}
         </nav>
         <div className="p-4 border-t border-inherit">
           <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/'; }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10">
-            <LogOut size={20} /> <span className="font-medium">Sair ({email.split('@')[0]})</span>
+            <LogOut size={20} aria-hidden="true" /> <span className="font-medium">Sair ({email.split('@')[0]})</span>
           </button>
         </div>
       </aside>
@@ -181,20 +181,20 @@ export default function TrackingPage() {
           </div>
           {tab !== 'install' && <div className={`flex items-center gap-1 p-1 rounded-lg border ${line} flex-wrap`}>
             {PERIODS.map(p => (
-              <button key={p.key} onClick={() => setPeriod(p.key)}
+              <button key={p.key} onClick={() => setPeriod(p.key)} aria-pressed={period === p.key}
                 className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${period === p.key ? tabOn : `${muted} hover:text-slate-300`}`}>
                 {p.label}
               </button>
             ))}
           </div>}
-          <button onClick={() => { const next = isDark ? 'light' : 'dark'; setTheme(next); localStorage.setItem('autometrics_theme', next); }} className={muted}>
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          <button onClick={() => { const next = isDark ? 'light' : 'dark'; setTheme(next); localStorage.setItem('autometrics_theme', next); }} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={muted}>
+            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
           </button>
         </div>
 
         <div className={`flex gap-1 border-b ${line} overflow-x-auto`}>
           {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
+            <button key={t.key} onClick={() => setTab(t.key)} aria-pressed={tab === t.key}
               className={`px-3 py-2 text-sm font-bold whitespace-nowrap border-b-2 -mb-px transition-colors ${tab === t.key ? 'border-indigo-500 text-indigo-400' : `border-transparent ${muted} hover:text-indigo-400`}`}>
               {t.label}
             </button>
@@ -204,10 +204,10 @@ export default function TrackingPage() {
         {custom && tab !== 'install' && (
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-[11px] font-bold uppercase tracking-wide ${muted}`}>Período</span>
-            <input type="date" value={from} max={dayStr(0)} onChange={e => setFrom(e.target.value)}
+            <input type="date" aria-label="Data inicial" value={from} max={dayStr(0)} onChange={e => setFrom(e.target.value)}
               className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} />
             <span className={`text-xs ${muted}`}>até</span>
-            <input type="date" value={to} max={dayStr(0)} onChange={e => setTo(e.target.value)}
+            <input type="date" aria-label="Data final" value={to} max={dayStr(0)} onChange={e => setTo(e.target.value)}
               className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} />
           </div>
         )}
@@ -217,8 +217,8 @@ export default function TrackingPage() {
         {tab === 'checkouts' && datesOk && <EventsTab ui={ui} period={query} type="checkout" />}
         {tab === 'install' && userId && <InstallTab isDark={isDark} userId={userId} />}
 
-        {tab === 'overview' && error && <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>}
-        {tab === 'overview' && loading && !data && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} className="animate-spin" /> Carregando…</div>}
+        <div aria-live="polite">{tab === 'overview' && error && <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>}</div>
+        {tab === 'overview' && loading && !data && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Carregando…</div>}
 
         {tab === 'overview' && data && t && (
           <div className={`space-y-5 transition-opacity ${loading ? 'opacity-60' : ''}`}>
@@ -242,7 +242,7 @@ export default function TrackingPage() {
                 <div className={`${card} border rounded-xl overflow-hidden`}>
                   <div className="flex flex-wrap items-center gap-1 p-3">
                     {VIEWS.map(v => (
-                      <button key={v.key} onClick={() => setView(v.key)}
+                      <button key={v.key} onClick={() => setView(v.key)} aria-pressed={view === v.key}
                         className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${view === v.key ? tabOn : `${muted} hover:text-slate-300`}`}>
                         {v.label}
                       </button>
@@ -315,7 +315,7 @@ export default function TrackingPage() {
             return (
               <Link key={href} href={href}
                 className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-                <Icon size={22} />
+                <Icon size={22} aria-hidden="true" />
                 <span className="text-[9px] font-bold tracking-wide">{short}</span>
                 {active && <div className="w-1 h-1 rounded-full bg-indigo-500" />}
               </Link>
