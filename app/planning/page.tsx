@@ -50,14 +50,6 @@ function fmtDay(day: string) {
 /** Contorno de foco para controles que tiram o contorno padrão. */
 const FOCUS_RING = 'rounded-md focus-visible:ring-2 focus-visible:ring-indigo-500';
 
-function trendPct(arr: number[]): number {
-  if (!arr || arr.length < 2) return 0;
-  const first = arr[0];
-  const last = arr[arr.length - 1];
-  if (!first) return 0;
-  return ((last - first) / Math.abs(first)) * 100;
-}
-
 function SparklineSVG({ data, color }: { data: number[]; color: string }) {
   if (!data || data.length < 2) return <div className="h-7" />;
   const w = 80, h = 28;
@@ -646,7 +638,14 @@ export default function PlanningPage() {
     });
 
     // Cálculos Estratégicos (Break-even e Top Campanhas)
-    const breakEvenROAS = totals.ads_cost > 0 ? ((totals.ads_cost + totals.extra_cost) / totals.ads_cost) * 100 : 0;
+    // Ponto de equilíbrio em ROI dos anúncios (sem os custos extras): para o lucro
+    // ficar em zero, o que os anúncios deixam precisa pagar os extras.
+    // Mínimo = extras ÷ custo dos anúncios; atual = (receita + receitas extras
+    // − reembolsos − custo dos anúncios) ÷ custo dos anúncios. Atual ≥ mínimo
+    // é o mesmo que lucro ≥ 0. (Antes comparava o ROI já com os extras
+    // descontados contra este mínimo, contando os extras duas vezes.)
+    const breakEvenRoi = totals.ads_cost > 0 ? (totals.extra_cost / totals.ads_cost) * 100 : 0;
+    const adsRoi = totals.ads_cost > 0 ? ((totals.revenue + totals.extra_revenue - totals.refunds - totals.ads_cost) / totals.ads_cost) * 100 : 0;
     
     const campaignsArray = Object.values(campaignMap).map(c => {
        const profit = c.revenue - c.cost - c.refunds;
@@ -671,7 +670,7 @@ export default function PlanningPage() {
           avgRoi
        }));
 
-    return { daysArray, totals, variations, chartData, projectedRevenue, revenueProgress, breakEvenROAS, topCampaigns, bottomCampaigns, isCurrentMonth, daysPassed, daysInMonth, dailyTargetRevenue, currentDailyRevenue, revenuePacing, dailyTargetProfit, currentDailyProfit, profitPacing, isProfitSafe, finalGoal };
+    return { daysArray, totals, variations, chartData, projectedRevenue, revenueProgress, breakEvenRoi, adsRoi, topCampaigns, bottomCampaigns, isCurrentMonth, daysPassed, daysInMonth, dailyTargetRevenue, currentDailyRevenue, revenuePacing, dailyTargetProfit, currentDailyProfit, profitPacing, isProfitSafe, finalGoal };
   }, [metrics, prevMetrics, extraCosts, prevExtraCosts, products, viewCurrency, liveDollar, manualDollar, liveEuro, manualEuro, goal, startDate, endDate, selectedMcc]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : viewCurrency === 'EUR' ? 'de-DE' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
@@ -813,8 +812,12 @@ export default function PlanningPage() {
       {/* MOBILE KPI GRID 2x2 */}
       <div className="md:hidden grid grid-cols-2 gap-3 px-1 pb-3">
         {mobileKpiCards.filter(c => ['Receita', 'Lucro', 'Custo Ads', 'ROI'].includes(c.label)).map(({ label, value, color, data, isPositiveGood, isRoi }) => {
-          const trend = trendPct(data);
-          const trendUp = trend >= 0;
+          // Mesma comparação dos cartões do computador: o período todo contra o anterior.
+          const change = label === 'Receita' ? processedData.variations.revenue
+            : label === 'Custo Ads' ? processedData.variations.ads_cost
+            : label === 'Lucro' ? processedData.variations.profit
+            : processedData.variations.roi;
+          const trendUp = change >= 0;
           const trendGood = isPositiveGood ? trendUp : !trendUp;
           const displayLabel = label === 'Custo Ads' ? 'Custo' : label;
           return (
@@ -824,9 +827,11 @@ export default function PlanningPage() {
               <div className="text-sm font-bold font-mono leading-tight mb-1" style={{ color }}>
                 {isRoi ? `${fmtPct(value, 1)}` : formatMoney(value)}
               </div>
-              {data.length >= 2 && (
-                <div className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5 ${trendGood ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>
-                  {trendUp ? '↑' : '↓'} {fmtPct(Math.abs(trend), 0)}
+              {change !== 0 && (
+                <div className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5 ${trendGood ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}
+                  title="Comparado com o período anterior">
+                  <span aria-hidden="true">{trendUp ? '↑' : '↓'}</span> {isRoi ? `${fmtNum(Math.abs(change), 1)} p.p.` : fmtPct(Math.abs(change), 1)}
+                  <span className="sr-only">{trendUp ? 'a mais' : 'a menos'} que no período anterior</span>
                 </div>
               )}
               <SparklineSVG data={data} color={color} />
@@ -1032,13 +1037,13 @@ export default function PlanningPage() {
       </header>
 
       {/* KPI SUMÁRIO — desktop only */}
-      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4 mb-8">
         <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm`}>
            <p className="text-xs font-bold text-slate-500 uppercase">Receita</p>
            <p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p>
            {processedData.variations.revenue !== 0 && (
              <p className={`text-[10px] font-bold mt-1 ${processedData.variations.revenue > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-               {fmtPct(processedData.variations.revenue, 1, true)} <span className="text-slate-400 font-normal">vs pe. anterior</span>
+               {fmtPct(processedData.variations.revenue, 1, true)} <span className="text-slate-400 font-normal">vs período anterior</span>
              </p>
            )}
         </div>
@@ -1047,7 +1052,7 @@ export default function PlanningPage() {
            <p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</p>
            {processedData.variations.ads_cost !== 0 && (
              <p className={`text-[10px] font-bold mt-1 ${processedData.variations.ads_cost < 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-               {fmtPct(processedData.variations.ads_cost, 1, true)} <span className="text-slate-400 font-normal">vs pe. anterior</span>
+               {fmtPct(processedData.variations.ads_cost, 1, true)} <span className="text-slate-400 font-normal">vs período anterior</span>
              </p>
            )}
         </div>
@@ -1060,7 +1065,7 @@ export default function PlanningPage() {
            <p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p>
            {processedData.variations.profit !== 0 && (
              <p className={`text-[10px] font-bold mt-1 ${processedData.variations.profit > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-               {fmtPct(processedData.variations.profit, 1, true)} <span className="text-slate-400 font-normal">vs pe. anterior</span>
+               {fmtPct(processedData.variations.profit, 1, true)} <span className="text-slate-400 font-normal">vs período anterior</span>
              </p>
            )}
         </div>
@@ -1069,7 +1074,7 @@ export default function PlanningPage() {
            <p className="text-2xl font-bold text-indigo-500">{fmtPct(processedData.totals.roi, 1)}</p>
            {processedData.variations.roi !== 0 && (
              <p className={`text-[10px] font-bold mt-1 ${processedData.variations.roi > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-               {fmtNum(processedData.variations.roi, 1, true)} p.p. <span className="text-slate-400 font-normal">vs pe. anterior</span>
+               {fmtNum(processedData.variations.roi, 1, true)} p.p. <span className="text-slate-400 font-normal">vs período anterior</span>
              </p>
            )}
         </div>
@@ -1086,7 +1091,7 @@ export default function PlanningPage() {
              <div className="space-y-4 z-10 relative">
                <div>
                   <p className="text-[10px] uppercase text-slate-500 mb-1">Ritmo Necessário / Dia</p>
-                  <p className="text-lg font-bold text-slate-300">{formatMoney(processedData.dailyTargetRevenue)}</p>
+                  <p className={`text-lg font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{formatMoney(processedData.dailyTargetRevenue)}</p>
                </div>
                <div>
                   <p className="text-[10px] uppercase text-slate-500 mb-1">Seu Ritmo Atual / Dia</p>
@@ -1125,14 +1130,14 @@ export default function PlanningPage() {
              <p className={`text-[10px] ${textMuted} mb-3`}>No período selecionado</p>
              <div className="space-y-2 z-10 relative overflow-y-auto max-h-44">
                {processedData.bottomCampaigns.length === 0 ? (
-                 <p className="text-xs text-slate-400 mt-4 p-4 border border-slate-700/50 border-dashed rounded-lg text-center">✅ Nenhuma campanha prejudicando o ROI no período!</p>
+                 <p className={`text-xs mt-4 p-4 border border-dashed rounded-lg text-center ${isDark ? 'text-slate-400 border-slate-700/50' : 'text-slate-500 border-slate-300'}`}>✅ Nenhuma campanha prejudicando o ROI no período!</p>
                ) : (
                  processedData.bottomCampaigns.map((c, i) => {
                    const isLoss = c.profit < 0 || c.roi < 0;
                    return (
                      <div key={i} className={`flex justify-between items-center p-2 rounded-lg border ${isLoss ? 'bg-rose-500/5 border-rose-500/15' : 'bg-amber-500/5 border-amber-500/15'}`}>
                        <div className="min-w-0 pr-2 max-w-[58%]">
-                         <p className={`text-[11px] font-bold leading-tight ${isLoss ? 'text-rose-300' : 'text-amber-300'}`}>
+                         <p className={`text-[11px] font-bold leading-tight ${isLoss ? (isDark ? 'text-rose-300' : 'text-rose-700') : (isDark ? 'text-amber-300' : 'text-amber-700')}`}>
                            <Package size={9} aria-hidden="true" className="inline mr-1 opacity-60"/>{c.name}
                          </p>
                          <p className="text-[9px] text-slate-500 mt-0.5">{fmtPct(c.spendShare, 1)} do gasto total</p>
@@ -1195,16 +1200,16 @@ export default function PlanningPage() {
                   <Target size={16} aria-hidden="true" className="text-orange-500" />
                   <h3 className={`text-sm font-bold ${textHead}`}>Ponto de Equilíbrio (Break-even)</h3>
                </div>
-               <p className={`text-xs ${textMuted} mb-4`}>Para atingir um lucro de R$ 0,00 e pagar todos os {formatMoney(processedData.totals.extra_cost)} em Custos Extras da sua operação.</p>
+               <p className={`text-xs ${textMuted} mb-4`}>Para o lucro chegar a zero, o que os anúncios deixam precisa pagar os {formatMoney(processedData.totals.extra_cost)} de custos extras do período.</p>
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">ROAS Mínimo Necessário</span>
-                  <p className="text-2xl font-bold text-orange-500">{fmtPct(processedData.breakEvenROAS, 1)}</p>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">ROI mínimo para empatar</span>
+                  <p className="text-2xl font-bold text-orange-500">{fmtPct(processedData.breakEvenRoi, 1)}</p>
                </div>
                <div className="text-right">
-                   <span className="text-[10px] font-bold text-slate-400 uppercase block">ROAS Atual</span>
-                   <p className={`text-lg font-bold ${processedData.totals.roi >= processedData.breakEvenROAS - 100 ? 'text-emerald-500' : 'text-rose-500'}`}>{fmtPct(processedData.totals.roi, 1)}</p>
+                   <span className="text-[10px] font-bold text-slate-400 uppercase block">ROI atual dos anúncios</span>
+                   <p className={`text-lg font-bold ${processedData.adsRoi >= processedData.breakEvenRoi ? 'text-emerald-500' : 'text-rose-500'}`}>{fmtPct(processedData.adsRoi, 1)}</p>
                </div>
             </div>
          </div>
@@ -1303,7 +1308,7 @@ export default function PlanningPage() {
                       <div className="font-bold text-blue-500">{formatMoney(day.revenue)}</div>
                     </div>
                     <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                      <div className="text-[9px] text-slate-500 uppercase mb-0.5">Ads Cost</div>
+                      <div className="text-[9px] text-slate-500 uppercase mb-0.5">Custo Ads</div>
                       <div className="font-bold text-orange-500">{formatMoney(day.ads_cost)}</div>
                     </div>
                     {day.refunds > 0 && (
@@ -1341,7 +1346,7 @@ export default function PlanningPage() {
           <div className="text-[10px] font-bold uppercase text-slate-500 mb-2">Totais do Período</div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div><div className="text-[9px] text-slate-500 uppercase">Receita</div><div className="font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</div></div>
-            <div><div className="text-[9px] text-slate-500 uppercase">Ads Cost</div><div className="font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</div></div>
+            <div><div className="text-[9px] text-slate-500 uppercase">Custo Ads</div><div className="font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</div></div>
             <div><div className="text-[9px] text-slate-500 uppercase">Extras Net</div><div className={`font-bold ${processedData.totals.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(processedData.totals.net_extra)}</div></div>
             <div><div className="text-[9px] text-slate-500 uppercase">Lucro</div><div className={`font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</div></div>
           </div>
@@ -1410,7 +1415,7 @@ export default function PlanningPage() {
                                  {day.details.length > 0 ? (
                                     <div className="flex flex-col items-end gap-1">
                                        <span className={`font-semibold ${day.net_extra >= 0 ? tone.pos : tone.warn}`}>{formatMoney(day.net_extra)}</span>
-                                       <div className="flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed border-slate-700 pt-1">
+                                       <div className={`flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed pt-1 ${isDark ? 'border-slate-700' : 'border-slate-300'}`}>
                                           {day.details.map((d: any) => (
                                              <div key={d.id} className="flex items-center gap-2 group/item">
                                                 <span className={`text-xs ${tone.muted} break-words min-w-0`} title={d.desc}>{d.desc}</span>
@@ -1603,7 +1608,7 @@ export default function PlanningPage() {
                   </div>
                   <div>
                     <label htmlFor="cost-date" className="text-xs uppercase font-bold text-slate-500">Data do Lançamento</label>
-                    <input id="cost-date" type="date" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol} [&::-webkit-calendar-picker-indicator]:invert`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
+                    <input id="cost-date" type="date" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
                   </div>
                   <div>
                     <label htmlFor="cost-desc" className="text-xs uppercase font-bold text-slate-500">Descrição</label>
