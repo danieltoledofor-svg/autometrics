@@ -18,6 +18,11 @@ body {
     rgb(var(--background-start-rgb));
   background-color: #000;
   min-height: 100vh;
+  /* Com viewport-fit=cover (app/layout.tsx), o celular deitado deixaria o
+     conteúdo atrás do recorte da câmera. Estas margens repetem a faixa que o
+     Safari já deixava antes; em pé elas valem zero. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 @layer utilities {

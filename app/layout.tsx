@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 // --- INSTRUÇÃO PARA SEU COMPUTADOR (VS CODE) ---
 // 1. Certifique-se de ter o arquivo 'globals.css' na pasta 'app'.
@@ -8,6 +8,15 @@ import SaleAlerts from "./components/SaleAlerts";
 export const metadata: Metadata = {
   title: "AutoMetrics",
   description: "Dashboard Financeiro",
+};
+
+// viewport-fit=cover: o iPhone passa a informar a área segura (barra de baixo,
+// recorte da câmera) pelo env(safe-area-inset-*). Os menus de baixo usam isso;
+// as laterais ficam protegidas pelo padding do body em globals.css.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

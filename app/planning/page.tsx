@@ -1465,7 +1465,7 @@ export default function PlanningPage() {
 
       {/* BOTTOM NAV */}
       <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
-        <div className="flex justify-around items-center px-2 pt-2 pb-5">
+        <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {[
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
             { href: '/planning', Icon: Target, label: 'Metas', active: true },
@@ -1492,7 +1492,7 @@ export default function PlanningPage() {
             <h2 className={`text-base font-bold ${textHead}`}>Filtros</h2>
             <button onClick={() => setShowFilterSheet(false)} className={`w-8 h-8 flex items-center justify-center rounded-full ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}><X size={16}/></button>
           </div>
-          <div className="px-5 pb-8 space-y-5 overflow-y-auto max-h-[70vh]">
+          <div className="px-5 pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))] space-y-5 overflow-y-auto max-h-[70vh]">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Período</p>
               <div className="flex flex-wrap gap-2">

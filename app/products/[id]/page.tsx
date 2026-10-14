@@ -1230,7 +1230,7 @@ export default function ProductDetailPage() {
       </button>
 
       {/* BOTTOM NAV */}
-      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md pb-5 ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
+      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md pb-[max(1.25rem,env(safe-area-inset-bottom))] ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
         <div className="flex justify-around pt-2">
           {[
             { href: '/dashboard', icon: <LayoutGrid size={22} />, label: 'Dashboard' },
@@ -1252,7 +1252,7 @@ export default function ProductDetailPage() {
       {showFilterSheet && (
         <>
           <div className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setShowFilterSheet(false)} />
-          <div className={`md:hidden fixed bottom-0 inset-x-0 z-50 rounded-t-2xl border-t shadow-2xl ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} pb-8`}>
+          <div className={`md:hidden fixed bottom-0 inset-x-0 z-50 rounded-t-2xl border-t shadow-2xl ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))]`}>
             <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
               <h3 className={`font-bold ${textHead}`}>Filtros</h3>
               <button onClick={() => setShowFilterSheet(false)}>

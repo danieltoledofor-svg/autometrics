@@ -1273,7 +1273,7 @@ export default function DashboardPage() {
 
       {/* ─── MOBILE BOTTOM NAVIGATION ─── */}
       <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
-        <div className="flex justify-around items-center px-2 pt-2 pb-5">
+        <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {[
             { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: true },
             { href: '/planning', Icon: Target, label: 'Metas', active: false },
@@ -1329,7 +1329,7 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <div className="px-5 pb-8 max-h-[80vh] overflow-y-auto" style={{ scrollbarWidth: 'none' } as React.CSSProperties}>
+          <div className="px-5 pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))] max-h-[80vh] overflow-y-auto" style={{ scrollbarWidth: 'none' } as React.CSSProperties}>
 
             {/* Period */}
             <div className="mb-5">
