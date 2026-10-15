@@ -12,7 +12,7 @@ export default function TermosPage() {
       <p>
         Estes termos valem para quem usa o Autometrics (autometrics.cloud). Ao criar uma conta ou conectar
         uma conta do Google Ads, você concorda com eles. Dúvidas:{' '}
-        <a className="text-indigo-400 hover:text-indigo-300" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+        <a className="text-brand-text hover:underline" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
 
       <Section title="1. O que a plataforma faz">
@@ -36,10 +36,10 @@ export default function TermosPage() {
           Ao conectar, você autoriza a plataforma a ler os dados das contas a que esse login do Google tem
           acesso e a alterar essas contas quando você comandar no painel: pausar ou ativar campanhas e
           palavras-chave, incluir palavras-chave negativas, mudar ajustes de lance e metas de CPA, criar
-          campanhas novas (sempre pausadas) e, se você ligar, enviar suas vendas ao Google Ads.
+          campanhas novas (que já nascem ativas, depois da sua confirmação) e, se você ligar, enviar suas vendas ao Google Ads.
         </p>
         <p>
-          <strong className="text-white">Toda alteração vale na hora, na conta real do Google Ads.</strong>{' '}
+          <strong className="text-ink font-medium">Toda alteração vale na hora, na conta real do Google Ads.</strong>{' '}
           Confira antes de confirmar. Cada ação fica registrada com data, hora e resultado.
         </p>
         <p>

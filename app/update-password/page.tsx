@@ -4,7 +4,11 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
-import Image from 'next/image';
+import { Logo } from '@/app/components/Logo';
+import { Inter } from 'next/font/google';
+
+// Fonte do guia visual (DESIGN.md).
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,31 +52,26 @@ export default function UpdatePasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+    <div className={`${inter.className} am-dark min-h-screen bg-canvas text-ink-muted flex items-center justify-center p-4`}>
+      <div className="w-full max-w-sm bg-surface-1 border border-line rounded-2xl p-6 sm:p-8">
         
         <div className="text-center mb-8 flex flex-col items-center">
-          <Image 
-            src="/logo.png" 
-            alt="AutoMetrics Logo" 
-            width={250} 
-            height={120}
-            className="w-[300px] h-auto object-contain mb-4" 
-            priority
-          />
-          <p className="text-slate-400 text-sm">Defina sua nova senha de acesso.</p>
+          <Logo size="lg" className="mb-4" onDark />
+          <p className="text-ink-subtle text-sm">Defina sua nova senha de acesso.</p>
         </div>
 
         <form onSubmit={handleUpdatePassword} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nova Senha</label>
+            <label htmlFor="new-password" className="block text-xs font-medium text-ink-subtle mb-1.5">Nova senha</label>
             <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" size={16} aria-hidden="true" />
               <input 
+                id="new-password"
+                autoComplete="new-password"
                 type="password" 
                 required 
                 disabled={success}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-white outline-none focus:border-indigo-500 transition-colors disabled:opacity-50" 
+                className="w-full bg-surface-2 border border-line-strong rounded-lg py-2.5 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint outline-none focus-visible:ring-2 focus-visible:ring-brand transition-colors disabled:opacity-50" 
                 placeholder="••••••••" 
                 value={password} 
                 onChange={e => setPassword(e.target.value)} 
@@ -81,24 +80,24 @@ export default function UpdatePasswordPage() {
             </div>
           </div>
 
-          {msg && (
-            <div className={`flex items-center gap-2 text-sm p-3 rounded-lg ${success || msg.includes('sucesso') ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-              <AlertCircle size={16} />{msg}
+          <div aria-live="polite">{msg && (
+            <div className={`flex items-center gap-2 text-sm p-3 rounded-lg border ${success || msg.includes('sucesso') ? 'bg-pos/10 border-pos/30 text-pos' : 'bg-neg/10 border-neg/30 text-neg'}`}>
+              <AlertCircle size={16} aria-hidden="true" className="shrink-0" />{msg}
             </div>
-          )}
+          )}</div>
           
           <button 
             type="submit" 
             disabled={loading || success} 
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-6 disabled:opacity-50"
+            className="w-full bg-brand hover:bg-brand-hover text-white text-sm font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 mt-6 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin" /> : 'Atualizar Senha'} {!loading && <ArrowRight size={18} />}
+            {loading ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : 'Atualizar senha'} {!loading && <ArrowRight size={16} aria-hidden="true" />}
           </button>
         </form>
 
         <div className="mt-6 text-center">
-          <button onClick={() => router.push('/')} className="text-sm text-slate-500 hover:text-white transition-colors">
-            Voltar para o Login
+          <button onClick={() => router.push('/')} className="text-sm text-ink-subtle hover:text-ink transition-colors">
+            Voltar para o login
           </button>
         </div>
       </div>

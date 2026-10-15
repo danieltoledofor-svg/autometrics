@@ -35,7 +35,8 @@ body {
    aceitar opacidade (bg-pos/10). O tema vem do <html data-theme>.
    ───────────────────────────────────────────────────────────────────────────── */
 :root,
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+.am-dark {
   --am-canvas: 8 9 10;
   --am-surface-1: 15 16 17;
   --am-surface-2: 20 21 22;
@@ -55,6 +56,11 @@ body {
   --am-chart-1: 124 134 224;
   --am-chart-2: 217 145 63;
   --am-chart-3: 39 166 68;
+}
+
+/* Páginas públicas (login, senha, termos): sempre escuras, qualquer que seja o tema salvo. */
+.am-dark {
+  color-scheme: dark;
 }
 
 :root[data-theme="light"] {
