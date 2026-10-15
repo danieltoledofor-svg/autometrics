@@ -19,13 +19,15 @@ interface Props {
   /** Nomes das campanhas do usuário, para contar quantas entram em cada grupo. */
   campaignNames: string[];
   isDark: boolean;
+  /** Estilo do guia visual (DESIGN.md). Ligado nas telas já migradas; as outras seguem no estilo antigo. */
+  tokens?: boolean;
 }
 
 type Draft = { id: string | null; name: string; terms: string };
 
 const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter(x => x !== id) : [...list, id]);
 
-export function CampaignGroupsBar({ groups, onChange, campaignNames, isDark }: Props) {
+export function CampaignGroupsBar({ groups, onChange, campaignNames, isDark, tokens = false }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
 
   const counts = useMemo(() => {
@@ -58,15 +60,18 @@ export function CampaignGroupsBar({ groups, onChange, campaignNames, isDark }: P
     setDraft(null);
   };
 
-  const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const muted = 'text-slate-500';
-  const head = isDark ? 'text-white' : 'text-slate-900';
-  const chipOn = isDark ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700';
-  const chipOff = isDark ? 'border-slate-800 text-slate-500 hover:text-slate-300' : 'border-slate-200 text-slate-400 hover:text-slate-600';
-  const field = `w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-indigo-500 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-900'}`;
+  const card = tokens ? 'bg-surface-1 border-line' : isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
+  const muted = tokens ? 'text-ink-subtle' : 'text-slate-500';
+  const head = tokens ? 'text-ink' : isDark ? 'text-white' : 'text-slate-900';
+  const chipOn = tokens ? 'bg-surface-3 border-line-strong text-ink' : isDark ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700';
+  const chipOff = tokens ? 'border-line text-ink-subtle hover:text-ink' : isDark ? 'border-slate-800 text-slate-500 hover:text-slate-300' : 'border-slate-200 text-slate-400 hover:text-slate-600';
+  const field = tokens
+    ? 'w-full rounded-lg border px-3 py-2 text-sm outline-none bg-surface-1 border-line-strong text-ink focus-visible:ring-2 focus-visible:ring-brand'
+    : `w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-indigo-500 ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-900'}`;
+  const weight = tokens ? 'font-medium' : 'font-bold';
 
   const chip = (id: string, label: string, on: boolean, onClick: () => void, group?: CampaignGroup) => (
-    <span key={id} className={`inline-flex items-center rounded-lg border text-xs font-bold transition-colors ${on ? chipOn : chipOff}`}>
+    <span key={id} className={`inline-flex items-center rounded-lg border text-xs ${weight} transition-colors ${on ? chipOn : chipOff}`}>
       <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1.5">
         <Check size={12} aria-hidden="true" className={on ? '' : 'opacity-0'} />
         <span>{label}</span>
@@ -85,12 +90,12 @@ export function CampaignGroupsBar({ groups, onChange, campaignNames, isDark }: P
   return (
     <>
       <div className={`flex items-center gap-2 flex-wrap p-2 rounded-xl border mb-3 ${card}`}>
-        <span className={`text-[11px] font-bold uppercase tracking-wide px-1 ${muted}`}>Grupos</span>
+        <span className={tokens ? `text-xs font-medium px-1 ${muted}` : `text-[11px] font-bold uppercase tracking-wide px-1 ${muted}`}>Grupos</span>
         {groups.list.length > 0 && chip(MAIN_BLOCK, MAIN_BLOCK_NAME, !groups.hidden.includes(MAIN_BLOCK), () => onChange({ ...groups, hidden: toggle(groups.hidden, MAIN_BLOCK) }))}
         {groups.list.map(g => chip(g.id, g.name, !groups.hidden.includes(g.id), () => onChange({ ...groups, hidden: toggle(groups.hidden, g.id) }), g))}
         {groups.list.length === 0 && <span className={`text-xs ${muted}`}>Separe as campanhas pelo que está escrito no nome.</span>}
         <button type="button" onClick={() => setDraft({ id: null, name: '', terms: '' })}
-          className={`ml-auto inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-bold ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}`}>
+          className={`ml-auto inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs ${weight} ${tokens ? 'border-line text-ink-subtle hover:text-ink hover:bg-surface-2' : isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}`}>
           <Plus size={12} aria-hidden="true" /> Criar grupo
         </button>
       </div>

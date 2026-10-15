@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Calendar, Sun, Moon, LayoutGrid, Package, Settings,
-  LogOut, Target, ArrowUpRight, ArrowDownRight,
-  ChevronUp, ChevronDown, SlidersHorizontal, X, FileText, AlertTriangle, Sparkles, Route
+  LogOut, Target,
+  ChevronUp, ChevronDown, ChevronRight, SlidersHorizontal, X, FileText, AlertTriangle, Sparkles, Route
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -26,6 +26,10 @@ import { MAIN_BLOCK, blockName, blockOf } from '@/lib/campaignGroups';
 import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
 import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
 import { spendAlert } from '@/lib/alerts/spendRule';
+import { Inter } from 'next/font/google';
+
+// Fonte do guia visual (DESIGN.md). Por enquanto só na Dashboard, a primeira tela migrada.
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
@@ -615,208 +619,204 @@ export default function DashboardPage() {
     };
   }, [processedData.chart]);
 
+  // Visual pelo guia (DESIGN.md, direção Linear): cores pelos tokens do tema,
+  // números neutros e cor só no resultado (lucro, ROI).
   const isDark = theme === 'dark';
-  const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
-  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const textMuted = 'text-slate-500';
-  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
+  const bgMain = 'bg-canvas text-ink-muted';
+  const textHead = 'text-ink';
+  const tone = (v: number) => (v >= 0 ? 'text-pos' : 'text-neg');
+  const navItem = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors';
+  const navIdle = `${navItem} text-ink-subtle hover:bg-surface-2 hover:text-ink`;
+  const iconBtn = 'w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors';
+  const segGroup = 'flex items-center gap-1 p-1 rounded-lg border border-line bg-surface-1';
+  const segItem = (on: boolean) => `rounded-md text-xs font-medium transition-colors ${on ? 'bg-surface-3 text-ink' : 'text-ink-subtle hover:text-ink'}`;
+  const chip = (on: boolean) => `flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border transition-colors ${on ? 'bg-surface-3 border-line-strong text-ink' : 'bg-surface-1 border-line text-ink-subtle hover:text-ink'}`;
+  const field = 'bg-surface-1 border border-line-strong rounded-lg text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand';
+  const th = 'px-4 py-2.5 text-xs font-medium text-ink-subtle';
+  // Recharts e o desenho das linhas pedem a cor pronta: os mesmos valores dos tokens chart-*.
+  const chartColor = isDark
+    ? { revenue: '#7c86e0', cost: '#d9913f', profit: '#27a644', roi: '#9aa3ef', grid: '#23252a', axis: '#8a8f98', tipBg: '#0f1011', tipLine: '#34343a', tipText: '#f7f8f8' }
+    : { revenue: '#5e6ad2', cost: '#c27a28', profit: '#1d7f38', roi: '#4b56be', grid: '#e2e4e8', axis: '#62666f', tipBg: '#ffffff', tipLine: '#cfd2d8', tipText: '#16171a' };
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : viewCurrency === 'EUR' ? 'de-DE' : 'en-US', { style: 'currency', currency: viewCurrency }).format(val);
   const toggleExpand = (id: string) => setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
 
-  if (!authChecked) return <div className="min-h-screen bg-black" />;
-  if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
+  if (!authChecked) return <div className="min-h-screen bg-canvas" />;
+  if (loading) return <div className={`${inter.className} min-h-screen ${bgMain} flex items-center justify-center`}>Carregando…</div>;
 
   const mobileKpiCards = processedData.totals ? [
-    { label: 'Receita', value: processedData.totals.revenue, color: '#3B82F6', data: sparklineData.revenue, isPositiveGood: true, isRoi: false },
-    { label: 'Lucro', value: processedData.totals.profit, color: '#10B981', data: sparklineData.profit, isPositiveGood: true, isRoi: false },
-    { label: 'Custo', value: processedData.totals.cost, color: '#F97316', data: sparklineData.cost, isPositiveGood: false, isRoi: false },
-    { label: 'ROI', value: processedData.totals.roi, color: '#8B5CF6', data: sparklineData.roi, isPositiveGood: true, isRoi: true },
-    { label: 'Reembolsos', value: processedData.totals.refunds, color: '#F43F5E', data: sparklineData.refunds, isPositiveGood: false, isRoi: false },
+    { label: 'Receita', value: processedData.totals.revenue, color: chartColor.revenue, data: sparklineData.revenue, isPositiveGood: true, isRoi: false, isResult: false },
+    { label: 'Lucro', value: processedData.totals.profit, color: chartColor.profit, data: sparklineData.profit, isPositiveGood: true, isRoi: false, isResult: true },
+    { label: 'Custo', value: processedData.totals.cost, color: chartColor.cost, data: sparklineData.cost, isPositiveGood: false, isRoi: false, isResult: false },
+    { label: 'ROI', value: processedData.totals.roi, color: chartColor.roi, data: sparklineData.roi, isPositiveGood: true, isRoi: true, isResult: true },
+    { label: 'Reembolsos', value: processedData.totals.refunds, color: chartColor.cost, data: sparklineData.refunds, isPositiveGood: false, isRoi: false, isResult: false },
   ] : [];
 
+  const NAV_ITEMS = [
+    { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', short: 'Dashboard' },
+    { href: '/planning', Icon: Target, label: 'Metas', short: 'Metas' },
+    { href: '/products', Icon: Package, label: 'Campanhas', short: 'Campanhas' },
+    { href: '/analise-ia', Icon: Sparkles, label: 'Análise de IA', short: 'Análise IA' },
+    { href: '/rastreamento', Icon: Route, label: 'Rastreamento', short: 'Rastreio' },
+    { href: '/integration', Icon: Settings, label: 'Integração', short: 'Integração' },
+  ];
+
+  const kpis = processedData.totals ? [
+    { label: 'Receita', value: formatMoney(processedData.totals.revenue), cls: textHead },
+    { label: 'Custo', value: formatMoney(processedData.totals.cost), cls: textHead },
+    { label: 'Lucro líquido', value: formatMoney(processedData.totals.profit), cls: tone(processedData.totals.profit) },
+    { label: 'ROI', value: formatPct(processedData.totals.roi, 1), cls: tone(processedData.totals.roi) },
+    { label: 'Reembolsos', value: formatMoney(processedData.totals.refunds), cls: textHead },
+  ] : [];
+
+  const rateBox = (kind: 'USD' | 'EUR') => (
+    <div className="flex items-center justify-between gap-4 px-3 py-2 rounded-lg border border-line bg-surface-1 flex-1 sm:flex-none sm:min-w-[180px]">
+      <div className="flex flex-col">
+        <span className="text-xs font-medium text-ink-subtle">{kind === 'USD' ? 'Dólar hoje' : 'Euro hoje'}</span>
+        <span className="text-sm font-medium tabular-nums text-ink">R$ {(kind === 'USD' ? liveDollar : liveEuro).toFixed(2).replace('.', ',')}</span>
+      </div>
+      <div className="flex flex-col items-end">
+        <span className="text-xs font-medium text-ink-subtle">{kind === 'USD' ? 'Meu dólar' : 'Meu euro'}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-ink-subtle">R$</span>
+          <input type="text" inputMode="decimal" aria-label={kind === 'USD' ? 'Meu dólar, em reais' : 'Meu euro, em reais'}
+            className="w-14 text-right bg-transparent text-sm font-medium tabular-nums text-ink outline-none border-b border-line-strong focus:border-brand transition-colors pb-0.5"
+            value={kind === 'USD' ? dollarInput : euroInput}
+            onChange={(e) => (kind === 'USD' ? handleDollarInputChange(e.target.value) : handleEuroInputChange(e.target.value))}
+            onBlur={kind === 'USD' ? handleDollarInputBlur : handleEuroInputBlur}
+          />
+          <div className="flex flex-col ml-0.5">
+            <button type="button" onClick={() => (kind === 'USD' ? handleDollarStep(0.01) : handleEuroStep(0.01))} aria-label={`Subir o ${kind === 'USD' ? 'dólar' : 'euro'} em 1 centavo`} className="p-0.5 rounded text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"><ChevronUp size={12} aria-hidden="true" /></button>
+            <button type="button" onClick={() => (kind === 'USD' ? handleDollarStep(-0.01) : handleEuroStep(-0.01))} aria-label={`Baixar o ${kind === 'USD' ? 'dólar' : 'euro'} em 1 centavo`} className="p-0.5 rounded text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"><ChevronDown size={12} aria-hidden="true" /></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const quickEntryButton = (cmp: any, date: string) => (
+    <button
+      onClick={(e) => { e.stopPropagation(); setQuickEntry({ productId: cmp.productId, productName: cmp.name, accountCurrency: cmp.currency, date }); }}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border border-line text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"
+      title={`Lançar vendas de ${date.split('-').reverse().join('/')}`}
+    >
+      <FileText size={12} aria-hidden="true" /> Lançar
+    </button>
+  );
+
   return (
-    <div className={`min-h-screen font-sans flex ${bgMain}`}>
+    <div className={`${inter.className} min-h-screen font-sans flex ${bgMain}`}>
 
       {/* ─── DESKTOP SIDEBAR (hidden on mobile) ─── */}
-      <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
+      <aside className="hidden md:flex md:w-60 shrink-0 border-r border-line bg-surface-1 flex-col sticky top-0 h-screen z-20">
+        <div className="h-16 flex items-center justify-start px-5 border-b border-line overflow-hidden shrink-0">
           <Logo />
         </div>
 
-        <nav className="flex-1 px-2 py-4 space-y-2">
-          <Link href="/dashboard" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
-            <LayoutGrid size={20} aria-hidden="true" /> <span className="font-medium">Dashboard</span>
-          </Link>
-          <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-            <Target size={20} aria-hidden="true" /> <span className="font-medium">Metas</span>
-          </Link>
-          <Link href="/products" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-            <Package size={20} aria-hidden="true" /> <span className="font-medium">Campanhas</span>
-          </Link>
-          <Link href="/analise-ia" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Sparkles size={20} aria-hidden="true" /> <span className="font-medium">Análise de IA</span></Link>
-          <Link href="/rastreamento" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Route size={20} aria-hidden="true" /> <span className="font-medium">Rastreamento</span></Link>
-          <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-            <Settings size={20} aria-hidden="true" /> <span className="font-medium">Integração</span>
-          </Link>
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {NAV_ITEMS.map(({ href, Icon, label }) => href === '/dashboard' ? (
+            <Link key={href} href={href} aria-current="page" className={`${navItem} bg-surface-2 text-ink`}>
+              <Icon size={18} aria-hidden="true" className="text-brand-text" /> <span>{label}</span>
+            </Link>
+          ) : (
+            <Link key={href} href={href} className={navIdle}>
+              <Icon size={18} aria-hidden="true" /> <span>{label}</span>
+            </Link>
+          ))}
         </nav>
-        <div className="p-4 border-t border-inherit">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10">
-            <LogOut size={20} aria-hidden="true" /> <span className="font-medium">Sair ({user?.email?.split('@')[0]})</span>
+        <div className="p-3 border-t border-line">
+          <button onClick={handleLogout} className={`${navItem} text-ink-subtle hover:text-neg hover:bg-neg/10`}>
+            <LogOut size={18} aria-hidden="true" /> <span className="truncate">Sair ({user?.email?.split('@')[0]})</span>
           </button>
         </div>
       </aside>
 
       {/* ─── MAIN CONTENT ─── */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
 
         {/* ── DESKTOP HEADER & FILTERS (hidden on mobile) ── */}
-        <header className="hidden md:flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-          <div className="flex justify-between items-center w-full xl:w-auto">
+        <header className="hidden md:flex flex-col gap-4 mb-6">
+          <div className="flex justify-between items-start gap-4">
             <div>
-              <h1 className={`text-2xl font-bold ${textHead}`}>Visão Geral</h1>
-              <p className={textMuted}>Acompanhe seus resultados consolidados.</p>
+              <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">Visão geral</h1>
+              <p className="text-sm text-ink-subtle">Seus resultados consolidados no período.</p>
             </div>
-            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>
-              {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+            <button type="button" onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={iconBtn}>
+              {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
             </button>
           </div>
-          <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
-            <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full sm:w-auto">
-              {availableMccs.length > 0 && (
-                <div className={`flex items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto`}>
-                  <div className="flex items-center gap-2 px-2 w-full">
-                    <Target size={18} aria-hidden="true" className={isDark ? "text-white" : "text-indigo-600"}/>
-                    <select
-                      aria-label="MCC ou conta"
-                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer flex-1 sm:w-32 ${FOCUS_RING} ${textHead}`}
-                      value={selectedMcc}
-                      onChange={(e) => handleMccChange(e.target.value)}
-                    >
-                      <option value="all">Visão Geral (Todas)</option>
-                      {availableMccs.map(mcc => <option key={mcc} value={mcc}>{mcc}</option>)}
-                    </select>
-                  </div>
-                </div>
-              )}
+          <div className="flex flex-wrap gap-3 items-center">
+            {availableMccs.length > 0 && (
+              <div className="flex items-center gap-2 h-9 px-3 rounded-lg border border-line bg-surface-1">
+                <Target size={16} aria-hidden="true" className="text-ink-subtle"/>
+                <select
+                  aria-label="MCC ou conta"
+                  className={`bg-transparent text-sm font-medium outline-none cursor-pointer w-40 ${FOCUS_RING} text-ink`}
+                  value={selectedMcc}
+                  onChange={(e) => handleMccChange(e.target.value)}
+                >
+                  <option value="all">Todas as MCCs</option>
+                  {availableMccs.map(mcc => <option key={mcc} value={mcc}>{mcc}</option>)}
+                </select>
+              </div>
+            )}
 
-              <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto gap-2 sm:gap-0`}>
-                <div className="flex items-center justify-between sm:justify-start gap-2 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit">
-                  <div className="flex items-center gap-2">
-                    <Calendar size={18} aria-hidden="true" className={isDark ? "text-white" : "text-indigo-600"}/>
-                    <select
-                      aria-label="Período"
-                      className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${FOCUS_RING} ${textHead} w-auto`}
-                      value={dateRange}
-                      onChange={(e) => handlePresetChange(e.target.value)}
-                    >
-                      <option value="today">Hoje</option>
-                      <option value="yesterday">Ontem</option>
-                      <option value="7d">7 Dias</option>
-                      <option value="30d">30 Dias</option>
-                      <option value="this_month">Este Mês</option>
-                      <option value="last_month">Mês Passado</option>
-                      <option value="custom">Personalizado</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between sm:justify-start gap-2 px-2">
-                  <input
-                    type="date"
-                    aria-label="Data inicial"
-                    className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${FOCUS_RING} ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                    value={startInput.value}
-                    onChange={(e) => startInput.onChange(e.target.value)}
-                  />
-                  <span className="text-slate-500 text-xs">até</span>
-                  <input
-                    type="date"
-                    aria-label="Data final"
-                    className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${FOCUS_RING} ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
-                    value={endInput.value}
-                    onChange={(e) => endInput.onChange(e.target.value)}
-                  />
-                </div>
+            <div className="flex items-center h-9 rounded-lg border border-line bg-surface-1">
+              <div className="flex items-center gap-2 px-3 h-full border-r border-line">
+                <Calendar size={16} aria-hidden="true" className="text-ink-subtle"/>
+                <select
+                  aria-label="Período"
+                  className={`bg-transparent text-sm font-medium outline-none cursor-pointer ${FOCUS_RING} text-ink w-auto`}
+                  value={dateRange}
+                  onChange={(e) => handlePresetChange(e.target.value)}
+                >
+                  <option value="today">Hoje</option>
+                  <option value="yesterday">Ontem</option>
+                  <option value="7d">7 dias</option>
+                  <option value="30d">30 dias</option>
+                  <option value="this_month">Este mês</option>
+                  <option value="last_month">Mês passado</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2 px-3">
+                <input
+                  type="date"
+                  aria-label="Data inicial"
+                  className={`bg-transparent w-[112px] text-xs tabular-nums outline-none cursor-pointer ${FOCUS_RING} text-ink ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                  value={startInput.value}
+                  onChange={(e) => startInput.onChange(e.target.value)}
+                />
+                <span className="text-ink-subtle text-xs">até</span>
+                <input
+                  type="date"
+                  aria-label="Data final"
+                  className={`bg-transparent w-[112px] text-xs tabular-nums outline-none cursor-pointer ${FOCUS_RING} text-ink ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                  value={endInput.value}
+                  onChange={(e) => endInput.onChange(e.target.value)}
+                />
               </div>
             </div>
 
-            <div className={`flex flex-col xl:flex-row items-stretch xl:items-center gap-4 p-3 rounded-2xl border ${bgCard} w-full xl:w-auto shadow-md`}>
-              <div className="flex flex-col gap-1.5 flex-1 sm:min-w-[140px]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Moeda de Exibição</span>
-                <div className={`flex items-center p-1 rounded-xl ${isDark ? 'bg-black/60' : 'bg-slate-100'} h-10`}>
-                  {(['BRL', 'USD', 'EUR'] as const).map(curr => (
-                    <button key={curr} type="button" onClick={() => handleCurrencyChange(curr)}
-                      className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === curr ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}>
-                      <span>{curr === 'BRL' ? 'R$' : curr === 'USD' ? '$' : '€'}</span>
-                      <span className="hidden sm:inline text-[9px] opacity-60 font-medium">{curr}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className={`hidden xl:block h-10 w-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
-
-              <div className="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-none">
-                {rateConfig === 'USD' && (
-                  <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Dólar Hoje</span>
-                      <span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2).replace('.', ',')}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Dólar</span>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-[10px] text-slate-500 font-bold">R$</span>
-                        <input type="text" inputMode="decimal" aria-label="Meu dólar, em reais"
-                          className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`}
-                          value={dollarInput} onChange={(e) => handleDollarInputChange(e.target.value)} onBlur={handleDollarInputBlur}
-                        />
-                        <div className="flex flex-col gap-0.5 ml-0.5">
-                          <button type="button" onClick={() => handleDollarStep(0.01)} aria-label="Subir o dólar em 1 centavo" className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronUp size={12} aria-hidden="true" /></button>
-                          <button type="button" onClick={() => handleDollarStep(-0.01)} aria-label="Baixar o dólar em 1 centavo" className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronDown size={12} aria-hidden="true" /></button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {rateConfig === 'EUR' && (
-                  <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Euro Hoje</span>
-                      <span className="text-xs font-mono font-bold text-orange-400">R$ {liveEuro.toFixed(2).replace('.', ',')}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Euro</span>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-[10px] text-slate-500 font-bold">R$</span>
-                        <input type="text" inputMode="decimal" aria-label="Meu euro, em reais"
-                          className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`}
-                          value={euroInput} onChange={(e) => handleEuroInputChange(e.target.value)} onBlur={handleEuroInputBlur}
-                        />
-                        <div className="flex flex-col gap-0.5 ml-0.5">
-                          <button type="button" onClick={() => handleEuroStep(0.01)} aria-label="Subir o euro em 1 centavo" className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronUp size={12} aria-hidden="true" /></button>
-                          <button type="button" onClick={() => handleEuroStep(-0.01)} aria-label="Baixar o euro em 1 centavo" className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"><ChevronDown size={12} aria-hidden="true" /></button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <button type="button" onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
-                className={`hidden xl:flex items-center justify-center w-10 h-10 rounded-xl border ${isDark ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:text-black hover:bg-slate-100'} transition-all`}>
-                {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-              </button>
+            <div className={segGroup} role="group" aria-label="Moeda de exibição">
+              {(['BRL', 'USD', 'EUR'] as const).map(curr => (
+                <button key={curr} type="button" onClick={() => handleCurrencyChange(curr)} aria-pressed={viewCurrency === curr}
+                  className={`h-7 px-3 ${segItem(viewCurrency === curr)}`}>
+                  {curr === 'BRL' ? 'R$' : curr === 'USD' ? 'US$' : '€'}
+                </button>
+              ))}
             </div>
+
+            {rateConfig === 'USD' && rateBox('USD')}
+            {rateConfig === 'EUR' && rateBox('EUR')}
           </div>
         </header>
 
         {/* ── MOBILE HEADER (hidden on desktop) ── */}
         <div className="flex md:hidden items-center justify-between px-1 pt-1 pb-3">
           <div>
-            <h1 className={`text-xl font-bold leading-tight ${textHead}`}>Visão Geral</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h1 className="text-xl font-semibold leading-tight text-ink">Visão geral</h1>
+            <p className="text-xs text-ink-subtle mt-0.5">
               {dateRange !== 'custom'
                 ? DATE_PRESET_LABELS[dateRange] ?? 'Período personalizado'
                 : `${startDate ? startDate.split('-').reverse().join('/') : '—'} → ${endDate ? endDate.split('-').reverse().join('/') : '—'}`
@@ -824,13 +824,11 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
-              className={`w-9 h-9 flex items-center justify-center rounded-xl border ${bgCard} ${textMuted}`}>
-              {isDark ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`${iconBtn} w-9 h-9`}>
+              {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
             </button>
-            <button onClick={() => setShowFilterSheet(true)} aria-label="Abrir filtros" aria-expanded={showFilterSheet}
-              className={`w-9 h-9 flex items-center justify-center rounded-xl border ${isDark ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-indigo-50 border-indigo-200 text-indigo-600'}`}>
-              <SlidersHorizontal size={15} aria-hidden="true" />
+            <button onClick={() => setShowFilterSheet(true)} aria-label="Abrir filtros" aria-expanded={showFilterSheet} className={`${iconBtn} w-9 h-9`}>
+              <SlidersHorizontal size={16} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -838,15 +836,7 @@ export default function DashboardPage() {
         {/* ── MOBILE DATE CHIPS (hidden on desktop) ── */}
         <div className="flex md:hidden gap-2 px-1 pb-3 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
           {DATE_PRESETS.map(preset => (
-            <button
-              key={preset}
-              onClick={() => handlePresetChange(preset)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
-                dateRange === preset
-                  ? 'bg-indigo-600 text-white'
-                  : isDark ? 'bg-slate-900 text-slate-400 border border-slate-800' : 'bg-white text-slate-500 border border-slate-200'
-              }`}
-            >
+            <button key={preset} onClick={() => handlePresetChange(preset)} aria-pressed={dateRange === preset} className={chip(dateRange === preset)}>
               {DATE_PRESET_LABELS[preset]}
             </button>
           ))}
@@ -856,23 +846,23 @@ export default function DashboardPage() {
         <div aria-live="polite">
         {/* ── VENDAS NOVAS ── ficam aqui até serem marcadas como vistas */}
         {pendingSales.length > 0 && (
-          <div className={`rounded-xl border mb-4 overflow-hidden ${isDark ? 'bg-emerald-500/5 border-emerald-500/40' : 'bg-emerald-50 border-emerald-300'}`}>
-            <div className="flex items-center gap-2 px-4 pt-3 pb-1 text-emerald-500">
-              <span className="text-[11px] font-extrabold uppercase tracking-wider">🎉 {pendingSales.length === 1 ? '1 venda nova' : `${pendingSales.length} vendas novas`}</span>
+          <div className="rounded-xl border border-pos/30 bg-pos/5 mb-4 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-pos" aria-hidden="true" />
+              <span className="text-[13px] font-medium text-pos">{pendingSales.length === 1 ? '1 venda nova' : `${pendingSales.length} vendas novas`}</span>
               {pendingSales.length > 1 && (
-                <button onClick={closeAllSales} className="ml-auto text-[11px] font-bold hover:underline">Marcar todas como vistas</button>
+                <button onClick={closeAllSales} className="ml-auto text-xs font-medium text-ink-subtle hover:text-ink">Marcar todas como vistas</button>
               )}
             </div>
             {pendingSales.map(s => (
-              <div key={s.id} className={`flex items-center gap-3 px-4 py-2 border-t ${isDark ? 'border-emerald-500/20' : 'border-emerald-200'}`}>
+              <div key={s.id} className="flex items-center gap-3 px-4 py-2 border-t border-pos/15">
                 <div className="flex-1 min-w-0">
-                  <Link href={`/products/${s.productId}`} target="_blank" rel="noopener noreferrer" className={`text-[13px] font-semibold break-words hover:underline ${textHead}`}>{s.productName}</Link>
-                  <div className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                    <b className="text-emerald-500">{saleMoney(s.amount, s.currency)}</b> · {s.platform} · {new Date(s.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às')}
+                  <Link href={`/products/${s.productId}`} target="_blank" rel="noopener noreferrer" className="text-[13px] font-medium break-words text-ink hover:underline">{s.productName}</Link>
+                  <div className="text-xs text-ink-subtle">
+                    <span className="font-medium text-pos tabular-nums">{saleMoney(s.amount, s.currency)}</span> · {s.platform} · {new Date(s.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às')}
                   </div>
                 </div>
-                <button onClick={() => closeSale(s.id)}
-                  className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-bold border ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-white'}`}>
+                <button onClick={() => closeSale(s.id)} className="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium border border-line text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors">
                   Visto
                 </button>
               </div>
@@ -882,26 +872,25 @@ export default function DashboardPage() {
 
         {/* ── ALERTAS DE GASTO ── */}
         {openAlerts.length > 0 && (
-          <div className={`rounded-xl border mb-4 overflow-hidden ${isDark ? 'bg-amber-500/5 border-amber-500/40' : 'bg-amber-50 border-amber-300'}`}>
-            <div className="flex items-center gap-2 px-4 pt-3 pb-1 text-amber-500">
+          <div className="rounded-xl border border-warn/30 bg-warn/5 mb-4 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 pt-3 pb-2 text-warn">
               <AlertTriangle size={15} aria-hidden="true" />
-              <span className="text-[11px] font-extrabold uppercase tracking-wider">Gasto acima do normal hoje · {openAlerts.length} {openAlerts.length === 1 ? 'campanha' : 'campanhas'}</span>
+              <span className="text-[13px] font-medium">Gasto acima do normal hoje · {openAlerts.length} {openAlerts.length === 1 ? 'campanha' : 'campanhas'}</span>
             </div>
             {openAlerts.map(a => {
               const m = (v: number) => new Intl.NumberFormat(a.currency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: a.currency }).format(v);
               return (
-                <div key={a.id} className={`flex items-start gap-3 px-4 py-2 border-t ${isDark ? 'border-amber-500/20' : 'border-amber-200'}`}>
+                <div key={a.id} className="flex items-start gap-3 px-4 py-2 border-t border-warn/15">
                   <div className="flex-1 min-w-0">
-                    <Link href={`/products/${a.id}`} target="_blank" rel="noopener noreferrer" className={`text-[13px] font-semibold break-words hover:underline ${textHead}`}>{a.name}</Link>
-                    <div className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <Link href={`/products/${a.id}`} target="_blank" rel="noopener noreferrer" className="text-[13px] font-medium break-words text-ink hover:underline">{a.name}</Link>
+                    <div className="text-xs text-ink-subtle">
                       {a.passed
                         ? <>Já gastou {m(a.today)} hoje, {Math.round((a.over - 1) * 100)}% acima de um dia normal ({m(a.normal)}).</>
                         : <>Gastou {m(a.today)} até agora: no ritmo de fechar o dia em {m(a.pace)}, contra {m(a.normal)} de um dia normal.</>}
                       {' '}{a.sales > 0 ? `${String(a.sales).replace('.', ',')} ${a.sales === 1 ? 'venda' : 'vendas'} hoje.` : 'Nenhuma venda hoje.'}
                     </div>
                   </div>
-                  <button onClick={() => markAlertSeen(a.id)}
-                    className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-bold border ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-white'}`}>
+                  <button onClick={() => markAlertSeen(a.id)} className="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium border border-line text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors">
                     Visto
                   </button>
                 </div>
@@ -914,21 +903,18 @@ export default function DashboardPage() {
         {/* ── MOBILE KPI GRID 2x2 (hidden on desktop) ── */}
         {processedData.totals && (
           <div className="md:hidden grid grid-cols-2 gap-3 px-1 pb-3">
-            {mobileKpiCards.slice(0, 4).map(({ label, value, color, data, isPositiveGood, isRoi }) => {
+            {mobileKpiCards.slice(0, 4).map(({ label, value, color, data, isPositiveGood, isRoi, isResult }) => {
               const trend = trendPct(data);
               const trendUp = trend >= 0;
               const trendGood = isPositiveGood ? trendUp : !trendUp;
               return (
-                <div key={label} className={`border rounded-2xl p-3 relative overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-                  <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ background: color }} />
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{label}</div>
-                  <div className="text-sm font-bold font-mono leading-tight mb-1" style={{ color }}>
+                <div key={label} className="rounded-xl border border-line bg-surface-1 p-3">
+                  <div className="text-xs font-medium text-ink-subtle mb-1">{label}</div>
+                  <div className={`text-base font-semibold tabular-nums leading-tight mb-1.5 ${isResult ? tone(value) : 'text-ink'}`}>
                     {isRoi ? formatPct(value, 1) : formatMoney(value)}
                   </div>
                   {data.length >= 2 && (
-                    <div className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5 ${
-                      trendGood ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                    }`}>
+                    <div className={`inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded mb-1.5 ${trendGood ? 'bg-pos/10 text-pos' : 'bg-neg/10 text-neg'}`}>
                       {trendUp ? '↑' : '↓'} {Math.abs(trend).toFixed(0)}%
                     </div>
                   )}
@@ -941,59 +927,59 @@ export default function DashboardPage() {
 
         {/* ── DESKTOP KPI GRID (hidden on mobile) ── */}
         {processedData.totals ? (
-          <div className="hidden md:grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
-            <div className={`${bgCard} border-t-4 border-t-blue-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Receita Total</p><p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p></div>
-            <div className={`${bgCard} border-t-4 border-t-orange-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Custos Totais</p><p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.cost)}</p></div>
-            <div className={`${bgCard} border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Lucro Líquido</p><p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p></div>
-            <div className={`${bgCard} border-t-4 border-t-indigo-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">ROI</p><p className="text-2xl font-bold text-indigo-500">{formatPct(processedData.totals.roi, 1)}</p></div>
-            <div className={`${bgCard} border-t-4 border-t-rose-500 p-5 rounded-xl shadow-sm`}><p className="text-xs font-bold text-slate-500 uppercase mb-2">Reembolsos</p><p className="text-2xl font-bold text-rose-500">{formatMoney(processedData.totals.refunds)}</p></div>
+          <div className="hidden md:grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3 mb-6">
+            {kpis.map(k => (
+              <div key={k.label} className="rounded-xl border border-line bg-surface-1 p-4">
+                <p className="text-xs font-medium text-ink-subtle mb-1.5">{k.label}</p>
+                <p className={`text-2xl font-semibold tabular-nums tracking-[-0.3px] ${k.cls}`}>{k.value}</p>
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="hidden md:block text-center py-20 bg-slate-900/20 rounded-xl mb-8 border border-dashed border-slate-800">
-            <p className="text-slate-500">Nenhum dado encontrado.</p>
+          <div className="hidden md:block text-center py-16 rounded-xl mb-6 border border-dashed border-line">
+            <p className="text-sm text-ink-subtle">Nenhum dado neste período. Troque o período ou a MCC acima.</p>
           </div>
         )}
 
         {/* ── BAR CHART (desktop only) ── */}
-        <div className={`hidden md:block ${bgCard} rounded-xl p-4 md:p-6 mb-4 md:mb-8 border shadow-sm`} style={{ height: '13rem' }}>
-          <div className="md:hidden text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Receita vs Custo</div>
+        <div className="hidden md:block rounded-xl border border-line bg-surface-1 p-4 md:p-5 mb-6" style={{ height: '14rem' }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={processedData.chart}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
-              <XAxis dataKey="shortDate" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-              <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} hide={true} />
-              <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000', fontSize: 12 }} formatter={(val: any) => formatMoney(val)} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={32} />
-              <Bar dataKey="cost" name="Custo" fill="#f97316" radius={[3, 3, 0, 0]} maxBarSize={32} />
-              <Bar dataKey="profit" name="Lucro" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={32} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartColor.grid} vertical={false} />
+              <XAxis dataKey="shortDate" stroke={chartColor.axis} fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke={chartColor.axis} fontSize={11} tickLine={false} axisLine={false} hide={true} />
+              <Tooltip cursor={{ fill: chartColor.grid, opacity: 0.4 }} contentStyle={{ backgroundColor: chartColor.tipBg, borderColor: chartColor.tipLine, borderRadius: 8, color: chartColor.tipText, fontSize: 12 }} formatter={(val: any) => formatMoney(val)} />
+              <Legend wrapperStyle={{ fontSize: 12, color: chartColor.axis }} iconType="circle" iconSize={8} />
+              <Bar dataKey="revenue" name="Receita" fill={chartColor.revenue} radius={[3, 3, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="cost" name="Custo" fill={chartColor.cost} radius={[3, 3, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="profit" name="Lucro" fill={chartColor.profit} radius={[3, 3, 0, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} />
+        <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} tokens />
 
         {/* Total de cada grupo no período, quando há mais de um bloco marcado. */}
         {showBlocks && (
-          <div className={`${bgCard} rounded-xl overflow-x-auto border mb-4`}>
-            <table className="w-full text-sm text-left border-collapse">
-              <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
+          <div className="rounded-xl border border-line bg-surface-1 overflow-x-auto mb-4">
+            <table className="w-full text-[13px] text-left border-collapse tabular-nums">
+              <thead className="bg-surface-2">
                 <tr>
-                  <th className="px-4 md:px-6 py-3">Grupo</th>
-                  <th className="px-4 md:px-6 py-3 text-right text-blue-600">Receita</th>
-                  <th className="px-4 md:px-6 py-3 text-right text-orange-600">Custo</th>
-                  <th className="px-4 md:px-6 py-3 text-right text-emerald-600">Lucro</th>
-                  <th className="px-4 md:px-6 py-3 text-right">ROI</th>
+                  <th className={th}>Grupo</th>
+                  <th className={`${th} text-right`}>Receita</th>
+                  <th className={`${th} text-right`}>Custo</th>
+                  <th className={`${th} text-right`}>Lucro</th>
+                  <th className={`${th} text-right`}>ROI</th>
                 </tr>
               </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+              <tbody className="divide-y divide-line">
                 {processedData.blocks.map((blk: any) => (
                   <tr key={blk.id}>
-                    <td className={`px-4 md:px-6 py-2.5 font-bold whitespace-nowrap ${textHead}`}>{blk.name}</td>
-                    <td className="px-4 md:px-6 py-2.5 text-right font-bold text-blue-500 tabular-nums whitespace-nowrap">{formatMoney(blk.revenue)}</td>
-                    <td className="px-4 md:px-6 py-2.5 text-right font-medium text-orange-500 tabular-nums whitespace-nowrap">{formatMoney(blk.cost)}</td>
-                    <td className={`px-4 md:px-6 py-2.5 text-right font-bold tabular-nums whitespace-nowrap ${blk.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(blk.profit)}</td>
-                    <td className={`px-4 md:px-6 py-2.5 text-right font-bold tabular-nums ${blk.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{formatPct(blk.roi)}</td>
+                    <td className="px-4 py-2.5 font-medium whitespace-nowrap text-ink">{blk.name}</td>
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap text-ink-muted">{formatMoney(blk.revenue)}</td>
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap text-ink-muted">{formatMoney(blk.cost)}</td>
+                    <td className={`px-4 py-2.5 text-right font-medium whitespace-nowrap ${tone(blk.profit)}`}>{formatMoney(blk.profit)}</td>
+                    <td className={`px-4 py-2.5 text-right font-medium ${tone(blk.roi)}`}>{formatPct(blk.roi)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1003,17 +989,14 @@ export default function DashboardPage() {
 
         {/* Ordenação das campanhas dentro de cada data. */}
         <div className="flex items-center justify-end gap-2 mb-3 flex-wrap">
-          <span className={`text-[11px] font-bold uppercase tracking-wide ${textMuted}`}>Ordenar campanhas por</span>
-          <div className={`flex items-center gap-1 p-1 rounded-lg border ${bgCard}`}>
+          <span className="text-xs font-medium text-ink-subtle">Ordenar campanhas por</span>
+          <div className={segGroup}>
             {METRIC_SORTS.map(opt => (
               <button
                 key={opt.key}
                 onClick={() => { setMetricSort(opt.key); saveMetricSort(opt.key); }}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${
-                  metricSort === opt.key
-                    ? (isDark ? 'bg-slate-800 ' : 'bg-slate-200 ') + opt.color
-                    : 'text-slate-500 hover:text-slate-400'
-                }`}
+                aria-pressed={metricSort === opt.key}
+                className={`px-3 py-1 ${segItem(metricSort === opt.key)}`}
               >
                 {opt.label}
               </button>
@@ -1022,94 +1005,92 @@ export default function DashboardPage() {
         </div>
 
         {/* ── DESKTOP TABLE (hidden on mobile) ── */}
-        <div className={`hidden md:block ${bgCard} rounded-xl overflow-hidden shadow-sm border border-inherit`}>
+        <div className="hidden md:block rounded-xl border border-line bg-surface-1 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left border-collapse">
-              <thead className={`text-xs uppercase font-bold ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
+            <table className="w-full text-[13px] text-left border-collapse tabular-nums">
+              <thead className="bg-surface-2">
                 <tr>
-                  <th className="px-6 py-4 w-10"></th>
-                  <th className="px-6 py-4">Data</th>
-                  <th className="px-6 py-4 text-right text-blue-600">Receita</th>
-                  <th className="px-6 py-4 text-right text-orange-600">Custo</th>
-                  <th className="px-6 py-4 text-right text-emerald-600">Lucro</th>
-                  <th className="px-6 py-4 text-right">ROI</th>
+                  <th className={`${th} w-10`}></th>
+                  <th className={th}>Data</th>
+                  <th className={`${th} text-right`}>Receita</th>
+                  <th className={`${th} text-right`}>Custo</th>
+                  <th className={`${th} text-right`}>Lucro</th>
+                  <th className={`${th} text-right`}>ROI</th>
                 </tr>
               </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+              <tbody className="divide-y divide-line">
                 {processedData.table.map((row: any) => {
                   const dateParts = row.date.split('-');
                   const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
                   const isExpanded = expandedRows[row.date];
                   return (
                     <React.Fragment key={row.date}>
-                      <tr onClick={() => toggleExpand(row.date)} className={`transition-colors cursor-pointer ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'} ${isExpanded ? (isDark ? 'bg-slate-900' : 'bg-slate-50') : ''}`}>
-                        <td className="px-6 py-4 text-center">
+                      <tr onClick={() => toggleExpand(row.date)} className={`transition-colors cursor-pointer hover:bg-surface-2 ${isExpanded ? 'bg-surface-2' : ''}`}>
+                        <td className="px-4 py-2.5 text-center">
                           {/* A linha inteira abre com o mouse; este botão é o caminho pelo teclado. */}
                           {Object.keys(row.accounts).length > 0 && (
                             <button type="button"
                               onClick={(e) => { e.stopPropagation(); toggleExpand(row.date); }}
                               aria-expanded={!!isExpanded}
                               aria-label={`${isExpanded ? 'Fechar' : 'Abrir'} o dia ${formattedDate}`}
-                              className={`inline-flex p-1 ${FOCUS_RING}`}>
-                              {isExpanded ? <ArrowDownRight size={16} aria-hidden="true" className="text-slate-500"/> : <ArrowUpRight size={16} aria-hidden="true" className="text-slate-500"/>}
+                              className={`inline-flex p-1 text-ink-subtle hover:text-ink ${FOCUS_RING}`}>
+                              {isExpanded ? <ChevronDown size={16} aria-hidden="true"/> : <ChevronRight size={16} aria-hidden="true"/>}
                             </button>
                           )}
                         </td>
-                        <td className={`px-6 py-4 font-bold ${textHead}`}>
+                        <td className="px-4 py-2.5 font-medium text-ink">
                           {formattedDate}
                           {row.problems > 0 && (
                             <span title={`${row.problems} campanha(s) com valor que não confere com o Google. Abra o dia para ver.`}
-                              className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-400 align-middle cursor-help">
+                              className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-warn/10 text-warn align-middle cursor-help">
                               <AlertTriangle size={11} aria-hidden="true" /> {row.problems}
                               <span className="sr-only">{row.problems === 1 ? 'campanha' : 'campanhas'} com valor que não confere com o Google</span>
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right font-bold text-blue-500">{formatMoney(row.revenue)}</td>
-                        <td className="px-6 py-4 text-right font-medium text-orange-500">{formatMoney(row.cost)}</td>
-                        <td className={`px-6 py-4 text-right font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</td>
-                        <td className={`px-6 py-4 text-right font-bold ${row.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{formatPct(row.roi)}</td>
+                        <td className="px-4 py-2.5 text-right text-ink">{formatMoney(row.revenue)}</td>
+                        <td className="px-4 py-2.5 text-right text-ink-muted">{formatMoney(row.cost)}</td>
+                        <td className={`px-4 py-2.5 text-right font-medium ${tone(row.profit)}`}>{formatMoney(row.profit)}</td>
+                        <td className={`px-4 py-2.5 text-right font-medium ${tone(row.roi)}`}>{formatPct(row.roi)}</td>
                       </tr>
                       {isExpanded && (showBlocks ? row.blockList : [{ id: 'all', accountList: row.accountList }]).map((blk: any) => (
                       <React.Fragment key={blk.id}>
                       {showBlocks && (
-                        <tr className={`${isDark ? 'bg-slate-900' : 'bg-slate-200/60'}`}>
+                        <tr className="bg-surface-2">
                           <td></td>
-                          <td className={`px-6 py-2 pl-8 text-[13px] font-extrabold uppercase tracking-wide ${textHead}`}>{blk.name}</td>
-                          <td className="px-6 py-2 text-right text-[13px] font-bold tabular-nums text-blue-500">{formatMoney(blk.revenue)}</td>
-                          <td className="px-6 py-2 text-right text-[13px] font-bold tabular-nums text-orange-500">{formatMoney(blk.cost)}</td>
-                          <td className={`px-6 py-2 text-right text-[13px] font-bold tabular-nums ${blk.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(blk.profit)}</td>
-                          <td className={`px-6 py-2 text-right text-[13px] font-bold tabular-nums ${blk.roi >= 0 ? 'text-indigo-500' : 'text-rose-500'}`}>{formatPct(blk.roi)}</td>
+                          <td className="px-4 py-2 pl-6 text-xs font-medium text-ink">{blk.name}</td>
+                          <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(blk.revenue)}</td>
+                          <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(blk.cost)}</td>
+                          <td className={`px-4 py-2 text-right font-medium ${tone(blk.profit)}`}>{formatMoney(blk.profit)}</td>
+                          <td className={`px-4 py-2 text-right font-medium ${tone(blk.roi)}`}>{formatPct(blk.roi)}</td>
                         </tr>
                       )}
                       {(blk.accountList || []).map((acc: any) => (
                         <React.Fragment key={acc.name}>
-                          <tr className={`${isDark ? 'bg-slate-950/50' : 'bg-slate-100/50'}`}>
+                          <tr className="bg-canvas/40">
                             <td></td>
-                            {/* Conta: valores com cor cheia (sem transparência), em 13px. */}
-                            <td className={`px-6 py-2 text-[13px] font-bold pl-10 flex items-center gap-2 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>
-                              <Settings size={12} aria-hidden="true"/> <span>Conta: {acc.name}</span>
+                            <td className="px-4 py-2 pl-8 font-medium text-ink">
+                              <span className="inline-flex items-center gap-2"><Settings size={12} aria-hidden="true" className="text-ink-subtle"/> {acc.name}</span>
                             </td>
-                            <td className={`px-6 py-2 text-right text-[13px] font-medium tabular-nums ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatMoney(acc.revenue)}</td>
-                            <td className={`px-6 py-2 text-right text-[13px] font-medium tabular-nums ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>{formatMoney(acc.cost)}</td>
-                            <td className={`px-6 py-2 text-right text-[13px] font-medium tabular-nums ${acc.profit >= 0 ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-rose-400' : 'text-rose-600')}`}>{formatMoney(acc.profit)}</td>
+                            <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(acc.revenue)}</td>
+                            <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(acc.cost)}</td>
+                            <td className={`px-4 py-2 text-right font-medium ${tone(acc.profit)}`}>{formatMoney(acc.profit)}</td>
                             <td></td>
                           </tr>
                           {(acc.campaignList || []).map((cmp: any) => (
-                            <tr key={cmp.name} className={`${isDark ? 'bg-slate-950/30' : 'bg-slate-100/30'}`}>
+                            <tr key={cmp.name} className="bg-canvas/40">
                               <td></td>
-                              <td className="px-6 py-2 pl-16 border-l-2 border-slate-800 ml-10">
+                              <td className="px-4 py-2 pl-14">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <Package size={12} aria-hidden="true" className="text-slate-500 shrink-0"/>
                                   {cmp.productId ? (
-                                    <Link href={`/products/${cmp.productId}`} target="_blank" rel="noopener noreferrer" className={`text-[13px] font-semibold ${isDark ? 'text-slate-100 hover:text-indigo-400' : 'text-slate-800 hover:text-indigo-600'} hover:underline transition-colors cursor-pointer`}>
+                                    <Link href={`/products/${cmp.productId}`} target="_blank" rel="noopener noreferrer" className="text-ink hover:text-brand-text hover:underline transition-colors">
                                       {cmp.name}
                                     </Link>
-                                  ) : <span className={`text-[13px] font-semibold ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>{cmp.name}</span>}
+                                  ) : <span className="text-ink">{cmp.name}</span>}
                                   {cmp.status && (
                                     <span
                                       title={cmp.status.hint}
-                                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide shrink-0 ${cmp.status.badge}`}
+                                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[11px] font-medium shrink-0 ${cmp.status.badge}`}
                                     >
                                       <span className={`w-1.5 h-1.5 rounded-full ${cmp.status.dot}`} />
                                       {cmp.status.label}
@@ -1118,27 +1099,18 @@ export default function DashboardPage() {
                                   )}
                                   {cmp.problem && (
                                     <span title={cmp.problem.text}
-                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-400 shrink-0 cursor-help">
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-warn/10 text-warn shrink-0 cursor-help">
                                       <AlertTriangle size={11} aria-hidden="true" /> não confere
                                       <span className="sr-only">: {cmp.problem.text}</span>
                                     </span>
                                   )}
                                 </div>
                               </td>
-                              {/* Campanha: receita e custo neutros, só o lucro com cor — legível sem competir com a conta. */}
-                              <td className={`px-6 py-1 text-right text-[13px] tabular-nums ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{formatMoney(cmp.revenue)}</td>
-                              <td className={`px-6 py-1 text-right text-[13px] tabular-nums ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{formatMoney(cmp.cost)}</td>
-                              <td className={`px-6 py-1 text-right text-[13px] font-medium tabular-nums ${cmp.profit >= 0 ? (isDark ? 'text-emerald-300' : 'text-emerald-700') : (isDark ? 'text-rose-300' : 'text-rose-700')}`}>{formatMoney(cmp.profit)}</td>
-                              <td className="px-6 py-1 text-right">
-                                {cmp.productId && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setQuickEntry({ productId: cmp.productId, productName: cmp.name, accountCurrency: cmp.currency, date: row.date }); }}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
-                                    title={`Lançar vendas de ${row.date}`}
-                                  >
-                                    <FileText size={11} aria-hidden="true" /> Lançar
-                                  </button>
-                                )}
+                              <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(cmp.revenue)}</td>
+                              <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(cmp.cost)}</td>
+                              <td className={`px-4 py-2 text-right ${tone(cmp.profit)}`}>{formatMoney(cmp.profit)}</td>
+                              <td className="px-4 py-2 text-right">
+                                {cmp.productId && quickEntryButton(cmp, row.date)}
                               </td>
                             </tr>
                           ))}
@@ -1157,15 +1129,13 @@ export default function DashboardPage() {
         {/* ── MOBILE DAY ROWS (hidden on desktop) ── */}
         <div className="md:hidden">
           {processedData.table.length === 0 ? (
-            <div className={`text-center py-10 rounded-2xl border border-dashed ${borderCol}`}>
-              <p className="text-slate-500 text-sm">Nenhum dado encontrado.</p>
+            <div className="text-center py-10 rounded-xl border border-dashed border-line">
+              <p className="text-ink-subtle text-sm">Nenhum dado neste período. Troque o período nos filtros.</p>
             </div>
           ) : (
             <>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 px-1">
-                Detalhes por Dia
-              </div>
-              <div className={`rounded-2xl overflow-hidden border ${borderCol}`}>
+              <div className="text-xs font-medium text-ink-subtle mb-2 px-1">Dia a dia</div>
+              <div className="rounded-xl overflow-hidden border border-line bg-surface-1">
                 {processedData.table.map((row: any) => {
                   const dp = row.date.split('-');
                   const fmt = `${dp[2]}/${dp[1]}`;
@@ -1176,22 +1146,20 @@ export default function DashboardPage() {
                         type="button"
                         onClick={() => toggleExpand(row.date)}
                         aria-expanded={!!isExpanded}
-                        className={`w-full text-left flex items-center justify-between px-4 py-3 border-b ${borderCol} cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
-                          isDark ? 'active:bg-slate-800/70' : 'active:bg-slate-50'
-                        } ${isExpanded ? (isDark ? 'bg-slate-900' : 'bg-slate-50') : ''}`}
+                        className={`w-full text-left flex items-center justify-between px-4 py-3 border-b border-line cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand active:bg-surface-2 ${isExpanded ? 'bg-surface-2' : ''}`}
                       >
                         <span className="flex items-center gap-3">
-                          <span aria-hidden="true" className={`block text-[10px] w-4 text-slate-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                          <span aria-hidden="true" className={`block text-xs w-3 text-ink-subtle transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
                             {Object.keys(row.accounts).length > 0 ? '›' : ''}
                           </span>
                           <span className="block">
-                            <span className={`block text-sm font-bold ${textHead}`}>{fmt}</span>
-                            <span className="block text-[10px] text-slate-500 font-mono">{formatMoney(row.cost)} custo</span>
+                            <span className="block text-sm font-medium text-ink">{fmt}</span>
+                            <span className="block text-xs text-ink-subtle tabular-nums">{formatMoney(row.cost)} de custo</span>
                           </span>
                         </span>
                         <span className="block text-right">
-                          <span className="block text-sm font-bold text-blue-500 font-mono">{formatMoney(row.revenue)}</span>
-                          <span className={`block text-[10px] font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          <span className="block text-sm font-medium text-ink tabular-nums">{formatMoney(row.revenue)}</span>
+                          <span className={`block text-xs font-medium tabular-nums ${tone(row.profit)}`}>
                             <span aria-hidden="true">{row.profit >= 0 ? '↑' : '↓'} </span>ROI {formatPct(row.roi)}
                           </span>
                         </span>
@@ -1200,52 +1168,45 @@ export default function DashboardPage() {
                       {isExpanded && (showBlocks ? row.blockList : [{ id: 'all', accountList: row.accountList }]).map((blk: any) => (
                       <React.Fragment key={blk.id}>
                       {showBlocks && (
-                        <div className={`flex items-center justify-between px-4 py-2 border-b ${borderCol} ${isDark ? 'bg-slate-900' : 'bg-slate-200/60'}`}>
-                          <span className={`text-xs font-extrabold uppercase tracking-wide ${textHead}`}>{blk.name}</span>
-                          <span className={`text-xs font-mono font-bold ${blk.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(blk.profit)}</span>
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-line bg-surface-2">
+                          <span className="text-xs font-medium text-ink">{blk.name}</span>
+                          <span className={`text-xs font-medium tabular-nums ${tone(blk.profit)}`}>{formatMoney(blk.profit)}</span>
                         </div>
                       )}
                       {(blk.accountList || []).map((acc: any) => (
                         <React.Fragment key={acc.name}>
-                          <div className={`flex items-center justify-between px-5 py-2 border-b ${borderCol} ${isDark ? 'bg-slate-950/60' : 'bg-indigo-50/60'}`}>
-                            <span className="text-xs font-bold text-indigo-400 break-words min-w-0 mr-2">{acc.name}</span>
-                            <span className="text-xs font-mono text-blue-400 ml-2 shrink-0">{formatMoney(acc.revenue)}</span>
+                          <div className="flex items-center justify-between px-5 py-2 border-b border-line bg-canvas/40">
+                            <span className="text-xs font-medium text-ink break-words min-w-0 mr-2">{acc.name}</span>
+                            <span className="text-xs text-ink-muted tabular-nums ml-2 shrink-0">{formatMoney(acc.revenue)}</span>
                           </div>
                           {(acc.campaignList || []).map((cmp: any) => (
-                            <div key={cmp.name} className={`px-6 py-2.5 border-b ${borderCol} ${isDark ? 'bg-slate-950/40' : 'bg-slate-50/60'}`}>
+                            <div key={cmp.name} className="px-6 py-2.5 border-b border-line bg-canvas/40">
                               <div className="flex items-start justify-between gap-2">
-                                <span className={`text-[13px] font-semibold break-words min-w-0 ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
+                                <span className="text-[13px] break-words min-w-0 text-ink">
                                   {cmp.productId ? (
-                                    <Link href={`/products/${cmp.productId}`} className="hover:text-indigo-400 active:text-indigo-400">
+                                    <Link href={`/products/${cmp.productId}`} className="hover:text-brand-text active:text-brand-text">
                                       {cmp.name}
                                     </Link>
                                   ) : cmp.name}
                                   {cmp.problem && (
-                                    <span title={cmp.problem.text} className="ml-1.5 inline-flex align-middle text-amber-400">
+                                    <span title={cmp.problem.text} className="ml-1.5 inline-flex align-middle text-warn">
                                       <AlertTriangle size={12} aria-hidden="true" />
                                       <span className="sr-only">Não confere com o Google: {cmp.problem.text}</span>
                                     </span>
                                   )}
                                 </span>
-                                <span className={`text-[11px] font-bold font-mono shrink-0 ${cmp.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                <span className={`text-xs font-medium tabular-nums shrink-0 ${tone(cmp.profit)}`}>
                                   {formatMoney(cmp.profit)}
                                 </span>
                               </div>
                               <div className="flex items-center justify-between gap-2 mt-1.5">
                                 {cmp.status ? (
-                                  <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase ${cmp.status.text}`}>
+                                  <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${cmp.status.text}`}>
                                     <span className={`w-1.5 h-1.5 rounded-full ${cmp.status.dot}`} />
                                     {cmp.status.label}
                                   </span>
                                 ) : <span />}
-                                {cmp.productId && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setQuickEntry({ productId: cmp.productId, productName: cmp.name, accountCurrency: cmp.currency, date: row.date }); }}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 active:bg-emerald-500/20"
-                                  >
-                                    <FileText size={11} aria-hidden="true" /> Lançar
-                                  </button>
-                                )}
+                                {cmp.productId && quickEntryButton(cmp, row.date)}
                               </div>
                             </div>
                           ))}
@@ -1272,181 +1233,111 @@ export default function DashboardPage() {
       />
 
       {/* ─── MOBILE BOTTOM NAVIGATION ─── */}
-      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+      <nav className="fixed bottom-0 inset-x-0 md:hidden z-40 border-t border-line bg-canvas/95 backdrop-blur-md">
         <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          {[
-            { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: true },
-            { href: '/planning', Icon: Target, label: 'Metas', active: false },
-            { href: '/products', Icon: Package, label: 'Campanhas', active: false },
-            { href: '/analise-ia', Icon: Sparkles, label: 'Análise IA', active: false },
-            { href: '/rastreamento', Icon: Route, label: 'Rastreio', active: false },
-            { href: '/integration', Icon: Settings, label: 'Integração', active: false },
-          ].map(({ href, Icon, label, active }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${
-                active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'
-              }`}
-            >
-              <Icon size={22} aria-hidden="true" />
-              <span className="text-[9px] font-bold tracking-wide">{label}</span>
-              {active && <div className="w-1 h-1 rounded-full bg-indigo-500" />}
-            </Link>
-          ))}
+          {NAV_ITEMS.map(({ href, Icon, short }) => {
+            const active = href === '/dashboard';
+            return (
+              <Link key={href} href={href} aria-current={active ? 'page' : undefined}
+                className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-lg transition-colors ${active ? 'text-brand-text' : 'text-ink-subtle'}`}>
+                <Icon size={22} aria-hidden="true" />
+                <span className="text-[10px] font-medium">{short}</span>
+              </Link>
+            );
+          })}
         </div>
       </nav>
 
-      {/* ─── FILTER BOTTOM SHEET (Concept 04) ─── */}
+      {/* ─── FILTER BOTTOM SHEET ─── */}
       {/* Fechado, o painel fica fora do alcance do teclado e do leitor de tela (inert). */}
       <div
         inert={!showFilterSheet}
         onKeyDown={(e) => { if (e.key === 'Escape') setShowFilterSheet(false); }}
         className={`fixed inset-0 z-50 md:hidden transition-opacity duration-300 ${showFilterSheet ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       >
-        {/* Backdrop */}
-        <div
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowFilterSheet(false)}
-        />
-        {/* Sheet panel */}
+        <div className="absolute inset-0 bg-black/60" onClick={() => setShowFilterSheet(false)} />
         <div role="dialog" aria-modal="true" aria-labelledby="filter-sheet-title"
-          className={`absolute bottom-0 inset-x-0 rounded-t-3xl border-t transition-transform duration-300 ease-out ${
-          showFilterSheet ? 'translate-y-0' : 'translate-y-full'
-        } ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+          className={`absolute bottom-0 inset-x-0 rounded-t-2xl border-t border-line-strong bg-surface-1 transition-transform duration-300 ease-out ${showFilterSheet ? 'translate-y-0' : 'translate-y-full'}`}>
 
-          {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-1">
-            <div className={`w-10 h-1 rounded-full ${isDark ? 'bg-slate-700' : 'bg-slate-300'}`} />
+            <div className="w-10 h-1 rounded-full bg-line-strong" />
           </div>
 
-          {/* Close button */}
           <div className="flex items-center justify-between px-5 pb-3">
-            <h3 id="filter-sheet-title" className={`text-base font-bold ${textHead}`}>Filtros</h3>
-            <button ref={filterCloseRef} onClick={() => setShowFilterSheet(false)} aria-label="Fechar filtros"
-              className={`w-8 h-8 flex items-center justify-center rounded-xl ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
-              <X size={15} aria-hidden="true" />
+            <h3 id="filter-sheet-title" className="text-base font-semibold text-ink">Filtros</h3>
+            <button ref={filterCloseRef} onClick={() => setShowFilterSheet(false)} aria-label="Fechar filtros" className={iconBtn}>
+              <X size={16} aria-hidden="true" />
             </button>
           </div>
 
           <div className="px-5 pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))] max-h-[80vh] overflow-y-auto" style={{ scrollbarWidth: 'none' } as React.CSSProperties}>
 
-            {/* Period */}
             <div className="mb-5">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Período</div>
+              <div className="text-xs font-medium text-ink-subtle mb-2">Período</div>
               <div className="flex flex-wrap gap-2">
                 {DATE_PRESETS.map(preset => (
-                  <button key={preset} onClick={() => handlePresetChange(preset)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                      dateRange === preset
-                        ? 'bg-indigo-600 text-white'
-                        : isDark ? 'bg-slate-900 text-slate-400 border border-slate-800' : 'bg-slate-100 text-slate-500'
-                    }`}>
+                  <button key={preset} onClick={() => handlePresetChange(preset)} aria-pressed={dateRange === preset} className={chip(dateRange === preset)}>
                     {DATE_PRESET_LABELS[preset]}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Custom dates */}
             <div className="mb-5">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Datas Personalizadas</div>
-              <div className="flex gap-3">
-                <label className="flex-1 block">
-                  <span className="block text-[10px] text-slate-500 mb-1 font-medium">De</span>
+              <div className="text-xs font-medium text-ink-subtle mb-2">Datas personalizadas</div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block min-w-0">
+                  <span className="block text-xs text-ink-subtle mb-1">De</span>
                   <input type="date" value={startInput.value}
                     onChange={e => startInput.onChange(e.target.value)}
-                    className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors ${isDark ? 'bg-slate-900 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+                    className={`w-full min-w-0 text-sm px-3 py-2 ${field} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                   />
                 </label>
-                <label className="flex-1 block">
-                  <span className="block text-[10px] text-slate-500 mb-1 font-medium">Até</span>
+                <label className="block min-w-0">
+                  <span className="block text-xs text-ink-subtle mb-1">Até</span>
                   <input type="date" value={endInput.value}
                     onChange={e => endInput.onChange(e.target.value)}
-                    className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors ${isDark ? 'bg-slate-900 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+                    className={`w-full min-w-0 text-sm px-3 py-2 ${field} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
                   />
                 </label>
               </div>
             </div>
 
-            {/* MCC */}
             {availableMccs.length > 0 && (
               <div className="mb-5">
-                <label htmlFor="filter-sheet-mcc" className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">MCC / Conta</label>
+                <label htmlFor="filter-sheet-mcc" className="block text-xs font-medium text-ink-subtle mb-2">MCC ou conta</label>
                 <select id="filter-sheet-mcc" value={selectedMcc} onChange={e => handleMccChange(e.target.value)}
-                  className={`w-full text-sm rounded-xl border px-3 py-2.5 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
-                  <option value="all">Visão Geral (Todas)</option>
+                  className={`w-full text-sm px-3 py-2 ${field}`}>
+                  <option value="all">Todas as MCCs</option>
                   {availableMccs.map(mcc => <option key={mcc} value={mcc}>{mcc}</option>)}
                 </select>
               </div>
             )}
 
-            {/* Currency */}
             <div className="mb-5">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Moeda de Exibição</div>
-              <div className={`flex p-1 rounded-xl ${isDark ? 'bg-black/60' : 'bg-slate-100'}`}>
+              <div className="text-xs font-medium text-ink-subtle mb-2">Moeda de exibição</div>
+              <div className={segGroup} role="group" aria-label="Moeda de exibição">
                 {(['BRL', 'USD', 'EUR'] as const).map(curr => (
-                  <button key={curr} onClick={() => handleCurrencyChange(curr)}
-                    className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                      viewCurrency === curr
-                        ? isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow'
-                        : 'text-slate-400'
-                    }`}>
-                    {curr === 'BRL' ? 'R$ BRL' : curr === 'USD' ? '$ USD' : '€ EUR'}
+                  <button key={curr} onClick={() => handleCurrencyChange(curr)} aria-pressed={viewCurrency === curr}
+                    className={`flex-1 py-2 text-sm ${segItem(viewCurrency === curr)}`}>
+                    {curr === 'BRL' ? 'R$ BRL' : curr === 'USD' ? 'US$ USD' : '€ EUR'}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Exchange rate */}
             {viewCurrency !== 'BRL' && (
               <div className="mb-5">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">
-                  Câmbio Manual — {rateConfig}
-                </div>
-                <div className={`flex items-center justify-between p-3.5 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                  <div>
-                    <div className="text-[9px] font-bold text-orange-500 uppercase tracking-wider mb-1">Cotação Hoje</div>
-                    <div className="text-sm font-bold text-orange-400 font-mono">
-                      R$ {(rateConfig === 'USD' ? liveDollar : liveEuro).toFixed(2).replace('.', ',')}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <div className="text-[9px] font-bold text-blue-500 uppercase tracking-wider mb-1">Meu Câmbio</div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-slate-500 font-bold">R$</span>
-                        <input type="text" inputMode="decimal" aria-label={`Meu ${rateConfig === 'USD' ? 'dólar' : 'euro'}, em reais`}
-                          value={rateConfig === 'USD' ? dollarInput : euroInput}
-                          onChange={e => rateConfig === 'USD' ? handleDollarInputChange(e.target.value) : handleEuroInputChange(e.target.value)}
-                          onBlur={rateConfig === 'USD' ? handleDollarInputBlur : handleEuroInputBlur}
-                          className={`w-16 text-right bg-transparent text-sm font-mono font-bold outline-none border-b transition-colors ${isDark ? 'border-slate-700 text-white focus:border-indigo-500' : 'border-slate-300 text-black focus:border-indigo-500'}`}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <button onClick={() => rateConfig === 'USD' ? handleDollarStep(0.01) : handleEuroStep(0.01)}
-                        aria-label={`Subir o ${rateConfig === 'USD' ? 'dólar' : 'euro'} em 1 centavo`}
-                        className={`w-9 h-9 flex items-center justify-center rounded-xl ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300'} transition-colors`}>
-                        <ChevronUp size={15} aria-hidden="true" />
-                      </button>
-                      <button onClick={() => rateConfig === 'USD' ? handleDollarStep(-0.01) : handleEuroStep(-0.01)}
-                        aria-label={`Baixar o ${rateConfig === 'USD' ? 'dólar' : 'euro'} em 1 centavo`}
-                        className={`w-9 h-9 flex items-center justify-center rounded-xl ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300'} transition-colors`}>
-                        <ChevronDown size={15} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <div className="text-xs font-medium text-ink-subtle mb-2">Câmbio manual — {rateConfig}</div>
+                {rateBox(rateConfig)}
               </div>
             )}
 
-            {/* Apply */}
             <button
               onClick={() => setShowFilterSheet(false)}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold py-4 rounded-2xl text-sm transition-colors"
+              className="w-full bg-brand hover:bg-brand-hover text-white font-medium py-3 rounded-lg text-sm transition-colors"
             >
-              Aplicar Filtros
+              Aplicar filtros
             </button>
           </div>
         </div>
