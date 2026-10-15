@@ -63,16 +63,16 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
   }, [month]);
   useEffect(() => { setData(null); load(); }, [load]);
 
-  const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const head = isDark ? 'text-white' : 'text-slate-900', muted = 'text-slate-500', line = isDark ? 'border-slate-800' : 'border-slate-200';
-  const soft = isDark ? 'bg-slate-950/60' : 'bg-slate-50';
+  const card = 'bg-surface-1 border-line';
+  const head = 'text-ink', muted = 'text-ink-subtle', line = 'border-line';
+  const soft = 'bg-surface-2';
   const tone = {
-    good: isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-700',
-    warn: isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700',
-    bad: isDark ? 'bg-rose-500/10 text-rose-400' : 'bg-rose-50 text-rose-700',
-    plain: isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600',
+    good: 'bg-pos/10 text-pos',
+    warn: 'bg-warn/10 text-warn',
+    bad: 'bg-neg/10 text-neg',
+    plain: 'bg-surface-3 text-ink-subtle',
   };
-  const select = `rounded-lg border px-3 py-1.5 text-[13px] ${isDark ? 'bg-slate-950 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'}`;
+  const select = 'rounded-lg border px-3 py-1.5 text-[13px] bg-surface-1 border-line-strong text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand';
   const readNow = async () => { setReading(true); await api('', { action: 'ler' }); await load(); setReading(false); };
 
   const check = data?.check;
@@ -90,43 +90,43 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
       <div className={`${card} border rounded-xl p-5`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className={`text-lg font-bold inline-flex items-center gap-2 ${head}`}><CreditCard size={18} /> Cartões · LootRush</div>
+            <div className={`text-base font-semibold inline-flex items-center gap-2 ${head}`}><CreditCard size={18} aria-hidden="true" /> Cartões · LootRush</div>
             <div className={`text-xs ${muted}`}>{data?.groups?.length ? `${data.groups.length === 1 ? 'Grupo' : 'Grupos'} ${data.groups.map((g: any) => g.name).join(', ')}` : ''}{data ? ` · ${ago(data.last_sync_at)} · ` : ''}
-              {data && <button onClick={readNow} disabled={reading} className="text-indigo-400 hover:underline disabled:opacity-50">{reading ? 'lendo…' : 'ler agora'}</button>}
+              {data && <button onClick={readNow} disabled={reading} className="text-brand-text hover:underline disabled:opacity-50">{reading ? 'lendo…' : 'ler agora'}</button>}
             </div>
           </div>
           <select value={month} onChange={e => setMonth(e.target.value)} aria-label="Mês da conferência" className={select}>
             {months.map(m => <option key={m} value={m}>{monthName(m)}</option>)}
           </select>
         </div>
-        {data?.status === 'erro' && data.last_error && <div className="text-xs text-rose-500 mt-2">{data.last_error}</div>}
-        {data?.error && <div className="text-xs text-rose-500 mt-2">{data.error}</div>}
+        {data?.status === 'erro' && data.last_error && <div className="text-xs text-neg mt-2">{data.last_error}</div>}
+        {data?.error && <div className="text-xs text-neg mt-2">{data.error}</div>}
 
         {!check ? <div className={`text-xs mt-4 ${muted}`}><Loader2 size={12} className="inline animate-spin mr-1" /> carregando…</div> : (
           <>
             <div className={`text-xs mt-3 ${muted}`}>
               Gasto no Google de {ddmm(check.first)} a {ddmm(check.last)}, ao lado das cobranças que pagam esse gasto: do dia 2 até o dia 1º do mês seguinte. As cobranças do dia 1º ficam no fechamento do mês anterior.
-              {check.oldest_day && check.oldest_day > check.first && <span className="text-amber-500"> As cobranças guardadas começam em {ddmm(check.oldest_day)}: antes disso este mês está incompleto.</span>}
+              {check.oldest_day && check.oldest_day > check.first && <span className="text-warn"> As cobranças guardadas começam em {ddmm(check.oldest_day)}: antes disso este mês está incompleto.</span>}
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
               <div className={`${soft} rounded-lg p-3`}>
                 <div className={`text-xs ${muted}`}>Gasto no Google no mês</div>
-                <div className={`text-xl font-bold ${head}`}>{usd(t.google)}</div>
+                <div className={`text-lg sm:text-xl font-semibold tabular-nums whitespace-nowrap ${head}`}>{usd(t.google)}</div>
                 <div className={`text-[11px] ${muted}`}>{accounts.filter(a => a.diff !== null).length} contas em dólar destes cartões</div>
               </div>
               <div className={`${soft} rounded-lg p-3`}>
                 <div className={`text-xs ${muted}`}>Cobrado nos cartões</div>
-                <div className={`text-xl font-bold ${head}`}>{usd(t.compared_charged)}</div>
+                <div className={`text-lg sm:text-xl font-semibold tabular-nums whitespace-nowrap ${head}`}>{usd(t.compared_charged)}</div>
                 <div className={`text-[11px] ${muted}`}>{t.pending ? `${usd(t.pending)} ainda em espera` : 'pelo gasto deste mês'}</div>
               </div>
               <div className={`${soft} rounded-lg p-3`}>
                 <div className={`text-xs ${muted}`}>Crédito nas contas</div>
-                <div className={`text-xl font-bold ${head}`}>{usd(t.credit)}</div>
+                <div className={`text-lg sm:text-xl font-semibold tabular-nums whitespace-nowrap ${head}`}>{usd(t.credit)}</div>
                 <div className={`text-[11px] ${muted}`}>pago e ainda não gasto{t.to_charge > 0 ? ` · ${usd(t.to_charge)} ${check.closed ? 'gasto sem cobrança' : 'gasto a cobrar'}` : ''}</div>
               </div>
               <div className={`rounded-lg p-3 ${toReview ? tone.bad : soft}`}>
                 <div className={`text-xs ${toReview ? '' : muted}`}>Para conferir</div>
-                <div className={`text-xl font-bold ${toReview ? '' : head}`}>{toReview}</div>
+                <div className={`text-lg sm:text-xl font-semibold tabular-nums ${toReview ? '' : head}`}>{toReview}</div>
                 <div className={`text-[11px] ${toReview ? '' : muted}`}>{reviewText || 'nada fora do esperado'}</div>
               </div>
             </div>
@@ -136,16 +136,16 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
 
       {check && c && c.done && (
         <div className={`${card} border rounded-xl p-5`}>
-          <div className={`text-sm font-bold ${head}`}>Fechamento de {monthName(c.month)} (cobrado no dia 1º)</div>
+          <div className={`text-sm font-semibold ${head}`}>Fechamento de {monthName(c.month)} (cobrado no dia 1º)</div>
           {!c.complete ? (
             <div className={`text-[13px] mt-2 ${muted}`}>No dia 1º foram cobrados <b className={head}>{usd(c.charged_day1)}</b>. Não dá para conferir com o que sobrou de {monthName(c.month)}: as cobranças guardadas começam em {check.oldest_day ? ddmm(check.oldest_day) : '—'}, depois do começo daquele mês.</div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3 text-[13px]">
-              <div><div className={`text-xs ${muted}`}>Gasto em {MONTHS[Number(c.month.slice(5)) - 1]}</div><div className={`font-bold ${head}`}>{usd(c.spent)}</div></div>
-              <div><div className={`text-xs ${muted}`}>Cobrado durante o mês</div><div className={`font-bold ${head}`}>{usd(c.charged_before)}</div></div>
-              <div><div className={`text-xs ${muted}`}>Sobrou para o dia 1º</div><div className={`font-bold ${head}`}>{usd(c.left)}</div></div>
-              <div><div className={`text-xs ${muted}`}>Cobrado no dia 1º</div><div className={`font-bold ${head}`}>{usd(c.charged_day1)}</div>
-                <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${Math.abs(c.charged_day1 - c.left) <= Math.max(50, c.spent * 0.02) ? tone.good : tone.warn}`}>
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mt-3 text-[13px] tabular-nums">
+              <div><div className={`text-xs ${muted}`}>Gasto em {MONTHS[Number(c.month.slice(5)) - 1]}</div><div className={`font-medium ${head}`}>{usd(c.spent)}</div></div>
+              <div><div className={`text-xs ${muted}`}>Cobrado durante o mês</div><div className={`font-medium ${head}`}>{usd(c.charged_before)}</div></div>
+              <div><div className={`text-xs ${muted}`}>Sobrou para o dia 1º</div><div className={`font-medium ${head}`}>{usd(c.left)}</div></div>
+              <div><div className={`text-xs ${muted}`}>Cobrado no dia 1º</div><div className={`font-medium ${head}`}>{usd(c.charged_day1)}</div>
+                <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${Math.abs(c.charged_day1 - c.left) <= Math.max(50, c.spent * 0.02) ? tone.good : tone.warn}`}>
                   {Math.abs(c.charged_day1 - c.left) <= Math.max(50, c.spent * 0.02) ? 'bate' : `diferença de ${usd(c.charged_day1 - c.left)}`}
                 </span>
               </div>
@@ -155,22 +155,22 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
       )}
 
       {check && check.codes.length > 0 && (
-        <div className={`rounded-xl px-4 py-3 text-[13px] space-y-1 ${tone.warn}`}>
-          <div className="font-bold"><KeyRound size={14} className="inline mr-1.5 -mt-0.5" />Códigos de verificação do Google neste mês</div>
-          {check.codes.slice(0, 12).map((x: any) => <div key={x.id}><b>{x.code}</b> · cartão final {x.card_last4 || '????'}{x.card_name ? ` (${x.card_name})` : ''} · {when(x.charged_at)}</div>)}
+        <div className="rounded-xl border border-warn/30 bg-warn/5 px-4 py-3 text-[13px] space-y-1 text-ink-muted">
+          <div className="font-medium text-warn"><KeyRound size={14} aria-hidden="true" className="inline mr-1.5 -mt-0.5" />Códigos de verificação do Google neste mês</div>
+          {check.codes.slice(0, 12).map((x: any) => <div key={x.id}><b className="font-semibold text-ink tabular-nums">{x.code}</b> · cartão final {x.card_last4 || '????'}{x.card_name ? ` (${x.card_name})` : ''} · {when(x.charged_at)}</div>)}
         </div>
       )}
 
       {check && (
         <div className={`${card} border rounded-xl p-5`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className={`text-sm font-bold ${head}`}>Conta por conta</div>
+            <div className={`text-sm font-semibold ${head}`}>Conta por conta</div>
             {issues.length > 0 && <label className={`text-xs inline-flex items-center gap-1.5 cursor-pointer ${muted}`}><input type="checkbox" checked={onlyIssues} onChange={e => setOnlyIssues(e.target.checked)} /> só as {issues.length} para conferir</label>}
           </div>
           {!accounts.length ? <div className={`text-[13px] mt-3 ${muted}`}>Nenhum gasto e nenhuma cobrança nestes cartões neste mês.</div> : (
             <div className="overflow-x-auto mt-3">
               <table className="w-full text-[13px]">
-                <thead><tr className={`text-left text-[11px] uppercase tracking-wide ${muted}`}>
+                <thead><tr className={`text-left text-xs font-medium ${muted}`}>
                   <th className="py-1.5 pr-3 font-semibold">Conta do Google</th><th className="py-1.5 px-3 font-semibold text-right">Gasto no Google</th>
                   <th className="py-1.5 px-3 font-semibold text-right">Cobrado</th><th className="py-1.5 px-3 font-semibold text-right">Cobrado − gasto</th><th className="py-1.5 pl-3 font-semibold">Situação</th>
                 </tr></thead>
@@ -181,7 +181,7 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
                       <tr key={a.customer_id} className={`border-t ${line}`}>
                         <td className="py-2 pr-3">
                           <div className={head}>{a.name || `Conta ${dashed(a.customer_id)}`}</div>
-                          <div className={`text-[11px] ${a.known ? muted : 'text-rose-500'}`}>
+                          <div className={`text-[11px] ${a.known ? muted : 'text-neg'}`}>
                             {a.known ? `${dashed(a.customer_id)}${a.mcc ? ` · ${a.mcc}` : ''}${a.state === 'credito_parado' ? ` · conta ${ACCOUNT_STATUS[String(a.status).toUpperCase()] || 'parada'}` : ''}` : 'ainda não está nas suas contas do Autometrics'}
                             {a.cards.length ? ` · ${a.cards.length === 1 ? 'final' : 'finais'} ${a.cards.join(', ')}` : ''}{a.declined ? ` · ${a.declined} recusada${a.declined > 1 ? 's' : ''}` : ''}
                           </div>
@@ -191,7 +191,7 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
                         </td>
                         <td className={`py-2 px-3 text-right whitespace-nowrap ${head}`}>{usd(a.charged)}<div className={`text-[11px] ${muted}`}>{a.charges} {a.charges === 1 ? 'cobrança' : 'cobranças'}</div></td>
                         <td className={`py-2 px-3 text-right whitespace-nowrap ${muted}`}>{a.diff === null ? '—' : `${a.diff > 0 ? '+' : a.diff < 0 ? '−' : ''}${Math.abs(a.diff).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</td>
-                        <td className="py-2 pl-3"><span className={`px-2 py-0.5 rounded-md text-[11px] font-bold whitespace-nowrap ${tone[s.tone]}`}>{s.text}</span></td>
+                        <td className="py-2 pl-3"><span className={`px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap ${tone[s.tone]}`}>{s.text}</span></td>
                       </tr>
                     );
                   })}
@@ -213,13 +213,13 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
             </div>
           )}
 
-          <button onClick={() => setOpen(o => !o)} className={`mt-3 text-xs inline-flex items-center gap-1 ${muted} hover:text-indigo-400`}>
+          <button onClick={() => setOpen(o => !o)} className={`mt-3 text-xs inline-flex items-center gap-1 ${muted} hover:text-brand-text`}>
             {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {open ? 'Esconder' : 'Ver'} as cobranças uma a uma
           </button>
           {open && (
             <div className="overflow-x-auto mt-2">
               <table className="w-full text-xs">
-                <thead><tr className={`text-left text-[11px] uppercase tracking-wide ${muted}`}>
+                <thead><tr className={`text-left text-xs font-medium ${muted}`}>
                   <th className="py-1.5 pr-3 font-semibold">Quando</th><th className="py-1.5 px-3 font-semibold">Cobrança</th><th className="py-1.5 px-3 font-semibold">Cartão</th>
                   <th className="py-1.5 px-3 font-semibold text-right">Valor</th><th className="py-1.5 pl-3 font-semibold">Situação</th>
                 </tr></thead>
@@ -230,7 +230,7 @@ export function LootrushPanel({ isDark }: { isDark: boolean }) {
                       <td className={`py-1.5 px-3 ${head}`}>{x.merchant}{x.code ? ` · código ${x.code}` : ''}</td>
                       <td className={`py-1.5 px-3 whitespace-nowrap ${muted}`}>final {x.card_last4 || '????'}{x.card_name ? ` · ${x.card_name}` : ''}</td>
                       <td className={`py-1.5 px-3 text-right whitespace-nowrap ${head}`}>{usd(x.polarity === 'credit' ? -Math.abs(x.amount) : x.amount)}</td>
-                      <td className={`py-1.5 pl-3 whitespace-nowrap ${x.status === 'declined' ? 'text-rose-500' : muted}`}>{STATUS[x.status] || x.status}{x.reason ? ` · ${x.reason}` : ''}</td>
+                      <td className={`py-1.5 pl-3 whitespace-nowrap ${x.status === 'declined' ? 'text-neg' : muted}`}>{STATUS[x.status] || x.status}{x.reason ? ` · ${x.reason}` : ''}</td>
                     </tr>
                   ))}
                 </tbody>
