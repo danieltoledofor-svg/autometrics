@@ -77,7 +77,7 @@ export function FilterBar({ fields, filters, onChange, ui }: {
   const field = fields.find(f => f.key === key);
   const ops = field?.type === 'text' ? TEXT_OPS : NUMBER_OPS;
   const labelOf = (k: string) => fields.find(f => f.key === k)?.label || k;
-  const selectCls = `text-sm rounded-lg px-2 py-1.5 border ${borderCol} ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'}`;
+  const selectCls = `text-sm rounded-lg px-2 py-1.5 border ${borderCol} bg-surface-2 text-ink`;
 
   const apply = () => {
     if (!field || !value.trim()) return;
@@ -92,9 +92,9 @@ export function FilterBar({ fields, filters, onChange, ui }: {
       {filters.map(f => {
         const unit = fields.find(x => x.key === f.key)?.unit;
         return (
-          <span key={f.id} className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${isDark ? 'bg-indigo-950/50 border-indigo-800 text-indigo-200' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}>
+          <span key={f.id} className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border bg-brand/50 border-brand/30 text-brand-text`}>
             {labelOf(f.key)} {OP_LABEL[f.op]} {f.value}{unit === '%' ? '%' : ''}
-            <button onClick={() => onChange(filters.filter(x => x.id !== f.id))} className="hover:text-rose-400"><X size={12} /></button>
+            <button onClick={() => onChange(filters.filter(x => x.id !== f.id))} className="hover:text-neg"><X size={12} /></button>
           </span>
         );
       })}
@@ -113,16 +113,16 @@ export function FilterBar({ fields, filters, onChange, ui }: {
           <input autoFocus value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') apply(); if (e.key === 'Escape') setAdding(false); }}
             placeholder={field?.type === 'number' ? (field.unit === '%' ? 'ex.: 5 (%)' : 'ex.: 10') : 'texto'}
             className={`${selectCls} w-28`} />
-          <button onClick={apply} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Aplicar</button>
-          <button onClick={() => setAdding(false)} className={`text-xs ${textMuted} hover:text-rose-400`}>Cancelar</button>
+          <button onClick={apply} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand text-white hover:bg-brand-hover">Aplicar</button>
+          <button onClick={() => setAdding(false)} className={`text-xs ${textMuted} hover:text-neg`}>Cancelar</button>
         </span>
       ) : (
-        <button onClick={() => setAdding(true)} className={`inline-flex items-center gap-1 text-xs font-semibold ${textMuted} hover:text-indigo-400`}>
+        <button onClick={() => setAdding(true)} className={`inline-flex items-center gap-1 text-xs font-semibold ${textMuted} hover:text-brand-text`}>
           <Plus size={13} /> Adicionar filtro
         </button>
       )}
       {filters.length > 1 && !adding && (
-        <button onClick={() => onChange([])} className={`text-xs ${textMuted} hover:text-rose-400`}>Limpar</button>
+        <button onClick={() => onChange([])} className={`text-xs ${textMuted} hover:text-neg`}>Limpar</button>
       )}
     </div>
   );

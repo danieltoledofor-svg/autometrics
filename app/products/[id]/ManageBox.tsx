@@ -55,9 +55,9 @@ function styles(ui: Ui) {
   const { isDark, borderCol } = ui;
   return {
     box: `${ui.bgCard} border rounded-xl p-4 space-y-3`,
-    input: `rounded-lg border ${borderCol} px-3 py-1.5 text-[13px] outline-none focus:border-indigo-500 ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'}`,
-    solid: 'bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5',
-    ghost: `px-3 py-1.5 rounded-lg border text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5 ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-400' : 'border-slate-300 text-slate-700 hover:border-indigo-500'}`,
+    input: `rounded-lg border ${borderCol} px-3 py-1.5 text-[13px] outline-none focus:border-brand bg-surface-2 text-ink`,
+    solid: 'bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5',
+    ghost: `px-3 py-1.5 rounded-lg border text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5 border-line-strong text-ink hover:border-brand`,
   };
 }
 
@@ -67,17 +67,17 @@ export function AddButton({ label, onClick, ui }: { label: string; onClick: () =
 }
 /** Ação de uma linha da tabela, como link. */
 export function RowAction({ label, onClick, busy, danger }: { label: string; onClick: () => void; busy?: boolean; danger?: boolean }) {
-  return <button onClick={onClick} disabled={busy} className={`text-xs font-semibold hover:underline disabled:opacity-40 whitespace-nowrap ${danger ? 'text-amber-400' : 'text-indigo-400'}`}>{busy ? '…' : label}</button>;
+  return <button onClick={onClick} disabled={busy} className={`text-xs font-semibold hover:underline disabled:opacity-40 whitespace-nowrap ${danger ? 'text-warn' : 'text-brand-text'}`}>{busy ? '…' : label}</button>;
 }
 export function ResultLine({ result }: { result: Result }) {
-  return result ? <div className={`text-xs ${result.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{result.text}</div> : null;
+  return result ? <div className={`text-xs ${result.ok ? 'text-pos' : 'text-neg'}`}>{result.text}</div> : null;
 }
 function Frame({ title, onClose, ui, children }: { title: string; onClose: () => void; ui: Ui; children: React.ReactNode }) {
   return (
     <div className={styles(ui).box}>
       <div className="flex items-center justify-between gap-3">
-        <div className={`text-sm font-bold ${ui.textHead}`}>{title}</div>
-        <button onClick={onClose} aria-label="Fechar" className={`${ui.textMuted} hover:text-indigo-400`}><X size={15} /></button>
+        <div className={`text-sm font-semibold ${ui.textHead}`}>{title}</div>
+        <button onClick={onClose} aria-label="Fechar" className={`${ui.textMuted} hover:text-brand-text`}><X size={15} /></button>
       </div>
       {children}
     </div>
@@ -228,19 +228,19 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
   const tooLong = titles.some(t => count(t) > 30) || descs.some(t => count(t) > 90) || count(path1) > 15 || count(path2) > 15;
   const missing = filledTitles.length < 3 ? 'Faltam títulos: o anúncio precisa de pelo menos 3.' : filledDescs.length < 2 ? 'Faltam descrições: o anúncio precisa de pelo menos 2.' : !/^https:\/\//i.test(url.trim()) ? 'A página precisa começar com https://' : tooLong ? 'Há texto acima do limite de letras.' : '';
   const set = (list: string[], apply: (l: string[]) => void, i: number, v: string) => apply(list.map((x, j) => (j === i ? v : x)));
-  const counter = (text: string, max: number) => <span className={`text-[11px] tabular-nums w-10 text-right flex-shrink-0 ${count(text) > max ? 'text-rose-500 font-bold' : ui.textMuted}`}>{count(text)}/{max}</span>;
-  const NOTE_TONE: Record<string, string> = { melhor: 'text-emerald-400', bom: 'text-emerald-400', baixo: 'text-rose-400' };
+  const counter = (text: string, max: number) => <span className={`text-[11px] tabular-nums w-10 text-right flex-shrink-0 ${count(text) > max ? 'text-neg font-medium' : ui.textMuted}`}>{count(text)}/{max}</span>;
+  const NOTE_TONE: Record<string, string> = { melhor: 'text-pos', bom: 'text-pos', baixo: 'text-neg' };
   const maxImp = stats ? Math.max(0, ...[...stats.values()].map(x => x.impressoes)) : 0;
   const stat = (text: string) => {
     const st = stats?.get(text.trim().toLowerCase());
     if (!text.trim()) return null;
-    if (!st) return adKey && stats ? <div className="text-[11px] text-indigo-400">texto novo</div> : null;
+    if (!st) return adKey && stats ? <div className="text-[11px] text-brand-text">texto novo</div> : null;
     const weak = hasNumbers && maxImp >= 200 && st.impressoes < maxImp * 0.1;
     return (
       <div className={`text-[11px] ${ui.textMuted}`}>
         {hasNumbers ? `${n(st.impressoes)} impressões · ${n(st.cliques)} cliques${st.conversoes ? ` · ${n(st.conversoes)} conversões` : ''}` : 'sem números ainda'}
-        {st.nota && <span className={`ml-1.5 font-bold ${NOTE_TONE[st.nota] || ''}`}>· Google: {st.nota}</span>}
-        {!st.nota && weak && <span className="ml-1.5 font-bold text-amber-400">· pouco mostrado</span>}
+        {st.nota && <span className={`ml-1.5 font-medium ${NOTE_TONE[st.nota] || ''}`}>· Google: {st.nota}</span>}
+        {!st.nota && weak && <span className="ml-1.5 font-medium text-warn">· pouco mostrado</span>}
         {st.pin && <span className="ml-1.5">· fixado</span>}
       </div>
     );
@@ -275,7 +275,7 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
     if (r.ok) onDone();
   };
   const TYPE: Record<string, string> = { titulo: 'Título', descricao: 'Descrição', sitelink: 'Sitelink', destaque: 'Frase de destaque' };
-  const useLink = (label: string, onClick: () => void, text: string) => (used.includes(text) ? <span className="text-xs text-emerald-500 whitespace-nowrap">feito</span> : <RowAction label={label} onClick={onClick} />);
+  const useLink = (label: string, onClick: () => void, text: string) => (used.includes(text) ? <span className="text-xs text-pos whitespace-nowrap">feito</span> : <RowAction label={label} onClick={onClick} />);
 
   return (
     <Frame title={mode === 'editar' ? 'Editar o anúncio' : mode === 'copia' ? 'Duplicar o anúncio: mude o que quiser antes de criar' : 'Novo anúncio de pesquisa'} onClose={onClose} ui={ui}>
@@ -285,26 +285,26 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
             <button onClick={askAi} disabled={asking || !canAi} className={s.ghost}>{asking && <Loader2 size={13} className="animate-spin" />} {asking ? 'A IA está lendo o anúncio…' : advice ? 'Pedir outra leitura à IA' : 'Pedir à IA o que melhorar'}</button>
             <span className={`text-[11px] ${ui.textMuted}`}>{!stats ? 'lendo o desempenho de cada texto no Google…' : !canAi ? 'A IA está desligada no servidor.' : hasNumbers ? 'Ela vê as impressões e os cliques de cada texto nos últimos 30 dias. Só sugere: nada muda sem você salvar.' : 'O Google ainda não tem números por texto neste anúncio: a IA avalia só pela escrita.'}</span>
           </div>
-          {aiError && <div className="text-xs text-rose-500">{aiError}</div>}
+          {aiError && <div className="text-xs text-neg">{aiError}</div>}
           {advice && (
             <div className="space-y-2">
               {advice.leitura && <div className={`text-[13px] ${ui.textHead}`}>{advice.leitura}</div>}
-              {advice.trocas.length > 0 && <div className={`text-xs font-bold ${ui.textHead}`}>Trocar</div>}
+              {advice.trocas.length > 0 && <div className={`text-xs font-medium ${ui.textHead}`}>Trocar</div>}
               {advice.trocas.map((t, i) => (
                 <div key={`t${i}`} className={`flex flex-wrap items-start justify-between gap-2 border-t ${ui.borderCol} pt-2 text-[13px]`}>
                   <div className="min-w-0">
-                    <div className={ui.textMuted}><span className="font-bold">{TYPE[t.tipo]}:</span> <s>{t.atual}</s></div>
+                    <div className={ui.textMuted}><span className="font-medium">{TYPE[t.tipo]}:</span> <s>{t.atual}</s></div>
                     <div className={ui.textHead}>→ {t.novo} <span className={`text-[11px] ${ui.textMuted}`}>({count(t.novo)} letras)</span></div>
                     <div className={`text-[11px] ${ui.textMuted}`}>{t.pt ? `"${t.pt}". ` : ''}{t.motivo}</div>
                   </div>
                   {useLink('Usar no lugar', () => use(t.tipo, t.novo, t.atual), t.novo)}
                 </div>
               ))}
-              {advice.novos.length > 0 && <div className={`text-xs font-bold pt-1 ${ui.textHead}`}>Incluir</div>}
+              {advice.novos.length > 0 && <div className={`text-xs font-medium pt-1 ${ui.textHead}`}>Incluir</div>}
               {advice.novos.map((x, i) => (
                 <div key={`n${i}`} className={`flex flex-wrap items-start justify-between gap-2 border-t ${ui.borderCol} pt-2 text-[13px]`}>
                   <div className="min-w-0">
-                    <div className={ui.textHead}><span className={`font-bold ${ui.textMuted}`}>{TYPE[x.tipo]}:</span> {x.novo}{x.desc1 ? ` | ${x.desc1} | ${x.desc2}` : ''} <span className={`text-[11px] ${ui.textMuted}`}>({count(x.novo)} letras)</span></div>
+                    <div className={ui.textHead}><span className={`font-medium ${ui.textMuted}`}>{TYPE[x.tipo]}:</span> {x.novo}{x.desc1 ? ` | ${x.desc1} | ${x.desc2}` : ''} <span className={`text-[11px] ${ui.textMuted}`}>({count(x.novo)} letras)</span></div>
                     <div className={`text-[11px] ${ui.textMuted}`}>{x.pt ? `"${x.pt}". ` : ''}{x.motivo}</div>
                   </div>
                   {x.tipo === 'titulo' || x.tipo === 'descricao' ? useLink('Usar numa vaga', () => use(x.tipo as any, x.novo), x.novo) : useLink('Incluir na campanha', () => addAsset(x), x.novo)}
@@ -318,7 +318,7 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
       )}
       <div className="grid lg:grid-cols-2 gap-x-6 gap-y-3">
         <div className="space-y-1.5">
-          <div className={`text-xs font-bold ${ui.textHead}`}>Títulos ({filledTitles.length} de 15, mínimo 3)</div>
+          <div className={`text-xs font-medium ${ui.textHead}`}>Títulos ({filledTitles.length} de 15, mínimo 3)</div>
           {titles.map((t, i) => (
             <div key={i}>
               <div className="flex items-center gap-2">
@@ -329,7 +329,7 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
           ))}
         </div>
         <div className="space-y-1.5">
-          <div className={`text-xs font-bold ${ui.textHead}`}>Descrições ({filledDescs.length} de 4, mínimo 2)</div>
+          <div className={`text-xs font-medium ${ui.textHead}`}>Descrições ({filledDescs.length} de 4, mínimo 2)</div>
           {descs.map((t, i) => (
             <div key={i}>
               <div className="flex items-start gap-2">
@@ -338,7 +338,7 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
               {stat(t)}
             </div>
           ))}
-          <div className={`text-xs font-bold pt-2 ${ui.textHead}`}>Página do anúncio</div>
+          <div className={`text-xs font-medium pt-2 ${ui.textHead}`}>Página do anúncio</div>
           <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://… (com os parâmetros de rastreamento)" aria-label="Página do anúncio" className={`${s.input} w-full`} />
           <div className="flex items-center gap-2">
             <span className={`text-xs ${ui.textMuted}`}>Caminho</span>
@@ -352,7 +352,7 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
         {mode !== 'editar' && <label className={`inline-flex items-center gap-1.5 text-xs cursor-pointer ${ui.textHead}`}><input type="checkbox" checked={paused} onChange={e => setPaused(e.target.checked)} /> Criar pausado</label>}
         <button onClick={submit} disabled={busy || !!missing || (mode !== 'editar' && !group) || (mode === 'editar' && !stats)} className={s.solid}>{busy && <Loader2 size={13} className="animate-spin" />} {mode === 'editar' ? 'Salvar no anúncio' : 'Criar anúncio'}</button>
         <button onClick={onClose} className={s.ghost}>{result?.ok ? 'Fechar' : 'Cancelar'}</button>
-        {missing && <span className="text-xs text-amber-500">{missing}</span>}
+        {missing && <span className="text-xs text-warn">{missing}</span>}
       </div>
       <div className={`text-[11px] ${ui.textMuted}`}>
         {mode === 'editar' ? 'Ao salvar, o Google analisa o anúncio de novo e a contagem dos textos trocados recomeça do zero; os textos que não mudaram continuam com o histórico. '
@@ -390,7 +390,7 @@ export function AssetsBox({ manage, ui, productId, defaultUrl, onClose }: { mana
     setResult({ ok: r.ok, text: r.ok ? `Feito: ${r.text}.` : r.text });
     if (r.ok && r.body.assets) { setAssets(r.body.assets); after?.(); }
   };
-  const counter = (text: string, max: number) => <span className={`text-[11px] tabular-nums w-10 text-right flex-shrink-0 ${count(text) > max ? 'text-rose-500 font-bold' : ui.textMuted}`}>{count(text)}/{max}</span>;
+  const counter = (text: string, max: number) => <span className={`text-[11px] tabular-nums w-10 text-right flex-shrink-0 ${count(text) > max ? 'text-neg font-medium' : ui.textMuted}`}>{count(text)}/{max}</span>;
   const links = (assets || []).filter(a => a.tipo === 'sitelink'), callouts = (assets || []).filter(a => a.tipo === 'destaque');
   const linkOk = link.texto.trim() && count(link.texto) <= 25 && count(link.desc1) <= 35 && count(link.desc2) <= 35 && !!link.desc1.trim() === !!link.desc2.trim() && /^https:\/\//i.test(link.url.trim());
   const row = (a: Asset) => (
@@ -404,10 +404,10 @@ export function AssetsBox({ manage, ui, productId, defaultUrl, onClose }: { mana
   );
   return (
     <Frame title="Sitelinks e frases de destaque da campanha" onClose={onClose} ui={ui}>
-      {error ? <div className="text-xs text-rose-500">{error}</div> : !assets ? <div className={`text-xs ${ui.textMuted}`}><Loader2 size={12} className="inline animate-spin mr-1" /> lendo no Google…</div> : (
+      {error ? <div className="text-xs text-neg">{error}</div> : !assets ? <div className={`text-xs ${ui.textMuted}`}><Loader2 size={12} className="inline animate-spin mr-1" /> lendo no Google…</div> : (
         <div className="grid lg:grid-cols-2 gap-x-6 gap-y-4">
           <div>
-            <div className={`text-xs font-bold ${ui.textHead} mb-1`}>Sitelinks ({links.length})</div>
+            <div className={`text-xs font-medium ${ui.textHead} mb-1`}>Sitelinks ({links.length})</div>
             {links.length ? links.map(row) : <div className={`text-xs ${ui.textMuted}`}>Nenhum sitelink na campanha.</div>}
             <div className="space-y-1.5 mt-3">
               <div className="flex items-center gap-2"><input value={link.texto} onChange={e => setLink({ ...link, texto: e.target.value })} placeholder="Texto do sitelink" aria-label="Texto do sitelink" className={`${s.input} flex-1 min-w-0`} />{counter(link.texto, 25)}</div>
@@ -418,7 +418,7 @@ export function AssetsBox({ manage, ui, productId, defaultUrl, onClose }: { mana
             </div>
           </div>
           <div>
-            <div className={`text-xs font-bold ${ui.textHead} mb-1`}>Frases de destaque ({callouts.length})</div>
+            <div className={`text-xs font-medium ${ui.textHead} mb-1`}>Frases de destaque ({callouts.length})</div>
             {callouts.length ? callouts.map(row) : <div className={`text-xs ${ui.textMuted}`}>Nenhuma frase de destaque na campanha.</div>}
             <div className="flex items-center gap-2 mt-3">
               <input value={callout} onChange={e => setCallout(e.target.value)} placeholder="Frase de destaque" aria-label="Frase de destaque" className={`${s.input} flex-1 min-w-0`} />{counter(callout, 25)}
@@ -471,17 +471,17 @@ export function LocationsBox({ manage, ui, productId }: { manage: Manage; ui: Ui
     if (r.ok && r.body.locations) { setLocations(r.body.locations); setFound(null); setQuery(''); }
   };
   const included = (locations || []).filter(l => !l.excluido).length;
-  const pill = (excluded: boolean) => `px-2 py-0.5 rounded-md text-[11px] font-bold ${excluded ? (ui.isDark ? 'bg-rose-500/10 text-rose-400' : 'bg-rose-50 text-rose-700') : (ui.isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-700')}`;
+  const pill = (excluded: boolean) => `px-2 py-0.5 rounded-md text-[11px] font-medium ${excluded ? ('bg-neg/10 text-neg') : ('bg-pos/10 text-pos')}`;
 
   return (
     <div className={s.box}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className={`text-sm font-bold ${ui.textHead}`}>Locais da campanha no Google</div>
+        <div className={`text-sm font-semibold ${ui.textHead}`}>Locais da campanha no Google</div>
         <div className={`text-[11px] ${ui.textMuted}`}>lido do Google agora · a tabela abaixo mostra de onde vieram os cliques</div>
       </div>
-      {error ? <div className="text-xs text-rose-500">{error}</div> : !locations ? <div className={`text-xs ${ui.textMuted}`}><Loader2 size={12} className="inline animate-spin mr-1" /> lendo os locais…</div> : (
+      {error ? <div className="text-xs text-neg">{error}</div> : !locations ? <div className={`text-xs ${ui.textMuted}`}><Loader2 size={12} className="inline animate-spin mr-1" /> lendo os locais…</div> : (
         <>
-          {!included && <div className="text-xs text-amber-500">Nenhum local incluído: a campanha aparece no mundo todo{locations.length ? ', menos nos locais excluídos' : ''}.</div>}
+          {!included && <div className="text-xs text-warn">Nenhum local incluído: a campanha aparece no mundo todo{locations.length ? ', menos nos locais excluídos' : ''}.</div>}
           <div className="flex flex-wrap gap-2">
             {locations.map(l => (
               <span key={l.id} className={`inline-flex items-center gap-2 rounded-lg border ${ui.borderCol} px-2 py-1 text-[13px] ${ui.textHead}`}>

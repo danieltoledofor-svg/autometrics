@@ -41,9 +41,9 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
   const describe = (h: any) => (MADE[h.kind] ? `${MADE[h.kind]}: ${h.target}` : DONE[h.kind] ? `${DONE[h.kind][h.undo_of ? 1 : 0]}: ${h.target}`
     : `${MONEY.has(h.kind) ? KIND[h.kind] : `${KIND[h.kind] || h.kind} ${h.target}`}: de ${show(h.kind, h.previous_value === null ? null : Number(h.previous_value))} para ${show(h.kind, Number(h.new_value))}${h.undo_of ? ' (desfazendo)' : ''}`);
   const main = controls.filter(c => MONEY.has(c.kind));
-  const field = `w-28 rounded-lg border px-2 py-1.5 text-right text-sm tabular-nums outline-none focus:border-indigo-500 ${isDark ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'}`;
-  const solid = 'bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5';
-  const ghost = `px-3 py-1.5 rounded-lg border ${borderCol} text-xs font-bold ${textMuted} hover:text-indigo-400 disabled:opacity-40`;
+  const field = `w-28 rounded-lg border px-2 py-1.5 text-right text-sm tabular-nums outline-none focus:border-brand bg-surface-2 border-line-strong text-ink`;
+  const solid = 'bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5';
+  const ghost = `px-3 py-1.5 rounded-lg border ${borderCol} text-xs font-medium ${textMuted} hover:text-brand-text disabled:opacity-40`;
 
   const send = async (key: string, body: any) => {
     setBusy(key);
@@ -59,11 +59,11 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
   return (
     <div className={`${bgCard} border rounded-xl p-4 mb-6`}>
       <div className="flex flex-wrap items-baseline gap-x-3 mb-3">
-        <span className={`text-sm font-bold ${textHead}`}>No Google agora</span>
+        <span className={`text-sm font-semibold ${textHead}`}>No Google agora</span>
         <span className={`text-xs ${textMuted}`}>O que você alterar aqui muda a campanha no Google Ads. A meta de cada grupo fica na aba Grupos de Anúncios; os ajustes de lance, nas abas Públicos e Locais.</span>
       </div>
       {loading && <div className={`flex items-center gap-2 text-xs ${textMuted}`}><Loader2 size={14} className="animate-spin" /> Lendo do Google…</div>}
-      {error && <div className="text-xs text-amber-500">{error}</div>}
+      {error && <div className="text-xs text-warn">{error}</div>}
 
       <div className="flex flex-wrap gap-x-8 gap-y-3">
         {main.map(c => {
@@ -81,7 +81,7 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
                   <button disabled={!valid} onClick={() => setConfirm({ control: c, value })} className={ghost}>Alterar</button>
                 </div>
               ) : null}
-              {c.note && !/^[A-Z_]+$/.test(c.note) && <div className="text-[11px] text-amber-500 mt-1 max-w-[320px]">{c.note}</div>}
+              {c.note && !/^[A-Z_]+$/.test(c.note) && <div className="text-[11px] text-warn mt-1 max-w-[320px]">{c.note}</div>}
             </div>
           );
         })}
@@ -90,12 +90,12 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
       {confirm && (() => {
         const before = confirm.control.value, pctChange = before ? Math.round(((confirm.value - before) / before) * 100) : null;
         return (
-          <div className="mt-4 p-3 rounded-lg border border-amber-500/40 bg-amber-500/5">
-            <div className="text-xs font-bold text-amber-500">Confirmar a alteração no Google</div>
+          <div className="mt-4 p-3 rounded-lg border border-warn/40 bg-warn/5">
+            <div className="text-xs font-medium text-warn">Confirmar a alteração no Google</div>
             <div className={`text-sm mt-1 ${textHead}`}>{confirm.control.label}: de {money(before)} para {money(confirm.value)}{pctChange !== null ? ` (${pctChange > 0 ? '+' : '−'}${Math.abs(pctChange)}%)` : ''}.</div>
-            {pctChange !== null && Math.abs(pctChange) > 30 && <div className="text-xs text-amber-500 mt-1">É uma mudança de mais de 30% de uma vez.</div>}
+            {pctChange !== null && Math.abs(pctChange) > 30 && <div className="text-xs text-warn mt-1">É uma mudança de mais de 30% de uma vez.</div>}
             {confirm.control.kind === 'meta_cpa' && <div className={`text-xs mt-1 ${textMuted}`}>Depois de mudar a meta, a campanha costuma voltar ao aprendizado por alguns dias.</div>}
-            {confirm.control.note && confirm.control.kind === 'orcamento' && <div className="text-xs text-amber-500 mt-1">{confirm.control.note}</div>}
+            {confirm.control.note && confirm.control.kind === 'orcamento' && <div className="text-xs text-warn mt-1">{confirm.control.note}</div>}
             <div className="flex gap-2 mt-2.5">
               <button disabled={!!busy} onClick={() => send('confirm', { kind: confirm.control.kind, key: confirm.control.key, value: confirm.value })} className={solid}>
                 {busy === 'confirm' && <Loader2 size={12} className="animate-spin" />} Alterar no Google
@@ -105,13 +105,13 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
           </div>
         );
       })()}
-      {message && <div className="text-xs text-rose-500 mt-3">{message}</div>}
+      {message && <div className="text-xs text-neg mt-3">{message}</div>}
 
       {history.length > 0 && (
         <div className={`mt-4 pt-3 border-t ${borderCol}`}>
-          <button onClick={toggleClosed} aria-expanded={!closed} className={`w-full flex items-center justify-between gap-3 text-[11px] uppercase tracking-wider font-extrabold ${textMuted} hover:text-indigo-400 ${closed ? '' : 'mb-1'}`}>
+          <button onClick={toggleClosed} aria-expanded={!closed} className={`w-full flex items-center justify-between gap-3 text-[11px] font-semibold ${textMuted} hover:text-brand-text ${closed ? '' : 'mb-1'}`}>
             <span>Alterações feitas por aqui ({history.length})</span>
-            <span className="normal-case tracking-normal font-bold">{closed ? 'Mostrar' : 'Ocultar'}</span>
+            <span className="normal-case tracking-normal font-medium">{closed ? 'Mostrar' : 'Ocultar'}</span>
           </button>
           {!closed && shown.map(h => (
             <div key={h.id} className="flex flex-wrap items-center justify-between gap-x-3 py-1.5 text-xs">
@@ -123,7 +123,7 @@ export function GoogleControlsBar({ productId, ui }: { productId: string; ui: { 
                 : h.undone_at ? <span className={textMuted}>desfeita</span> : null}
             </div>
           ))}
-          {!closed && history.length > 3 && <button onClick={() => setShowAll(v => !v)} className={`text-xs font-bold mt-1 ${textMuted} hover:text-indigo-400`}>{showAll ? 'Mostrar menos' : `Ver as ${history.length}`}</button>}
+          {!closed && history.length > 3 && <button onClick={() => setShowAll(v => !v)} className={`text-xs font-medium mt-1 ${textMuted} hover:text-brand-text`}>{showAll ? 'Mostrar menos' : `Ver as ${history.length}`}</button>}
         </div>
       )}
     </div>

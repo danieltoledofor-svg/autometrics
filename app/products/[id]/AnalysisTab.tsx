@@ -62,7 +62,7 @@ function CorrectionBox({ ui, initial = '', onSave, onCancel }: { ui: Ui; initial
     <div className="mt-2 space-y-2">
       <textarea autoFocus value={text} onChange={e => setText(e.target.value)} rows={2} maxLength={1000}
         placeholder="O que você faria nesta campanha? Ex.: esse termo vende bem para mim, eu manteria e só baixaria o lance no celular."
-        className={`w-full rounded-lg border ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-white'} ${textHead} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
+        className={`w-full rounded-lg border ${borderCol} bg-surface-2 ${textHead} px-3 py-2 text-[13px] outline-none focus:border-brand resize-y`} />
       <div className="flex flex-wrap items-center gap-3">
         <label className={`flex items-center gap-1.5 text-[11.5px] ${textMuted} cursor-pointer`}>
           <input type="checkbox" checked={general} onChange={e => setGeneral(e.target.checked)} /> Vale para todas as minhas campanhas (desmarque se for algo só deste produto ou nicho)
@@ -70,7 +70,7 @@ function CorrectionBox({ ui, initial = '', onSave, onCancel }: { ui: Ui; initial
         <div className="flex-1" />
         <button onClick={onCancel} className={`text-[11px] px-2 py-1 ${textMuted}`}>Cancelar</button>
         <button disabled={saving} onClick={async () => { setSaving(true); await onSave(text.trim(), general); }}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-50">
+          className="bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg text-[11px] font-medium disabled:opacity-50">
           {saving ? 'Salvando…' : text.trim() ? 'Salvar e ensinar a IA' : 'Marcar sem comentar'}
         </button>
       </div>
@@ -123,8 +123,8 @@ export function ApplyBox({ ui, s, plan, change, onDone, onCancel }: { ui: Ui; s:
     </label>
   );
   return (
-    <div className="mt-2 p-3 rounded-lg border border-amber-500/40 bg-amber-500/5 space-y-2">
-      <div className="text-xs font-bold text-amber-500">Confirmar a alteração no Google</div>
+    <div className="mt-2 p-3 rounded-lg border border-warn/40 bg-warn/5 space-y-2">
+      <div className="text-xs font-medium text-warn">Confirmar a alteração no Google</div>
       {plan.type === 'negativa' && <>
         <div className={`text-[13px] ${textHead}`}>Negativar o termo <b>{term}</b> na campanha inteira.</div>
         {option('EXACT', `Exata: [${term}]`, 'bloqueia só essa pesquisa, escrita assim.')}
@@ -135,13 +135,13 @@ export function ApplyBox({ ui, s, plan, change, onDone, onCancel }: { ui: Ui; s:
         <div className={`flex flex-wrap items-center gap-2 text-[13px] ${textHead}`}>
           <span>{control.label}: hoje {adjustText(control.value, control.mixed) === '—' ? 'sem ajuste' : adjustText(control.value, control.mixed)}. Novo ajuste:</span>
           <input autoFocus value={text} onChange={e => setText(e.target.value)} inputMode="decimal" placeholder="-30" aria-label="Novo ajuste em %"
-            className={`w-20 rounded border ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-white'} px-2 py-1 text-right text-[13px] tabular-nums outline-none focus:border-indigo-500`} />
+            className={`w-20 rounded border ${borderCol} bg-surface-2 px-2 py-1 text-right text-[13px] tabular-nums outline-none focus:border-brand`} />
           <span className={textMuted}>% (de {min}% a +900%; negativo reduz o lance)</span>
         </div>
       )}
-      {error && <div className="text-xs text-rose-500">{error}</div>}
+      {error && <div className="text-xs text-neg">{error}</div>}
       <div className="flex gap-2">
-        <button disabled={sending || !valid} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-50 inline-flex items-center gap-1.5"
+        <button disabled={sending || !valid} className="bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg text-[11px] font-medium disabled:opacity-50 inline-flex items-center gap-1.5"
           onClick={async () => { setSending(true); setError(''); const problem = await change(body); if (problem) { setError(problem); setSending(false); } else await onDone(); }}>
           {sending && <Loader2 size={12} className="animate-spin" />} {plan.type === 'negativa' ? 'Negativar no Google' : plan.type === 'pausar' ? 'Pausar no Google' : 'Alterar no Google'}
         </button>
@@ -197,20 +197,20 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
 
   // ── cores ────────────────────────────────────────────────────────────────
   const tone = {
-    ok: isDark ? 'text-emerald-400' : 'text-emerald-600',
-    alerta: isDark ? 'text-orange-400' : 'text-orange-600',
-    urgente: isDark ? 'text-rose-400' : 'text-rose-600',
+    ok: 'text-pos',
+    alerta: 'text-warn',
+    urgente: 'text-neg',
     sem_dado: textMuted,
   } as Record<Status, string>;
   const pill = {
-    ok: isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700',
-    alerta: isDark ? 'bg-orange-500/10 border-orange-500/40 text-orange-400' : 'bg-orange-50 border-orange-300 text-orange-700',
-    urgente: isDark ? 'bg-rose-500/10 border-rose-500/40 text-rose-400' : 'bg-rose-50 border-rose-300 text-rose-700',
-    sem_dado: isDark ? 'bg-slate-500/10 border-slate-500/30 text-slate-400' : 'bg-slate-100 border-slate-300 text-slate-500',
+    ok: 'bg-pos/10 border-pos/30 text-pos',
+    alerta: 'bg-warn/10 border-warn/40 text-warn',
+    urgente: 'bg-neg/10 border-neg/40 text-neg',
+    sem_dado: 'bg-surface-3/10 border-line-strong/30 text-ink-subtle',
   } as Record<Status, string>;
-  const soft = isDark ? 'bg-slate-950' : 'bg-slate-50';
+  const soft = 'bg-surface-2';
   const Pill = ({ s, children }: { s: Status; children: React.ReactNode }) => (
-    <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${pill[s]}`}>{children}</span>
+    <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap ${pill[s]}`}>{children}</span>
   );
   const Icon = ({ s, big }: { s: Status; big?: boolean }) => {
     const size = big ? 22 : 13;
@@ -232,10 +232,10 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
     return (
       <div className="space-y-5 max-w-6xl">
       <div className={`${bgCard} border ${borderCol} rounded-xl p-6 space-y-3`}>
-        <div className={`font-bold ${textHead}`}>Esta campanha ainda não foi analisada</div>
+        <div className={`font-medium ${textHead}`}>Esta campanha ainda não foi analisada</div>
         <div className={`text-sm ${textMuted}`}>A análise roda sozinha depois de cada coleta, para campanhas com gasto nos últimos 7 dias.</div>
-        {error && <div className="text-sm text-rose-500">{error}</div>}
-        <button onClick={rerun} disabled={running} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-60">
+        {error && <div className="text-sm text-neg">{error}</div>}
+        <button onClick={rerun} disabled={running} className="flex items-center gap-2 bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-60">
           {running ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Analisar agora
         </button>
       </div>
@@ -277,9 +277,9 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
   ];
 
   // ── tabelas de cada item ─────────────────────────────────────────────────
-  const th = `px-3 py-2 text-[10.5px] uppercase tracking-wider font-bold ${textMuted} ${soft} whitespace-nowrap border-b ${borderCol}`;
+  const th = `px-3 py-2 text-[10.5px] font-medium ${textMuted} ${soft} whitespace-nowrap border-b ${borderCol}`;
   const td = `px-3 py-2 text-[13px] whitespace-nowrap border-b ${borderCol}`;
-  const conv = (v: number, approx = false) => <span className={v > 0 ? `${tone.ok} font-bold` : textMuted}>{approx && v > 0 ? '≈ ' : ''}{String(v).replace('.', ',')}</span>;
+  const conv = (v: number, approx = false) => <span className={v > 0 ? `${tone.ok} font-medium` : textMuted}>{approx && v > 0 ? '≈ ' : ''}{String(v).replace('.', ',')}</span>;
   const cpa = (r: any) => (r.cpa3 === null ? <span className={textMuted}>—</span> : <span className={tone[r.status as Status] || ''}>{r.approx ? '≈ ' : ''}{money(r.cpa3)}</span>);
   const pctRef = (r: any) => r.pct === null ? <span className={textMuted}>—</span>
     : <span className={tone[r.status as Status] || ''}>{Math.round(r.pct * 100)}%{r.conv3 === 0 ? ' sem venda' : ''}</span>;
@@ -376,17 +376,17 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
       {list.map(s => {
         const plan = google.allowed && s.status === 'aberta' ? applyPlan(s, google.controls) : null;
         return (
-        <div key={s.id} className={`rounded-r-lg border-l-[3px] border-blue-400 ${soft} px-3 py-2`}>
+        <div key={s.id} className={`rounded-r-lg border-l-[3px] border-brand ${soft} px-3 py-2`}>
           <div className="flex flex-wrap items-start gap-2">
             <div className="flex-1 min-w-[220px]">
-              <div className={`text-[10.5px] uppercase tracking-wider font-bold ${textMuted}`}>✦ Ponto de alteração · {s.target_label}</div>
-              <div className={`text-[13px] ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{s.text}</div>
+              <div className={`text-[10.5px] font-medium ${textMuted}`}>✦ Ponto de alteração · {s.target_label}</div>
+              <div className={`text-[13px] text-brand-text`}>{s.text}</div>
             </div>
             {s.status === 'aberta' && (
               <div className="flex gap-1.5">
-                {plan && <button onClick={() => { setReplyTo(null); setApplyTo(s.id); }} className="text-[11px] px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold">Aplicar</button>}
-                <button onClick={() => mark(s.id, 'ignorada')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-indigo-400`}>Ignorar</button>
-                <button onClick={() => { setApplyTo(null); setReplyTo(s.id); }} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-rose-400`}>Não faz sentido</button>
+                {plan && <button onClick={() => { setReplyTo(null); setApplyTo(s.id); }} className="text-[11px] px-2.5 py-1 rounded bg-brand hover:bg-brand-hover text-white font-medium">Aplicar</button>}
+                <button onClick={() => mark(s.id, 'ignorada')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-brand-text`}>Ignorar</button>
+                <button onClick={() => { setApplyTo(null); setReplyTo(s.id); }} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-neg`}>Não faz sentido</button>
               </div>
             )}
           </div>
@@ -405,40 +405,40 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
 
   return (
     <div className="space-y-5 max-w-6xl">
-      {error && <div className="text-sm text-rose-500">{error}</div>}
+      {error && <div className="text-sm text-neg">{error}</div>}
       {!data.ai && <div className={`text-xs ${textMuted}`}>IA desligada no servidor (OPENROUTER_API_KEY). Números e checklist funcionam; os textos usam o modelo padrão.</div>}
 
       {/* 1. Resumo */}
-      <div className={`${bgCard} border ${borderCol} rounded-xl p-4 md:p-5 grid grid-cols-[auto_1fr] lg:grid-cols-[auto_1fr_auto] gap-4 items-center`}>
+      <div className={`${bgCard} border ${borderCol} rounded-xl p-4 md:p-5 grid grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto] gap-4 items-center`}>
         <Icon s={summaryStatus} big />
         <div className="min-w-0">
-          <div className={`text-base font-extrabold ${textHead}`}>{summary.source === 'ia' ? '✦ ' : ''}{summary.title || 'Leitura da campanha'}</div>
-          {summary.text && <div className={`text-[13px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{summary.text}</div>}
+          <div className={`text-base font-semibold ${textHead}`}>{summary.source === 'ia' ? '✦ ' : ''}{summary.title || 'Leitura da campanha'}</div>
+          {summary.text && <div className={`text-[13px] mt-0.5 text-ink-muted`}>{summary.text}</div>}
           <div className="flex flex-wrap gap-1.5 mt-2">
             {counts.urgente > 0 && <Pill s="urgente">{counts.urgente} {counts.urgente === 1 ? 'urgente' : 'urgentes'}</Pill>}
             {counts.alerta > 0 && <Pill s="alerta">{counts.alerta} em alerta</Pill>}
             <Pill s="ok">{counts.ok} {counts.ok === 1 ? 'item ok' : 'itens ok'}</Pill>
           </div>
         </div>
-        <div className={`col-span-2 lg:col-span-1 text-[11.5px] ${textMuted} lg:text-right leading-relaxed`}>
+        <div className={`col-span-2 xl:col-span-1 text-xs ${textMuted} xl:text-right leading-relaxed`}>
           {ref?.mode === 'nenhuma' ? <>Sem referência: {ref.basis}</> : <>
             {ref?.mode === 'venda' ? 'Venda média' : ref?.mode === 'meta_cpa' ? 'Meta de CPA' : 'CPA de 7 dias'} {money(ref?.value)} · alerta ≥ {money(ref?.warn)} · urgente &gt; {money(ref?.urgent)}
             <br /><span title={ref?.basis}>{ref?.basis}</span></>}
           <br />3 dias ({ddmm(a.period?.d3?.[0])}–{ddmm(a.period?.d3?.[1])}) × 7 dias ({ddmm(a.period?.d7?.[0])}–{ddmm(a.period?.d7?.[1])})
           <br />Atualizado {timeAgo(a.computed_at)} ·{' '}
-          <button onClick={rerun} disabled={running} className="text-indigo-400 hover:underline inline-flex items-center gap-1 disabled:opacity-60">
+          <button onClick={rerun} disabled={running} className="text-brand-text hover:underline inline-flex items-center gap-1 disabled:opacity-60">
             {running && <Loader2 size={11} className="animate-spin" />}reanalisar
           </button>
-          <br /><a href="/analise-ia" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Análise de IA das campanhas parecidas</a>
+          <br /><a href="/analise-ia" target="_blank" rel="noopener noreferrer" className="text-brand-text hover:underline">Análise de IA das campanhas parecidas</a>
         </div>
       </div>
 
       {/* 2. Números */}
-      <div className={`${bgCard} border ${borderCol} rounded-xl grid grid-cols-3 lg:grid-cols-6 overflow-hidden tabular-nums`}>
+      <div className={`${bgCard} border ${borderCol} rounded-xl grid grid-cols-3 xl:grid-cols-6 overflow-hidden tabular-nums`}>
         {numbers.map((x, i) => (
-          <div key={x.l} className={`px-4 py-3 ${i % 3 !== 2 ? `border-r ${borderCol}` : ''} lg:border-r ${i < 3 ? `border-b lg:border-b-0 ${borderCol}` : ''} ${i === 5 ? 'lg:border-r-0' : ''}`}>
-            <div className={`text-[10.5px] uppercase tracking-wider font-bold ${textMuted}`}>{x.l}</div>
-            <div className={`text-lg font-extrabold ${x.t}`}>{x.v}</div>
+          <div key={x.l} className={`px-4 py-3 ${i % 3 !== 2 ? `border-r ${borderCol}` : ''} xl:border-r ${i < 3 ? `border-b xl:border-b-0 ${borderCol}` : ''} ${i === 5 ? 'xl:border-r-0' : ''}`}>
+            <div className={`text-xs font-medium ${textMuted}`}>{x.l}</div>
+            <div className={`text-lg font-semibold whitespace-nowrap ${x.t}`}>{x.v}</div>
             <div className={`text-[11.5px] ${textMuted}`}>{x.c} {x.d}</div>
           </div>
         ))}
@@ -446,8 +446,8 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
 
       {/* 3. Checklist */}
       <div>
-        <div className={`flex items-center gap-2 text-[11px] uppercase tracking-wider font-extrabold ${textMuted} mb-2`}>
-          Verificação da campanha <span className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+        <div className={`flex items-center gap-2 text-[11px] font-semibold ${textMuted} mb-2`}>
+          Verificação da campanha <span className={`flex-1 h-px bg-surface-2`} />
         </div>
         <div className={`${bgCard} border ${borderCol} rounded-xl overflow-hidden`}>
           {items.map((item, idx) => {
@@ -459,10 +459,10 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
             return (
               <div key={item.key} className={idx < items.length - 1 ? `border-b ${borderCol}` : ''}>
                 <button onClick={() => setOpen(o => ({ ...o, [item.key]: !o[item.key] }))}
-                  className={`w-full grid grid-cols-[24px_1fr_14px] md:grid-cols-[24px_220px_1fr_auto_14px] gap-3 items-center px-4 py-3 text-left transition-colors ${isDark ? 'hover:bg-slate-950' : 'hover:bg-slate-50'}`}>
+                  className={`w-full grid grid-cols-[24px_1fr_14px] md:grid-cols-[24px_220px_1fr_auto_14px] gap-3 items-center px-4 py-3 text-left transition-colors hover:bg-surface-2`}>
                   <Icon s={item.status} />
-                  <span className={`font-bold text-sm ${textHead}`}>{idx + 1}. {item.title}</span>
-                  <span className={`hidden md:block text-[13px] truncate ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{item.headline}</span>
+                  <span className={`font-semibold text-sm ${textHead}`}>{idx + 1}. {item.title}</span>
+                  <span className={`hidden md:block text-[13px] truncate text-ink-muted`}>{item.headline}</span>
                   <span className="hidden md:block"><Pill s={item.status}>{badge}</Pill></span>
                   <ChevronRight size={14} className={`${textMuted} transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                   <span className={`md:hidden col-start-2 col-span-2 text-[12.5px] ${textMuted}`}>{item.headline}</span>
@@ -483,7 +483,7 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
           <div className={`mt-2 ${bgCard} border ${borderCol} rounded-xl px-4 py-2.5 flex items-center gap-2.5 flex-wrap text-[13px]`}>
             <Icon s={topo.status} />
             <span className={textHead}>Página e vídeo: {topo.headline || topo.title}</span>
-            {onOpenVturb && <button onClick={onOpenVturb} className="ml-auto text-xs text-indigo-400 hover:underline">ver na aba VTurb</button>}
+            {onOpenVturb && <button onClick={onOpenVturb} className="ml-auto text-xs text-brand-text hover:underline">ver na aba VTurb</button>}
           </div>
         )}
       </div>
@@ -493,8 +493,8 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
 
       {/* 4. Resultado das sugestões anteriores */}
       <div>
-        <div className={`flex items-center gap-2 text-[11px] uppercase tracking-wider font-extrabold ${textMuted} mb-2`}>
-          Resultado das sugestões anteriores · esta campanha <span className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+        <div className={`flex items-center gap-2 text-[11px] font-semibold ${textMuted} mb-2`}>
+          Resultado das sugestões anteriores · esta campanha <span className={`flex-1 h-px bg-surface-2`} />
         </div>
         {history.length === 0 ? (
           <div className={`text-[13px] ${textMuted}`}>
@@ -512,8 +512,8 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
                   <tr key={h.id}>
                     <td className={`${td} whitespace-normal`}><span className={textHead}>{h.target_label}</span> <span className={`text-[11.5px] ${textMuted}`}>· {ACTIONS[h.action] || h.action}{h.eval?.metric ? ` · ${h.eval.metric === 'pitch' ? 'pitch' : 'fuga'} ${pctText(h.eval.metric_before)} → ${pctText(h.eval.metric_after)}` : ''}</span>
                       {h.status === 'nao_faz_sentido' && (h.correction
-                        ? <div className={`text-[12px] mt-1 ${textMuted}`}>O que você faria: <span className={textHead}>{h.correction}</span> <button onClick={() => setReplyTo(h.id)} className="text-indigo-400 hover:underline">editar</button></div>
-                        : <div className="mt-1"><button onClick={() => setReplyTo(h.id)} className="text-[12px] text-indigo-400 hover:underline">Dizer o que você faria no lugar</button></div>)}
+                        ? <div className={`text-[12px] mt-1 ${textMuted}`}>O que você faria: <span className={textHead}>{h.correction}</span> <button onClick={() => setReplyTo(h.id)} className="text-brand-text hover:underline">editar</button></div>
+                        : <div className="mt-1"><button onClick={() => setReplyTo(h.id)} className="text-[12px] text-brand-text hover:underline">Dizer o que você faria no lugar</button></div>)}
                       {replyTo === h.id && (
                         <CorrectionBox ui={ui} initial={h.correction || ''} onCancel={() => setReplyTo(null)} onSave={(text, general) => mark(h.id, 'nao_faz_sentido', text, general)} />
                       )}

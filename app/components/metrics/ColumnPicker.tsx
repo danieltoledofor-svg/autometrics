@@ -59,23 +59,23 @@ export function ColumnPicker({ columns, visible, onChange, onReset, onClose, cus
   const customList = custom.columns.filter(c => !term || c.name.toLowerCase().includes(term));
 
   const checkbox = (on: boolean) => (
-    <div className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${on ? 'bg-indigo-600 border-indigo-600' : 'bg-transparent border-slate-600'}`}>
+    <div className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${on ? 'bg-brand border-brand' : 'bg-transparent border-line-strong'}`}>
       {on && <Check size={13} className="text-white" />}
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div className={`${bgCard} border rounded-2xl w-full max-w-5xl max-h-[88vh] flex flex-col shadow-2xl`} onClick={e => e.stopPropagation()}>
         <div className={`p-5 border-b flex justify-between items-center gap-4 ${borderCol}`}>
-          <h2 className={`text-lg font-bold ${textHead} flex items-center gap-2`}><Columns size={20} className="text-indigo-500" /> Modificar colunas</h2>
+          <h2 className={`text-lg font-semibold ${textHead} flex items-center gap-2`}><Columns size={20} className="text-brand-text" /> Modificar colunas</h2>
           <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 border ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 border ${borderCol} bg-surface-2`}>
               <Search size={14} className={textMuted} />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar coluna"
-                className={`bg-transparent outline-none text-sm w-40 ${isDark ? 'text-slate-200' : 'text-slate-800'}`} />
+                className={`bg-transparent outline-none text-sm w-40 text-ink`} />
             </div>
-            <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={22} /></button>
+            <button onClick={onClose} className="text-ink-subtle hover:text-white"><X size={22} /></button>
           </div>
         </div>
 
@@ -98,36 +98,36 @@ export function ColumnPicker({ columns, visible, onChange, onReset, onClose, cus
           <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-6">
             <div>
               <div className={`flex items-center justify-between border-b ${borderCol} pb-2 mb-3`}>
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Colunas personalizadas</h3>
+                <h3 className="text-xs font-medium text-ink-subtle">Colunas personalizadas</h3>
                 {!custom.error && (
                   <button onClick={() => setEditing({ name: '', formula: '', format: 'number' })}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-indigo-400 hover:text-indigo-300">
+                    className="inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:text-brand-text">
                     <Plus size={14} /> Nova coluna
                   </button>
                 )}
               </div>
               {custom.error ? (
-                <p className="text-xs text-amber-400">{custom.error}</p>
+                <p className="text-xs text-warn">{custom.error}</p>
               ) : customList.length ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {customList.map(c => {
                     const key = CUSTOM_KEY(c.id);
                     const on = visible.includes(key);
                     return (
-                      <div key={c.id} className={`flex items-center gap-3 p-2 rounded-lg ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}>
+                      <div key={c.id} className={`flex items-center gap-3 p-2 rounded-lg hover:bg-surface-2`}>
                         <button onClick={() => toggle(key)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
                           {checkbox(on)}
                           <span className="min-w-0">
-                            <span className={`block truncate text-sm ${on ? `${textHead} font-medium` : 'text-slate-400'}`}>{c.name}</span>
+                            <span className={`block truncate text-sm ${on ? `${textHead} font-medium` : 'text-ink-subtle'}`}>{c.name}</span>
                             <span className={`block truncate text-[11px] font-mono ${textMuted}`}>{c.formula}</span>
                           </span>
                         </button>
-                        <button onClick={() => setEditing(c)} title="Editar" className={`${textMuted} hover:text-indigo-400`}><Pencil size={14} /></button>
+                        <button onClick={() => setEditing(c)} title="Editar" className={`${textMuted} hover:text-brand-text`}><Pencil size={14} /></button>
                         <button onClick={async () => {
                           if (!confirm(`Excluir a coluna "${c.name}"? Ela some de todas as abas.`)) return;
                           const err = await custom.remove(c.id);
                           if (err) alert(err);
-                        }} title="Excluir" className={`${textMuted} hover:text-rose-400`}><Trash2 size={14} /></button>
+                        }} title="Excluir" className={`${textMuted} hover:text-neg`}><Trash2 size={14} /></button>
                       </div>
                     );
                   })}
@@ -142,15 +142,15 @@ export function ColumnPicker({ columns, visible, onChange, onReset, onClose, cus
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {categories.map(([category, cols]) => (
                 <div key={category}>
-                  <h3 className={`text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 border-b ${borderCol} pb-2`}>{category}</h3>
+                  <h3 className={`text-xs font-medium text-ink-subtle mb-3 border-b ${borderCol} pb-2`}>{category}</h3>
                   <div className="space-y-1">
                     {cols.map(col => {
                       const on = visible.includes(col.key);
                       return (
                         <button key={col.key} onClick={() => toggle(col.key)}
-                          className={`flex items-center gap-3 w-full p-2 rounded-lg text-left text-sm ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}>
+                          className={`flex items-center gap-3 w-full p-2 rounded-lg text-left text-sm hover:bg-surface-2`}>
                           {checkbox(on)}
-                          <span className={on ? `${textHead} font-medium` : 'text-slate-400'}>{col.estimate ? '≈ ' : ''}{col.label}</span>
+                          <span className={on ? `${textHead} font-medium` : 'text-ink-subtle'}>{col.estimate ? '≈ ' : ''}{col.label}</span>
                         </button>
                       );
                     })}
@@ -165,8 +165,8 @@ export function ColumnPicker({ columns, visible, onChange, onReset, onClose, cus
           <div className={`p-4 border-t ${borderCol} flex justify-between items-center`}>
             <span className={`text-xs ${textMuted}`}>{visible.length} coluna(s) visíveis · ≈ = vendas reais distribuídas por estimativa</span>
             <div className="flex gap-2">
-              {onReset && <button onClick={onReset} className={`px-4 py-2 rounded-lg text-sm font-semibold border ${borderCol} ${textMuted} hover:text-indigo-400`}>Restaurar padrão</button>}
-              <button onClick={onClose} className="px-5 py-2 rounded-lg text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-500">Concluir</button>
+              {onReset && <button onClick={onReset} className={`px-4 py-2 rounded-lg text-sm font-semibold border ${borderCol} ${textMuted} hover:text-brand-text`}>Restaurar padrão</button>}
+              <button onClick={onClose} className="px-5 py-2 rounded-lg text-sm font-semibold bg-brand text-white hover:bg-brand-hover">Concluir</button>
             </div>
           </div>
         )}
@@ -225,52 +225,52 @@ function FormulaEditor({ initial, extraVars, ui, onCancel, onSave }: {
   }, [vt, variables]);
 
   const valid = name.trim() && parsed.ok && !unknown.length;
-  const inputCls = `w-full rounded-lg px-3 py-2 text-sm border ${borderCol} ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'} outline-none focus:border-indigo-500`;
+  const inputCls = `w-full rounded-lg px-3 py-2 text-sm border ${borderCol} bg-surface-2 text-ink outline-none focus:border-brand`;
 
   return (
     <div className="p-5 overflow-y-auto custom-scrollbar flex-1 grid lg:grid-cols-[1fr_320px] gap-6">
       <div className="space-y-4">
         <div>
-          <label className={`block text-xs font-bold uppercase mb-1 ${textMuted}`}>Nome da coluna</label>
+          <label className={`block text-xs font-medium mb-1 ${textMuted}`}>Nome da coluna</label>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Lucro por clique" className={inputCls} />
         </div>
         <div>
-          <label className={`block text-xs font-bold uppercase mb-1 ${textMuted}`}>Fórmula</label>
+          <label className={`block text-xs font-medium mb-1 ${textMuted}`}>Fórmula</label>
           <textarea ref={ref} value={formula} onChange={e => setFormula(e.target.value)} rows={4}
             placeholder="Ex.: profit / clicks" className={`${inputCls} font-mono`} />
           <div className="flex flex-wrap gap-1.5 mt-2">
             {['+', '-', '*', '/', '(', ')', '100'].map(op => (
               <button key={op} onClick={() => insert(op === '(' || op === ')' ? op : ` ${op} `)}
-                className={`px-2.5 py-1 rounded font-mono text-sm border ${borderCol} ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'} ${textHead}`}>{op}</button>
+                className={`px-2.5 py-1 rounded font-mono text-sm border ${borderCol} hover:bg-surface-2 ${textHead}`}>{op}</button>
             ))}
           </div>
           <div className="mt-3 text-xs min-h-[1.25rem]">
             {!formula.trim() ? <span className={textMuted}>Clique nas métricas ao lado para montar a fórmula.</span>
-              : !parsed.ok ? <span className="text-rose-400">{parsed.error}</span>
-              : unknown.length ? <span className="text-rose-400">Métrica desconhecida: {unknown.join(', ')}</span>
-              : <span className="text-emerald-400">Fórmula válida: {parsed.vars.map(v => labelOf.get(v) || v).join(', ') || 'só números'}</span>}
+              : !parsed.ok ? <span className="text-neg">{parsed.error}</span>
+              : unknown.length ? <span className="text-neg">Métrica desconhecida: {unknown.join(', ')}</span>
+              : <span className="text-pos">Fórmula válida: {parsed.vars.map(v => labelOf.get(v) || v).join(', ') || 'só números'}</span>}
           </div>
         </div>
         <div>
-          <label className={`block text-xs font-bold uppercase mb-1 ${textMuted}`}>Formato</label>
+          <label className={`block text-xs font-medium mb-1 ${textMuted}`}>Formato</label>
           <div className="flex gap-2">
             {(Object.keys(FORMAT_LABEL) as CustomColumn['format'][]).map(f => (
               <button key={f} onClick={() => setFormat(f)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold border ${format === f ? 'bg-indigo-600 border-indigo-600 text-white' : `${borderCol} ${textMuted}`}`}>{FORMAT_LABEL[f]}</button>
+                className={`px-4 py-2 rounded-lg text-sm font-semibold border ${format === f ? 'bg-brand border-brand text-white' : `${borderCol} ${textMuted}`}`}>{FORMAT_LABEL[f]}</button>
             ))}
           </div>
           <p className={`text-xs mt-2 ${textMuted}`}>
             Percentual multiplica o resultado por 100 (cliques / impressões vira 5,00%). CTR, ROI e taxas já estão em %; dinheiro já vem na moeda da tela. A fórmula é aplicada ao total do período de cada linha, como no Google.
           </p>
         </div>
-        {saveError && <p className="text-sm text-rose-400">{saveError}</p>}
+        {saveError && <p className="text-sm text-neg">{saveError}</p>}
         <div className="flex gap-2 pt-2">
           <button disabled={!valid || saving} onClick={async () => {
             setSaving(true);
             const err = await onSave({ id: initial.id, name, formula, format });
             setSaving(false);
             if (err) setSaveError(err);
-          }} className="px-5 py-2 rounded-lg text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40">
+          }} className="px-5 py-2 rounded-lg text-sm font-semibold bg-brand text-white hover:bg-brand-hover disabled:opacity-40">
             {saving ? 'Salvando…' : initial.id ? 'Salvar alterações' : 'Criar coluna'}
           </button>
           <button onClick={onCancel} className={`px-4 py-2 rounded-lg text-sm font-semibold border ${borderCol} ${textMuted}`}>Cancelar</button>
@@ -284,10 +284,10 @@ function FormulaEditor({ initial, extraVars, ui, onCancel, onSave }: {
         <div className="overflow-y-auto custom-scrollbar p-2 space-y-3">
           {groups.map(([cat, vars]) => (
             <div key={cat}>
-              <div className="text-[10px] font-bold uppercase text-slate-500 px-1 mb-1">{cat}</div>
+              <div className="text-[10px] font-medium text-ink-subtle px-1 mb-1">{cat}</div>
               {vars.map(v => (
                 <button key={v.key} onClick={() => insert(v.key)}
-                  className={`w-full text-left px-2 py-1 rounded text-xs ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}>
+                  className={`w-full text-left px-2 py-1 rounded text-xs hover:bg-surface-2`}>
                   <span className={textHead}>{v.label}</span>
                   <span className={`block font-mono text-[10px] ${textMuted}`}>{v.key}</span>
                 </button>

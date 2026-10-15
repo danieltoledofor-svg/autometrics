@@ -174,7 +174,7 @@ export function DimensionTable(props: Props) {
     <Th key={key} colKey={key} prefs={prefs} title={title}
       className={`${pad} border-b ${tone.line} ${tone.headerBg} whitespace-nowrap font-medium ${align === 'right' ? 'text-right' : 'text-left'} ${key === 'name' ? 'sticky left-0 z-20' : ''}`}>
       {sortable ? (
-        <button onClick={() => toggleSort(key)} className={`inline-flex items-center gap-1 hover:text-indigo-400 ${sort.key === key ? tone.text : ''}`}>
+        <button onClick={() => toggleSort(key)} className={`inline-flex items-center gap-1 hover:text-brand-text ${sort.key === key ? tone.text : ''}`}>
           {label}
           {sort.key === key && (sort.dir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
         </button>
@@ -182,29 +182,29 @@ export function DimensionTable(props: Props) {
     </Th>
   );
 
-  const selectCls = `rounded-lg px-3 py-1.5 border ${borderCol} ${isDark ? 'bg-slate-950' : 'bg-white'}`;
+  const selectCls = `rounded-lg px-3 py-1.5 border ${borderCol} bg-surface-2`;
   const colSpan = 1 + dims.length + metricCols.length;
 
   return (
     <div className="space-y-4">
-      <div className={`${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
+      <div className={`${bgCard} rounded-xl overflow-hidden border ${borderCol}`}>
         <div className={`p-4 border-b ${borderCol} space-y-3`}>
-          <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-3">
+          <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-3">
             <div className="flex items-center gap-3">
-              <h3 className={`font-semibold ${textHead}`}>{props.title}</h3>
-              {!props.loading && <span className={`text-xs ${textMuted} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} px-2 py-1 rounded border ${borderCol}`}>{rows.length}</span>}
+              <h3 className={`font-semibold whitespace-nowrap ${textHead}`}>{props.title}</h3>
+              {!props.loading && <span className={`text-xs ${textMuted} bg-surface-2 px-2 py-1 rounded border ${borderCol}`}>{rows.length}</span>}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {props.toolbar}
               <div className={`flex items-center gap-2 ${selectCls}`}>
                 <Search size={14} className={textMuted} />
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar" aria-label="Buscar na tabela"
-                  className={`bg-transparent outline-none text-sm w-32 ${isDark ? 'text-slate-200' : 'text-slate-800'}`} />
+                  className={`bg-transparent outline-none text-sm w-32 text-ink`} />
               </div>
-              <button onClick={() => setPickerOpen(true)} className={`inline-flex items-center gap-2 text-sm font-semibold ${selectCls} ${textHead} hover:border-indigo-500`}>
-                <Columns size={14} className="text-indigo-400" /> Colunas
+              <button onClick={() => setPickerOpen(true)} className={`inline-flex items-center gap-2 text-sm font-medium ${selectCls} ${textHead} hover:border-line-strong`}>
+                <Columns size={14} className="text-brand-text" /> Colunas
               </button>
-              <TableControls prefs={prefs} isDark={isDark} />
+              <TableControls prefs={prefs} isDark={isDark} tokens />
             </div>
           </div>
           <FilterBar fields={filterFields} filters={filters} onChange={changeFilters} ui={ui} />
@@ -246,7 +246,7 @@ export function DimensionTable(props: Props) {
                         ))}
                       </tr>
                       {open && props.expandRender && (
-                        <tr className={isDark ? 'bg-slate-950/60' : 'bg-slate-50'}>
+                        <tr className={'bg-surface-2/60'}>
                           <td colSpan={colSpan} className="px-6 py-4">{props.expandRender(r.item)}</td>
                         </tr>
                       )}
@@ -256,7 +256,7 @@ export function DimensionTable(props: Props) {
                 {rows.length > limit && (
                   <tr>
                     <td colSpan={colSpan} className="px-3 py-3 text-center">
-                      <button onClick={() => setLimit(l => l + PAGE)} className="text-sm font-semibold text-indigo-400 hover:underline">
+                      <button onClick={() => setLimit(l => l + PAGE)} className="text-sm font-semibold text-brand-text hover:underline">
                         Mostrar mais {Math.min(PAGE, rows.length - limit)} de {rows.length - limit}
                       </button>
                     </td>

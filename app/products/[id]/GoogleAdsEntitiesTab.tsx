@@ -54,20 +54,20 @@ interface Entity {
 
 const STATUS_PT: Record<string, string> = { ENABLED: 'Ativo', PAUSED: 'Pausado', REMOVED: 'Removido' };
 const STRENGTH_PT: Record<string, [string, string]> = {
-  EXCELLENT: ['Excelente', 'text-emerald-400'],
-  GOOD: ['Boa', 'text-emerald-400'],
-  AVERAGE: ['Média', 'text-amber-400'],
-  POOR: ['Baixa', 'text-rose-400'],
-  PENDING: ['Pendente', 'text-slate-400'],
-  NO_ADS: ['Sem anúncios', 'text-slate-400'],
+  EXCELLENT: ['Excelente', 'text-pos'],
+  GOOD: ['Boa', 'text-pos'],
+  AVERAGE: ['Média', 'text-warn'],
+  POOR: ['Baixa', 'text-neg'],
+  PENDING: ['Pendente', 'text-ink-subtle'],
+  NO_ADS: ['Sem anúncios', 'text-ink-subtle'],
 };
 const APPROVAL_PT: Record<string, [string, string]> = {
-  APPROVED: ['Aprovado', 'text-emerald-400'],
-  APPROVED_LIMITED: ['Aprovado (limitado)', 'text-amber-400'],
-  AREA_OF_INTEREST_ONLY: ['Aprovado (limitado)', 'text-amber-400'],
-  DISAPPROVED: ['Reprovado', 'text-rose-400'],
-  UNDER_REVIEW: ['Em análise', 'text-slate-400'],
-  PENDING_REVIEW: ['Em análise', 'text-slate-400'],
+  APPROVED: ['Aprovado', 'text-pos'],
+  APPROVED_LIMITED: ['Aprovado (limitado)', 'text-warn'],
+  AREA_OF_INTEREST_ONLY: ['Aprovado (limitado)', 'text-warn'],
+  DISAPPROVED: ['Reprovado', 'text-neg'],
+  UNDER_REVIEW: ['Em análise', 'text-ink-subtle'],
+  PENDING_REVIEW: ['Em análise', 'text-ink-subtle'],
 };
 const QUALITY_PT: Record<string, string> = {
   ABOVE_AVERAGE: 'Acima da média',
@@ -189,8 +189,8 @@ export function GoogleAdsEntitiesTab(props: Props) {
     })), [entities, level, props.adGroupFilter, statusFilter, withData]);
 
   const statusBadge = (status: string) => (
-    <span className={`inline-flex items-center gap-1.5 text-xs ${status === 'ENABLED' ? 'text-emerald-400' : status === 'PAUSED' ? 'text-amber-400' : textMuted}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${status === 'ENABLED' ? 'bg-emerald-400' : status === 'PAUSED' ? 'bg-amber-400' : 'bg-slate-500'}`} />
+    <span className={`inline-flex items-center gap-1.5 text-xs ${status === 'ENABLED' ? 'text-pos' : status === 'PAUSED' ? 'text-warn' : textMuted}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${status === 'ENABLED' ? 'bg-pos' : status === 'PAUSED' ? 'bg-warn' : 'bg-ink-faint'}`} />
       {STATUS_PT[status] || status}
     </span>
   );
@@ -252,7 +252,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
             `Experiência na página: ${QUALITY_PT[d.landing_page_quality] || '—'}`,
           ].join('\n')}>
             {d.quality_score
-              ? <span className={`font-bold ${d.quality_score >= 7 ? 'text-emerald-400' : d.quality_score >= 5 ? 'text-amber-400' : 'text-rose-400'}`}>{d.quality_score}/10</span>
+              ? <span className={`font-medium ${d.quality_score >= 7 ? 'text-pos' : d.quality_score >= 5 ? 'text-warn' : 'text-neg'}`}>{d.quality_score}/10</span>
               : <span className={textMuted}>—</span>}
           </span>
         );
@@ -310,8 +310,8 @@ export function GoogleAdsEntitiesTab(props: Props) {
       <div>
         <div className="font-medium">{i.name}</div>
         <div className="flex gap-3 mt-1 text-xs">
-          <button onClick={() => props.onOpenAdGroup(i.entity_id, 'ad')} className="text-indigo-400 hover:underline">Anúncios</button>
-          <button onClick={() => props.onOpenAdGroup(i.entity_id, 'keyword')} className="text-indigo-400 hover:underline">Palavras-chave</button>
+          <button onClick={() => props.onOpenAdGroup(i.entity_id, 'ad')} className="text-brand-text hover:underline">Anúncios</button>
+          <button onClick={() => props.onOpenAdGroup(i.entity_id, 'keyword')} className="text-brand-text hover:underline">Palavras-chave</button>
         </div>
       </div>
     );
@@ -321,7 +321,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
         <div className="flex items-start gap-1.5">
           {open ? <ChevronDown size={14} className="mt-0.5 flex-shrink-0" /> : <ChevronRight size={14} className="mt-0.5 flex-shrink-0" />}
           <div className="min-w-0">
-            <div className="font-medium text-indigo-400 truncate">
+            <div className="font-medium text-brand-text truncate">
               {(d.headlines || []).slice(0, 3).map((h: any) => h.text).join(' | ') || i.name}
             </div>
             {d.descriptions?.[0]?.text && <div className={`text-xs ${textMuted} truncate`}>{d.descriptions[0].text}</div>}
@@ -337,7 +337,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
     return (
       <div className="grid md:grid-cols-2 gap-6 text-sm">
         <div>
-          <div className={`text-xs font-bold uppercase ${textMuted} mb-2`}>Títulos ({(d.headlines || []).length})</div>
+          <div className={`text-xs font-medium ${textMuted} mb-2`}>Títulos ({(d.headlines || []).length})</div>
           <ul className="space-y-1">
             {(d.headlines || []).map((h: any, idx: number) => (
               <li key={idx} className={textHead}>
@@ -348,7 +348,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
           </ul>
         </div>
         <div>
-          <div className={`text-xs font-bold uppercase ${textMuted} mb-2`}>Descrições ({(d.descriptions || []).length})</div>
+          <div className={`text-xs font-medium ${textMuted} mb-2`}>Descrições ({(d.descriptions || []).length})</div>
           <ul className="space-y-1">
             {(d.descriptions || []).map((h: any, idx: number) => (
               <li key={idx} className={textHead}>
@@ -358,7 +358,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
             ))}
           </ul>
           {d.final_url && (
-            <a href={d.final_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-4 text-xs text-indigo-400 hover:underline break-all">
+            <a href={d.final_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-4 text-xs text-brand-text hover:underline break-all">
               <ExternalLink size={12} /> {d.final_url}{d.path1 ? ` (/${d.path1}${d.path2 ? `/${d.path2}` : ''})` : ''}
             </a>
           )}
@@ -367,7 +367,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
     );
   };
 
-  const selectCls = `text-sm rounded-lg px-3 py-1.5 border ${borderCol} ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'}`;
+  const selectCls = `text-sm rounded-lg px-3 py-1.5 border ${borderCol} bg-surface-2 text-ink`;
   const hasAny = entities.some(e => e.level === level);
   const isPmax = props.channelType === 'PERFORMANCE_MAX';
 
@@ -407,7 +407,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
       toolbar={<>
         {manage.allowed && !isPmax && level === 'ad_group' && <AddButton label="Novo grupo" ui={ui} onClick={() => setForm({ type: 'grupo' })} />}
         {manage.allowed && !isPmax && level === 'ad' && <AddButton label="Novo anúncio" ui={ui} onClick={() => setForm({ type: 'anuncio', mode: 'novo', seed: blankAd() })} />}
-        {manage.allowed && !isPmax && level === 'ad' && <button onClick={() => setForm({ type: 'recursos' })} className={`text-sm rounded-lg px-3 py-1.5 border ${borderCol} ${isDark ? 'bg-slate-950 text-slate-200 hover:border-indigo-400' : 'bg-white text-slate-800 hover:border-indigo-500'}`}>Sitelinks e frases</button>}
+        {manage.allowed && !isPmax && level === 'ad' && <button onClick={() => setForm({ type: 'recursos' })} className={`text-sm rounded-lg px-3 py-1.5 border ${borderCol} bg-surface-2 text-ink hover:border-brand`}>Sitelinks e frases</button>}
         {manage.allowed && !isPmax && level === 'keyword' && <AddButton label="Palavra-chave" ui={ui} onClick={() => setForm({ type: 'palavra' })} />}
         {level !== 'ad_group' && adGroups.length > 0 && (
           <select value={props.adGroupFilter} onChange={e => props.onAdGroupFilter(e.target.value)} className={`${selectCls} max-w-[240px]`}>

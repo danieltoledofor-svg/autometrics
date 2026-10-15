@@ -31,37 +31,24 @@ export interface TableTone {
   rowHover: string;
 }
 
-export function tableTone(isDark: boolean): TableTone {
-  return isDark ? {
-    text: 'text-slate-100',
-    head: 'text-slate-400',
-    muted: 'text-slate-400',
-    cost: 'text-orange-300',
-    revenue: 'text-sky-300',
-    pos: 'text-green-400',
-    neg: 'text-rose-400',
-    warn: 'text-amber-400',
-    accent: 'text-indigo-300',
-    line: 'border-slate-800',
-    headerBg: 'bg-slate-950',
-    totalBg: 'bg-slate-950',
-    rowBg: i => (i % 2 ? 'bg-[#111a2b]' : 'bg-slate-900'),
-    rowHover: 'group-hover:bg-slate-800',
-  } : {
-    text: 'text-slate-900',
-    head: 'text-slate-600',
-    muted: 'text-slate-500',
-    cost: 'text-orange-700',
-    revenue: 'text-sky-700',
-    pos: 'text-green-700',
-    neg: 'text-rose-700',
-    warn: 'text-amber-700',
-    accent: 'text-indigo-600',
-    line: 'border-slate-200',
-    headerBg: 'bg-slate-100',
-    totalBg: 'bg-slate-100',
-    rowBg: i => (i % 2 ? 'bg-slate-50' : 'bg-white'),
-    rowHover: 'group-hover:bg-indigo-50',
+/** Cores das tabelas pelo guia visual (DESIGN.md): os tokens já seguem o tema. */
+export function tableTone(_isDark?: boolean): TableTone {
+  return {
+    text: 'text-ink',
+    head: 'text-ink-subtle',
+    muted: 'text-ink-subtle',
+    cost: 'text-ink',
+    revenue: 'text-ink',
+    pos: 'text-pos',
+    neg: 'text-neg',
+    warn: 'text-warn',
+    accent: 'text-brand-text',
+    line: 'border-line',
+    headerBg: 'bg-surface-2',
+    totalBg: 'bg-surface-2',
+    // Sem listras: fundo opaco igual em todas (a primeira coluna é fixa), divisória e hover.
+    rowBg: () => 'bg-surface-1',
+    rowHover: 'group-hover:bg-surface-2',
   };
 }
 
@@ -130,7 +117,7 @@ export function Th({ colKey, prefs, className = '', style, title, children }: {
         onMouseDown={start}
         onDoubleClick={e => { e.stopPropagation(); prefs.setWidth(colKey, null); }}
         onClick={e => e.stopPropagation()}
-        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-500/70"
+        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brand/70"
       />
     </th>
   );

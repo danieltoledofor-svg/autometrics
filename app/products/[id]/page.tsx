@@ -16,6 +16,10 @@ import { applyTheme } from '@/lib/theme';
 import { useDayInput, isValidDay } from '@/lib/useDayInput';
 import Link from 'next/link';
 import { Logo } from '@/app/components/Logo';
+import { Inter } from 'next/font/google';
+
+// Fonte do guia visual (DESIGN.md), nas telas já migradas.
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 import { resolveCampaignStatus } from '@/lib/campaignStatus';
 import { QuickEntryModal } from '@/app/components/QuickEntryModal';
 import { GoogleAdsEntitiesTab, EntityLevel } from './GoogleAdsEntitiesTab';
@@ -489,17 +493,20 @@ export default function ProductDetailPage() {
 
 
   const isDark = theme === 'dark';
-  const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
-  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const textHead = isDark ? 'text-white' : 'text-slate-900';
-  // Texto de apoio: legível no escuro (slate-500 sumia no fundo preto).
-  const textMuted = isDark ? 'text-slate-400' : 'text-slate-500';
+  const bgMain = 'bg-canvas text-ink-muted';
+  const bgCard = 'bg-surface-1 border-line';
+  const textHead = 'text-ink';
+  const textMuted = 'text-ink-subtle';
   const tone = tableTone(isDark);
   const pad = cellPad(overviewPrefs.density);
-  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
+  const borderCol = 'border-line';
+  // Recharts e o desenho das linhas pedem a cor pronta: os mesmos valores dos tokens chart-*.
+  const chartColor = isDark
+    ? { revenue: '#7c86e0', cost: '#d9913f', profit: '#27a644', loss: '#eb5757', roi: '#9aa3ef', grid: '#23252a', axis: '#8a8f98', tipBg: '#0f1011', tipLine: '#34343a', tipText: '#f7f8f8' }
+    : { revenue: '#5e6ad2', cost: '#c27a28', profit: '#1d7f38', loss: '#c93a3a', roi: '#4b56be', grid: '#e2e4e8', axis: '#62666f', tipBg: '#ffffff', tipLine: '#cfd2d8', tipText: '#16171a' };
 
   // Render nothing until auth is confirmed — prevents any HTML leaking to unauthenticated users
-  if (!authChecked) return <div className="min-h-screen bg-black" />;
+  if (!authChecked) return <div className="min-h-screen bg-canvas" />;
 
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
   if (!product) return <div className={`min-h-screen ${bgMain} flex items-center justify-center ${textMuted}`}>Produto não encontrado.</div>;
@@ -628,14 +635,14 @@ export default function ProductDetailPage() {
   })();
 
   return (
-    <div className={`legivel min-h-screen font-sans flex ${bgMain}`}>
+    <div className={`${inter.className} legivel min-h-screen font-sans flex ${bgMain}`}>
 
       {/* ── SIDEBAR DESKTOP ── */}
-      <aside className={`hidden md:flex flex-col w-64 shrink-0 border-r ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'} fixed top-0 left-0 h-screen z-50`}>
-        <div className={`p-5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+      <aside className="hidden md:flex flex-col w-60 shrink-0 border-r bg-surface-1 border-line fixed top-0 left-0 h-screen z-50">
+        <div className="h-16 flex items-center px-5 border-b border-line overflow-hidden shrink-0">
           <Logo />
         </div>
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           {[
             { href: '/dashboard', icon: <LayoutGrid size={18} aria-hidden="true" />, label: 'Dashboard' },
             { href: '/planning', icon: <Target size={18} aria-hidden="true" />, label: 'Metas' },
@@ -644,39 +651,38 @@ export default function ProductDetailPage() {
             { href: '/rastreamento', icon: <Route size={18} aria-hidden="true" />, label: 'Rastreamento' },
             { href: '/integration', icon: <Settings size={18} aria-hidden="true" />, label: 'Integração' },
           ].map(item => (
-            <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${(item as any).active ? 'bg-indigo-600 text-white' : (isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-white' : 'text-slate-600 hover:bg-slate-100')}`}>
+            <Link key={item.href} href={item.href} aria-current={(item as any).active ? 'page' : undefined} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${(item as any).active ? 'bg-surface-2 text-ink [&>svg]:text-brand-text' : 'text-ink-subtle hover:bg-surface-2 hover:text-ink'}`}>
               {item.icon} {item.label}
             </Link>
           ))}
         </nav>
-        <div className={`p-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-          <div className={`text-xs ${textMuted} mb-2 truncate`}>{userEmail}</div>
-          <button onClick={handleLogout} className={`flex items-center gap-2 text-xs ${textMuted} hover:text-rose-400 transition-colors`}>
-            <LogOut size={14} aria-hidden="true" /> Sair
+        <div className="p-3 border-t border-line">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-ink-subtle hover:text-neg hover:bg-neg/10">
+            <LogOut size={18} aria-hidden="true" /> <span className="truncate">Sair ({userEmail.split('@')[0]})</span>
           </button>
         </div>
       </aside>
 
       {/* ── MAIN ── */}
-      <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pb-40 md:pb-8">
+      <main className="flex-1 min-w-0 md:ml-60 min-h-screen overflow-y-auto pb-40 md:pb-8">
 
         {/* MOBILE HEADER */}
-        <div className={`md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-3 border-b backdrop-blur-md ${isDark ? 'bg-black/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
-          <Link href="/products" aria-label="Voltar para Campanhas" className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+        <div className={`md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-3 border-b backdrop-blur-md bg-canvas/90 border-line`}>
+          <Link href="/products" aria-label="Voltar para Campanhas" className="p-1.5 rounded-lg flex-shrink-0 border border-line bg-surface-1 text-ink-subtle hover:text-ink">
             <ArrowLeft size={18} aria-hidden="true" />
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className={`text-sm font-bold truncate ${textHead}`}>{product.name}</h1>
-            <span className={`text-[10px] ${textMuted}`}>{product.platform}</span>
+            <h1 className={`text-sm font-semibold truncate ${textHead}`}>{product.name}</h1>
+            <span className={`text-[11px] ${textMuted}`}>{product.platform}</span>
           </div>
-          <span className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold border ${headerStatus.badge}`} title={headerStatus.hint}>
+          <span className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border ${headerStatus.badge}`} title={headerStatus.hint}>
             {headerStatus.key === 'ativo' ? <PlayCircle size={10} aria-hidden="true" /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={10} aria-hidden="true" /> : <PauseCircle size={10} aria-hidden="true" />}
             {headerStatus.label}
           </span>
-          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className="flex-shrink-0 p-1.5 rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink">
             {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
           </button>
-          <button onClick={() => setShowFilterSheet(true)} aria-label="Abrir filtros" aria-expanded={showFilterSheet} className={`flex-shrink-0 p-1.5 rounded-lg ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+          <button onClick={() => setShowFilterSheet(true)} aria-label="Abrir filtros" aria-expanded={showFilterSheet} className="flex-shrink-0 p-1.5 rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink">
             <SlidersHorizontal size={16} aria-hidden="true" />
           </button>
         </div>
@@ -684,33 +690,33 @@ export default function ProductDetailPage() {
         <div className="p-4 md:p-6">
 
       <header className="hidden md:flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-        <div className="flex items-center gap-4">
-          <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
-            <ArrowLeft size={20} aria-hidden="true" />
+        <div className="flex items-center gap-4 min-w-0">
+          <Link href="/products" aria-label="Voltar para Campanhas" className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border transition-colors bg-surface-1 border-line text-ink-subtle hover:text-ink hover:bg-surface-2">
+            <ArrowLeft size={16} aria-hidden="true" />
           </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className={`text-2xl font-bold ${textHead}`}>{product.name}</h1>
-              <span className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase border ${headerStatus.badge}`} title={headerStatus.hint}>
+          <div className="min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink break-words">{product.name}</h1>
+              <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border ${headerStatus.badge}`} title={headerStatus.hint}>
                 {headerStatus.key === 'ativo' ? <PlayCircle size={12} aria-hidden="true" /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={12} aria-hidden="true" /> : <PauseCircle size={12} aria-hidden="true" />} {headerStatus.label}
               </span>
             </div>
-            <div className={`flex items-center gap-3 text-sm ${textMuted} mt-1`}><span className="flex items-center gap-1"><ExternalLink size={12} aria-hidden="true" /> {product.platform}</span><span>•</span><span className={`font-mono text-xs px-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}><Hash size={10} aria-hidden="true" /> {product.google_ads_campaign_id || 'N/A'}</span></div>
+            <div className={`flex items-center gap-3 text-sm ${textMuted} mt-1`}><span className="flex items-center gap-1"><ExternalLink size={12} aria-hidden="true" /> {product.platform}</span><span>•</span><span className={`font-mono text-xs px-1 rounded flex items-center gap-1 bg-surface-2`}><Hash size={10} aria-hidden="true" /> {product.google_ads_campaign_id || 'N/A'}</span></div>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
-          <button onClick={() => setShowManualEntry(true)} className="flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-bold transition-all shadow-lg shadow-indigo-900/20 w-full sm:w-auto">
+          <button onClick={() => setShowManualEntry(true)} className="flex justify-center items-center gap-2 bg-brand hover:bg-brand-hover text-white px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-colors w-full sm:w-auto">
             <FileText size={16} aria-hidden="true" className="sm:w-3.5 sm:h-3.5" /> Lançamento Rápido
           </button>
 
           {/* SELETOR DE DATA */}
-          <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto gap-2 sm:gap-0`}>
+          <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} w-full sm:w-auto gap-2 sm:gap-0`}>
             <div className="flex items-center justify-between sm:justify-start gap-2 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit">
               <div className="flex items-center gap-2 w-full">
-                <Calendar size={18} aria-hidden="true" className={isDark ? "text-white" : "text-indigo-600"} />
+                <Calendar size={16} aria-hidden="true" className="text-ink-subtle" />
                 <select
-                  className={`bg-transparent text-sm font-bold outline-none cursor-pointer text-right sm:text-left flex-1 sm:w-28 ${textHead}`}
+                  className={`bg-transparent text-sm font-medium outline-none cursor-pointer text-right sm:text-left flex-1 sm:w-28 ${textHead}`}
                   value={dateRange}
                   onChange={(e) => handlePresetChange(e.target.value)}
                 >
@@ -728,15 +734,15 @@ export default function ProductDetailPage() {
               <input
                 type="date"
                 aria-label="Data inicial"
-                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-indigo-500 ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-brand ${textHead} dark:[&::-webkit-calendar-picker-indicator]:invert`}
                 value={startInput.value}
                 onChange={(e) => startInput.onChange(e.target.value)}
               />
-              <span className="text-slate-500 text-xs">até</span>
+              <span className="text-ink-subtle text-xs">até</span>
               <input
                 type="date"
                 aria-label="Data final"
-                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-indigo-500 ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`}
+                className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-brand ${textHead} dark:[&::-webkit-calendar-picker-indicator]:invert`}
                 value={endInput.value}
                 onChange={(e) => endInput.onChange(e.target.value)}
               />
@@ -744,12 +750,12 @@ export default function ProductDetailPage() {
           </div>
 
           <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-lg border gap-4 sm:gap-2 w-full sm:w-auto ${bgCard}`}>
-            <div className={`flex rounded-md p-1 sm:p-0 ${isDark ? 'bg-black sm:bg-transparent' : 'bg-slate-100 sm:bg-transparent'} gap-1 w-full sm:w-auto`}>
-              <button onClick={() => toggleViewCurrency('USD')} aria-pressed={viewCurrency === 'USD'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>USD</button>
-              <button onClick={() => toggleViewCurrency('BRL')} aria-pressed={viewCurrency === 'BRL'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>BRL</button>
-              <button onClick={() => toggleViewCurrency('EUR')} aria-pressed={viewCurrency === 'EUR'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-bold transition-all ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white' : 'bg-white text-indigo-600 shadow') : textMuted}`}>EUR</button>
+            <div className="flex rounded-md p-1 sm:p-0 bg-surface-2 sm:bg-transparent gap-1 w-full sm:w-auto">
+              <button onClick={() => toggleViewCurrency('USD')} aria-pressed={viewCurrency === 'USD'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-medium transition-colors ${viewCurrency === 'USD' ? 'bg-surface-3 text-ink' : `${textMuted} hover:text-ink`}`}>USD</button>
+              <button onClick={() => toggleViewCurrency('BRL')} aria-pressed={viewCurrency === 'BRL'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-medium transition-colors ${viewCurrency === 'BRL' ? 'bg-surface-3 text-ink' : `${textMuted} hover:text-ink`}`}>BRL</button>
+              <button onClick={() => toggleViewCurrency('EUR')} aria-pressed={viewCurrency === 'EUR'} className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded text-sm sm:text-xs font-medium transition-colors ${viewCurrency === 'EUR' ? 'bg-surface-3 text-ink' : `${textMuted} hover:text-ink`}`}>EUR</button>
             </div>
-            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`hidden xl:block ${textMuted} hover:text-indigo-500 px-2`}>{isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}</button>
+            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`hidden xl:flex w-8 h-8 items-center justify-center rounded-lg ${textMuted} hover:text-ink hover:bg-surface-2`}>{isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}</button>
           </div>
         </div>
       </header>
@@ -771,14 +777,14 @@ export default function ProductDetailPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             aria-pressed={activeTab === tab.id}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}
+            className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors border ${activeTab === tab.id ? 'bg-surface-3 border-line-strong text-ink' : 'bg-surface-1 border-line text-ink-subtle'}`}
           >
             {tab.label}
           </button>
         ))}
       </div>
 
-      <div className={`hidden md:flex overflow-x-auto custom-scrollbar gap-0 border-b ${borderCol} mb-8`}>
+      <div className={`hidden md:flex overflow-x-auto gap-0 border-b ${borderCol} mb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
         {[
           { id: 'ads', icon: <BarChart2 size={15} aria-hidden="true" />, label: 'Visão Geral' },
           { id: 'analysis', icon: <ListChecks size={15} aria-hidden="true" />, label: 'Análise' },
@@ -794,9 +800,9 @@ export default function ProductDetailPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             aria-pressed={activeTab === tab.id}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-bold border-b-2 whitespace-nowrap transition-all ${activeTab === tab.id
-              ? 'border-indigo-500 text-indigo-400'
-              : `border-transparent ${textMuted} hover:text-slate-300`
+            className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${activeTab === tab.id
+              ? 'border-brand text-ink'
+              : `border-transparent ${textMuted} hover:text-ink`
               }`}
           >
             {tab.icon} {tab.label}
@@ -811,54 +817,46 @@ export default function ProductDetailPage() {
         {/* MOBILE KPI CAROUSEL */}
         <div className="md:hidden overflow-x-auto flex gap-3 mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>
           {[
-            { label: 'Receita', value: formatMoney(stats.revenue), color: '#3b82f6', data: chart.map(c => c.receita) },
-            { label: 'Custo Ads', value: formatMoney(stats.cost), color: '#f97316', data: chart.map(c => c.custo) },
-            { label: 'Lucro', value: formatMoney(stats.profit), color: stats.profit >= 0 ? '#10b981' : '#f43f5e', data: chart.map(c => c.lucro) },
-            { label: 'ROI', value: `${stats.roi.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`, color: '#6366f1', data: rows.map(r => r.roi) },
-            { label: 'CPA', value: formatMoney(globalCpa), color: '#06b6d4', data: rows.map(r => r.cpa) },
+            { label: 'Receita', value: formatMoney(stats.revenue), color: chartColor.revenue, tone: 'text-ink', data: chart.map(c => c.receita) },
+            { label: 'Custo Ads', value: formatMoney(stats.cost), color: chartColor.cost, tone: 'text-ink', data: chart.map(c => c.custo) },
+            { label: 'Lucro', value: formatMoney(stats.profit), color: stats.profit >= 0 ? chartColor.profit : chartColor.loss, tone: stats.profit >= 0 ? 'text-pos' : 'text-neg', data: chart.map(c => c.lucro) },
+            { label: 'ROI', value: `${stats.roi.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`, color: chartColor.roi, tone: stats.roi >= 0 ? 'text-pos' : 'text-neg', data: rows.map(r => r.roi) },
+            { label: 'CPA', value: formatMoney(globalCpa), color: chartColor.axis, tone: 'text-ink', data: rows.map(r => r.cpa) },
           ].map((kpi, i) => (
-            <div key={i} className={`flex-shrink-0 w-[130px] ${bgCard} rounded-xl p-4 border-t-4`} style={{ borderTopColor: kpi.color }}>
-              <p className={`text-[10px] font-bold uppercase ${textMuted} mb-1`}>{kpi.label}</p>
-              <p className="text-base font-bold" style={{ color: kpi.color }}>{kpi.value}</p>
+            <div key={i} className={`flex-shrink-0 min-w-[140px] ${bgCard} border rounded-xl p-4`}>
+              <p className={`text-xs font-medium ${textMuted} mb-1`}>{kpi.label}</p>
+              <p className={`text-base font-semibold tabular-nums whitespace-nowrap ${kpi.tone}`}>{kpi.value}</p>
               <SparklineSVG data={kpi.data} color={kpi.color} />
             </div>
           ))}
         </div>
 
-        <div className="hidden md:grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-          <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-blue-500`}>
-            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Receita Total</p>
-            <p className="text-2xl font-bold text-blue-500">{formatMoney(stats.revenue)}</p>
-          </div>
-          <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-orange-500`}>
-            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Custo Ads</p>
-            <p className="text-2xl font-bold text-orange-500">{formatMoney(stats.cost)}</p>
-          </div>
-          <div className={`${bgCard} p-5 rounded-xl border-t-4 ${stats.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'}`}>
-            <p className="text-slate-500 text-xs font-bold uppercase mb-2">Lucro Líquido</p>
-            <p className={`text-2xl font-bold ${stats.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(stats.profit)}</p>
-          </div>
-          <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-indigo-500`}>
-            <p className="text-slate-500 text-xs font-bold uppercase mb-2">ROI</p>
-            <p className="text-2xl font-bold text-indigo-500">{stats.roi.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</p>
-          </div>
-          <div className={`${bgCard} p-5 rounded-xl border-t-4 border-t-cyan-500`}>
-            <p className="text-slate-500 text-xs font-bold uppercase mb-2">CPA (Custo/Conv)</p>
-            <p className="text-2xl font-bold text-cyan-500">{formatMoney(globalCpa)}</p>
-          </div>
+        <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-5 gap-3 mb-8">
+          {[
+            { label: 'Receita total', value: formatMoney(stats.revenue), tone: 'text-ink' },
+            { label: 'Custo Ads', value: formatMoney(stats.cost), tone: 'text-ink' },
+            { label: 'Lucro líquido', value: formatMoney(stats.profit), tone: stats.profit >= 0 ? 'text-pos' : 'text-neg' },
+            { label: 'ROI', value: `${stats.roi.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`, tone: stats.roi >= 0 ? 'text-pos' : 'text-neg' },
+            { label: 'CPA (custo por conversão)', value: formatMoney(globalCpa), tone: 'text-ink' },
+          ].map(k => (
+            <div key={k.label} className={`${bgCard} border rounded-xl p-4`}>
+              <p className="text-ink-subtle text-xs font-medium mb-1">{k.label}</p>
+              <p className={`text-xl xl:text-2xl font-semibold tabular-nums whitespace-nowrap ${k.tone}`}>{k.value}</p>
+            </div>
+          ))}
         </div>
 
-        <div className={`${bgCard} rounded-xl p-6 mb-8 h-64`}>
+        <div className={`${bgCard} border rounded-xl p-6 mb-8 h-64`}>
           <ResponsiveContainer width="100%" height="100%">
             <RechartsBarChart data={chart}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
-              <XAxis dataKey="day" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(val: any) => formatMoney(val)} />
-              <Legend />
-              <Bar dataKey="receita" name="Receita" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              <Bar dataKey="custo" name="Custo" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              <Bar dataKey="lucro" name="Lucro" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartColor.grid} vertical={false} />
+              <XAxis dataKey="day" stroke={chartColor.axis} fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke={chartColor.axis} fontSize={11} tickLine={false} axisLine={false} />
+              <Tooltip cursor={{ fill: chartColor.grid, opacity: 0.4 }} contentStyle={{ backgroundColor: chartColor.tipBg, borderColor: chartColor.tipLine, borderRadius: 8, color: chartColor.tipText, fontSize: 12 }} formatter={(val: any) => formatMoney(val)} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="receita" name="Receita" fill={chartColor.revenue} radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="custo" name="Custo" fill={chartColor.cost} radius={[4, 4, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="lucro" name="Lucro" fill={chartColor.profit} radius={[4, 4, 0, 0]} maxBarSize={40} />
             </RechartsBarChart>
           </ResponsiveContainer>
         </div>
@@ -876,42 +874,42 @@ export default function ProductDetailPage() {
                   onClick={() => setExpandedRow(expandedRow === idx ? null : idx)}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex flex-col items-center justify-center text-center flex-shrink-0 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                      <span className={`text-[9px] font-bold ${textMuted}`}>{parts[1]}/{parts[2]?.slice(2)}</span>
-                      <span className={`text-base font-bold leading-none ${textHead}`}>{parts[0]}</span>
+                    <div className={`w-10 h-10 rounded-lg flex flex-col items-center justify-center text-center flex-shrink-0 bg-surface-2`}>
+                      <span className={`text-[9px] font-medium ${textMuted}`}>{parts[1]}/{parts[2]?.slice(2)}</span>
+                      <span className={`text-base font-semibold leading-none ${textHead}`}>{parts[0]}</span>
                     </div>
                     <div className="text-left">
-                      <p className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(row.profit)}</p>
+                      <p className={`text-sm font-semibold ${row.profit >= 0 ? 'text-pos' : 'text-neg'}`}>{formatMoney(row.profit)}</p>
                       <p className={`text-xs ${textMuted}`}>{row.conversions} conv · ROI {Math.round(row.roi).toLocaleString('pt-BR')}%</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {hasNote && <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />}
+                    {hasNote && <span className="w-2 h-2 rounded-full bg-warn flex-shrink-0" />}
                     <span className={`text-xs ${textMuted}`} style={{ display: 'inline-block', transform: expandedRow === idx ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
                   </div>
                 </button>
                 {expandedRow === idx && (
                   <div className={`px-3 pb-3 border-t ${borderCol}`}>
                     <div className="grid grid-cols-2 gap-2 pt-3">
-                      <div className={`${isDark ? 'bg-slate-800' : 'bg-slate-50'} rounded-lg p-2.5`}>
+                      <div className={`bg-surface-2 rounded-lg p-2.5`}>
                         <p className={`text-[10px] ${textMuted} mb-0.5`}>Receita</p>
-                        <p className="text-sm font-bold text-blue-500">{formatMoney(row.revenue)}</p>
+                        <p className="text-sm font-semibold text-brand-text">{formatMoney(row.revenue)}</p>
                       </div>
-                      <div className={`${isDark ? 'bg-slate-800' : 'bg-slate-50'} rounded-lg p-2.5`}>
+                      <div className={`bg-surface-2 rounded-lg p-2.5`}>
                         <p className={`text-[10px] ${textMuted} mb-0.5`}>Custo Ads</p>
-                        <p className="text-sm font-bold text-orange-500">{formatMoney(row.cost)}</p>
+                        <p className="text-sm font-semibold text-warn">{formatMoney(row.cost)}</p>
                       </div>
-                      <div className={`${isDark ? 'bg-slate-800' : 'bg-slate-50'} rounded-lg p-2.5`}>
+                      <div className={`bg-surface-2 rounded-lg p-2.5`}>
                         <p className={`text-[10px] ${textMuted} mb-0.5`}>Cliques</p>
-                        <p className={`text-sm font-bold ${textHead}`}>{(row.clicks || 0).toLocaleString()}</p>
+                        <p className={`text-sm font-semibold ${textHead}`}>{(row.clicks || 0).toLocaleString()}</p>
                       </div>
-                      <div className={`${isDark ? 'bg-slate-800' : 'bg-slate-50'} rounded-lg p-2.5`}>
+                      <div className={`bg-surface-2 rounded-lg p-2.5`}>
                         <p className={`text-[10px] ${textMuted} mb-0.5`}>CPA</p>
-                        <p className="text-sm font-bold text-cyan-500">{formatMoney(row.cpa)}</p>
+                        <p className="text-sm font-semibold text-brand-text">{formatMoney(row.cpa)}</p>
                       </div>
                     </div>
                     {hasNote && (
-                      <div className={`mt-2 p-2 rounded-lg text-xs italic whitespace-pre-line text-amber-400 ${isDark ? 'bg-amber-400/5' : 'bg-amber-50'}`}>
+                      <div className={`mt-2 p-2 rounded-lg text-xs italic whitespace-pre-line text-warn bg-warn/5`}>
                         {notes[dateKey]}
                       </div>
                     )}
@@ -928,22 +926,22 @@ export default function ProductDetailPage() {
           <div className={`p-4 border-b ${borderCol} flex flex-col md:flex-row justify-between items-center gap-4 shrink-0`}>
             <div className="flex items-center gap-3">
               <h3 className={`font-semibold ${textHead}`}>Histórico Detalhado</h3>
-              <span className={`text-xs ${textMuted} ${isDark ? 'bg-slate-950' : 'bg-slate-100'} px-2 py-1 rounded border ${borderCol}`}>{rows.length} registros</span>
+              <span className={`text-xs ${textMuted} bg-surface-2 px-2 py-1 rounded border ${borderCol}`}>{rows.length} registros</span>
             </div>
             <div className="flex items-center gap-2">
-            <TableControls prefs={overviewPrefs} isDark={isDark} />
-            <button onClick={() => setShowColumnModal(true)} className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded transition-colors border ${isDark ? 'text-slate-300 bg-slate-800 hover:bg-slate-700 border-slate-700' : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border-slate-300'}`}>
+            <TableControls prefs={overviewPrefs} isDark={isDark} tokens />
+            <button onClick={() => setShowColumnModal(true)} className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded transition-colors border text-ink-muted bg-surface-2 hover:bg-surface-3 border-line-strong`}>
               <Columns size={14} aria-hidden="true" /> Personalizar Colunas
             </button>
             </div>
           </div>
           {revisoes && (
-            <div className={`px-4 py-2.5 border-b flex items-center gap-2 flex-wrap text-xs ${borderCol} ${isDark ? 'bg-sky-500/10' : 'bg-sky-50'}`}>
-              <RefreshCw size={14} aria-hidden="true" className="text-sky-400 shrink-0" />
-              <span className={isDark ? 'text-sky-300' : 'text-sky-700'}>
+            <div className={`px-4 py-2.5 border-b flex items-center gap-2 flex-wrap text-xs ${borderCol} bg-brand/10`}>
+              <RefreshCw size={14} aria-hidden="true" className="text-brand-text shrink-0" />
+              <span className={'text-brand-text'}>
                 <strong>{revisoes.dias}</strong> {revisoes.dias === 1 ? 'dia teve' : 'dias tiveram'} o custo revisado pelo Google no período
                 {' — '}
-                <strong className={revisoes.delta <= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                <strong className={revisoes.delta <= 0 ? 'text-pos' : 'text-neg'}>
                   {revisoes.delta <= 0 ? '' : '+'}{formatMoney(revisoes.delta)}
                 </strong>
                 {revisoes.cliques !== 0 && <> · {revisoes.cliques > 0 ? '+' : ''}{revisoes.cliques} cliques</>}
@@ -966,10 +964,10 @@ export default function ProductDetailPage() {
 
                 {/* ── LINHA DE TOTAIS/MÉDIAS ── */}
                 {summaryRow && (
-                  <tr className={`font-semibold border-b-2 ${isDark ? 'bg-indigo-950 border-indigo-800' : 'bg-indigo-50 border-indigo-200'}`}>
+                  <tr className="font-semibold border-b-2 bg-surface-2 border-line-strong">
                     {shownColumns.map((col, i) => {
                       if (i === 0) return (
-                        <td key={col.key} className={`${pad} sticky left-0 z-[1] text-xs font-semibold ${isDark ? 'bg-indigo-950 text-indigo-200' : 'bg-indigo-50 text-indigo-700'}`} style={widthStyle(overviewPrefs.widths[col.key])}>
+                        <td key={col.key} className={`${pad} sticky left-0 z-[1] text-xs font-semibold bg-surface-2 text-ink`} style={widthStyle(overviewPrefs.widths[col.key])}>
                           Σ Total / Ø Média
                         </td>
                       );
@@ -982,8 +980,7 @@ export default function ProductDetailPage() {
                       if (col.key === 'profit' || col.key === 'roi') textClass = val >= 0 ? tone.pos : tone.neg;
                       else if (col.key === 'revenue') textClass = tone.revenue;
                       else if (col.key === 'cost') textClass = tone.cost;
-                      else if (isAvg) textClass = isDark ? 'text-indigo-200' : 'text-indigo-700';
-                      else if (isLatest) textClass = isDark ? 'text-fuchsia-300' : 'text-fuchsia-700';
+                      else if (isAvg || isLatest) textClass = tone.text;
                       else textClass = tone.text;
 
                       let content;
@@ -1030,38 +1027,38 @@ export default function ProductDetailPage() {
                                   title={hasNote ? 'Ver/Editar anotação' : 'Adicionar anotação'}
                                   aria-label={`${hasNote ? 'Ver ou editar a anotação' : 'Adicionar anotação'} de ${val}`}
                                   className={`rounded-md p-1 transition-colors ${hasNote
-                                    ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20'
-                                    : `${textMuted} hover:text-indigo-400 hover:bg-indigo-400/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100`
+                                    ? 'text-warn bg-warn/10 hover:bg-warn/20'
+                                    : `${textMuted} hover:text-brand-text hover:bg-brand/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100`
                                     }`}
                                 >
                                   <NotebookPen size={13} aria-hidden="true" />
                                 </button>
-                                {hasNote && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Tem anotação" />}
+                                {hasNote && <span className="w-1.5 h-1.5 rounded-full bg-warn shrink-0" title="Tem anotação" />}
                               </div>
                             </td>
                           );
                           if (col.key === 'notes') return (
                             <td key={col.key} className={`${pad} ${bg} max-w-[200px]`} style={widthStyle(overviewPrefs.widths[col.key])}>
                               {hasNote
-                                ? <span role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteByKey(dateKey); } }} className={`text-xs italic truncate block max-w-[180px] text-amber-400/80 cursor-pointer hover:text-amber-300`} title={notes[dateKey]} onClick={() => openNoteByKey(dateKey)}>{noteSummary(notes[dateKey])}</span>
-                                : <button onClick={() => openNoteByKey(dateKey)} className={`text-xs ${textMuted} hover:text-indigo-400 transition-colors`}>+ nota</button>
+                                ? <span role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteByKey(dateKey); } }} className={`text-xs italic truncate block max-w-[180px] text-warn/80 cursor-pointer hover:text-warn`} title={notes[dateKey]} onClick={() => openNoteByKey(dateKey)}>{noteSummary(notes[dateKey])}</span>
+                                : <button onClick={() => openNoteByKey(dateKey)} className={`text-xs ${textMuted} hover:text-brand-text transition-colors`}>+ nota</button>
                               }
                             </td>
                           );
-                          if (col.key === 'campaign_status') content = <span className={`flex items-center justify-end gap-1.5 ${val === 'PAUSED' ? 'text-slate-500' : 'text-emerald-400'}`}>{val} {val === 'PAUSED' ? <PauseCircle size={14} aria-hidden="true" /> : <PlayCircle size={14} aria-hidden="true" />}</span>;
+                          if (col.key === 'campaign_status') content = <span className={`flex items-center justify-end gap-1.5 ${val === 'PAUSED' ? 'text-ink-subtle' : 'text-pos'}`}>{val} {val === 'PAUSED' ? <PauseCircle size={14} aria-hidden="true" /> : <PlayCircle size={14} aria-hidden="true" />}</span>;
                           else if (col.type === 'status') {
                             const st = resolveCampaignStatus(row as any);
                             content = (
                               <span
                                 title={st.hint}
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-bold whitespace-nowrap ${st.badge}`}
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium whitespace-nowrap ${st.badge}`}
                               >
                                 {st.key === 'ativo' ? <PlayCircle size={12} aria-hidden="true" /> : st.key === 'suspenso' ? <AlertTriangle size={12} aria-hidden="true" /> : <PauseCircle size={12} aria-hidden="true" />}
                                 {st.label}
                               </span>
                             );
                           }
-                          else if (col.type === 'link') content = val ? <a href={val} target="_blank" rel="noopener noreferrer" aria-label="Abrir a página do anúncio" title={val} className="text-indigo-400 hover:text-indigo-300 flex justify-end"><LinkIcon size={14} aria-hidden="true" /></a> : '-';
+                          else if (col.type === 'link') content = val ? <a href={val} target="_blank" rel="noopener noreferrer" aria-label="Abrir a página do anúncio" title={val} className="text-brand-text hover:text-brand-text flex justify-end"><LinkIcon size={14} aria-hidden="true" /></a> : '-';
                           else if (col.format === 'currency') {
                             const revisado = col.key === 'cost' && row.revised_at && row.cost_previous != null;
                             const diff = revisado ? Number(row.cost) - Number(row.cost_previous) : 0;
@@ -1071,7 +1068,7 @@ export default function ProductDetailPage() {
                                 {revisado && (
                                   <span
                                     title={`Custo revisado pelo Google: ${formatMoney(Number(row.cost_previous))} → ${formatMoney(Number(row.cost))}${row.clicks_previous != null ? ` · cliques ${row.clicks_previous} → ${row.clicks}` : ''}`}
-                                    className={`text-[9px] font-bold px-1 rounded ${diff <= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}
+                                    className={`text-[9px] font-medium px-1 rounded ${diff <= 0 ? 'bg-pos/15 text-pos' : 'bg-neg/15 text-neg'}`}
                                   >
                                     {diff <= 0 ? '↓' : '↑'}
                                   </span>
@@ -1090,39 +1087,35 @@ export default function ProductDetailPage() {
 
                       {/* ── EDITOR INLINE DE NOTA ── */}
                       {isEditingThisNote && (
-                        <tr className={`${isDark ? 'bg-amber-950/20' : 'bg-amber-50'}`}>
+                        <tr className="bg-warn/5">
                           <td colSpan={shownColumns.length} className="p-0">
                             {/* A célula acompanha a largura TOTAL da tabela, que rola na
                                 horizontal. Sem o sticky, a caixa nascia fora da área visível
                                 e era preciso rolar para encontrá-la. Presa à esquerda, ela
                                 fica sempre à vista, com largura limitada ao viewport. */}
                             <div className="sticky left-0 w-[calc(100vw-2rem)] max-w-3xl px-4 py-3">
-                              <div className={`flex flex-col sm:flex-row items-stretch sm:items-start gap-3 p-3 rounded-xl border ${isDark ? 'bg-slate-950 border-amber-500/30' : 'bg-white border-amber-300'}`}>
+                              <div className={`flex flex-col sm:flex-row items-stretch sm:items-start gap-3 p-3 rounded-xl border bg-surface-2 border-warn/30`}>
                                 <div className="flex items-start gap-2 flex-1 min-w-0">
-                                  <NotebookPen size={16} aria-hidden="true" className="text-amber-400 mt-1 shrink-0" />
+                                  <NotebookPen size={16} aria-hidden="true" className="text-warn mt-1 shrink-0" />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] font-bold uppercase text-amber-400 mb-1">Anotação — {row.date}</p>
+                                    <p className="text-xs font-medium text-warn mb-1">Anotação — {row.date}</p>
                                     <textarea
                                       autoFocus
                                       rows={4}
                                       value={noteText}
                                       onChange={e => setNoteText(e.target.value)}
                                       placeholder="Digite sua anotação para este dia..."
-                                      className={`w-full rounded-lg p-2 text-sm leading-relaxed outline-none resize-y min-h-[88px] transition-colors border ${isDark
-                                        ? 'bg-slate-900 border-slate-700 text-white focus:border-amber-500 placeholder-slate-600'
-                                        : 'bg-slate-50 border-slate-200 text-black focus:border-amber-400'
-                                        }`}
+                                      className={`w-full rounded-lg p-2 text-sm leading-relaxed outline-none resize-y min-h-[88px] transition-colors border bg-surface-1 border-line-strong text-ink focus:border-warn placeholder:text-ink-faint`}
                                     />
                                   </div>
                                 </div>
                                 <div className="flex flex-row sm:flex-col gap-2 shrink-0">
                                   <button onClick={() => saveNote(dateKey)}
-                                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                     <Check size={12} aria-hidden="true" /> Salvar
                                   </button>
                                   <button onClick={() => setEditingNote(null)}
-                                    className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'
-                                      }`}>
+                                    className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-surface-2 text-ink-subtle hover:text-ink`}>
                                     <X size={12} aria-hidden="true" /> Fechar
                                   </button>
                                 </div>
@@ -1230,13 +1223,13 @@ export default function ProductDetailPage() {
         onClick={() => setShowManualEntry(true)}
         aria-label="Lançamento Rápido"
         title="Lançamento Rápido"
-        className="md:hidden fixed bottom-24 right-4 z-30 w-12 h-12 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg shadow-indigo-900/40 transition-colors"
+        className="md:hidden fixed bottom-24 right-4 z-30 w-12 h-12 flex items-center justify-center bg-brand hover:bg-brand-hover text-white rounded-full shadow-lg transition-colors"
       >
         <FileText size={20} aria-hidden="true" />
       </button>
 
       {/* BOTTOM NAV */}
-      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+      <nav className="fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md bg-canvas/95 border-line">
         <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {[
             { href: '/dashboard', icon: <LayoutGrid size={22} aria-hidden="true" />, label: 'Dashboard' },
@@ -1246,10 +1239,9 @@ export default function ProductDetailPage() {
             { href: '/rastreamento', icon: <Route size={22} aria-hidden="true" />, label: 'Rastreio' },
             { href: '/integration', icon: <Settings size={22} aria-hidden="true" />, label: 'Integração' },
           ].map(item => (
-            <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${(item as any).active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+            <Link key={item.href} href={item.href} aria-current={(item as any).active ? 'page' : undefined} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-lg transition-colors ${(item as any).active ? 'text-brand-text' : 'text-ink-subtle'}`}>
               {item.icon}
-              <span className="text-[9px] font-bold tracking-wide">{item.label}</span>
-              {(item as any).active && <div className="w-1 h-1 rounded-full bg-indigo-500" />}
+              <span className="text-[10px] font-medium">{item.label}</span>
             </Link>
           ))}
         </div>
@@ -1260,22 +1252,22 @@ export default function ProductDetailPage() {
         <>
           <div className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={() => setShowFilterSheet(false)} />
           <div role="dialog" aria-modal="true" aria-labelledby="detail-filter-title" onKeyDown={e => { if (e.key === 'Escape') setShowFilterSheet(false); }}
-            className={`md:hidden fixed bottom-0 inset-x-0 z-50 rounded-t-2xl border-t shadow-2xl ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))]`}>
-            <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <h3 id="detail-filter-title" className={`font-bold ${textHead}`}>Filtros</h3>
+            className={`md:hidden fixed bottom-0 inset-x-0 z-50 rounded-t-2xl border-t shadow-2xl bg-surface-1 border-line-strong pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))]`}>
+            <div className={`flex items-center justify-between p-4 border-b border-line-strong`}>
+              <h3 id="detail-filter-title" className={`font-semibold ${textHead}`}>Filtros</h3>
               <button autoFocus onClick={() => setShowFilterSheet(false)} aria-label="Fechar filtros">
                 <X size={20} aria-hidden="true" className={textMuted} />
               </button>
             </div>
             <div className="p-4 space-y-5 overflow-y-auto max-h-[70vh]">
               <div>
-                <label className={`text-xs font-bold uppercase ${textMuted} block mb-2`}>Período</label>
+                <label className={`text-xs font-medium ${textMuted} block mb-2`}>Período</label>
                 <div className="flex flex-wrap gap-2">
                   {(['today', 'yesterday', '7d', 'this_month', '30d', 'last_month'] as const).map(preset => (
                     <button
                       key={preset}
                       onClick={() => handlePresetChange(preset)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${dateRange === preset ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${dateRange === preset ? 'bg-surface-3 text-ink' : 'bg-surface-2 text-ink-subtle'}`}
                     >
                       {DATE_PRESET_LABELS[preset]}
                     </button>
@@ -1284,23 +1276,23 @@ export default function ProductDetailPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="detail-sheet-from" className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>De</label>
-                  <input id="detail-sheet-from" type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={startInput.value} onChange={e => startInput.onChange(e.target.value)} />
+                  <label htmlFor="detail-sheet-from" className={`text-xs font-medium ${textMuted} block mb-1`}>De</label>
+                  <input id="detail-sheet-from" type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none bg-surface-2 border-line-strong text-ink dark:[&::-webkit-calendar-picker-indicator]:invert`} value={startInput.value} onChange={e => startInput.onChange(e.target.value)} />
                 </div>
                 <div>
-                  <label htmlFor="detail-sheet-to" className={`text-xs font-bold uppercase ${textMuted} block mb-1`}>Até</label>
-                  <input id="detail-sheet-to" type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none ${isDark ? 'bg-slate-800 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-white border-slate-300 text-black'}`} value={endInput.value} onChange={e => endInput.onChange(e.target.value)} />
+                  <label htmlFor="detail-sheet-to" className={`text-xs font-medium ${textMuted} block mb-1`}>Até</label>
+                  <input id="detail-sheet-to" type="date" className={`w-full border rounded-lg px-3 py-2 text-sm outline-none bg-surface-2 border-line-strong text-ink dark:[&::-webkit-calendar-picker-indicator]:invert`} value={endInput.value} onChange={e => endInput.onChange(e.target.value)} />
                 </div>
               </div>
               <div>
-                <label className={`text-xs font-bold uppercase ${textMuted} block mb-2`}>Moeda de Visualização</label>
+                <label className={`text-xs font-medium ${textMuted} block mb-2`}>Moeda de Visualização</label>
                 <div className="flex gap-2">
                   {['USD', 'BRL', 'EUR'].map(cur => (
-                    <button key={cur} onClick={() => toggleViewCurrency(cur)} aria-pressed={viewCurrency === cur} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewCurrency === cur ? 'bg-indigo-600 text-white' : (isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}>{cur}</button>
+                    <button key={cur} onClick={() => toggleViewCurrency(cur)} aria-pressed={viewCurrency === cur} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${viewCurrency === cur ? 'bg-surface-3 text-ink' : 'bg-surface-2 text-ink-subtle'}`}>{cur}</button>
                   ))}
                 </div>
               </div>
-              <button onClick={() => setShowFilterSheet(false)} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">
+              <button onClick={() => setShowFilterSheet(false)} className="w-full bg-brand hover:bg-brand-hover text-white py-3 rounded-xl font-medium">
                 Aplicar
               </button>
             </div>

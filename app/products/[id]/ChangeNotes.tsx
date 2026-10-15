@@ -17,11 +17,11 @@ const HIDDEN = 'autometrics_alteracoes_ocultas';
 export type ChangeArea = 'campanha' | 'grupos' | 'palavras' | 'anuncios' | 'recursos' | 'segmentacao';
 
 const OUTCOME: Record<string, { label: string; cls: string }> = {
-  melhorou: { label: 'Melhorou', cls: 'bg-emerald-500/15 text-emerald-500' },
-  piorou: { label: 'Piorou', cls: 'bg-rose-500/15 text-rose-500' },
-  igual: { label: 'Ficou igual', cls: 'bg-slate-500/15 text-slate-400' },
-  aguardando: { label: 'Aguardando', cls: 'bg-amber-500/15 text-amber-500' },
-  sem_base: { label: 'Sem base', cls: 'bg-slate-500/15 text-slate-400' },
+  melhorou: { label: 'Melhorou', cls: 'bg-pos/15 text-pos' },
+  piorou: { label: 'Piorou', cls: 'bg-neg/15 text-neg' },
+  igual: { label: 'Ficou igual', cls: 'bg-surface-3/15 text-ink-subtle' },
+  aguardando: { label: 'Aguardando', cls: 'bg-warn/15 text-warn' },
+  sem_base: { label: 'Sem base', cls: 'bg-surface-3/15 text-ink-subtle' },
 };
 const ddmm = (d?: string | null) => (d ? d.slice(5).split('-').reverse().join('/') : '');
 
@@ -64,12 +64,12 @@ export function ChangeNotes({ productId, ui, areas, events, limit = 6 }: {
   return (
     <div className={`${bgCard} border ${borderCol} rounded-xl mb-4 ${hidden ? 'px-4 py-2.5' : 'p-4'}`}>
       <div className={`flex items-center justify-between gap-3 ${hidden ? '' : 'mb-1'}`}>
-        <div className={`text-[11px] uppercase tracking-wider font-extrabold ${textMuted}`}>
+        <div className={`text-[11px] font-semibold ${textMuted}`}>
           {areas ? 'Alterações feitas aqui e o que aconteceu depois' : 'Alterações feitas na campanha e o que aconteceu depois'}
-          {hidden && <span className="font-bold normal-case tracking-normal"> · {list.length} {list.length === 1 ? 'data' : 'datas'}</span>}
+          {hidden && <span className="font-medium normal-case tracking-normal"> · {list.length} {list.length === 1 ? 'data' : 'datas'}</span>}
         </div>
         {areas && (
-          <button onClick={toggleHidden} className="inline-flex items-center gap-1 text-xs font-bold text-indigo-400 hover:underline whitespace-nowrap shrink-0">
+          <button onClick={toggleHidden} className="inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline whitespace-nowrap shrink-0">
             {hidden ? <>Mostrar <ChevronDown size={13} /></> : <>Ocultar <ChevronUp size={13} /></>}
           </button>
         )}
@@ -82,7 +82,7 @@ export function ChangeNotes({ productId, ui, areas, events, limit = 6 }: {
         <div className="space-y-0">
           {(all ? list : list.slice(0, limit)).map(e => (
             <div key={e.date} className={`flex gap-3 items-start py-2 border-t ${borderCol}`}>
-              <div className={`text-[13px] font-bold tabular-nums w-11 shrink-0 ${textHead}`}>{ddmm(e.date)}</div>
+              <div className={`text-[13px] font-medium tabular-nums w-11 shrink-0 ${textHead}`}>{ddmm(e.date)}</div>
               <div className="flex-1 min-w-0">
                 <div className={`text-[13px] ${textHead}`}>
                   {e.shown.length ? e.shown.map((i: any) => i.text).join(' · ') : 'Campanha criada'}
@@ -94,13 +94,13 @@ export function ChangeNotes({ productId, ui, areas, events, limit = 6 }: {
                   {e.next_check && e.outcome !== 'aguardando' && ` Confere de novo com 7 dias em ${ddmm(e.next_check)}.`}
                 </div>
               </div>
-              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${OUTCOME[e.outcome]?.cls}`}>
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${OUTCOME[e.outcome]?.cls}`}>
                 {OUTCOME[e.outcome]?.label}{e.outcome === 'aguardando' && e.next_check ? ` até ${ddmm(e.next_check)}` : ''}
               </span>
             </div>
           ))}
           {list.length > limit && (
-            <button onClick={() => setAll(v => !v)} className="text-xs text-indigo-400 hover:underline pt-2">
+            <button onClick={() => setAll(v => !v)} className="text-xs text-brand-text hover:underline pt-2">
               {all ? 'Mostrar menos' : `Ver as ${list.length} datas`}
             </button>
           )}

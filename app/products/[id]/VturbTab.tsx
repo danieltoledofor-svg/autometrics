@@ -95,19 +95,19 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
     : null;
 
   const tone = {
-    ok: isDark ? 'text-emerald-400' : 'text-emerald-600',
-    alerta: isDark ? 'text-orange-400' : 'text-orange-600',
-    urgente: isDark ? 'text-rose-400' : 'text-rose-600',
+    ok: 'text-pos',
+    alerta: 'text-warn',
+    urgente: 'text-neg',
     sem_dado: textMuted,
   } as Record<Status, string>;
   const ring = {
     ok: borderCol, sem_dado: borderCol,
     // "!": o bgCard já traz a cor da borda.
-    alerta: isDark ? '!border-orange-500/60' : '!border-orange-300',
-    urgente: isDark ? '!border-rose-500/60' : '!border-rose-300',
+    alerta: '!border-warn/60',
+    urgente: '!border-neg/60',
   } as Record<Status, string>;
-  const soft = isDark ? 'bg-slate-950' : 'bg-slate-50';
-  const label = `text-[11px] font-semibold tracking-wide uppercase ${textMuted}`;
+  const soft = 'bg-surface-2';
+  const label = `text-[11px] font-semibold ${textMuted}`;
 
   if (loading) return <div className={`${bgCard} border rounded-xl p-6 text-sm ${textMuted}`}>Carregando…</div>;
   if (data && data.ready === false && !data.player && data.error) return <div className={`${bgCard} border rounded-xl p-6 text-sm ${textMuted}`}>{data.error}</div>;
@@ -119,7 +119,7 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
         aria-label="URL ou ID do player da VTurb"
         className={`flex-1 min-w-[260px] text-sm px-3 py-2 rounded-lg border ${borderCol} ${soft} ${textHead}`} />
       <button onClick={() => post({ action: 'link', player: playerInput })} disabled={running || !playerInput.trim()}
-        className="text-sm font-semibold px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50">
+        className="text-sm font-semibold px-4 py-2 rounded-lg bg-brand hover:bg-brand-hover text-white disabled:opacity-50">
         {running ? 'Lendo…' : 'Vincular'}
       </button>
       {player && <button onClick={() => setEditing(false)} className={`text-sm px-3 py-2 ${textMuted}`}>cancelar</button>}
@@ -131,7 +131,7 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
       <div className="space-y-5">
       {banner}
       <div className={`${bgCard} border rounded-xl p-5`}>
-        <p className={`text-sm font-bold ${textHead}`}>Player da VTurb</p>
+        <p className={`text-sm font-semibold ${textHead}`}>Player da VTurb</p>
         <p className={`text-xs ${textMuted} mt-1`}>Vincule o player do vídeo desta campanha. Os números passam a ser guardados a cada hora e cruzados com os cliques do Google.</p>
         {linkForm}
         {error && <p className={`text-xs mt-2 ${tone.urgente}`}>{error}</p>}
@@ -147,7 +147,7 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
   const Card = ({ title, value, line, lineTone, sub, s = 'ok' as Status }: { title: string; value: string; line?: string; lineTone?: string; sub: string; s?: Status }) => (
     <div className={`${bgCard} border ${ring[s]} rounded-xl p-4 flex flex-col gap-1.5`}>
       <div className={label}>{title}</div>
-      <div className={`text-2xl font-bold tabular-nums ${textHead}`}>{value}</div>
+      <div className={`text-2xl font-semibold tabular-nums ${textHead}`}>{value}</div>
       {line && <div className={`text-xs ${lineTone || textMuted}`}>{line}</div>}
       <div className={`text-xs ${textMuted}`}>{sub}</div>
     </div>
@@ -160,8 +160,8 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
         <TopoAnalysis data={data} ui={ui} money={money} running={running} onAnalyze={() => post({ action: 'analyze' })} onMark={mark} />
       )}
       {data?.ai && d3 && <VturbAsk productId={productId} startDate={startDate} endDate={endDate} period={data?.screen?.period || null} ui={ui} />}
-      <div className={`flex items-center gap-2 text-[11px] uppercase tracking-wider font-extrabold ${textMuted}`}>
-        Números da VTurb <span className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+      <div className={`flex items-center gap-2 text-[11px] font-semibold ${textMuted}`}>
+        Números da VTurb <span className={`flex-1 h-px bg-surface-2`} />
       </div>
       <div className={`${bgCard} border rounded-xl px-5 py-4 flex justify-between items-center gap-4 flex-wrap`}>
         <div className="min-w-0">
@@ -169,10 +169,10 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
           <div className={`text-xs ${textMuted} mt-0.5`}>
             {player.duration ? `Vídeo de ${mmss(player.duration)} · ` : ''}{player.pitch_time ? `pitch em ${mmss(player.pitch_time)} (lido da VTurb) · ` : ''}
             dados guardados a cada hora · atualizado {timeAgo(data?.synced_at)} ·{' '}
-            <button onClick={() => post({ action: 'sync' })} disabled={running} className="underline hover:text-purple-400 disabled:opacity-50">
+            <button onClick={() => post({ action: 'sync' })} disabled={running} className="underline hover:text-brand-text disabled:opacity-50">
               {running ? <><Loader2 size={11} className="inline animate-spin" /> lendo</> : <><RefreshCw size={11} className="inline" /> ler agora</>}
             </button>{' '}
-            · <button onClick={() => { setPlayerInput(player.id); setEditing(true); }} className="underline hover:text-purple-400">trocar player</button>
+            · <button onClick={() => { setPlayerInput(player.id); setEditing(true); }} className="underline hover:text-brand-text">trocar player</button>
           </div>
           {editing && linkForm}
         </div>
@@ -228,16 +228,17 @@ function Retention({ curve, before, history, drops, ui }: { curve: any; before: 
   const pts: [number, number][] = curve.points;
   const line = pts.map(([t, p]) => `${x(t).toFixed(1)},${y(p).toFixed(1)}`).join(' ');
   const area = `M0,${H} L${line.split(' ').join(' L')} L${x(pts[pts.length - 1][0]).toFixed(1)},${H} Z`;
-  const stroke = isDark ? '#a78bfa' : '#7c3aed';
-  const grid = isDark ? '#1e293b' : '#e2e8f0';
-  const text = isDark ? '#e2e8f0' : '#334155';
-  const muted = isDark ? '#94a3b8' : '#64748b';
-  const pitchColor = isDark ? '#fb923c' : '#c2410c';
+  // O desenho em SVG pede a cor pronta: os mesmos valores dos tokens do guia (DESIGN.md).
+  const stroke = isDark ? '#9aa3ef' : '#4b56be';
+  const grid = isDark ? '#23252a' : '#e2e4e8';
+  const text = isDark ? '#f7f8f8' : '#16171a';
+  const muted = isDark ? '#8a8f98' : '#62666f';
+  const pitchColor = isDark ? '#d9913f' : '#c27a28';
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
   return (
     <div className={`${bgCard} border rounded-xl px-5 py-4 space-y-3`}>
       <div className="flex justify-between items-baseline gap-3 flex-wrap">
-        <div className={`text-sm font-bold ${textHead}`}>Retenção do vídeo · 7 dias ({ddmm(curve.period[0])}–{ddmm(curve.period[1])})</div>
+        <div className={`text-sm font-semibold ${textHead}`}>Retenção do vídeo · 7 dias ({ddmm(curve.period[0])}–{ddmm(curve.period[1])})</div>
         <div className={`text-xs ${textMuted}`}>% de quem deu play que ainda está assistindo · semana fechada, atualizada 1 vez por dia (não segue o período da tela)</div>
       </div>
       <svg viewBox={`0 0 ${W} ${H + 20}`} className="w-full h-auto block" role="img"
@@ -268,7 +269,7 @@ function Retention({ curve, before, history, drops, ui }: { curve: any; before: 
           <text key={f} x={f * W} y={H + 16} fill={muted} fontSize={11} textAnchor={f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}>{fmt(f * curve.duration)}</text>
         ))}
       </svg>
-      <div className={`flex gap-6 flex-wrap text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+      <div className={`flex gap-6 flex-wrap text-xs text-ink-muted`}>
         {curve.notes.map((n: string) => <span key={n}>{n}</span>)}
       </div>
       {old ? (
@@ -288,11 +289,11 @@ function Retention({ curve, before, history, drops, ui }: { curve: any; before: 
       )}
       {drops.some(d => d.vsl) && (
         <div className={`pt-3 border-t ${borderCol} space-y-2`}>
-          <div className={`text-[11px] font-semibold tracking-wide uppercase ${textMuted}`}>O que o vídeo diz onde mais gente sai (≈ pela posição na transcrição)</div>
+          <div className={`text-[11px] font-semibold ${textMuted}`}>O que o vídeo diz onde mais gente sai (≈ pela posição na transcrição)</div>
           {drops.filter(d => d.vsl).map(d => (
             <div key={d.label} className="grid grid-cols-[150px_1fr] gap-3 text-xs">
               <div className={textHead}>{d.label}<div className={textMuted}>saem {d.left}</div></div>
-              <div className={`italic ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{d.vsl}</div>
+              <div className={`italic text-ink-muted`}>{d.vsl}</div>
             </div>
           ))}
         </div>
@@ -312,19 +313,19 @@ function Keywords({ kw, money, ui }: { kw: any; money: (v: number | null) => str
         ? `${int(v.gclid)} visitas têm gclid. Com a conta conectada pela API do Google, cada visita e cada venda são ligadas à palavra-chave exata.`
         : 'Nenhuma visita chegou com utm_term ou gclid.';
   const warn = kw.source !== 'gclid';
-  const dash = <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>—</span>;
-  const thBase = `text-[11px] font-semibold uppercase tracking-wide ${textMuted} px-3 py-2.5 border-b ${borderCol} whitespace-nowrap`;
+  const dash = <span className={'text-ink-subtle'}>—</span>;
+  const thBase = `text-[11px] font-semibold ${textMuted} px-3 py-2.5 border-b ${borderCol} whitespace-nowrap`;
   const tdBase = `text-[13px] px-3 py-2.5 border-b ${borderCol} tabular-nums whitespace-nowrap`;
   const th = `${thBase} text-right`, td = `${tdBase} text-right`;
   return (
     <div className={`${bgCard} border rounded-xl px-5 py-4 space-y-3`}>
       <div className="flex justify-between items-baseline gap-3 flex-wrap">
-        <div className={`text-sm font-bold ${textHead}`}>Por palavra-chave · 7 dias</div>
+        <div className={`text-sm font-semibold ${textHead}`}>Por palavra-chave · 7 dias</div>
         <div className={`text-xs ${textMuted}`}>{kw.source === 'gclid' ? 'ligação clique a clique pelo gclid' : kw.source === 'utm_term' ? 'ligação pelo utm_term' : ''}</div>
       </div>
       <div className={`text-xs rounded-lg px-3 py-2.5 ${warn
-        ? (isDark ? 'bg-orange-500/10 text-orange-300' : 'bg-orange-50 text-orange-800')
-        : (isDark ? 'bg-slate-950 text-slate-400' : 'bg-slate-50 text-slate-600')}`}>{note}</div>
+        ? ('bg-warn/10 text-warn')
+        : ('bg-surface-2 text-ink-subtle')}`}>{note}</div>
       {kw.rows.length > 0 && (
         <>
           <div className="overflow-x-auto">
@@ -336,7 +337,7 @@ function Keywords({ kw, money, ui }: { kw: any; money: (v: number | null) => str
               </tr></thead>
               <tbody>
                 {kw.rows.map((r: any) => (
-                  <tr key={r.label} className={r.small ? (isDark ? 'text-slate-500' : 'text-slate-400') : textHead}>
+                  <tr key={r.label} className={r.small ? ('text-ink-subtle') : textHead}>
                     <td className={`${tdBase} text-left`}>{r.label}</td>
                     <td className={td}>{r.clicks === null ? dash : int(r.clicks)}</td>
                     <td className={td}>{r.cost === null ? dash : money(r.cost)}</td>

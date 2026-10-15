@@ -222,12 +222,12 @@ export function SegmentTab(props: Props) {
   const muted = (text: string) => <span className={`text-xs ${textMuted}`}>{text || '—'}</span>;
   const dims: DimColumn[] = [];
   if (hasKeywords && termView === 'term_keyword') {
-    dims.push({ key: 'keyword', label: 'Palavra-chave', value: i => i.keyword, render: i => <span className="font-mono text-[13px] text-indigo-300">{i.keyword || '—'}</span> });
+    dims.push({ key: 'keyword', label: 'Palavra-chave', value: i => i.keyword, render: i => <span className="font-mono text-[13px] text-brand-text">{i.keyword || '—'}</span> });
     dims.push({ key: 'kw_match', label: 'Corresp. da palavra', value: i => MATCH_PT[i.keywordMatch] || '', render: i => muted(MATCH_PT[i.keywordMatch]) });
     dims.push({ key: 'term_match', label: 'Corresp. do termo', value: i => TERM_MATCH_PT[i.termMatch] || i.termMatch, render: i => muted(TERM_MATCH_PT[i.termMatch] || i.termMatch) });
     dims.push({ key: 'ad_group', label: 'Grupo', value: i => i.adGroup, render: i => <span className={`text-xs ${textMuted} block max-w-[160px] truncate`} title={i.adGroup}>{i.adGroup || '—'}</span> });
     dims.push({ key: 'term_status', label: 'Status do termo', value: i => TERM_STATUS_PT[i.status] || i.status,
-      render: i => <span className={`text-xs ${i.status === 'ADDED' ? 'text-emerald-400' : i.status === 'EXCLUDED' ? 'text-rose-400' : textMuted}`}>{TERM_STATUS_PT[i.status] || '—'}</span> });
+      render: i => <span className={`text-xs ${i.status === 'ADDED' ? 'text-pos' : i.status === 'EXCLUDED' ? 'text-neg' : textMuted}`}>{TERM_STATUS_PT[i.status] || '—'}</span> });
   }
   if (hasKeywords && termView === 'term') {
     dims.push({ key: 'n_keywords', label: 'Palavras-chave', align: 'right', value: i => i.keywords.size, render: i => muted(String(i.keywords.size)) });
@@ -300,7 +300,7 @@ export function SegmentTab(props: Props) {
       empty={empty}
       toolbar={kind === 'search_terms' && hasKeywords ? (
         <select value={termView} onChange={e => setTermView(e.target.value as TermView)}
-          className={`text-sm rounded-lg px-3 py-1.5 border ${borderCol} ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'}`}>
+          className={`text-sm rounded-lg px-3 py-1.5 border ${borderCol} bg-surface-2 text-ink`}>
           <option value="term_keyword">Termo + palavra-chave</option>
           <option value="term">Só o termo</option>
           <option value="keyword">Por palavra-chave</option>
@@ -309,7 +309,7 @@ export function SegmentTab(props: Props) {
         <div className={`flex rounded-lg border ${borderCol} overflow-hidden`}>
           {AUDIENCE_TYPES.map(t => (
             <button key={t.id} onClick={() => setAudienceType(t.id)}
-              className={`px-3 py-1.5 text-sm font-semibold ${audienceType === t.id ? 'bg-indigo-600 text-white' : `${textMuted} ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}`}>
+              className={`px-3 py-1.5 text-sm font-semibold ${audienceType === t.id ? 'bg-brand text-white' : `${textMuted} hover:bg-surface-2`}`}>
               {t.label}
             </button>
           ))}

@@ -40,27 +40,27 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
   if (!topo) return null;
 
   const tone = {
-    ok: isDark ? 'text-emerald-400' : 'text-emerald-600',
-    alerta: isDark ? 'text-orange-400' : 'text-orange-600',
-    urgente: isDark ? 'text-rose-400' : 'text-rose-600',
+    ok: 'text-pos',
+    alerta: 'text-warn',
+    urgente: 'text-neg',
     sem_dado: textMuted,
   } as Record<Status, string>;
   const pill = {
-    ok: isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700',
-    alerta: isDark ? 'bg-orange-500/10 border-orange-500/40 text-orange-400' : 'bg-orange-50 border-orange-300 text-orange-700',
-    urgente: isDark ? 'bg-rose-500/10 border-rose-500/40 text-rose-400' : 'bg-rose-50 border-rose-300 text-rose-700',
-    sem_dado: isDark ? 'bg-slate-500/10 border-slate-500/30 text-slate-400' : 'bg-slate-100 border-slate-300 text-slate-500',
+    ok: 'bg-pos/10 border-pos/30 text-pos',
+    alerta: 'bg-warn/10 border-warn/40 text-warn',
+    urgente: 'bg-neg/10 border-neg/40 text-neg',
+    sem_dado: 'bg-surface-3/10 border-line-strong/30 text-ink-subtle',
   } as Record<Status, string>;
-  const soft = isDark ? 'bg-slate-950' : 'bg-slate-50';
+  const soft = 'bg-surface-2';
   const label = (s: Status) => (s === 'sem_dado' ? 'sem dado' : s);
   const Pill = ({ s, children }: { s: Status; children: React.ReactNode }) => (
-    <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${pill[s]}`}>{children}</span>
+    <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap ${pill[s]}`}>{children}</span>
   );
   const Icon = ({ s }: { s: Status }) => {
     const inner = s === 'ok' ? <Check size={13} strokeWidth={3} /> : s === 'urgente' ? <X size={13} strokeWidth={3} /> : s === 'alerta' ? <AlertTriangle size={13} strokeWidth={2.5} /> : <Minus size={13} strokeWidth={3} />;
     return <span className={`w-6 h-6 rounded-full shrink-0 grid place-items-center border ${pill[s]}`}>{inner}</span>;
   };
-  const th = `text-[11px] font-semibold uppercase tracking-wide ${textMuted} px-3 py-2 border-b ${borderCol} whitespace-nowrap`;
+  const th = `text-[11px] font-semibold ${textMuted} px-3 py-2 border-b ${borderCol} whitespace-nowrap`;
   const td = `text-[13px] px-3 py-2 border-b ${borderCol} tabular-nums whitespace-nowrap`;
   const sumStatus: Status = topo.status;
   const c = topo.counts;
@@ -91,16 +91,16 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
   const Points = ({ list }: { list: any[] }) => (
     <div className="space-y-2">
       {list.map(s => (
-        <div key={s.id} className={`rounded-r-lg border-l-[3px] border-blue-400 ${soft} px-3 py-2`}>
+        <div key={s.id} className={`rounded-r-lg border-l-[3px] border-brand ${soft} px-3 py-2`}>
           <div className="flex flex-wrap items-start gap-2">
             <div className="flex-1 min-w-[220px]">
-              <div className={`text-[10.5px] uppercase tracking-wider font-bold ${textMuted}`}>✦ Ponto de alteração · {s.target_label}</div>
-              <div className={`text-[13px] ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>{s.text}</div>
+              <div className={`text-[10.5px] font-medium ${textMuted}`}>✦ Ponto de alteração · {s.target_label}</div>
+              <div className={`text-[13px] text-brand-text`}>{s.text}</div>
             </div>
             {s.status === 'aberta' && (
               <div className="flex gap-1.5">
-                <button onClick={() => onMark(s.id, 'ignorada')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-indigo-400`}>Ignorar</button>
-                <button onClick={() => onMark(s.id, 'nao_faz_sentido')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-rose-400`}>Não faz sentido</button>
+                <button onClick={() => onMark(s.id, 'ignorada')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-brand-text`}>Ignorar</button>
+                <button onClick={() => onMark(s.id, 'nao_faz_sentido')} className={`text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted} hover:text-neg`}>Não faz sentido</button>
               </div>
             )}
           </div>
@@ -113,19 +113,19 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
   const d3 = data.d3, d7 = data.d7;
   const detail = (key: string) => {
     if (key === 'fuga') {
-      return <div className={`text-[12.5px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+      return <div className={`text-[12.5px] text-ink-muted`}>
         {d3.clicks.toLocaleString('pt-BR')} cliques no anúncio → {d3.viewed.toLocaleString('pt-BR')} carregaram o vídeo. Custo por vídeo carregado {data.extra.costPerView[0]} (7d {data.extra.costPerView[1]}).
       </div>;
     }
     if (key === 'play') {
-      return <div className={`text-[12.5px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+      return <div className={`text-[12.5px] text-ink-muted`}>
         {d3.started.toLocaleString('pt-BR')} de {d3.viewed.toLocaleString('pt-BR')} pessoas que carregaram o vídeo deram play ({pct(d3.play)}; 7d {pct(d7.play)}).
       </div>;
     }
     if (key === 'retencao') {
       return (
         <div className="space-y-2">
-          {data.curve?.notes?.length > 0 && <div className={`text-[12.5px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{data.curve.notes.join(' · ')}</div>}
+          {data.curve?.notes?.length > 0 && <div className={`text-[12.5px] text-ink-muted`}>{data.curve.notes.join(' · ')}</div>}
           {topo.drops?.length > 0 && (
             <div className={`overflow-x-auto rounded-lg border ${borderCol}`}>
               <table className="w-full border-collapse">
@@ -134,7 +134,7 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
                   <tr key={d.label}>
                     <td className={`${td} ${textHead}`}>{d.label}</td>
                     <td className={`${td} text-right`}>{d.left}</td>
-                    <td className={`${td} whitespace-normal min-w-[260px] ${d.vsl ? (isDark ? 'text-slate-300' : 'text-slate-700') : textMuted}`}>{d.vsl ? `≈ ${d.vsl}` : 'Envie a transcrição da VSL no topo da aba'}</td>
+                    <td className={`${td} whitespace-normal min-w-[260px] ${d.vsl ? ('text-ink-muted') : textMuted}`}>{d.vsl ? `≈ ${d.vsl}` : 'Envie a transcrição da VSL no topo da aba'}</td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -183,7 +183,7 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
     return (
       <div className="space-y-2.5">
         <div className={`text-[11.5px] ${textMuted}`}>
-          {p.url && <>Página lida: <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline break-all">{p.url}</a> · </>}
+          {p.url && <>Página lida: <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-brand-text hover:underline break-all">{p.url}</a> · </>}
           {p.checked_at && `em ${ddmm(p.checked_at.slice(0, 10))} · `}relida quando a página, a VSL ou os termos principais mudam, e no mínimo 1 vez por semana
         </div>
         {p.error && <div className={`text-sm ${tone.urgente}`}>{p.error}</div>}
@@ -209,7 +209,7 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
         {p.achados?.filter((f: any) => f.nivel !== 'ok').map((f: any, i: number) => (
           <div key={i} className="flex gap-2 text-[13px]">
             <Icon s={f.nivel} />
-            <div><b className={textHead}>{f.titulo}.</b> <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>{f.texto}</span></div>
+            <div><b className={textHead}>{f.titulo}.</b> <span className={'text-ink-muted'}>{f.texto}</span></div>
           </div>
         ))}
       </div>
@@ -219,20 +219,20 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
   const history = topo.history || [];
   return (
     <div className="space-y-3">
-      <div className={`flex items-center gap-2 text-[11px] uppercase tracking-wider font-extrabold ${textMuted}`}>
-        Análise do topo de funil · depois do clique <span className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+      <div className={`flex items-center gap-2 text-[11px] font-semibold ${textMuted}`}>
+        Análise do topo de funil · depois do clique <span className={`flex-1 h-px bg-surface-2`} />
       </div>
 
       <div className={`${bgCard} border ${borderCol} rounded-xl px-5 py-4 flex justify-between items-center gap-4 flex-wrap`}>
         <div className="min-w-0 flex-1">
-          <div className={`text-base font-bold ${textHead}`}>
+          <div className={`text-base font-semibold ${textHead}`}>
             {(sumStatus === 'alerta' || sumStatus === 'urgente') && <span className={tone[sumStatus]}>✦ </span>}{topo.summary.title}
           </div>
-          {topo.summary.text && <div className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'} mt-1`}>{topo.summary.text}</div>}
+          {topo.summary.text && <div className={`text-sm text-ink-muted mt-1`}>{topo.summary.text}</div>}
           <div className={`text-[11.5px] ${textMuted} mt-1.5`}>
             {data.period && <>3 dias ({ddmm(data.period.d3[0])}–{ddmm(data.period.d3[1])}) × 7 dias ({ddmm(data.period.d7[0])}–{ddmm(data.period.d7[1])}) · </>}
             atualizado {timeAgo(topo.computed_at)} ·{' '}
-            <button onClick={onAnalyze} disabled={running} className="underline hover:text-indigo-400 disabled:opacity-50">
+            <button onClick={onAnalyze} disabled={running} className="underline hover:text-brand-text disabled:opacity-50">
               {running ? <><Loader2 size={11} className="inline animate-spin" /> analisando</> : 'reanalisar'}
             </button>
           </div>
@@ -252,10 +252,10 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
           return (
             <div key={item.key} className={idx < topo.items.length - 1 ? `border-b ${borderCol}` : ''}>
               <button onClick={() => setOpen(o => ({ ...o, [item.key]: !o[item.key] }))}
-                className={`w-full grid grid-cols-[24px_1fr_14px] md:grid-cols-[24px_220px_1fr_auto_14px] gap-3 items-center px-4 py-3 text-left transition-colors ${isDark ? 'hover:bg-slate-950' : 'hover:bg-slate-50'}`}>
+                className={`w-full grid grid-cols-[24px_1fr_14px] md:grid-cols-[24px_220px_1fr_auto_14px] gap-3 items-center px-4 py-3 text-left transition-colors hover:bg-surface-2`}>
                 <Icon s={item.status} />
-                <span className={`font-bold text-sm ${textHead}`}>{idx + 1}. {item.title}</span>
-                <span className={`hidden md:block text-[13px] truncate ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{item.headline}</span>
+                <span className={`font-semibold text-sm ${textHead}`}>{idx + 1}. {item.title}</span>
+                <span className={`hidden md:block text-[13px] truncate text-ink-muted`}>{item.headline}</span>
                 <span className="hidden md:block"><Pill s={item.status}>{label(item.status)}</Pill></span>
                 <ChevronRight size={14} className={`${textMuted} transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                 <span className={`md:hidden col-start-2 col-span-2 text-[12.5px] ${textMuted}`}>{item.headline}</span>
@@ -273,7 +273,7 @@ export function TopoAnalysis({ data, ui, money, running, onAnalyze, onMark }: {
 
       {history.length > 0 && (
         <div className="space-y-2">
-          <div className={`text-[11px] uppercase tracking-wider font-bold ${textMuted}`}>Resultado das sugestões anteriores · topo de funil</div>
+          <div className={`text-[11px] font-medium ${textMuted}`}>Resultado das sugestões anteriores · topo de funil</div>
           <div className={`${bgCard} border ${borderCol} rounded-xl overflow-x-auto`}>
             <table className="w-full border-collapse">
               <thead><tr>{['Sugestão', 'Feita em', 'Antes', 'Depois', 'Resultado'].map((h, i) =>

@@ -34,7 +34,7 @@ export function VturbAsk({ productId, startDate, endDate, period, ui }: { produc
   const [chat, setChat] = useState<{ q: string; a: string; missing: string; kept?: boolean }[]>([]);
   const [answering, setAnswering] = useState(false);
   const [error, setError] = useState('');
-  const soft = isDark ? 'bg-slate-950' : 'bg-slate-50';
+  const soft = 'bg-surface-2';
 
   const ask = async (text?: string) => {
     const q = (text ?? question).trim();
@@ -57,36 +57,36 @@ export function VturbAsk({ productId, startDate, endDate, period, ui }: { produc
   return (
     <div className={`${bgCard} border rounded-xl p-4 space-y-3`}>
       <div className="flex justify-between items-baseline gap-3 flex-wrap">
-        <div className={`text-sm font-bold ${textHead} inline-flex items-center gap-1.5`}><Sparkles size={14} className="text-indigo-400" /> Pergunte à IA sobre esta campanha</div>
+        <div className={`text-sm font-semibold ${textHead} inline-flex items-center gap-1.5`}><Sparkles size={14} className="text-brand-text" /> Pergunte à IA sobre esta campanha</div>
         {period && <div className={`text-xs ${textMuted}`}>ela lê o período da tela: {ddmm(period[0])} a {ddmm(period[1])}, e os últimos 3 e 7 dias</div>}
       </div>
       {chat.length === 0 && (
         <div className="flex flex-wrap gap-1.5">
           {IDEAS.map(idea => (
             <button key={idea} onClick={() => ask(idea)} disabled={answering}
-              className={`text-xs text-left px-2.5 py-1.5 rounded-lg border ${borderCol} ${textMuted} hover:text-indigo-400 hover:border-indigo-500/50 disabled:opacity-50`}>{idea}</button>
+              className={`text-xs text-left px-2.5 py-1.5 rounded-lg border ${borderCol} ${textMuted} hover:text-brand-text hover:border-brand/50 disabled:opacity-50`}>{idea}</button>
           ))}
         </div>
       )}
       {chat.map((c, i) => (
         <div key={i} className="space-y-1.5">
-          <div className={`text-[13px] font-bold ${textHead}`}>{c.q}</div>
-          <div className={`rounded-lg border ${borderCol} ${soft} p-3 text-[13px] leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{c.a}</div>
+          <div className={`text-[13px] font-medium ${textHead}`}>{c.q}</div>
+          <div className={`rounded-lg border ${borderCol} ${soft} p-3 text-[13px] leading-relaxed whitespace-pre-wrap text-ink`}>{c.a}</div>
           {c.missing && <div className={`text-[11px] ${textMuted}`}>Faltou para responder melhor: {c.missing}</div>}
           {c.kept
-            ? <div className="text-[11px] text-emerald-500">Guardado na memória da IA, para esta campanha.</div>
-            : <button onClick={() => keep(i)} className="text-[11px] text-indigo-400 hover:underline">Guardar esta resposta na memória da IA</button>}
+            ? <div className="text-[11px] text-pos">Guardado na memória da IA, para esta campanha.</div>
+            : <button onClick={() => keep(i)} className="text-[11px] text-brand-text hover:underline">Guardar esta resposta na memória da IA</button>}
         </div>
       ))}
       {answering && <div className={`flex items-center gap-2 text-xs ${textMuted}`}><Loader2 size={13} className="animate-spin" /> A IA está lendo os números…</div>}
-      {error && <div className="text-xs text-rose-500">{error}</div>}
+      {error && <div className="text-xs text-neg">{error}</div>}
       <div className="flex gap-2 items-end">
         <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2} maxLength={1000} aria-label="Pergunta para a IA"
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }}
           placeholder="O celular vale o que custa nesta campanha?"
-          className={`flex-1 rounded-lg border ${borderCol} ${soft} ${textHead} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
+          className={`flex-1 rounded-lg border ${borderCol} ${soft} ${textHead} px-3 py-2 text-[13px] outline-none focus:border-brand resize-y`} />
         <button onClick={() => ask()} disabled={answering || !question.trim()}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5">
+          className="bg-brand hover:bg-brand-hover text-white px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5">
           {answering ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Perguntar
         </button>
       </div>

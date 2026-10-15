@@ -40,18 +40,18 @@ export function Funnel({ screen, ui }: { screen: any; ui: Ui }) {
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
   const now = stepsOf(screen.steps), d3 = stepsOf(screen.steps3), d7 = stepsOf(screen.steps7);
   const max = Math.max(1, ...now.map(s => s.n || 0));
-  const bad = isDark ? 'text-rose-400' : 'text-rose-600';
+  const bad = 'text-neg';
   // Maior perda: a etapa em que menos gente seguiu (só entre as que têm número).
   const losses = now.filter(s => s.rate !== null && s.rate <= 1).sort((a, b) => a.rate! - b.rate!);
   const worst = losses[0]?.key, second = losses[1]?.key;
   const rateText = (s: { key: string; rate: number | null }) => (s.rate === null ? '—' : s.key === 'viewed' ? `fuga ${pct(Math.max(0, 1 - s.rate))}` : `${pct(s.rate)} seguem`);
-  const th = `text-[11px] font-semibold uppercase tracking-wide ${textMuted} pb-2 whitespace-nowrap`;
+  const th = `text-[11px] font-semibold ${textMuted} pb-2 whitespace-nowrap`;
   const noCheckout = !screen.steps.checkout && screen.steps.sales > 0;
   const noButton = screen.steps.button === 0 && screen.steps.sales > 0;
   return (
     <div className={`${bgCard} border rounded-xl px-5 py-4`}>
       <div className="flex justify-between items-baseline gap-3 flex-wrap mb-3">
-        <div className={`text-sm font-bold ${textHead}`}>Do clique à venda</div>
+        <div className={`text-sm font-semibold ${textHead}`}>Do clique à venda</div>
         <div className={`text-xs ${textMuted}`}>período da tela: {ddmm(screen.period[0])} a {ddmm(screen.period[1])} · ao lado, 3 dias ({ddmm(screen.d3[0])}–{ddmm(screen.d3[1])}) e 7 dias ({ddmm(screen.d7[0])}–{ddmm(screen.d7[1])})</div>
       </div>
       <div className="overflow-x-auto">
@@ -66,7 +66,7 @@ export function Funnel({ screen, ui }: { screen: any; ui: Ui }) {
               <tr key={s.key} className={`border-t ${borderCol}`}>
                 <td className={`py-2 pr-3 text-[13px] whitespace-nowrap ${textHead}`}>{s.label}</td>
                 <td className="py-2 pr-3">
-                  <div className={`h-4 rounded ${i >= 4 ? 'bg-emerald-500/70' : 'bg-purple-500/70'}`} style={{ width: `${Math.max(s.n ? 1.5 : 0, ((s.n || 0) / max) * 100)}%` }} />
+                  <div className={`h-4 rounded ${i >= 4 ? 'bg-pos/70' : 'bg-brand/70'}`} style={{ width: `${Math.max(s.n ? 1.5 : 0, ((s.n || 0) / max) * 100)}%` }} />
                 </td>
                 <td className={`py-2 text-right text-[13px] font-semibold ${textHead}`}>{int(s.n)}</td>
                 <td className={`py-2 pl-3 text-right text-xs whitespace-nowrap ${s.key === worst || s.key === second ? bad : textMuted}`} title={s.of}>{rateText(s)}</td>
@@ -80,8 +80,8 @@ export function Funnel({ screen, ui }: { screen: any; ui: Ui }) {
       <div className={`text-xs ${textMuted} mt-3 space-y-1`}>
         {worst && <div>Maior perda no período: <b className={textHead}>{now.find(s => s.key === worst)!.label.toLowerCase()}</b>{second ? <>. Segunda: <b className={textHead}>{now.find(s => s.key === second)!.label.toLowerCase()}</b></> : null}.</div>}
         <div>Cada etapa mostra quantos seguiram da etapa anterior. O clique no botão é contado pela VTurb; o checkout, pelo postback e pelo script do Autometrics; as vendas, pelo postback.</div>
-        {noButton && <div className={isDark ? 'text-orange-300' : 'text-orange-700'}>A VTurb não registrou clique no botão deste player neste período, então essa etapa fica sem número.</div>}
-        {noCheckout && <div className={isDark ? 'text-orange-300' : 'text-orange-700'}>Nenhum checkout chegou neste período. Ele aparece quando o evento de checkout está marcado no postback da plataforma, ou quando a página usa o script do Autometrics.</div>}
+        {noButton && <div className={'text-warn'}>A VTurb não registrou clique no botão deste player neste período, então essa etapa fica sem número.</div>}
+        {noCheckout && <div className={'text-warn'}>Nenhum checkout chegou neste período. Ele aparece quando o evento de checkout está marcado no postback da plataforma, ou quando a página usa o script do Autometrics.</div>}
       </div>
     </div>
   );
@@ -112,9 +112,9 @@ export function Segments({ screen, productId, money, ui, onChanged }: { screen: 
   const rows = onlyBad ? all.filter(r => leakBad(r) || pitchBad(r)) : all;
   const badCount = all.filter(r => leakBad(r) || pitchBad(r)).length;
 
-  const bad = isDark ? 'text-rose-400' : 'text-rose-600';
-  const dash = <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>—</span>;
-  const thBase = `text-[11px] font-semibold uppercase tracking-wide ${textMuted} px-3 py-2.5 border-b ${borderCol} whitespace-nowrap`;
+  const bad = 'text-neg';
+  const dash = <span className={'text-ink-subtle'}>—</span>;
+  const thBase = `text-[11px] font-semibold ${textMuted} px-3 py-2.5 border-b ${borderCol} whitespace-nowrap`;
   const tdBase = `text-[13px] px-3 py-2.5 border-b ${borderCol} tabular-nums whitespace-nowrap`;
   const th = `${thBase} text-right`, td = `${tdBase} text-right`;
   const small = `text-[11px] px-2 py-1 rounded border ${borderCol} ${textMuted}`;
@@ -133,8 +133,8 @@ export function Segments({ screen, productId, money, ui, onChanged }: { screen: 
     return (
       <span className="inline-flex gap-1.5">
         {r.paused ? <span className={`text-[11px] ${textMuted}`}>pausada</span>
-          : r.entity_id && <button onClick={() => setApplying({ key: r.key, plan: { type: 'pausar' } })} className={`${small} hover:text-amber-400`}>Pausar</button>}
-        <button onClick={() => setApplying({ key: r.key, plan: { type: 'negativa' } })} className={`${small} hover:text-rose-400`}>Negativar</button>
+          : r.entity_id && <button onClick={() => setApplying({ key: r.key, plan: { type: 'pausar' } })} className={`${small} hover:text-warn`}>Pausar</button>}
+        <button onClick={() => setApplying({ key: r.key, plan: { type: 'negativa' } })} className={`${small} hover:text-neg`}>Negativar</button>
       </span>
     );
   };
@@ -142,23 +142,23 @@ export function Segments({ screen, productId, money, ui, onChanged }: { screen: 
   return (
     <div className={`${bgCard} border rounded-xl px-5 py-4 space-y-3`}>
       <div className="flex justify-between items-center gap-3 flex-wrap">
-        <div className={`text-sm font-bold ${textHead}`}>Quem assiste e quem compra · {ddmm(screen.period[0])} a {ddmm(screen.period[1])}</div>
+        <div className={`text-sm font-semibold ${textHead}`}>Quem assiste e quem compra · {ddmm(screen.period[0])} a {ddmm(screen.period[1])}</div>
         <div className="flex items-center gap-2 flex-wrap">
           {badCount > 0 && (
             <button onClick={() => setOnlyBad(v => !v)} aria-pressed={onlyBad}
-              className={`text-xs px-3 py-1.5 rounded-lg border ${onlyBad ? 'border-rose-500/60 text-rose-400' : `${borderCol} ${textMuted}`}`}>
+              className={`text-xs px-3 py-1.5 rounded-lg border ${onlyBad ? 'border-neg/60 text-neg' : `${borderCol} ${textMuted}`}`}>
               {onlyBad ? 'Mostrar todas' : `Só as ${badCount} que não assistem`}
             </button>
           )}
           <div className={`flex rounded-lg border ${borderCol} overflow-hidden`}>
             {VIEWS.map(v => (
               <button key={v.id} onClick={() => { setView(v.id); setOnlyBad(false); setApplying(null); }}
-                className={`px-3 py-1.5 text-xs font-semibold ${view === v.id ? 'bg-indigo-600 text-white' : `${textMuted} ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}`}>{v.label}</button>
+                className={`px-3 py-1.5 text-xs font-semibold ${view === v.id ? 'bg-brand text-white' : `${textMuted} hover:bg-surface-2`}`}>{v.label}</button>
             ))}
           </div>
         </div>
       </div>
-      <div className={`text-xs rounded-lg px-3 py-2.5 ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-slate-50 text-slate-600'}`}>
+      <div className={`text-xs rounded-lg px-3 py-2.5 bg-surface-2 text-ink-subtle`}>
         {seg.visits.gclid > 0
           ? <>Cada visita da VTurb é ligada ao clique do Google pelo gclid: {int(seg.visits.matched)} de {int(seg.visits.gclid)} visitas com gclid acharam o clique. Cliques e custo são do Google; carregaram, pitch e vendas são das visitas ligadas (vendas contadas pela VTurb). Fuga e custo por pessoa no pitch levam em conta as visitas que não acharam o clique.{seg.visits.gclid > 0 && seg.visits.matched / seg.visits.gclid < 0.5 ? ' Menos da metade foi ligada: leia as linhas como amostra.' : ''} Em vermelho, o que está fora do limite contra a campanha (fuga 10 pontos acima ou chegada ao pitch 25% abaixo).</>
           : 'Nenhuma visita deste período chegou com gclid, então não há como ligar a visita ao clique do Google.'}
@@ -175,7 +175,7 @@ export function Segments({ screen, productId, money, ui, onChanged }: { screen: 
             <tbody>
               {rows.map((r: any) => (
                 <React.Fragment key={r.key}>
-                  <tr className={r.small ? (isDark ? 'text-slate-500' : 'text-slate-400') : textHead}>
+                  <tr className={r.small ? ('text-ink-subtle') : textHead}>
                     <td className={`${tdBase} text-left`}><span className="block max-w-[260px] truncate" title={r.label}>{r.label}</span></td>
                     <td className={td}>{r.clicks === null ? dash : int(r.clicks)}</td>
                     <td className={td}>{r.cost === null ? dash : money(r.cost)}</td>
@@ -216,7 +216,7 @@ export function Changes({ screen, ui }: { screen: any; ui: Ui }) {
   return (
     <div className={`${bgCard} border rounded-xl px-5 py-4`}>
       <div className="flex justify-between items-baseline gap-3 flex-wrap mb-2">
-        <div className={`text-sm font-bold ${textHead}`}>Alterações na campanha · {ddmm(screen.period[0])} a {ddmm(screen.period[1])}</div>
+        <div className={`text-sm font-semibold ${textHead}`}>Alterações na campanha · {ddmm(screen.period[0])} a {ddmm(screen.period[1])}</div>
         <div className={`text-xs ${textMuted}`}>{total} {total === 1 ? 'alteração' : 'alterações'} em {days.length} {days.length === 1 ? 'dia' : 'dias'} · para ler junto com os números acima</div>
       </div>
       {shown.map(d => (
@@ -229,7 +229,7 @@ export function Changes({ screen, ui }: { screen: any; ui: Ui }) {
         </div>
       ))}
       {(days.length > 3 || days.some(d => d.lines.length > 5)) && (
-        <button onClick={() => setAll(v => !v)} className={`text-xs font-bold mt-2 ${textMuted} hover:text-indigo-400`}>{all ? 'Mostrar menos' : 'Ver todas'}</button>
+        <button onClick={() => setAll(v => !v)} className={`text-xs font-medium mt-2 ${textMuted} hover:text-brand-text`}>{all ? 'Mostrar menos' : 'Ver todas'}</button>
       )}
     </div>
   );
