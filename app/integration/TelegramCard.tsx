@@ -102,13 +102,13 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
     setManual(null);
   };
 
-  const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const head = isDark ? 'text-white' : 'text-slate-900';
-  const muted = 'text-slate-500';
-  const line = isDark ? 'border-slate-800' : 'border-slate-200';
-  const field = `rounded-lg border ${line} ${isDark ? 'bg-slate-950 text-white' : 'bg-white text-slate-900'} px-2 py-1 text-[13px] outline-none focus:border-indigo-500`;
-  const ghost = `px-3 py-1.5 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-50`;
-  const solid = 'bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50 inline-flex items-center gap-1.5';
+  const card = 'bg-surface-1 border-line';
+  const head = 'text-ink';
+  const muted = 'text-ink-subtle';
+  const line = 'border-line';
+  const field = `rounded-lg border ${line} bg-surface-2 text-ink px-2 py-1 text-[13px] outline-none focus:border-brand`;
+  const ghost = `px-3 py-1.5 rounded-lg border ${line} text-xs font-medium ${muted} hover:text-ink disabled:opacity-50`;
+  const solid = 'bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 inline-flex items-center gap-1.5';
   const spin = (a: string) => busy === a && <Loader2 size={12} aria-hidden="true" className="animate-spin" />;
 
   if (!state) return <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Carregando…</div>;
@@ -116,7 +116,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
 
   const Switch = ({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) => (
     <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={onClick}
-      className={`relative w-10 h-[22px] rounded-full shrink-0 transition-colors ${on ? 'bg-indigo-600' : isDark ? 'bg-slate-700' : 'bg-slate-300'}`}>
+      className={`relative w-10 h-[22px] rounded-full shrink-0 transition-colors ${on ? 'bg-brand' : 'bg-surface-3'}`}>
       <span className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-all ${on ? 'left-[21px]' : 'left-[3px]'}`} />
     </button>
   );
@@ -126,14 +126,14 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
       {/* ── Ligação com o bot ── */}
       <div className={`${card} border rounded-xl p-5`}>
         <div className="flex items-center gap-2 mb-1">
-          <Send size={16} aria-hidden="true" className="text-sky-500" />
-          <span className={`text-base font-bold ${head}`}>Telegram</span>
-          {state.linked && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${state.enabled ? 'bg-emerald-500/15 text-emerald-500' : 'bg-slate-500/15 text-slate-400'}`}>{state.enabled ? 'Ligado' : 'Pausado'}</span>}
+          <Send size={16} aria-hidden="true" className="text-brand-text" />
+          <span className={`text-base font-semibold ${head}`}>Telegram</span>
+          {state.linked && <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${state.enabled ? 'bg-pos/10 text-pos' : 'bg-surface-3 text-ink-subtle'}`}>{state.enabled ? 'Ligado' : 'Pausado'}</span>}
         </div>
         <div className={`text-xs ${muted} mb-4`}>Os avisos das suas campanhas chegam numa conversa com o bot do Autometrics. Cada pessoa liga o próprio Telegram e recebe só o que é dela.</div>
 
-        {!state.ready && <div className="text-sm text-amber-500">{state.error}</div>}
-        {state.ready && !state.configured && <div className="text-sm text-amber-500">O bot do Telegram ainda não foi configurado no servidor do Autometrics.</div>}
+        {!state.ready && <div className="text-sm text-warn">{state.error}</div>}
+        {state.ready && !state.configured && <div className="text-sm text-warn">O bot do Telegram ainda não foi configurado no servidor do Autometrics.</div>}
 
         {state.ready && state.configured && !state.linked && (
           <div className="space-y-3">
@@ -142,7 +142,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
             ) : (
               <>
                 <ol className={`text-[13px] ${head} space-y-1.5 list-decimal pl-5`}>
-                  <li>Abra o bot: <a href={link} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline break-all">{link}</a></li>
+                  <li>Abra o bot: <a href={link} target="_blank" rel="noopener noreferrer" className="text-brand-text hover:underline break-all">{link}</a></li>
                   <li>No Telegram, toque em <b>Iniciar</b>. Se o botão não aparecer, envie a mensagem <b className="font-mono">{state.code}</b>.</li>
                   <li>Volte aqui e clique em conferir.</li>
                 </ol>
@@ -164,15 +164,15 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
             <button onClick={() => { if (confirm('Desligar o Telegram? Os avisos param de chegar até você ligar de novo, com um código novo.')) run('unlink', {}, 'Ligação desfeita.'); }} disabled={!!busy} className={ghost}>Desligar</button>
           </div>
         )}
-        <div aria-live="polite">{message && <div className={`text-xs mt-3 ${message.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{message.text}</div>}</div>
+        <div aria-live="polite">{message && <div className={`text-xs mt-3 ${message.ok ? 'text-pos' : 'text-neg'}`}>{message.text}</div>}</div>
       </div>
 
       {/* ── Alertas ── */}
       {state.ready && settings && (
         <div className={`${card} border rounded-xl overflow-hidden`}>
           <div className="flex items-center gap-2 px-5 pt-5 pb-1">
-            <span className={`text-base font-bold ${head}`}>Alertas</span>
-            <span className={`text-[11px] ml-auto ${saved === 'erro' ? 'text-rose-500' : saved === 'salvo' ? 'text-emerald-500' : muted}`}>
+            <span className={`text-base font-semibold ${head}`}>Alertas</span>
+            <span className={`text-[11px] ml-auto ${saved === 'erro' ? 'text-neg' : saved === 'salvo' ? 'text-pos' : muted}`}>
               {saved === 'salvando' ? 'Salvando…' : saved === 'salvo' ? 'Salvo' : saved === 'erro' ? saveError : ''}
             </span>
           </div>
@@ -187,7 +187,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
                 <div className="flex items-start gap-3">
                   <Switch on={!!s.on} onClick={() => setAlert(a.key, { on: !s.on })} label={a.title} />
                   <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-bold ${s.on ? head : muted}`}>{a.title}</div>
+                    <div className={`text-sm font-medium ${s.on ? head : muted}`}>{a.title}</div>
                     <div className={`text-xs ${muted}`}>{a.when}</div>
                     {s.on && a.params.length > 0 && (
                       <div className="flex flex-wrap gap-x-5 gap-y-2 mt-2.5">
@@ -215,7 +215,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
 
           {/* ── Regras próprias ── */}
           <div className={`px-5 py-4 border-t ${line}`}>
-            <div className={`text-sm font-bold ${head}`}>Suas regras</div>
+            <div className={`text-sm font-medium ${head}`}>Suas regras</div>
             <div className={`text-xs ${muted} mb-3`}>
               Escreva do seu jeito o que quer ser avisado. A IA monta a regra e mostra em uma frase; ela só entra na lista quando você adicionar.
               Cada regra avisa uma vez por dia por campanha.
@@ -225,11 +225,11 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
               <div key={r.id} className="flex items-start gap-3 py-2">
                 <Switch on={!!r.on} onClick={() => setRules(rules.map((x, k) => (k === i ? { ...x, on: !x.on } : x)))} label={r.name} />
                 <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-bold ${r.on ? head : muted}`}>{r.name}</div>
+                  <div className={`text-sm font-medium ${r.on ? head : muted}`}>{r.name}</div>
                   <div className={`text-xs ${muted}`}>{describeRule(r)}</div>
                 </div>
-                <button onClick={() => setManual({ index: i, rule: { ...r, min_cost: r.min_cost || '' } })} aria-label={`Editar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10"><Pencil size={14} aria-hidden="true" /></button>
-                <button onClick={() => { if (confirm(`Apagar a regra "${r.name}"?`)) setRules(rules.filter((_, k) => k !== i)); }} aria-label={`Apagar a regra ${r.name}`} className="p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"><Trash2 size={14} aria-hidden="true" /></button>
+                <button onClick={() => setManual({ index: i, rule: { ...r, min_cost: r.min_cost || '' } })} aria-label={`Editar a regra ${r.name}`} className="p-1.5 rounded text-ink-subtle hover:text-ink hover:bg-surface-2"><Pencil size={14} aria-hidden="true" /></button>
+                <button onClick={() => { if (confirm(`Apagar a regra "${r.name}"?`)) setRules(rules.filter((_, k) => k !== i)); }} aria-label={`Apagar a regra ${r.name}`} className="p-1.5 rounded text-ink-subtle hover:text-neg hover:bg-neg/10"><Trash2 size={14} aria-hidden="true" /></button>
               </div>
             ))}
 
@@ -246,15 +246,15 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
             </div>
 
             {!manual && (
-              <button onClick={() => setManual({ index: -1, rule: BLANK })} className={`mt-2 text-xs font-bold ${muted} hover:text-indigo-400`}>Ou montar a regra na mão</button>
+              <button onClick={() => setManual({ index: -1, rule: BLANK })} className={`mt-2 text-xs font-medium ${muted} hover:text-ink`}>Ou montar a regra na mão</button>
             )}
             {manual && (() => {
               const r = manual.rule;
               const moneyMetric = RULE_METRICS[r.metric as keyof typeof RULE_METRICS]?.money;
-              const label = `flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide ${muted}`;
+              const label = `flex flex-col gap-1 text-xs font-medium ${muted}`;
               return (
                 <div className={`mt-3 p-3 rounded-lg border ${line}`}>
-                  <div className={`text-[11px] uppercase tracking-wider font-extrabold ${muted} mb-2`}>{manual.index >= 0 ? 'Editar a regra' : 'Regra nova, na mão'}</div>
+                  <div className={`text-xs font-medium ${muted} mb-2`}>{manual.index >= 0 ? 'Editar a regra' : 'Regra nova, na mão'}</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <label className={label}>Nome da regra
                       <input value={r.name} onChange={e => setField({ name: e.target.value })} maxLength={60} placeholder="CPA alto no BP" className={`${field} font-normal normal-case`} />
@@ -290,7 +290,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
                       <input type="number" inputMode="decimal" min={0} step="any" value={r.min_cost} onChange={e => setField({ min_cost: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="sem mínimo" className={`${field} font-normal text-right tabular-nums`} />
                     </label>
                   </div>
-                  <div className={`text-xs mt-3 ${manualRule ? head : 'text-amber-500'}`}>{manualRule ? describeRule(manualRule) : 'Preencha o limite com um número.'}</div>
+                  <div className={`text-xs mt-3 ${manualRule ? head : 'text-warn'}`}>{manualRule ? describeRule(manualRule) : 'Preencha o limite com um número.'}</div>
                   <div className="flex gap-2 mt-2.5">
                     <button onClick={saveManual} disabled={!manualRule} className={solid}>{manual.index >= 0 ? 'Salvar a regra' : 'Adicionar regra'}</button>
                     <button onClick={() => setManual(null)} className={ghost}>Cancelar</button>
@@ -299,11 +299,11 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
               );
             })()}
 
-            {ruleError && <div className="text-xs text-rose-500 mt-2">{ruleError}</div>}
+            {ruleError && <div className="text-xs text-neg mt-2">{ruleError}</div>}
             {draft && (
-              <div className={`mt-3 p-3 rounded-lg border ${isDark ? 'border-indigo-500/40 bg-indigo-500/5' : 'border-indigo-200 bg-indigo-50'}`}>
-                <div className={`text-[11px] uppercase tracking-wider font-extrabold ${muted}`}>A IA entendeu assim</div>
-                <div className={`text-sm font-bold mt-1 ${head}`}>{draft.rule.name}</div>
+              <div className={`mt-3 p-3 rounded-lg border border-brand/30 bg-brand/5`}>
+                <div className={`text-xs font-medium ${muted}`}>A IA entendeu assim</div>
+                <div className={`text-sm font-medium mt-1 ${head}`}>{draft.rule.name}</div>
                 <div className={`text-xs ${muted}`}>{draft.description}</div>
                 <div className="flex gap-2 mt-2.5">
                   <button onClick={addDraft} className={solid}>Adicionar regra</button>
@@ -317,7 +317,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
             <div className="flex items-start gap-3">
               <Switch on={!!settings.quiet.on} onClick={() => change({ ...settings, quiet: { ...settings.quiet, on: !settings.quiet.on } })} label="Horário de silêncio" />
               <div className="flex-1 min-w-0">
-                <div className={`text-sm font-bold ${settings.quiet.on ? head : muted}`}>Horário de silêncio</div>
+                <div className={`text-sm font-medium ${settings.quiet.on ? head : muted}`}>Horário de silêncio</div>
                 <div className={`text-xs ${muted}`}>Nesse intervalo nada é enviado. O que continuar valendo chega quando o silêncio acaba.</div>
                 {settings.quiet.on && (
                   <div className={`flex items-center gap-2 text-xs ${muted} mt-2.5`}>

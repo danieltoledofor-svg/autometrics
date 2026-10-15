@@ -38,7 +38,7 @@ function reconcileLine(a: Account): { text: string; tone: string } | null {
   if (!a.last_reconciled_at) return null;
   const s = a.last_reconcile_summary || {};
   const when = `Conferido com o Google ${timeAgo(a.last_reconciled_at)}`;
-  if (a.last_reconcile_status === 'erro') return { text: `${when} · falhou: ${s.error || 'erro'}`, tone: 'text-rose-500' };
+  if (a.last_reconcile_status === 'erro') return { text: `${when} · falhou: ${s.error || 'erro'}`, tone: 'text-neg' };
   const parts = [when];
   if (a.last_reconcile_status === 'divergente') {
     parts.push(`${s.divergent_days} dia(s) ainda não conferem`);
@@ -46,7 +46,7 @@ function reconcileLine(a: Account): { text: string; tone: string } | null {
   } else parts.push(`${s.days || 0} dia(s) batendo`);
   if (s.corrected) parts.push(`${s.corrected} correção(ões) com o valor do Google`);
   if (s.created?.length) parts.push(`${s.created.length} campanha(s) trazida(s) (${s.created.join(', ')})`);
-  return { text: parts.join(' · '), tone: a.last_reconcile_status === 'divergente' ? 'text-amber-500' : 'text-indigo-400' };
+  return { text: parts.join(' · '), tone: a.last_reconcile_status === 'divergente' ? 'text-warn' : 'text-brand-text' };
 }
 
 async function api(path: string, init: RequestInit = {}) {
@@ -89,11 +89,11 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const [showInactive, setShowInactive] = useState(false);
 
-  const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const muted = 'text-slate-500';
-  const rowBorder = isDark ? 'border-slate-800' : 'border-slate-100';
-  const btnGhost = `px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}`;
+  const card = 'bg-surface-1 border-line';
+  const textHead = 'text-ink';
+  const muted = 'text-ink-subtle';
+  const rowBorder = 'border-line';
+  const btnGhost = 'px-3 py-1.5 rounded-lg text-xs font-medium border border-line bg-surface-1 text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors disabled:opacity-50';
 
   const load = useCallback(async () => {
     const { ok, body } = await api('/api/google-ads/connections');
@@ -229,17 +229,17 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
 
   return (
     <div className={`${card} rounded-xl border overflow-hidden`}>
-      <div className={`p-6 border-b ${rowBorder} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
+      <div className={`p-6 border-b ${rowBorder} flex flex-col xl:flex-row xl:items-center justify-between gap-4`}>
         <div>
-          <h3 className={`font-bold flex items-center gap-2 ${textHead}`}>
-            <Plug size={18} aria-hidden="true" className="text-indigo-500" /> Google Ads API
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400">Recomendado</span>
+          <h3 className={`text-base font-semibold flex items-center gap-2 ${textHead}`}>
+            <Plug size={18} aria-hidden="true" className="text-brand-text" /> Google Ads API
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-brand/15 text-brand-text">Recomendado</span>
           </h3>
           <p className={`text-sm mt-1 ${muted}`}>
             Conexão direta: atualização de hora em hora (com as revisões de custo do Google), pausar/ativar campanhas pelo painel e sem script para colar.
           </p>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex flex-wrap gap-2 shrink-0">
           {accounts.length > 0 && (
             <button onClick={syncEverything} disabled={!!syncAll || !!busy} className={btnGhost + ' flex items-center gap-1.5'}>
               <RefreshCw size={14} aria-hidden="true" className={syncAll ? 'animate-spin' : ''} />
@@ -247,7 +247,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
             </button>
           )}
           <button onClick={connect} disabled={!configured || !!setupError || busy === 'connect'}
-            className="px-4 py-2 rounded-lg text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 disabled:opacity-50">
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-brand hover:bg-brand-hover text-white flex items-center gap-2 disabled:opacity-50">
             {busy === 'connect' ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Plug size={16} aria-hidden="true" />}
             {connections.length ? 'Conectar outra conta Google' : 'Conectar Google Ads'}
           </button>
@@ -256,7 +256,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
 
       <div aria-live="polite">
       {notice && (
-        <div className={`mx-6 mt-4 p-3 rounded-lg text-sm flex items-start gap-2 ${notice.kind === 'ok' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+        <div className={`mx-6 mt-4 p-3 rounded-lg text-sm flex items-start gap-2 ${notice.kind === 'ok' ? 'bg-pos/10 text-pos' : 'bg-neg/10 text-neg'}`}>
           {notice.kind === 'ok' ? <CheckCircle2 size={16} aria-hidden="true" className="mt-0.5 shrink-0" /> : <AlertCircle size={16} aria-hidden="true" className="mt-0.5 shrink-0" />}
           <span className="flex-1 break-words">{notice.text}</span>
           <button onClick={() => setNotice(null)} className="text-xs opacity-70 hover:opacity-100">fechar</button>
@@ -265,7 +265,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
       </div>
 
       {(setupError || !configured) && (
-        <div className="mx-6 mt-4 p-3 rounded-lg text-sm bg-amber-500/10 text-amber-500 flex items-start gap-2">
+        <div className="mx-6 mt-4 p-3 rounded-lg text-sm bg-warn/10 text-warn flex items-start gap-2">
           <AlertCircle size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
           <span>{setupError || 'Faltam as credenciais do Google no servidor (GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET e GOOGLE_ADS_TOKEN_KEY).'}</span>
         </div>
@@ -273,7 +273,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
 
       <div className="p-6 space-y-6">
         {quota && connections.length > 0 && (
-          <p className={`text-xs ${quota.used >= quota.limit * 0.8 ? 'text-amber-500' : muted}`}>
+          <p className={`text-xs ${quota.used >= quota.limit * 0.8 ? 'text-warn' : muted}`}>
             Consultas à API hoje: {quota.used.toLocaleString('pt-BR')} de {quota.limit.toLocaleString('pt-BR')}
             {quota.used >= quota.limit * 0.8 && ' — perto do limite: a coleta automática desacelera até a virada do dia.'}
           </p>
@@ -286,25 +286,25 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
         {connections.map(c => (
           <div key={c.id} className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border ${rowBorder}`}>
             <div className="flex items-center gap-2 min-w-0">
-              <ShieldCheck size={16} aria-hidden="true" className={c.status === 'ok' ? 'text-emerald-500' : 'text-rose-500'} />
-              <span className={`text-sm font-bold truncate ${textHead}`}>{c.google_email}</span>
-              {c.status !== 'ok' && <span className="text-xs text-rose-500 font-bold">autorização expirada — reconecte</span>}
+              <ShieldCheck size={16} aria-hidden="true" className={c.status === 'ok' ? 'text-pos' : 'text-neg'} />
+              <span className={`text-sm font-medium truncate ${textHead}`}>{c.google_email}</span>
+              {c.status !== 'ok' && <span className="text-xs text-neg font-medium">autorização expirada — reconecte</span>}
             </div>
             <div className="flex gap-2">
               <button onClick={() => refreshAccounts(c.id)} disabled={!!busy} className={btnGhost}>
                 {busy === `refresh-${c.id}` ? 'Buscando…' : 'Atualizar contas'}
               </button>
-              <button onClick={() => disconnect(c)} disabled={!!busy} className={`${btnGhost} hover:!text-rose-500`} title="Desconectar" aria-label={`Desconectar ${c.google_email}`}>
+              <button onClick={() => disconnect(c)} disabled={!!busy} className={`${btnGhost} hover:!text-neg`} title="Desconectar" aria-label={`Desconectar ${c.google_email}`}>
                 <Trash2 size={14} aria-hidden="true" />
               </button>
             </div>
-            {c.last_error && <p className="w-full text-xs text-amber-500 break-words">{c.last_error}</p>}
+            {c.last_error && <p className="w-full text-xs text-warn break-words">{c.last_error}</p>}
           </div>
         ))}
 
         {accounts.length > 0 && (
           <label className={`flex items-center gap-2 text-xs cursor-pointer ${muted}`}>
-            <input type="checkbox" checked={showInactive} onChange={() => setShowInactive(v => !v)} className="accent-indigo-600 w-3.5 h-3.5" />
+            <input type="checkbox" checked={showInactive} onChange={() => setShowInactive(v => !v)} className="accent-brand w-3.5 h-3.5" />
             {showInactive ? <Eye size={13} aria-hidden="true" /> : <EyeOff size={13} aria-hidden="true" />}
             Mostrar contas suspensas e canceladas
           </label>
@@ -318,15 +318,15 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
               <button
                 onClick={() => toggleGroup(g.name)}
                 aria-expanded={aberto}
-                className={`w-full p-3 flex items-center gap-3 text-left transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'}`}
+                className={`w-full p-3 flex items-center gap-3 text-left transition-colors hover:bg-surface-2`}
               >
-                {aberto ? <ChevronDown size={16} aria-hidden="true" className="text-slate-500 shrink-0" /> : <ChevronRight size={16} aria-hidden="true" className="text-slate-500 shrink-0" />}
-                <Folder size={15} aria-hidden="true" className="text-indigo-500 shrink-0" />
+                {aberto ? <ChevronDown size={16} aria-hidden="true" className="text-ink-subtle shrink-0" /> : <ChevronRight size={16} aria-hidden="true" className="text-ink-subtle shrink-0" />}
+                <Folder size={15} aria-hidden="true" className="text-ink-subtle shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-bold truncate ${textHead}`}>{g.name}</p>
+                  <p className={`text-sm font-medium truncate ${textHead}`}>{g.name}</p>
                   <p className={`text-[11px] ${muted}`}>
                     {g.ativas} ativa(s) de {g.list.length} · {g.coletando} coletando
-                    {g.comErro > 0 && <span className="text-amber-500"> · {g.comErro} com aviso</span>}
+                    {g.comErro > 0 && <span className="text-warn"> · {g.comErro} com aviso</span>}
                   </p>
                 </div>
                 <div className={`text-xs text-right shrink-0 ${muted}`}>
@@ -340,7 +340,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
               </button>
 
               {aberto && (
-                <div className={`border-t divide-y ${rowBorder} ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                <div className={`border-t divide-y ${rowBorder} divide-line`}>
                   {visiveis.length === 0 && (
                     <p className={`p-3 text-xs ${muted}`}>
                       Nenhuma conta ativa aqui. Marque "mostrar contas suspensas e canceladas" para ver as {g.list.length}.
@@ -349,16 +349,16 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
                   {visiveis.map(a => {
                     const closed = !isActive(a);
                     const s = a.last_sync_summary;
-                    const statusColor = a.last_sync_status === 'ok' ? 'text-emerald-500' : a.last_sync_status === 'parcial' ? 'text-amber-500' : a.last_sync_status === 'erro' ? 'text-rose-500' : muted;
+                    const statusColor = a.last_sync_status === 'ok' ? 'text-pos' : a.last_sync_status === 'parcial' ? 'text-warn' : a.last_sync_status === 'erro' ? 'text-neg' : muted;
                     return (
                       <div key={a.id} className="p-3 flex flex-wrap items-center gap-3">
                         <input type="checkbox" checked={a.sync_enabled} onChange={() => toggleSync(a)}
-                          className="accent-indigo-600 w-4 h-4 cursor-pointer"
+                          className="accent-brand w-4 h-4 cursor-pointer"
                           title={a.sync_enabled ? 'Coleta ligada' : 'Coleta desligada'} aria-label={`Coletar a conta ${a.name}`} />
                         <div className="flex-1 min-w-[180px]">
-                          <p className={`text-sm font-bold ${textHead} ${closed ? 'opacity-60' : ''}`}>
+                          <p className={`text-sm font-medium ${textHead} ${closed ? 'opacity-60' : ''}`}>
                             {a.name}
-                            {closed && <span className="ml-2 text-[10px] font-bold uppercase text-rose-500">{a.status}</span>}
+                            {closed && <span className="ml-2 text-[11px] font-medium text-neg">{a.status}</span>}
                           </p>
                           <p className={`text-[11px] font-mono ${muted}`}>{fmtCustomer(a.customer_id)} · {a.currency_code || '—'}</p>
                         </div>
@@ -378,7 +378,7 @@ export function GoogleAdsApiPanel({ isDark }: { isDark: boolean }) {
                           return r && !closed ? <p className={`w-full text-[11px] ${r.tone}`}>{r.text}</p> : null;
                         })()}
                         {a.last_sync_error && (
-                          <p className={`w-full text-[11px] break-words ${a.last_sync_status === 'erro' ? 'text-rose-500' : 'text-amber-500'}`}>{a.last_sync_error}</p>
+                          <p className={`w-full text-[11px] break-words ${a.last_sync_status === 'erro' ? 'text-neg' : 'text-warn'}`}>{a.last_sync_error}</p>
                         )}
                       </div>
                     );

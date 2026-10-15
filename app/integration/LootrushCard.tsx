@@ -36,11 +36,11 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const head = isDark ? 'text-white' : 'text-slate-900', muted = 'text-slate-500';
-  const solid = 'bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2';
-  const ghost = `px-4 py-2 rounded-lg border text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2 ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-400' : 'border-slate-300 text-slate-700 hover:border-indigo-500'}`;
-  const input = `flex-1 min-w-0 rounded-lg border px-3 py-2 text-[13px] ${isDark ? 'bg-slate-950 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'}`;
+  const card = 'bg-surface-1 border-line';
+  const head = 'text-ink', muted = 'text-ink-subtle';
+  const solid = 'bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-2';
+  const ghost = 'px-4 py-2 rounded-lg border border-line bg-surface-1 text-ink-muted hover:text-ink hover:bg-surface-2 text-xs font-medium disabled:opacity-40 inline-flex items-center gap-2';
+  const input = 'flex-1 min-w-0 rounded-lg border px-3 py-2 text-[13px] bg-surface-2 border-line text-ink outline-none focus:border-brand';
   const spin = (name: string) => busy === name && <Loader2 size={13} aria-hidden="true" className="animate-spin" />;
 
   const apply = (body: any) => {
@@ -73,13 +73,13 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
   return (
     <div className={`${card} border rounded-xl p-5 space-y-4`}>
       <div>
-        <div className={`text-base font-bold flex items-center gap-2 ${head}`}><CreditCard size={17} aria-hidden="true" /> LootRush</div>
+        <div className={`text-base font-semibold flex items-center gap-2 ${head}`}><CreditCard size={17} aria-hidden="true" /> LootRush</div>
         <div className={`text-[13px] mt-1 ${muted}`}>
           Acompanha as cobranças dos seus cartões: avisa no Telegram cada cobrança, cobrança recusada e código de verificação do Google, e confere em Metas o cobrado com o gasto de cada conta do Google.
         </div>
       </div>
 
-      {state.migration && <div className="text-xs text-amber-500">{state.error}</div>}
+      {state.migration && <div className="text-xs text-warn">{state.error}</div>}
 
       {!state.migration && (!state.connected || changing) && (
         <div className="space-y-2">
@@ -101,12 +101,12 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
         <>
           <div className={`text-[13px] ${head}`}>
             Ligada. Última leitura: <b>{when(state.last_sync_at)}</b>
-            {state.status === 'erro' && state.last_error && <div className="text-xs text-rose-500 mt-1">{state.last_error}</div>}
+            {state.status === 'erro' && state.last_error && <div className="text-xs text-neg mt-1">{state.last_error}</div>}
           </div>
           <div>
-            <div className={`text-xs font-bold mb-1 ${head}`}>Grupos de cartões para acompanhar</div>
+            <div className={`text-xs font-medium mb-1 ${head}`}>Grupos de cartões para acompanhar</div>
             {!available ? <div className={`text-xs ${muted}`}><Loader2 size={12} aria-hidden="true" className="inline animate-spin mr-1" /> lendo os grupos na LootRush…</div>
-              : !available.length ? <div className="text-xs text-amber-500">Esta chave não enxerga nenhum grupo de cartões. Crie o grupo na LootRush e volte aqui.</div>
+              : !available.length ? <div className="text-xs text-warn">Esta chave não enxerga nenhum grupo de cartões. Crie o grupo na LootRush e volte aqui.</div>
                 : available.map(g => (
                   <label key={g.id} className={`flex items-center gap-2 py-1.5 text-[13px] cursor-pointer ${head}`}>
                     <input type="checkbox" checked={picked.includes(g.id)} onChange={e => setPicked(p => (e.target.checked ? [...p, g.id] : p.filter(id => id !== g.id)))} />
@@ -125,7 +125,7 @@ export function LootrushCard({ isDark }: { isDark: boolean }) {
           <div className={`text-[11px] ${muted}`}>Os avisos destes cartões são ligados e desligados na aba Telegram, em Alertas. A conferência fica em Metas.</div>
         </>
       )}
-      <div aria-live="polite">{message && <div className={`text-xs ${message.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{message.text}</div>}</div>
+      <div aria-live="polite">{message && <div className={`text-xs ${message.ok ? 'text-pos' : 'text-neg'}`}>{message.text}</div>}</div>
     </div>
   );
 }

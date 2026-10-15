@@ -15,6 +15,10 @@ import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { GoogleAdsApiPanel } from './GoogleAdsApiPanel';
+import { Inter } from 'next/font/google';
+
+// Fonte do guia visual (DESIGN.md), nas telas já migradas.
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -722,32 +726,45 @@ ${commonFunctions}`;
 
   // Estilos
   const isDark = theme === 'dark';
-  const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
-  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const textMuted = 'text-slate-500';
-  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
+  const bgMain = 'bg-canvas text-ink-muted';
+  const bgCard = 'bg-surface-1 border-line';
+  const textHead = 'text-ink';
+  const textMuted = 'text-ink-subtle';
+  const borderCol = 'border-line';
+  const navItem = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors';
+  const field = 'w-full px-3 py-2.5 rounded-lg outline-none border bg-surface-2 border-line text-ink focus:border-brand transition-colors';
+  const stepBadge = (n: number) => <span className="bg-brand w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium text-white">{n}</span>;
+  const NAV = [
+    { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', short: 'Dashboard' },
+    { href: '/planning', Icon: Target, label: 'Metas', short: 'Metas' },
+    { href: '/products', Icon: Package, label: 'Campanhas', short: 'Campanhas' },
+    { href: '/analise-ia', Icon: Sparkles, label: 'Análise de IA', short: 'Análise IA' },
+    { href: '/rastreamento', Icon: Route, label: 'Rastreamento', short: 'Rastreio' },
+    { href: '/integration', Icon: Settings, label: 'Integração', short: 'Integração' },
+  ];
 
-  if (!authChecked) return <div className="min-h-screen bg-black" />;
+  if (!authChecked) return <div className="min-h-screen bg-canvas" />;
 
   return (
-    <div className={`min-h-screen font-sans flex ${bgMain}`}>
+    <div className={`${inter.className} min-h-screen font-sans flex ${bgMain}`}>
 
       {/* SIDEBAR DESKTOP */}
-      <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
+      <aside className="hidden md:flex md:w-60 shrink-0 border-r border-line bg-surface-1 flex-col sticky top-0 h-screen z-20">
+        <div className="h-16 flex items-center justify-start px-5 border-b border-line overflow-hidden shrink-0">
           <Logo />
         </div>
-        <nav className="flex-1 px-2 py-4 space-y-2">
-          <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20} aria-hidden="true"/> Dashboard</Link>
-          <Link href="/planning" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Target size={20} aria-hidden="true"/> Metas</Link>
-          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20} aria-hidden="true"/> Campanhas</Link>
-          <Link href="/analise-ia" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Sparkles size={20} aria-hidden="true" /> Análise de IA</Link>
-          <Link href="/rastreamento" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Route size={20} aria-hidden="true" /> Rastreamento</Link>
-          <Link href="/integration" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Settings size={20} aria-hidden="true"/> Integração</Link>
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {NAV.map(({ href, Icon, label }) => (
+            <Link key={href} href={href} aria-current={href === '/integration' ? 'page' : undefined}
+              className={href === '/integration' ? `${navItem} bg-surface-2 text-ink` : `${navItem} text-ink-subtle hover:bg-surface-2 hover:text-ink`}>
+              <Icon size={18} aria-hidden="true" className={href === '/integration' ? 'text-brand-text' : ''} /> <span>{label}</span>
+            </Link>
+          ))}
         </nav>
-        <div className="p-4 border-t border-inherit">
-          <button onClick={handleLogout} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold w-full transition-colors text-rose-500 ${isDark ? 'hover:bg-slate-900' : 'hover:bg-slate-100'}`}><LogOut size={20} aria-hidden="true"/> Sair ({userEmail.split('@')[0]})</button>
+        <div className="p-3 border-t border-line">
+          <button onClick={handleLogout} className={`${navItem} text-ink-subtle hover:text-neg hover:bg-neg/10`}>
+            <LogOut size={18} aria-hidden="true" /> <span className="truncate">Sair ({userEmail.split('@')[0]})</span>
+          </button>
         </div>
       </aside>
 
@@ -758,23 +775,21 @@ ${commonFunctions}`;
         {/* HEADER */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" aria-label="Voltar para a Dashboard" className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-slate-900 hover:bg-slate-800 text-slate-400' : 'bg-white border border-slate-200 text-slate-600'}`}>
-              <ArrowLeft size={20} aria-hidden="true" />
+            <Link href="/dashboard" aria-label="Voltar para a Dashboard" className="w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors">
+              <ArrowLeft size={16} aria-hidden="true" />
             </Link>
             <div>
-              <h1 className={`text-2xl font-bold flex items-center gap-2 ${textHead}`}>
-                <Code className="text-indigo-500" /> Integração
-              </h1>
+              <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">Integração</h1>
               <p className={`text-sm ${textMuted}`}>Configure as conexões da sua conta.</p>
             </div>
           </div>
-          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>
-            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors">
+            {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
           </button>
         </div>
 
         {/* TAB NAV */}
-        <div className={`flex gap-1 p-1 rounded-xl mb-8 overflow-x-auto custom-scrollbar ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-200'}`}>
+        <div className="flex gap-1 p-1 rounded-lg mb-8 overflow-x-auto border border-line bg-surface-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {([
             { key: 'google', icon: <Code size={15} aria-hidden="true" />, label: 'Google Ads' },
             { key: 'vturb', icon: <Tv2 size={15} aria-hidden="true" />, label: 'VTurb' },
@@ -785,9 +800,9 @@ ${commonFunctions}`;
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               aria-pressed={activeTab === tab.key}
-              className={`shrink-0 sm:shrink flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${activeTab === tab.key
-                ? 'bg-indigo-600 text-white shadow-lg'
-                : `${textMuted} ${isDark ? 'hover:text-white' : 'hover:text-slate-900'}`
+              className={`shrink-0 sm:shrink flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab.key
+                ? 'bg-surface-3 text-ink'
+                : `${textMuted} hover:text-ink`
                 }`}
             >
               {tab.icon}
@@ -798,7 +813,7 @@ ${commonFunctions}`;
 
         {isOwner && (
           <div className="-mt-4 mb-6 text-right">
-            <Link href="/ia" className="text-xs text-indigo-400 hover:underline">Consumo da IA →</Link>
+            <Link href="/ia" className="text-xs text-brand-text hover:underline">Consumo da IA →</Link>
           </div>
         )}
 
@@ -815,46 +830,46 @@ ${commonFunctions}`;
               <GoogleAdsApiPanel isDark={isDark} />
             </div>
 
-            <h3 className={`text-xs font-bold uppercase tracking-wider mb-4 ${textMuted}`}>Script do Google Ads (método antigo)</h3>
+            <h3 className={`text-sm font-medium mb-4 ${textMuted}`}>Script do Google Ads (método antigo)</h3>
             {!generatedScript ? (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-6">
                   <div className={`${bgCard} rounded-xl p-6 border`}>
-                    <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2 ${textHead}`}>
-                      <span className="bg-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white">1</span>
+                    <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${textHead}`}>
+                      {stepBadge(1)}
                       Tipo de Conta Google
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <button onClick={() => setAccountType('mcc')} aria-pressed={accountType === 'mcc'} className={`p-4 rounded-xl border-2 text-left transition-all ${accountType === 'mcc' ? 'border-indigo-500 bg-indigo-500/10' : `${borderCol} hover:border-indigo-300`}`}>
-                        <div className="flex justify-between items-start mb-2"><Globe className={accountType === 'mcc' ? 'text-indigo-400' : 'text-slate-400'} size={24} />{accountType === 'mcc' && <Check size={16} aria-hidden="true" className="text-indigo-500" />}</div>
-                        <p className={`font-bold ${textHead}`}>Agência / MCC</p><p className={`text-xs mt-1 ${textMuted}`}>Várias sub-contas.</p>
+                      <button onClick={() => setAccountType('mcc')} aria-pressed={accountType === 'mcc'} className={`p-4 rounded-lg border text-left transition-colors ${accountType === 'mcc' ? 'border-brand bg-brand/10' : `${borderCol} hover:border-line-strong`}`}>
+                        <div className="flex justify-between items-start mb-2"><Globe className={accountType === 'mcc' ? 'text-brand-text' : 'text-ink-faint'} size={22} aria-hidden="true" />{accountType === 'mcc' && <Check size={16} aria-hidden="true" className="text-brand-text" />}</div>
+                        <p className={`font-medium ${textHead}`}>Agência / MCC</p><p className={`text-xs mt-1 ${textMuted}`}>Várias sub-contas.</p>
                       </button>
-                      <button onClick={() => setAccountType('single')} aria-pressed={accountType === 'single'} className={`p-4 rounded-xl border-2 text-left transition-all ${accountType === 'single' ? 'border-indigo-500 bg-indigo-500/10' : `${borderCol} hover:border-indigo-300`}`}>
-                        <div className="flex justify-between items-start mb-2"><Store className={accountType === 'single' ? 'text-indigo-400' : 'text-slate-400'} size={24} />{accountType === 'single' && <Check size={16} aria-hidden="true" className="text-indigo-500" />}</div>
-                        <p className={`font-bold ${textHead}`}>Conta Única</p><p className={`text-xs mt-1 ${textMuted}`}>Conta isolada.</p>
+                      <button onClick={() => setAccountType('single')} aria-pressed={accountType === 'single'} className={`p-4 rounded-lg border text-left transition-colors ${accountType === 'single' ? 'border-brand bg-brand/10' : `${borderCol} hover:border-line-strong`}`}>
+                        <div className="flex justify-between items-start mb-2"><Store className={accountType === 'single' ? 'text-brand-text' : 'text-ink-faint'} size={22} aria-hidden="true" />{accountType === 'single' && <Check size={16} aria-hidden="true" className="text-brand-text" />}</div>
+                        <p className={`font-medium ${textHead}`}>Conta Única</p><p className={`text-xs mt-1 ${textMuted}`}>Conta isolada.</p>
                       </button>
                     </div>
                   </div>
 
                   <div className={`${bgCard} rounded-xl p-6 border`}>
-                    <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2 ${textHead}`}><span className="bg-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white">2</span> Identificação</h3>
+                    <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${textHead}`}>{stepBadge(2)} Identificação</h3>
                     <div className="space-y-4">
                       <div>
-                        <label htmlFor="script-identifier" className={`block text-xs font-bold mb-2 ${textMuted}`}>{accountType === 'mcc' ? 'Nome da MCC' : 'Nome da Loja'}</label>
-                        <input id="script-identifier" type="text" className={`w-full p-4 rounded-lg outline-none border transition-colors ${isDark ? 'bg-slate-950 border-slate-700 text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-300 text-black focus:border-indigo-500'}`} placeholder="Ex: Minha Loja" value={identifierName} onChange={(e) => setIdentifierName(e.target.value)} />
+                        <label htmlFor="script-identifier" className={`block text-xs font-medium mb-2 ${textMuted}`}>{accountType === 'mcc' ? 'Nome da MCC' : 'Nome da Loja'}</label>
+                        <input id="script-identifier" type="text" className={field} placeholder="Ex: Minha Loja" value={identifierName} onChange={(e) => setIdentifierName(e.target.value)} />
                       </div>
                       <div>
-                        <label htmlFor="script-start-date" className={`block text-xs font-bold mb-2 ${textMuted}`}>Data Inicial</label>
-                        <input id="script-start-date" type="date" className={`w-full p-4 rounded-lg outline-none border transition-colors ${isDark ? 'bg-slate-950 border-slate-700 text-white [&::-webkit-calendar-picker-indicator]:invert' : 'bg-slate-50 border-slate-300 text-black'}`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                        <label htmlFor="script-start-date" className={`block text-xs font-medium mb-2 ${textMuted}`}>Data Inicial</label>
+                        <input id="script-start-date" type="date" className={`${field} dark:[&::-webkit-calendar-picker-indicator]:invert`} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                       </div>
                     </div>
                   </div>
-                  <button onClick={handleGenerateScript} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"><Code size={20} aria-hidden="true" /> Gerar Script</button>
+                  <button onClick={handleGenerateScript} className="w-full bg-brand hover:bg-brand-hover text-white py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"><Code size={18} aria-hidden="true" /> Gerar Script</button>
                 </div>
 
                 <div className="space-y-6">
                   <div className={`${bgCard} rounded-xl p-6 border`}>
-                    <h3 className={`font-bold mb-4 flex items-center gap-2 ${textHead}`}><Zap size={18} aria-hidden="true" className="text-amber-400" /> Instalação</h3>
+                    <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${textHead}`}><Zap size={16} aria-hidden="true" className="text-warn" /> Instalação</h3>
                     <ol className={`space-y-4 text-sm list-decimal pl-4 ${textMuted}`}>
                       <li>Abra sua conta do Google Ads.</li>
                       <li>Vá em <strong>Ferramentas e Configurações</strong> {'>'} <strong>Ações em Massa</strong> {'>'} <strong>Scripts</strong>.</li>
@@ -864,9 +879,9 @@ ${commonFunctions}`;
                       <li>Clique em <strong>Autorizar</strong> e depois em <strong>Salvar</strong>.</li>
                     </ol>
                   </div>
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl">
-                    <p className="text-xs text-emerald-400 leading-relaxed mb-2"><strong>Dica Importante:</strong></p>
-                    <p className="text-xs text-emerald-500/80 leading-relaxed">
+                  <div className="bg-pos/10 border border-pos/20 p-4 rounded-lg">
+                    <p className="text-xs text-pos leading-relaxed mb-2"><strong>Dica Importante:</strong></p>
+                    <p className="text-xs text-ink-muted leading-relaxed">
                       Na lista de scripts, altere a coluna <strong>Frequência</strong> de "Diariamente" para <strong>"A cada hora"</strong> (Hourly).
                       Isso garante que seus dados estejam sempre atualizados.
                     </p>
@@ -874,15 +889,15 @@ ${commonFunctions}`;
                 </div>
               </div>
             ) : (
-              <div className={`${bgCard} rounded-xl overflow-hidden shadow-2xl border`}>
-                <div className={`px-6 py-4 border-b flex justify-between items-center gap-4 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <div className={`${bgCard} rounded-xl overflow-hidden border`}>
+                <div className={`px-6 py-4 border-b flex justify-between items-center gap-4 bg-surface-2 border-line`}>
                   <div className="flex items-center gap-4">
-                    <button onClick={() => setGeneratedScript(null)} aria-label="Voltar e gerar outro script" className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-white border text-slate-600 hover:bg-slate-100'}`}><ArrowLeft size={18} aria-hidden="true" /></button>
-                    <div><h3 className={`font-bold text-sm ${textHead}`}>Script Pronto</h3><p className="text-xs text-emerald-500">{identifierName}</p></div>
+                    <button onClick={() => setGeneratedScript(null)} aria-label="Voltar e gerar outro script" className="p-2 rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-3 transition-colors"><ArrowLeft size={16} aria-hidden="true" /></button>
+                    <div><h3 className={`font-semibold text-sm ${textHead}`}>Script Pronto</h3><p className="text-xs text-pos">{identifierName}</p></div>
                   </div>
-                  <button onClick={copyToClipboard} className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-bold transition-all ${copied ? 'bg-emerald-500 text-white' : (isDark ? 'bg-white text-black' : 'bg-slate-900 text-white')}`}>{copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />} {copied ? 'Copiado!' : 'Copiar'}</button>
+                  <button onClick={copyToClipboard} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${copied ? 'bg-pos text-white' : 'bg-brand hover:bg-brand-hover text-white'}`}>{copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />} {copied ? 'Copiado!' : 'Copiar'}</button>
                 </div>
-                <div className="p-0 overflow-x-auto bg-[#0d1117]"><pre className="font-mono text-xs text-slate-300 leading-relaxed p-6 min-h-[400px]">{generatedScript}</pre></div>
+                <div className="p-0 overflow-x-auto bg-surface-2"><pre className="font-mono text-xs text-ink-muted leading-relaxed p-6 min-h-[400px]">{generatedScript}</pre></div>
               </div>
             )}
           </>
@@ -893,16 +908,16 @@ ${commonFunctions}`;
         {activeTab === 'vturb' && userId && (
           <div className={`rounded-xl p-6 border ${bgCard}`}>
             <div className="flex items-center gap-3 mb-1">
-              <Tv2 size={20} aria-hidden="true" className="text-purple-500" />
-              <h2 className={`text-lg font-bold ${textHead}`}>VTurb Analytics — Token de API</h2>
+              <Tv2 size={18} aria-hidden="true" className="text-brand-text" />
+              <h2 className={`text-base font-semibold ${textHead}`}>VTurb Analytics — Token de API</h2>
             </div>
             <p className={`text-sm ${textMuted} mb-5`}>
               Configure seu token de API do VTurb para visualizar métricas de vídeo
               (visualizações, plays, engajamento, cliques e conversões) diretamente nos produtos.
             </p>
 
-            <div className={`flex flex-col gap-1 text-xs mb-5 p-4 rounded-lg border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-              <p className={`font-bold mb-1 ${textHead}`}>Como obter o token:</p>
+            <div className={`flex flex-col gap-1 text-xs mb-5 p-4 rounded-lg border bg-surface-2 border-line`}>
+              <p className={`font-medium mb-1 ${textHead}`}>Como obter o token:</p>
               {[
                 '1. Acesse app.vturb.com e faça login',
                 '2. Vá em Configurações → API (ou Integrações)',
@@ -912,31 +927,31 @@ ${commonFunctions}`;
             </div>
 
             <div className="flex items-center gap-3">
-              <div className={`flex-1 flex items-center gap-2 rounded-xl border px-4 py-3 transition-colors ${isDark ? 'bg-slate-950 border-slate-700 focus-within:border-purple-500' : 'bg-white border-slate-200 focus-within:border-purple-400'}`}>
-                <Key size={16} aria-hidden="true" className="text-purple-400 shrink-0" />
+              <div className={`flex-1 flex items-center gap-2 rounded-xl border px-4 py-3 transition-colors bg-surface-2 border-line focus-within:border-brand`}>
+                <Key size={16} aria-hidden="true" className="text-ink-subtle shrink-0" />
                 <input
                   type={vturbTokenVisible ? 'text' : 'password'}
                   value={vturbTokenInput}
                   onChange={e => setVturbTokenInput(e.target.value)}
                   placeholder="Cole seu token VTurb aqui…"
                   aria-label="Token de API da VTurb"
-                  className={`flex-1 bg-transparent outline-none text-sm font-mono ${textHead} placeholder:text-slate-500`}
+                  className={`flex-1 bg-transparent outline-none text-sm font-mono ${textHead} placeholder:text-ink-faint`}
                 />
-                <button onClick={() => setVturbTokenVisible(v => !v)} className={`p-1 rounded transition-colors ${isDark ? 'text-slate-500 hover:text-white' : 'text-slate-400 hover:text-black'}`} title={vturbTokenVisible ? 'Ocultar token' : 'Mostrar token'} aria-label={vturbTokenVisible ? 'Ocultar token' : 'Mostrar token'}>
+                <button onClick={() => setVturbTokenVisible(v => !v)} className="p-1 rounded transition-colors text-ink-subtle hover:text-ink" title={vturbTokenVisible ? 'Ocultar token' : 'Mostrar token'} aria-label={vturbTokenVisible ? 'Ocultar token' : 'Mostrar token'}>
                   {vturbTokenVisible ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
                 </button>
               </div>
               <button onClick={saveVturbToken} disabled={vturbTokenSaving || !vturbTokenInput.trim()}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all shrink-0 ${vturbTokenSaved ? 'bg-emerald-500 text-white' : 'bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed'}`}>
+                className={`flex items-center gap-2 px-5 py-3 rounded-lg text-sm font-medium transition-colors shrink-0 ${vturbTokenSaved ? 'bg-pos text-white' : 'bg-brand hover:bg-brand-hover text-white disabled:opacity-40 disabled:cursor-not-allowed'}`}>
                 {vturbTokenSaved ? <CheckCircle2 size={16} aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
                 {vturbTokenSaving ? 'Salvando…' : vturbTokenSaved ? 'Salvo!' : 'Salvar'}
               </button>
             </div>
 
             {vturbToken && (
-              <div className={`mt-4 flex items-center gap-2 text-xs p-3 rounded-lg border ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
-                <CheckCircle2 size={14} aria-hidden="true" className="text-emerald-400 shrink-0" />
-                <span className="text-emerald-400 font-medium">Token configurado</span>
+              <div className={`mt-4 flex items-center gap-2 text-xs p-3 rounded-lg border bg-pos/5 border-pos/20`}>
+                <CheckCircle2 size={14} aria-hidden="true" className="text-pos shrink-0" />
+                <span className="text-pos font-medium">Token configurado</span>
                 <span className={`font-mono ${textMuted}`}>{vturbToken.slice(0, 8)}{'•'.repeat(Math.min(20, vturbToken.length - 8))}</span>
               </div>
             )}
@@ -948,22 +963,18 @@ ${commonFunctions}`;
       </main>
 
       {/* BOTTOM NAV */}
-      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+      <nav className="fixed bottom-0 inset-x-0 md:hidden z-40 border-t border-line bg-canvas/95 backdrop-blur-md">
         <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          {[
-            { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
-            { href: '/planning', Icon: Target, label: 'Metas', active: false },
-            { href: '/products', Icon: Package, label: 'Campanhas', active: false },
-            { href: '/analise-ia', Icon: Sparkles, label: 'Análise IA', active: false },
-            { href: '/rastreamento', Icon: Route, label: 'Rastreio', active: false },
-            { href: '/integration', Icon: Settings, label: 'Integração', active: true },
-          ].map(({ href, Icon, label, active }) => (
-            <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-              <Icon size={22} aria-hidden="true"/>
-              <span className="text-[9px] font-bold tracking-wide">{label}</span>
-              {active && <div className="w-1 h-1 rounded-full bg-indigo-500"/>}
-            </Link>
-          ))}
+          {NAV.map(({ href, Icon, short }) => {
+            const active = href === '/integration';
+            return (
+              <Link key={href} href={href}
+                aria-current={active ? 'page' : undefined} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-lg transition-colors ${active ? 'text-brand-text' : 'text-ink-subtle'}`}>
+                <Icon size={22} aria-hidden="true" />
+                <span className="text-[10px] font-medium">{short}</span>
+              </Link>
+            );
+          })}
         </div>
       </nav>
 
