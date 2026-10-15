@@ -9,6 +9,7 @@ const config: Config = {
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/**/*.{js,ts,jsx,tsx,mdx}", // Garante compatibilidade
+    "./lib/**/*.{ts,tsx}", // classes dos selos de status (lib/campaignStatus.ts)
   ],
   theme: {
     extend: {

@@ -16,7 +16,7 @@ export function LegalLayout({ title, children }: { title: string; children: Reac
     <div className="min-h-screen bg-black text-slate-300">
       <header className="border-b border-slate-800">
         <div className="max-w-3xl mx-auto px-6 py-6 flex items-center justify-between gap-4">
-          <Link href="/" aria-label="Autometrics"><Logo /></Link>
+          <Link href="/" aria-label="Autometrics"><Logo onDark /></Link>
           <nav className="flex gap-4 text-sm">
             <Link href="/privacidade" className="text-slate-400 hover:text-white transition-colors">Privacidade</Link>
             <Link href="/termos" className="text-slate-400 hover:text-white transition-colors">Termos</Link>

@@ -22,24 +22,25 @@ export interface CampaignStatus {
   hint: string;
 }
 
+// Cores do guia visual (DESIGN.md): ativa em verde, pausada neutra, suspensa em vermelho.
 const TONE: Record<StatusKey, Omit<CampaignStatus, 'hint' | 'key'>> = {
   ativo: {
     label: 'Ativo',
-    badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-    dot: 'bg-emerald-500',
-    text: 'text-emerald-400',
+    badge: 'bg-pos/10 text-pos border-pos/30',
+    dot: 'bg-pos',
+    text: 'text-pos',
   },
   pausado: {
     label: 'Pausado',
-    badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    dot: 'bg-amber-500',
-    text: 'text-amber-400',
+    badge: 'bg-surface-3 text-ink-subtle border-line',
+    dot: 'bg-ink-faint',
+    text: 'text-ink-subtle',
   },
   suspenso: {
     label: 'Suspenso',
-    badge: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
-    dot: 'bg-rose-500',
-    text: 'text-rose-400',
+    badge: 'bg-neg/10 text-neg border-neg/30',
+    dot: 'bg-neg',
+    text: 'text-neg',
   },
 };
 

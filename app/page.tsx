@@ -73,7 +73,7 @@ export default function LoginPage() {
         
         <div className="text-center mb-8 flex flex-col items-center">
           
-          <Logo size="lg" className="mb-4" />
+          <Logo size="lg" className="mb-4" onDark />
           
           <p className="text-slate-400 text-sm">Acesse sua central de inteligência.</p>
         </div>

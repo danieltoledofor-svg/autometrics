@@ -27,21 +27,12 @@ export const saleMoney = (amount: number, currency: string, digits = 2) => {
 export default function SaleAlerts() {
   const pending = usePendingSales();
   const pathname = usePathname();
-  const [isDark, setIsDark] = useState(true);
   const [reminderClosed, setReminderClosed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSoundRef = useRef(0);
 
   useEffect(() => startSaleAlerts(), []);
 
-  // O tema vive em cada página, espelhado no <html data-theme>.
-  useEffect(() => {
-    const read = () => setIsDark(document.documentElement.dataset.theme !== 'light');
-    read();
-    const observer = new MutationObserver(read);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
-  }, []);
 
   // O navegador só libera áudio depois de alguma interação na página, então o
   // primeiro clique/tecla destrava o som em silêncio.
@@ -88,26 +79,27 @@ export default function SaleAlerts() {
   if (!cards.length && !showReminder) return null;
 
   return (
-    <div className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 flex flex-col gap-3 w-[19rem] md:w-[21rem] pointer-events-none">
+    <div aria-live="polite" className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 flex flex-col gap-3 w-[19rem] md:w-[21rem] pointer-events-none">
       {showReminder && (
-        <div className={`pointer-events-auto flex items-center gap-3 rounded-2xl border shadow-2xl px-4 py-3 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
-          <span className="text-xl leading-none">🎉</span>
-          <Link href="/dashboard" className={`flex-1 min-w-0 text-[13px] font-bold leading-snug hover:underline ${isDark ? 'text-white' : 'text-slate-900'}`}>
+        <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-pos/30 bg-surface-1 shadow-lg px-4 py-3">
+          <span className="text-xl leading-none" aria-hidden="true">🎉</span>
+          <Link href="/dashboard" className="flex-1 min-w-0 text-[13px] font-medium leading-snug text-ink hover:underline">
             {waiting === 1 ? '1 venda nova para ver' : `${waiting} vendas novas para ver`}
-            <span className="block text-[11.5px] font-normal text-slate-500">Abrir a Dashboard</span>
+            <span className="block text-xs font-normal text-ink-subtle">Abrir a Dashboard</span>
           </Link>
-          <button onClick={() => setReminderClosed(true)} title="Fechar"
-            className={`p-1 rounded-lg transition-colors ${isDark ? 'text-slate-600 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`}>
-            <X size={13} />
+          <button onClick={() => setReminderClosed(true)} title="Fechar" aria-label="Fechar o aviso de vendas novas"
+            className="p-1 rounded-lg transition-colors text-ink-subtle hover:text-ink hover:bg-surface-2">
+            <X size={13} aria-hidden="true" />
           </button>
         </div>
       )}
-      {cards.map(s => <SaleCard key={s.id} sale={s} isDark={isDark} />)}
+      {cards.map(s => <SaleCard key={s.id} sale={s} />)}
     </div>
   );
 }
 
-function SaleCard({ sale, isDark }: { sale: PendingSale; isDark: boolean }) {
+// As cores vêm dos tokens do guia (DESIGN.md) e seguem o <html data-theme> sozinhas.
+function SaleCard({ sale }: { sale: PendingSale }) {
   // Sem fechamento automático: o cartão fica até o usuário clicar no ✕, e fechar marca a venda como vista.
 
   // Valor cheio no bloco verde só cabe até 6 dígitos; acima disso, sem centavos.
@@ -130,42 +122,37 @@ function SaleCard({ sale, isDark }: { sale: PendingSale; isDark: boolean }) {
       `}</style>
 
       <div
-        className={`sale-alert pointer-events-auto flex rounded-2xl overflow-hidden border shadow-2xl ${
-          isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
-        }`}
+        className="sale-alert pointer-events-auto flex rounded-xl overflow-hidden border border-pos/30 bg-surface-1 shadow-lg"
       >
         {/* Bloco do valor */}
-        <div className="shrink-0 w-[6.5rem] px-2 py-3 flex flex-col items-center justify-center text-center bg-gradient-to-b from-emerald-500 to-emerald-600">
-          <span className="text-2xl leading-none mb-1 sale-emoji">🎉</span>
-          <span className="text-[9px] font-extrabold tracking-[0.14em] text-emerald-950/80">VENDA</span>
-          <b className="text-lg font-extrabold tracking-tight text-emerald-950 leading-tight break-all">{amountText}</b>
+        <div className="shrink-0 w-[6.5rem] px-2 py-3 flex flex-col items-center justify-center text-center bg-pos text-white">
+          <span className="text-2xl leading-none mb-1 sale-emoji" aria-hidden="true">🎉</span>
+          <span className="text-[11px] font-medium text-white/80">Venda</span>
+          <b className="text-lg font-semibold tabular-nums leading-tight break-all">{amountText}</b>
         </div>
 
         {/* Dados */}
         <div className="flex-1 min-w-0 p-3">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-500">NOVA VENDA</span>
-            <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
-              isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'
-            }`}>
+            <span className="text-xs font-medium text-pos">Nova venda</span>
+            <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-ink-subtle">
               {sale.platform}
             </span>
             <button
               onClick={() => closeSale(sale.id)}
-              className={`ml-auto -mt-1 -mr-1 p-1 rounded-lg transition-colors ${
-                isDark ? 'text-slate-600 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+              className="ml-auto -mt-1 -mr-1 p-1 rounded-lg transition-colors text-ink-subtle hover:text-ink hover:bg-surface-2"
               title="Fechar"
+              aria-label={`Fechar o aviso da venda de ${sale.productName}`}
             >
-              <X size={13} />
+              <X size={13} aria-hidden="true" />
             </button>
           </div>
 
-          <p className={`text-[13px] font-bold leading-snug break-words ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          <p className="text-[13px] font-medium leading-snug break-words text-ink">
             {sale.productName}
           </p>
           {sale.campaignName && sale.campaignName !== sale.productName && (
-            <p className="text-[11.5px] leading-snug mt-0.5 break-words text-slate-500">
+            <p className="text-xs leading-snug mt-0.5 break-words text-ink-subtle">
               {sale.campaignName}
             </p>
           )}
