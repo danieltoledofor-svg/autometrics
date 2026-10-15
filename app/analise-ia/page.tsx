@@ -8,6 +8,10 @@ import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
 import { Logo } from '@/app/components/Logo';
 import { MemoryCard } from './MemoryCard';
+import { Inter } from 'next/font/google';
+
+// Fonte do guia visual (DESIGN.md), nas telas já migradas.
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 /**
  * Análise de IA: o que se repete nas campanhas parecidas do usuário (mesma
@@ -151,18 +155,21 @@ export default function PatternsPage() {
   };
 
   const isDark = theme === 'dark';
-  const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
-  const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200';
-  const head = isDark ? 'text-white' : 'text-slate-900';
-  const muted = isDark ? 'text-slate-400' : 'text-slate-500';
-  const line = isDark ? 'border-slate-800' : 'border-slate-200';
-  const soft = isDark ? 'bg-slate-950' : 'bg-slate-50';
-  const good = 'text-emerald-500', bad = 'text-rose-500', warn = 'text-amber-500';
-  const chipOn = isDark ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700';
-  const chipOff = isDark ? 'border-slate-800 text-slate-500 hover:text-slate-300' : 'border-slate-200 text-slate-400 hover:text-slate-600';
-  const th = `px-3 py-2 text-[10.5px] uppercase tracking-wider font-bold ${muted} ${soft} whitespace-nowrap border-b ${line}`;
+  // Visual pelo guia (DESIGN.md, direção Linear): cores pelos tokens do tema.
+  const bgMain = 'bg-canvas text-ink-muted';
+  const card = 'bg-surface-1 border-line';
+  const head = 'text-ink';
+  const muted = 'text-ink-subtle';
+  const line = 'border-line';
+  const soft = 'bg-surface-2';
+  const good = 'text-pos', bad = 'text-neg', warn = 'text-warn';
+  const chipOn = 'bg-surface-3 border-line-strong text-ink';
+  const chipOff = 'bg-surface-1 border-line text-ink-subtle hover:text-ink';
+  const th = `px-3 py-2 text-xs font-medium ${muted} ${soft} whitespace-nowrap border-b ${line}`;
   const td = `px-3 py-2 text-[13px] border-b ${line}`;
-  const title = `text-[11px] uppercase tracking-wider font-extrabold ${muted}`;
+  const title = 'text-sm font-medium text-ink';
+  const brandBtn = 'bg-brand hover:bg-brand-hover text-white rounded-lg text-sm font-medium disabled:opacity-40 inline-flex items-center gap-1.5 transition-colors';
+  const navItem = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors';
 
   const money = (v: number | null | undefined) => v === null || v === undefined ? '—'
     : `${data?.currency === 'BRL' ? 'R$' : data?.currency === 'EUR' ? '€' : 'US$'} ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -170,18 +177,18 @@ export default function PatternsPage() {
     : <span className={v >= 0 ? good : bad}>{v >= 0 ? '+' : '−'}{money(Math.abs(v))}</span>;
 
   const MARK: Record<string, { label: string; cls: string }> = {
-    funciona: { label: 'Funciona', cls: 'bg-emerald-500/15 text-emerald-500' },
-    desperdicio: { label: 'Desperdício', cls: 'bg-rose-500/15 text-rose-500' },
-    atencao: { label: 'Atenção', cls: 'bg-amber-500/15 text-amber-500' },
+    funciona: { label: 'Funciona', cls: 'bg-pos/10 text-pos' },
+    desperdicio: { label: 'Desperdício', cls: 'bg-neg/10 text-neg' },
+    atencao: { label: 'Atenção', cls: 'bg-warn/10 text-warn' },
   };
   const VERDICT: Record<string, { label: string; cls: string }> = {
-    manter: { label: 'Manter', cls: 'bg-emerald-500/15 text-emerald-500' },
-    ajustar: { label: 'Ajustar', cls: 'bg-amber-500/15 text-amber-500' },
-    pausar: { label: 'Pausar', cls: 'bg-rose-500/15 text-rose-500' },
-    cedo: { label: 'Cedo para dizer', cls: isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500' },
+    manter: { label: 'Manter', cls: 'bg-pos/10 text-pos' },
+    ajustar: { label: 'Ajustar', cls: 'bg-warn/10 text-warn' },
+    pausar: { label: 'Pausar', cls: 'bg-neg/10 text-neg' },
+    cedo: { label: 'Cedo para dizer', cls: 'bg-surface-3 text-ink-subtle' },
   };
   const Pill = ({ m }: { m: { label: string; cls: string } }) =>
-    <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${m.cls}`}>{m.label}</span>;
+    <span className={`inline-block text-[11px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap ${m.cls}`}>{m.label}</span>;
   const cpaTone = (mark: string | null) => (mark === 'funciona' ? good : mark === 'desperdicio' ? bad : mark === 'atencao' ? warn : '');
 
   // Os que mais venderam em cima; embaixo, os que mais gastaram sem vender.
@@ -192,7 +199,7 @@ export default function PatternsPage() {
         <td className={`${td} text-right`}>{r.campaigns}</td>
         <td className={`${td} text-right whitespace-nowrap`}>{money(r.cost)}</td>
         <td className={`${td} text-right whitespace-nowrap`}>{data.approx && r.conv > 0 ? '≈ ' : ''}{qty(r.conv)}</td>
-        <td className={`${td} text-right whitespace-nowrap font-bold ${cpaTone(r.mark)}`}>{r.cpa === null ? 'sem venda' : money(r.cpa)}</td>
+        <td className={`${td} text-right whitespace-nowrap font-medium ${cpaTone(r.mark)}`}>{r.cpa === null ? 'sem venda' : money(r.cpa)}</td>
       </tr>
     );
     return (
@@ -231,27 +238,25 @@ export default function PatternsPage() {
   });
 
   return (
-    <div className={`legivel min-h-screen font-sans flex ${bgMain}`}>
+    <div className={`${inter.className} legivel min-h-screen font-sans flex ${bgMain}`}>
 
       {/* Menu lateral, igual ao do Dashboard */}
-      <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
+      <aside className="hidden md:flex md:w-60 shrink-0 border-r border-line bg-surface-1 flex-col sticky top-0 h-screen z-20">
+        <div className="h-16 flex items-center justify-start px-5 border-b border-line overflow-hidden shrink-0">
           <Logo />
         </div>
-        <nav className="flex-1 px-2 py-4 space-y-2">
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
           {NAV.map(({ href, Icon, label }) => (
-            <Link key={href} href={href}
-              className={href === '/analise-ia'
-                ? 'w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20'
-                : `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}>
-              <Icon size={20} aria-hidden="true" /> <span className="font-medium">{label}</span>
+            <Link key={href} href={href} aria-current={href === '/analise-ia' ? 'page' : undefined}
+              className={href === '/analise-ia' ? `${navItem} bg-surface-2 text-ink` : `${navItem} text-ink-subtle hover:bg-surface-2 hover:text-ink`}>
+              <Icon size={18} aria-hidden="true" className={href === '/analise-ia' ? 'text-brand-text' : ''} /> <span>{label}</span>
             </Link>
           ))}
         </nav>
-        <div className="p-4 border-t border-inherit">
+        <div className="p-3 border-t border-line">
           <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/'; }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10">
-            <LogOut size={20} aria-hidden="true" /> <span className="font-medium">Sair ({email.split('@')[0]})</span>
+            className={`${navItem} text-ink-subtle hover:text-neg hover:bg-neg/10`}>
+            <LogOut size={18} aria-hidden="true" /> <span className="truncate">Sair ({email.split('@')[0]})</span>
           </button>
         </div>
       </aside>
@@ -260,12 +265,12 @@ export default function PatternsPage() {
       <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-5">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <h1 className={`text-2xl font-bold ${head}`}>Análise de IA</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">Análise de IA</h1>
             <div className={`text-sm ${muted}`}>O que se repete nas suas campanhas parecidas, e perguntas sobre elas</div>
           </div>
           <button onClick={() => { const t = isDark ? 'light' : 'dark'; setTheme(t); localStorage.setItem('autometrics_theme', t); }} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
-            className={`shrink-0 w-10 h-10 flex items-center justify-center rounded-xl border transition-colors ${isDark ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:text-black hover:bg-slate-100'}`}>
-            {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors">
+            {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
           </button>
         </div>
 
@@ -276,9 +281,9 @@ export default function PatternsPage() {
             {[{ name: '', label: 'Todas as MCCs', count: data.options.mccs.reduce((n: number, m: any) => n + m.count, 0) },
               ...data.options.mccs.map((m: any) => ({ name: m.name, label: m.name, count: m.count }))].map((m: any) => (
               <button key={m.name || 'todas'} onClick={() => setMcc(m.name)} aria-pressed={mcc === m.name}
-                className={`shrink-0 md:shrink text-left rounded-xl border px-3.5 py-2.5 min-w-[130px] transition-colors ${mcc === m.name ? chipOn : `${card} ${muted} hover:border-indigo-500/40`}`}>
-                <div className={`text-[13px] font-bold ${mcc === m.name ? '' : head}`}>{m.label}</div>
-                <div className="text-[11px] opacity-70 tabular-nums">{m.count} {m.count === 1 ? 'campanha' : 'campanhas'}</div>
+                className={`shrink-0 md:shrink text-left rounded-xl border px-3.5 py-2.5 min-w-[130px] transition-colors ${mcc === m.name ? chipOn : `${card} ${muted} hover:border-line-strong`}`}>
+                <div className={`text-[13px] font-medium ${mcc === m.name ? '' : head}`}>{m.label}</div>
+                <div className="text-[11px] text-ink-subtle tabular-nums">{m.count} {m.count === 1 ? 'campanha' : 'campanhas'}</div>
               </button>
             ))}
           </div>
@@ -289,7 +294,7 @@ export default function PatternsPage() {
             <select value={(data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) ? tag.toUpperCase() : tag ? '__outro' : ''}
               onChange={e => { if (e.target.value !== '__outro') setTag(e.target.value); }}
               aria-label="Conjunto de campanhas"
-              className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] font-bold`}>
+              className={`rounded-lg border border-line-strong bg-surface-1 ${head} px-2 py-1.5 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand`}>
               <option value="">Todas as campanhas</option>
               {(data?.options?.tags || []).map((t: any) => <option key={t.tag} value={t.tag}>{t.tag} · {t.count}</option>)}
               {tag && !(data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) && <option value="__outro">Contém “{tag}”</option>}
@@ -297,11 +302,11 @@ export default function PatternsPage() {
             <input defaultValue="" placeholder="ou um trecho do nome" aria-label="Trecho do nome da campanha (Enter para usar)" key={tag}
               onKeyDown={e => { if (e.key === 'Enter') setTag((e.target as HTMLInputElement).value.trim()); }}
               onBlur={e => { const v = e.target.value.trim(); if (v) setTag(v); }}
-              className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] w-44 outline-none focus:border-indigo-500`} />
-            <div className={`flex items-center gap-1 p-1 rounded-lg border ${line} ml-auto flex-wrap`}>
+              className={`rounded-lg border border-line-strong bg-surface-1 ${head} px-2 py-1.5 text-[13px] w-44 outline-none placeholder:text-ink-faint focus-visible:ring-2 focus-visible:ring-brand`} />
+            <div className={`flex items-center gap-1 p-1 rounded-lg border ${line} bg-surface-1 ml-auto flex-wrap`}>
               {PERIODS.map(p => (
                 <button key={p.key} onClick={() => setPeriod(p.key)} aria-pressed={period === p.key}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${period === p.key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-900') : `${muted} ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`}>
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${period === p.key ? 'bg-surface-3 text-ink' : `${muted} hover:text-ink`}`}>
                   {p.label}
                 </button>
               ))}
@@ -309,7 +314,7 @@ export default function PatternsPage() {
           </div>
           {custom && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`text-[11px] font-bold uppercase tracking-wide ${muted}`}>Período</span>
+              <span className={`text-xs font-medium ${muted}`}>Período</span>
               <input type="date" aria-label="Data inicial" value={from} max={dayStr(0)} onChange={e => setFrom(e.target.value)}
                 className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} />
               <span className={`text-xs ${muted}`}>até</span>
@@ -319,12 +324,12 @@ export default function PatternsPage() {
           )}
           {(data?.options?.blocks || []).length > 1 && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`text-[11px] font-bold uppercase tracking-wide ${muted}`}>Grupos que entram</span>
+              <span className={`text-xs font-medium ${muted}`}>Grupos que entram</span>
               {data.options.blocks.map((b: any) => {
                 const on = blocks.includes(b.id);
                 return (
                   <button key={b.id} onClick={() => toggleBlock(b.id)} aria-pressed={on}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-colors ${on ? chipOn : chipOff}`}>
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${on ? chipOn : chipOff}`}>
                     <Check size={12} aria-hidden="true" className={on ? '' : 'opacity-0'} /> {b.name} <span className="opacity-60 font-medium tabular-nums">{b.count}</span>
                   </button>
                 );
@@ -334,7 +339,7 @@ export default function PatternsPage() {
         </div>
 
         {loading && !data && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Calculando…</div>}
-        <div aria-live="polite">{error && <div className="text-sm text-rose-500">{error}</div>}</div>
+        <div aria-live="polite">{error && <div className="text-sm text-neg">{error}</div>}</div>
         {data?.empty && <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>Nenhuma campanha com esse nome nos grupos marcados.</div>}
 
         {d && (
@@ -348,7 +353,7 @@ export default function PatternsPage() {
               {d.sales_source === 'google' ? ' · vendas pelas conversões do Google' : ''}
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 tabular-nums">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 tabular-nums">
               {[
                 { l: 'Campanhas com gasto', v: String(d.totals.campaigns) },
                 { l: 'Custo', v: money(d.totals.cost) },
@@ -357,8 +362,8 @@ export default function PatternsPage() {
                 { l: 'Resultado', v: signed(d.totals.result) },
               ].map(x => (
                 <div key={x.l} className={`${card} border rounded-xl px-4 py-3`}>
-                  <div className={`text-[10.5px] uppercase tracking-wider font-bold ${muted}`}>{x.l}</div>
-                  <div className={`text-xl font-extrabold ${head}`}>{x.v}</div>
+                  <div className={`text-xs font-medium ${muted}`}>{x.l}</div>
+                  <div className={`text-lg sm:text-xl font-semibold whitespace-nowrap tabular-nums ${head}`}>{x.v}</div>
                 </div>
               ))}
             </div>
@@ -369,17 +374,17 @@ export default function PatternsPage() {
                 <div className={title}>O que se repete{tag ? ` nas campanhas ${tag}` : ''}</div>
                 {data.ai && (
                   <button onClick={askAi} disabled={asking || !d.totals.cost}
-                    className="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5">
+                    className={`ml-auto h-8 px-3 ${brandBtn}`}>
                     {asking ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Sparkles size={12} aria-hidden="true" />} {reading ? 'Refazer leitura da IA' : 'Pedir leitura da IA'}
                   </button>
                 )}
               </div>
               {fewSales && <div className={`text-xs ${warn}`}>Poucas vendas neste período ({qty(d.totals.sales)}): os números ainda são pequenos para concluir.</div>}
-              <div aria-live="polite">{aiError && <div className="text-xs text-rose-500">{aiError}</div>}</div>
+              <div aria-live="polite">{aiError && <div className="text-xs text-neg">{aiError}</div>}</div>
               {reading && (
                 <div className={`rounded-lg border ${line} ${soft} p-3 space-y-2`}>
-                  <div className={`text-[10.5px] uppercase tracking-wider font-bold ${muted}`}>✦ Leitura da IA</div>
-                  {reading.title && <div className={`text-sm font-bold ${head}`}>{reading.title}</div>}
+                  <div className={`text-xs font-medium ${muted}`}>✦ Leitura da IA</div>
+                  {reading.title && <div className={`text-sm font-medium ${head}`}>{reading.title}</div>}
                   {reading.points.map((p: any, i: number) => (
                     <div key={i} className="flex gap-2.5 text-[13px] items-start"><Pill m={MARK[p.mark] || MARK.atencao} /><span>{p.text}</span></div>
                   ))}
@@ -399,23 +404,23 @@ export default function PatternsPage() {
                 <div aria-live="polite" className="space-y-3">
                 {chat.map((c, i) => (
                   <div key={i} className="space-y-1.5">
-                    <div className={`text-[13px] font-bold ${head}`}>{c.q}</div>
+                    <div className={`text-[13px] font-medium ${head}`}>{c.q}</div>
                     <div className={`rounded-lg border ${line} ${soft} p-3 text-[13px] leading-relaxed whitespace-pre-wrap`}>{c.a}</div>
                     {c.missing && <div className={`text-[11px] ${muted}`}>Faltou para responder melhor: {c.missing}</div>}
                     {kept.includes(i)
-                      ? <div className="text-[11px] text-emerald-500">Guardado na memória da IA.</div>
-                      : <button onClick={() => keep(i)} className="text-[11px] text-indigo-400 hover:underline">Guardar esta resposta na memória da IA</button>}
+                      ? <div className="text-[11px] text-pos">Guardado na memória da IA.</div>
+                      : <button onClick={() => keep(i)} className="text-[11px] text-brand-text hover:underline">Guardar esta resposta na memória da IA</button>}
                   </div>
                 ))}
                 </div>
-                <div aria-live="polite">{askError && <div className="text-xs text-rose-500">{askError}</div>}</div>
+                <div aria-live="polite">{askError && <div className="text-xs text-neg">{askError}</div>}</div>
                 <div className="flex gap-2 items-end">
                   <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2} maxLength={1000} aria-label="Pergunta para a IA (Enter envia, Shift+Enter quebra a linha)"
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }}
                     placeholder="Qual campanha piorou mais nesta semana e em qual termo?"
-                    className={`flex-1 rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
+                    className={`flex-1 rounded-lg border border-line-strong bg-surface-1 ${head} px-3 py-2 text-[13px] outline-none placeholder:text-ink-faint focus-visible:ring-2 focus-visible:ring-brand resize-y`} />
                   <button onClick={ask} disabled={answering || !question.trim()}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5">
+                    className={`px-3 py-2 ${brandBtn}`}>
                     {answering ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Send size={13} aria-hidden="true" />} Perguntar
                   </button>
                 </div>
@@ -427,7 +432,7 @@ export default function PatternsPage() {
 
             <MemoryCard api={api} tags={data.options?.tags || []} reloadKey={memoryTick} css={{ card, head, muted, line, soft, title }} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <TermTable best={d.terms_best} waste={d.terms_waste} label="Termos de pesquisa que mais vendem" first="Termo" />
               <TermTable best={d.keywords_best} waste={d.keywords_waste} label="Palavras-chave com melhor rendimento" first="Palavra-chave" />
             </div>
@@ -451,7 +456,7 @@ export default function PatternsPage() {
                         <td className={`${td} text-right`}>{Math.round(r.share * 100)}%</td>
                         <td className={`${td} text-right`}>{money(r.cost)}</td>
                         <td className={`${td} text-right`}>{d.approx && r.conv > 0 ? '≈ ' : ''}{qty(r.conv)}</td>
-                        <td className={`${td} text-right font-bold ${cpaTone(r.mark)}`}>{r.cpa === null ? 'sem venda' : money(r.cpa)}</td>
+                        <td className={`${td} text-right font-medium ${cpaTone(r.mark)}`}>{r.cpa === null ? 'sem venda' : money(r.cpa)}</td>
                       </tr>
                     ))}</tbody>
                   </table>
@@ -537,9 +542,9 @@ export default function PatternsPage() {
                     <tbody>{d.verdicts.map((v: any) => (
                       <tr key={v.id}>
                         <td className={`${td} max-w-[320px]`}>
-                          <Link href={`/products/${v.id}`} target="_blank" rel="noopener noreferrer" className={`font-medium ${head} hover:text-indigo-400 hover:underline`}>{v.name}</Link>
+                          <Link href={`/products/${v.id}`} target="_blank" rel="noopener noreferrer" className={`font-medium ${head} hover:text-brand-text hover:underline`}>{v.name}</Link>
                           {v.status && (
-                            <span title={v.status.hint} className={`ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide align-middle ${v.status.badge}`}>
+                            <span title={v.status.hint} className={`ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[11px] font-medium align-middle ${v.status.badge}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${v.status.dot}`} />{v.status.label}
                               {v.status.hint && <span className="sr-only">: {v.status.hint}</span>}
                             </span>
@@ -550,7 +555,7 @@ export default function PatternsPage() {
                         <td className={`${td} text-right align-top whitespace-nowrap`}>{money(v.cost)}</td>
                         <td className={`${td} text-right align-top`}>{qty(v.sales)}</td>
                         <td className={`${td} text-right align-top whitespace-nowrap`}>{money(v.cpa)}</td>
-                        <td className={`${td} text-right align-top whitespace-nowrap font-bold`}>{signed(v.result)}</td>
+                        <td className={`${td} text-right align-top whitespace-nowrap font-medium`}>{signed(v.result)}</td>
                         <td className={`${td} text-right align-top whitespace-nowrap`}>{signed(v.result7)}</td>
                         <td className={`${td} align-top`}><Pill m={VERDICT[v.verdict]} /></td>
                       </tr>
@@ -565,16 +570,15 @@ export default function PatternsPage() {
       </main>
 
       {/* Menu do celular */}
-      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+      <nav className="fixed bottom-0 inset-x-0 md:hidden z-40 border-t border-line bg-canvas/95 backdrop-blur-md">
         <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {NAV.map(({ href, Icon, short }) => {
             const active = href === '/analise-ia';
             return (
               <Link key={href} href={href}
-                className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                aria-current={active ? 'page' : undefined} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-lg transition-colors ${active ? 'text-brand-text' : 'text-ink-subtle'}`}>
                 <Icon size={22} aria-hidden="true" />
-                <span className="text-[9px] font-bold tracking-wide">{short}</span>
-                {active && <div className="w-1 h-1 rounded-full bg-indigo-500" />}
+                <span className="text-[10px] font-medium">{short}</span>
               </Link>
             );
           })}

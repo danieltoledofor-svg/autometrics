@@ -67,7 +67,7 @@ export function MemoryCard({ api, tags, css, reloadKey }: { api: Api; tags: { ta
     await load();
   };
 
-  const field = `rounded-lg border ${line} ${soft} ${head} px-2.5 py-1.5 text-[13px] outline-none focus:border-indigo-500`;
+  const field = `rounded-lg border ${line} ${soft} ${head} px-2.5 py-1.5 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-brand`;
 
   return (
     <div className={`${card} border rounded-xl p-4 space-y-3`}>
@@ -77,14 +77,14 @@ export function MemoryCard({ api, tags, css, reloadKey }: { api: Api; tags: { ta
         <span className={`text-xs ${muted}`}>{state?.ready ? `${state.items.length} ${state.items.length === 1 ? 'item guardado' : 'itens guardados'}` : ''}</span>
       </button>
 
-      {open && state && !state.ready && <div className="text-sm text-amber-500">{state.error || 'A memória ainda não está disponível.'}</div>}
+      {open && state && !state.ready && <div className="text-sm text-warn">{state.error || 'A memória ainda não está disponível.'}</div>}
 
       {open && state?.ready && (<>
         <div className={`text-xs ${muted}`}>
           Guarde aqui decisões que você tomou, regras suas e materiais de estudo. A IA lê isto antes de escrever a leitura de cada campanha, a leitura do grupo e as respostas às suas perguntas. Só você vê.
         </div>
         <div className="flex flex-wrap gap-2">
-          <select value={kind} onChange={e => setKind(e.target.value)} aria-label="Tipo de anotação" className={`${field} font-bold`}>
+          <select value={kind} onChange={e => setKind(e.target.value)} aria-label="Tipo de anotação" className={`${field} font-medium`}>
             {KINDS.map(k => <option key={k.key} value={k.key}>{k.label}</option>)}
           </select>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Título" aria-label="Título" maxLength={160} className={`${field} flex-1 min-w-[180px]`} />
@@ -99,17 +99,17 @@ export function MemoryCard({ api, tags, css, reloadKey }: { api: Api; tags: { ta
         <div className="flex flex-wrap items-center gap-2">
           <input ref={file} type="file" accept=".md,.txt,.markdown,text/plain,text/markdown" className="hidden"
             onChange={e => { pickFile(e.target.files?.[0]); e.target.value = ''; }} />
-          <button onClick={() => file.current?.click()} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400`}>
+          <button onClick={() => file.current?.click()} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${line} text-xs font-medium ${muted} hover:text-ink`}>
             <FileUp size={13} aria-hidden="true" /> Enviar arquivo .md ou .txt
           </button>
           {text && <span className={`text-[11px] ${muted}`}>{text.length.toLocaleString('pt-BR')} caracteres</span>}
           <div className="flex-1" />
           <button onClick={save} disabled={saving || !text.trim()}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5">
+            className="bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5">
             {saving ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Save size={12} aria-hidden="true" />} Guardar na memória
           </button>
         </div>
-        <div aria-live="polite">{message && <div className={`text-xs ${/Guardado/.test(message) ? 'text-emerald-500' : 'text-rose-500'}`}>{message}</div>}</div>
+        <div aria-live="polite">{message && <div className={`text-xs ${/Guardado/.test(message) ? 'text-pos' : 'text-neg'}`}>{message}</div>}</div>
 
         {state.items.length > 0 && (
           <div>
@@ -117,11 +117,11 @@ export function MemoryCard({ api, tags, css, reloadKey }: { api: Api; tags: { ta
               <div key={m.id} className={`py-2 border-t ${line}`}>
                 <div className="flex items-start gap-2">
                   <button onClick={() => setExpanded(x => (x === m.id ? null : m.id))} aria-expanded={expanded === m.id} className="flex-1 min-w-0 text-left">
-                    <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${soft} ${muted} mr-2`}>{KIND_LABEL[m.kind] || 'Observação'}</span>
+                    <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${soft} ${muted} mr-2`}>{KIND_LABEL[m.kind] || 'Observação'}</span>
                     <span className={`text-[13px] font-medium ${head}`}>{m.title}</span>
                     <span className={`text-[11px] ${muted}`}> · {String(m.created_at).slice(0, 10).split('-').reverse().join('/')}{m.scope ? ` · só ${m.scope}` : ''}{m.summarized ? ` · resumo de ${m.chars.toLocaleString('pt-BR')} caracteres` : ''}</span>
                   </button>
-                  <button onClick={() => remove(m.id, m.title)} title="Apagar" aria-label={`Apagar ${m.title} da memória`} className={`${muted} hover:text-rose-500 shrink-0`}><Trash2 size={13} aria-hidden="true" /></button>
+                  <button onClick={() => remove(m.id, m.title)} title="Apagar" aria-label={`Apagar ${m.title} da memória`} className={`${muted} hover:text-neg shrink-0`}><Trash2 size={13} aria-hidden="true" /></button>
                 </div>
                 {expanded === m.id && <div className={`mt-2 rounded-lg border ${line} ${soft} p-3 text-[12.5px] leading-relaxed whitespace-pre-wrap`}>{m.summary}</div>}
               </div>
