@@ -137,10 +137,11 @@ export function Th({ colKey, prefs, className = '', style, title, children }: {
 }
 
 /** Densidade e "restaurar larguras", para a barra de cada tabela. */
-export function TableControls({ prefs, isDark }: { prefs: TablePrefsApi; isDark: boolean }) {
-  const border = isDark ? 'border-slate-700' : 'border-slate-300';
-  const idle = isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100';
-  const on = 'bg-indigo-600 text-white';
+/** tokens: estilo do guia visual (DESIGN.md), nas telas já migradas. */
+export function TableControls({ prefs, isDark, tokens = false }: { prefs: TablePrefsApi; isDark: boolean; tokens?: boolean }) {
+  const border = tokens ? 'border-line' : isDark ? 'border-slate-700' : 'border-slate-300';
+  const idle = tokens ? 'text-ink-subtle hover:text-ink hover:bg-surface-2' : isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100';
+  const on = tokens ? 'bg-surface-3 text-ink' : 'bg-indigo-600 text-white';
   const hasWidths = Object.keys(prefs.widths).length > 0;
   return (
     <div className="flex items-center gap-2">

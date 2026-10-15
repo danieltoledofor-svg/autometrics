@@ -20,7 +20,11 @@ import { Logo } from '@/app/components/Logo';
 import { LootrushPanel } from './LootrushPanel';
 import { useLiveMetrics } from '@/lib/useLiveMetrics';
 import { useTablePrefs } from '@/app/components/table/useTablePrefs';
-import { cellPad, TableControls, tableTone, Th, widthStyle } from '@/app/components/table/tableUi';
+import { cellPad, TableControls, Th, widthStyle } from '@/app/components/table/tableUi';
+import { Inter } from 'next/font/google';
+
+// Fonte do guia visual (DESIGN.md), nas telas já migradas.
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 // Configuração Supabase
 const supabase = createClient(
@@ -29,8 +33,8 @@ const supabase = createClient(
 );
 
 const DATE_PRESET_LABELS: Record<string, string> = {
-  today: 'Hoje', yesterday: 'Ontem', '7d': '7 Dias',
-  this_month: 'Este Mês', '30d': '30 Dias', last_month: 'Mês Passado',
+  today: 'Hoje', yesterday: 'Ontem', '7d': '7 dias',
+  this_month: 'Este mês', '30d': '30 dias', last_month: 'Mês passado',
 };
 const DATE_PRESETS = ['today', 'yesterday', '7d', 'this_month', '30d', 'last_month'] as const;
 
@@ -48,7 +52,7 @@ function fmtDay(day: string) {
 }
 
 /** Contorno de foco para controles que tiram o contorno padrão. */
-const FOCUS_RING = 'rounded-md focus-visible:ring-2 focus-visible:ring-indigo-500';
+const FOCUS_RING = 'rounded-md focus-visible:ring-2 focus-visible:ring-brand';
 
 function SparklineSVG({ data, color }: { data: number[]; color: string }) {
   if (!data || data.length < 2) return <div className="h-7" />;
@@ -714,54 +718,117 @@ export default function PlanningPage() {
     if (user?.id) fetchData(user.id);
   };
 
+  // Visual pelo guia (DESIGN.md, direção Linear): cores pelos tokens do tema,
+  // números neutros e cor só no resultado (lucro, ROI, variações).
   const isDark = theme === 'dark';
-  const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
-  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const textMuted = 'text-slate-500';
-  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
-
-  if (!authChecked) return <div className="min-h-screen bg-black" />;
-  if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando…</div>;
-
-  const mobileKpiCards = [
-    { label: 'Receita', value: processedData.totals.revenue, color: '#3b82f6', data: processedData.daysArray.map((d: any) => d.revenue), isPositiveGood: true, isRoi: false },
-    { label: 'Custo Ads', value: processedData.totals.ads_cost, color: '#f97316', data: processedData.daysArray.map((d: any) => d.ads_cost), isPositiveGood: false, isRoi: false },
-    { label: 'Extras Net', value: processedData.totals.net_extra, color: processedData.totals.net_extra >= 0 ? '#10b981' : '#f59e0b', data: processedData.daysArray.map((d: any) => d.net_extra), isPositiveGood: true, isRoi: false },
-    { label: 'Lucro', value: processedData.totals.profit, color: processedData.totals.profit >= 0 ? '#10b981' : '#f43f5e', data: processedData.daysArray.map((d: any) => d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds), isPositiveGood: true, isRoi: false },
-    { label: 'ROI', value: processedData.totals.roi, color: '#6366f1', data: processedData.daysArray.map((d: any) => d.ads_cost > 0 ? ((d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds) / d.ads_cost) * 100 : 0), isPositiveGood: true, isRoi: true },
+  const tone = (v: number) => (v >= 0 ? 'text-pos' : 'text-neg');
+  const card = 'rounded-xl border border-line bg-surface-1';
+  const label = 'text-xs font-medium text-ink-subtle';
+  const navItem = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors';
+  const navIdle = `${navItem} text-ink-subtle hover:bg-surface-2 hover:text-ink`;
+  const iconBtn = 'w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors';
+  const segGroup = 'flex items-center gap-1 p-1 rounded-lg border border-line bg-surface-1';
+  const segItem = (on: boolean) => `rounded-md text-xs font-medium whitespace-nowrap transition-colors ${on ? 'bg-surface-3 text-ink' : 'text-ink-subtle hover:text-ink'}`;
+  const chip = (on: boolean) => `flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border transition-colors ${on ? 'bg-surface-3 border-line-strong text-ink' : 'bg-surface-1 border-line text-ink-subtle hover:text-ink'}`;
+  const btnSecondary = 'inline-flex items-center justify-center gap-2 h-8 px-3 rounded-lg border border-line bg-surface-1 text-sm font-medium text-ink hover:bg-surface-2 transition-colors';
+  const btnPrimary = 'inline-flex items-center justify-center gap-2 h-8 px-3 rounded-lg bg-brand hover:bg-brand-hover text-white text-sm font-medium transition-colors';
+  const field = 'w-full bg-surface-1 border border-line-strong rounded-lg px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand';
+  // Recharts e as linhas pequenas pedem a cor pronta: os mesmos valores dos tokens chart-*.
+  const chartColor = isDark
+    ? { revenue: '#7c86e0', cost: '#d9913f', profit: '#27a644', roi: '#9aa3ef', grid: '#23252a', axis: '#8a8f98', goal: '#62666d', tipBg: '#0f1011', tipLine: '#34343a', tipText: '#f7f8f8' }
+    : { revenue: '#5e6ad2', cost: '#c27a28', profit: '#1d7f38', roi: '#4b56be', grid: '#e2e4e8', axis: '#62666f', goal: '#9a9fa8', tipBg: '#ffffff', tipLine: '#cfd2d8', tipText: '#16171a' };
+  const NAV_ITEMS = [
+    { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', short: 'Dashboard' },
+    { href: '/planning', Icon: Target, label: 'Metas', short: 'Metas' },
+    { href: '/products', Icon: Package, label: 'Campanhas', short: 'Campanhas' },
+    { href: '/analise-ia', Icon: Sparkles, label: 'Análise de IA', short: 'Análise IA' },
+    { href: '/rastreamento', Icon: Route, label: 'Rastreamento', short: 'Rastreio' },
+    { href: '/integration', Icon: Settings, label: 'Integração', short: 'Integração' },
   ];
 
+  if (!authChecked) return <div className="min-h-screen bg-canvas" />;
+  if (loading) return <div className={`${inter.className} min-h-screen bg-canvas text-ink-muted flex items-center justify-center`}>Carregando…</div>;
+
+  const mobileKpiCards = [
+    { label: 'Receita', value: processedData.totals.revenue, color: chartColor.revenue, data: processedData.daysArray.map((d: any) => d.revenue), isPositiveGood: true, isRoi: false, isResult: false },
+    { label: 'Custo Ads', value: processedData.totals.ads_cost, color: chartColor.cost, data: processedData.daysArray.map((d: any) => d.ads_cost), isPositiveGood: false, isRoi: false, isResult: false },
+    { label: 'Extras Net', value: processedData.totals.net_extra, color: chartColor.cost, data: processedData.daysArray.map((d: any) => d.net_extra), isPositiveGood: true, isRoi: false, isResult: false },
+    { label: 'Lucro', value: processedData.totals.profit, color: chartColor.profit, data: processedData.daysArray.map((d: any) => d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds), isPositiveGood: true, isRoi: false, isResult: true },
+    { label: 'ROI', value: processedData.totals.roi, color: chartColor.roi, data: processedData.daysArray.map((d: any) => d.ads_cost > 0 ? ((d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds) / d.ads_cost) * 100 : 0), isPositiveGood: true, isRoi: true, isResult: true },
+  ];
+
+  // Variação contra o período anterior; para custo, cair é bom.
+  const variation = (v: number, goodWhenUp: boolean, pp = false) => v === 0 ? null : (
+    <p className={`text-xs font-medium mt-1 tabular-nums ${(goodWhenUp ? v > 0 : v < 0) ? 'text-pos' : 'text-neg'}`}>
+      {pp ? `${fmtNum(v, 1, true)} p.p.` : fmtPct(v, 1, true)} <span className="font-normal text-ink-subtle">vs período anterior</span>
+    </p>
+  );
+  const kpis = [
+    { label: 'Receita', value: formatMoney(processedData.totals.revenue), cls: 'text-ink', extra: variation(processedData.variations.revenue, true) },
+    { label: 'Custo dos anúncios', value: formatMoney(processedData.totals.ads_cost), cls: 'text-ink', extra: variation(processedData.variations.ads_cost, false) },
+    { label: 'Extras (saldo)', value: formatMoney(processedData.totals.net_extra), cls: processedData.totals.net_extra >= 0 ? 'text-ink' : 'text-warn', extra: null },
+    { label: 'Lucro líquido', value: formatMoney(processedData.totals.profit), cls: tone(processedData.totals.profit), extra: variation(processedData.variations.profit, true) },
+    { label: 'ROI', value: fmtPct(processedData.totals.roi, 1), cls: tone(processedData.totals.roi), extra: variation(processedData.variations.roi, true, true) },
+  ];
+
+  const rateBox = (kind: 'USD' | 'EUR') => (
+    <div className="flex items-center justify-between gap-4 px-3 py-2 rounded-lg border border-line bg-surface-1 flex-1 sm:flex-none sm:min-w-[180px]">
+      <div className="flex flex-col">
+        <span className={label}>{kind === 'USD' ? 'Dólar hoje' : 'Euro hoje'}</span>
+        <span className="text-sm font-medium tabular-nums text-ink">R$ {(kind === 'USD' ? liveDollar : liveEuro).toFixed(2).replace('.', ',')}</span>
+      </div>
+      <div className="flex flex-col items-end">
+        <span className={label}>{kind === 'USD' ? 'Meu dólar' : 'Meu euro'}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-ink-subtle">R$</span>
+          <input type="text" inputMode="decimal" aria-label={kind === 'USD' ? 'Meu dólar, em reais' : 'Meu euro, em reais'}
+            className="w-14 text-right bg-transparent text-sm font-medium tabular-nums text-ink outline-none border-b border-line-strong focus:border-brand transition-colors pb-0.5"
+            value={kind === 'USD' ? dollarInput : euroInput}
+            onChange={(e) => (kind === 'USD' ? handleDollarInputChange(e.target.value) : handleEuroInputChange(e.target.value))}
+            onBlur={kind === 'USD' ? handleDollarInputBlur : handleEuroInputBlur}
+          />
+          <div className="flex flex-col ml-0.5">
+            <button type="button" onClick={() => (kind === 'USD' ? handleDollarStep(0.01) : handleEuroStep(0.01))} aria-label={`Aumentar o ${kind === 'USD' ? 'dólar' : 'euro'} em 1 centavo`} className="p-0.5 rounded text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"><ChevronUp size={12} aria-hidden="true" /></button>
+            <button type="button" onClick={() => (kind === 'USD' ? handleDollarStep(-0.01) : handleEuroStep(-0.01))} aria-label={`Diminuir o ${kind === 'USD' ? 'dólar' : 'euro'} em 1 centavo`} className="p-0.5 rounded text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"><ChevronDown size={12} aria-hidden="true" /></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className={`min-h-screen font-sans flex ${bgMain}`}>
+    <div className={`${inter.className} min-h-screen font-sans flex bg-canvas text-ink-muted`}>
 
       {/* SIDEBAR DESKTOP */}
-      <aside className={`hidden md:flex md:w-64 shrink-0 border-r flex-col sticky top-0 h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        <div className="h-20 flex items-center justify-start px-6 border-b border-inherit overflow-hidden shrink-0">
+      <aside className="hidden md:flex md:w-60 shrink-0 border-r border-line bg-surface-1 flex-col sticky top-0 h-screen z-20">
+        <div className="h-16 flex items-center justify-start px-5 border-b border-line overflow-hidden shrink-0">
           <Logo />
         </div>
-        <nav className="flex-1 px-2 py-4 space-y-2">
-          <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><LayoutGrid size={20} aria-hidden="true"/> Dashboard</Link>
-          <Link href="/planning" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white"><Target size={20} aria-hidden="true"/> Metas</Link>
-          <Link href="/products" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Package size={20} aria-hidden="true"/> Campanhas</Link>
-          <Link href="/analise-ia" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Sparkles size={20} aria-hidden="true" /> Análise de IA</Link>
-          <Link href="/rastreamento" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Route size={20} aria-hidden="true" /> Rastreamento</Link>
-          <Link href="/integration" className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Settings size={20} aria-hidden="true"/> Integração</Link>
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {NAV_ITEMS.map(({ href, Icon, label: l }) => href === '/planning' ? (
+            <Link key={href} href={href} aria-current="page" className={`${navItem} bg-surface-2 text-ink`}>
+              <Icon size={18} aria-hidden="true" className="text-brand-text" /> <span>{l}</span>
+            </Link>
+          ) : (
+            <Link key={href} href={href} className={navIdle}>
+              <Icon size={18} aria-hidden="true" /> <span>{l}</span>
+            </Link>
+          ))}
         </nav>
-        <div className="p-4 border-t border-inherit">
-          <button onClick={handleLogout} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold w-full transition-colors text-rose-500 ${isDark ? 'hover:bg-slate-900' : 'hover:bg-slate-100'}`}><LogOut size={20} aria-hidden="true"/> Sair ({user?.email?.split('@')[0]})</button>
+        <div className="p-3 border-t border-line">
+          <button onClick={handleLogout} className={`${navItem} text-ink-subtle hover:text-neg hover:bg-neg/10`}><LogOut size={18} aria-hidden="true"/> <span className="truncate">Sair ({user?.email?.split('@')[0]})</span></button>
         </div>
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
 
       {/* ABAS: Metas | Cartões (LootRush). A segunda só existe para quem ligou a LootRush em Integração. */}
       {hasCards && (
-        <div className={`flex gap-1 p-1 rounded-xl mb-4 md:mb-6 w-full sm:w-fit ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-200'}`}>
-          {([['metas', 'Metas e DRE'], ['cartoes', 'Cartões · LootRush']] as const).map(([key, label]) => (
+        <div className={`${segGroup} mb-4 md:mb-6 w-full sm:w-fit`}>
+          {([['metas', 'Metas e DRE'], ['cartoes', 'Cartões · LootRush']] as const).map(([key, l]) => (
             <button key={key} onClick={() => setView(key)} aria-pressed={view === key}
-              className={`flex-1 sm:flex-none py-2 px-4 rounded-lg text-sm font-medium transition-all ${view === key ? 'bg-indigo-600 text-white shadow-lg' : `${textMuted} hover:text-indigo-400`}`}>{label}</button>
+              className={`flex-1 sm:flex-none py-1.5 px-4 text-sm ${segItem(view === key)}`}>{l}</button>
           ))}
         </div>
       )}
@@ -771,15 +838,15 @@ export default function PlanningPage() {
       {/* MOBILE HEADER */}
       <div className="flex md:hidden items-center justify-between px-1 pt-1 pb-3">
         <div>
-          <h1 className={`text-xl font-bold leading-tight ${textHead}`}>Metas</h1>
-          <p className="text-xs text-slate-500 mt-0.5">{dateRange === 'custom' ? `${fmtDay(startDate)} → ${fmtDay(endDate)}` : (DATE_PRESET_LABELS[dateRange] || 'Período')}</p>
+          <h1 className="text-xl font-semibold leading-tight text-ink">Metas</h1>
+          <p className="text-xs text-ink-subtle mt-0.5">{dateRange === 'custom' ? `${fmtDay(startDate)} → ${fmtDay(endDate)}` : (DATE_PRESET_LABELS[dateRange] || 'Período')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`w-9 h-9 flex items-center justify-center rounded-xl border ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}>
-            {isDark ? <Sun size={15} aria-hidden="true"/> : <Moon size={15} aria-hidden="true"/>}
+          <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`${iconBtn} w-9 h-9`}>
+            {isDark ? <Sun size={16} aria-hidden="true"/> : <Moon size={16} aria-hidden="true"/>}
           </button>
-          <button onClick={() => setShowFilterSheet(true)} aria-label="Abrir filtros" aria-expanded={showFilterSheet} className={`w-9 h-9 flex items-center justify-center rounded-xl border ${isDark ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-indigo-50 border-indigo-200 text-indigo-600'}`}>
-            <SlidersHorizontal size={15} aria-hidden="true"/>
+          <button onClick={() => setShowFilterSheet(true)} aria-label="Abrir filtros" aria-expanded={showFilterSheet} className={`${iconBtn} w-9 h-9`}>
+            <SlidersHorizontal size={16} aria-hidden="true"/>
           </button>
         </div>
       </div>
@@ -787,10 +854,7 @@ export default function PlanningPage() {
       {/* MOBILE DATE CHIPS */}
       <div className="flex md:hidden gap-2 px-1 pb-3 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
         {DATE_PRESETS.map(preset => (
-          <button key={preset} onClick={() => handlePresetChange(preset)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
-              dateRange === preset ? 'bg-indigo-600 text-white' : isDark ? 'bg-slate-900 text-slate-400 border border-slate-800' : 'bg-white text-slate-500 border border-slate-200'
-            }`}>
+          <button key={preset} onClick={() => handlePresetChange(preset)} aria-pressed={dateRange === preset} className={chip(dateRange === preset)}>
             {DATE_PRESET_LABELS[preset]}
           </button>
         ))}
@@ -798,37 +862,36 @@ export default function PlanningPage() {
 
       {/* MOBILE ACTION ROW */}
       <div className="flex md:hidden gap-2 px-1 pb-3">
-        <button onClick={() => setEditMode(!editMode)} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold border transition-all ${editMode ? 'bg-amber-500 text-white border-amber-500' : isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}>
-          <Edit2 size={13} aria-hidden="true"/> {editMode ? 'Parar' : 'Editar'}
+        <button onClick={() => setEditMode(!editMode)} aria-pressed={editMode} className={`flex-1 ${editMode ? 'inline-flex items-center justify-center gap-2 h-8 px-3 rounded-lg border border-warn/40 bg-warn/10 text-warn text-sm font-medium' : btnSecondary}`}>
+          <Edit2 size={14} aria-hidden="true"/> {editMode ? 'Parar' : 'Editar'}
         </button>
-        <button onClick={() => setIsGoalModalOpen(true)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white">
-          <Target size={13} aria-hidden="true"/> Metas
+        <button onClick={() => setIsGoalModalOpen(true)} className={`flex-1 ${btnPrimary}`}>
+          <Target size={14} aria-hidden="true"/> Metas
         </button>
-        <button onClick={() => setIsCostModalOpen(true)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white">
-          <Plus size={13} aria-hidden="true"/> Extras
+        <button onClick={() => setIsCostModalOpen(true)} className={`flex-1 ${btnSecondary}`}>
+          <Plus size={14} aria-hidden="true"/> Extras
         </button>
       </div>
 
       {/* MOBILE KPI GRID 2x2 */}
       <div className="md:hidden grid grid-cols-2 gap-3 px-1 pb-3">
-        {mobileKpiCards.filter(c => ['Receita', 'Lucro', 'Custo Ads', 'ROI'].includes(c.label)).map(({ label, value, color, data, isPositiveGood, isRoi }) => {
+        {mobileKpiCards.filter(c => ['Receita', 'Lucro', 'Custo Ads', 'ROI'].includes(c.label)).map(({ label: l, value, color, data, isPositiveGood, isRoi, isResult }) => {
           // Mesma comparação dos cartões do computador: o período todo contra o anterior.
-          const change = label === 'Receita' ? processedData.variations.revenue
-            : label === 'Custo Ads' ? processedData.variations.ads_cost
-            : label === 'Lucro' ? processedData.variations.profit
+          const change = l === 'Receita' ? processedData.variations.revenue
+            : l === 'Custo Ads' ? processedData.variations.ads_cost
+            : l === 'Lucro' ? processedData.variations.profit
             : processedData.variations.roi;
           const trendUp = change >= 0;
           const trendGood = isPositiveGood ? trendUp : !trendUp;
-          const displayLabel = label === 'Custo Ads' ? 'Custo' : label;
+          const displayLabel = l === 'Custo Ads' ? 'Custo' : l;
           return (
-            <div key={label} className={`border rounded-2xl p-3 relative overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ background: color }} />
-              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{displayLabel}</div>
-              <div className="text-sm font-bold font-mono leading-tight mb-1" style={{ color }}>
+            <div key={l} className={`${card} p-3`}>
+              <div className={`${label} mb-1`}>{displayLabel}</div>
+              <div className={`text-base font-semibold tabular-nums leading-tight mb-1.5 ${isResult ? tone(value) : 'text-ink'}`}>
                 {isRoi ? `${fmtPct(value, 1)}` : formatMoney(value)}
               </div>
               {change !== 0 && (
-                <div className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5 ${trendGood ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}
+                <div className={`inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded mb-1.5 ${trendGood ? 'bg-pos/10 text-pos' : 'bg-neg/10 text-neg'}`}
                   title="Comparado com o período anterior">
                   <span aria-hidden="true">{trendUp ? '↑' : '↓'}</span> {isRoi ? `${fmtNum(Math.abs(change), 1)} p.p.` : fmtPct(Math.abs(change), 1)}
                   <span className="sr-only">{trendUp ? 'a mais' : 'a menos'} que no período anterior</span>
@@ -841,314 +904,136 @@ export default function PlanningPage() {
       </div>
 
       {/* DESKTOP HEADER */}
-      <header className="hidden md:flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-      <div className="w-full xl:w-auto">
-         <Link href="/dashboard" className={`text-xs ${textMuted} hover:underline mb-2 block`}>&larr; Voltar ao Dashboard</Link>
-         <div className="flex justify-between items-center w-full">
-            <h1 className={`text-2xl font-bold ${textHead} flex items-center gap-2`}><Target className="text-indigo-500" /> Metas & DRE</h1>
-            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`xl:hidden p-2 rounded-lg border ${bgCard} ${textMuted}`}>{isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}</button>
-         </div>
-      </div>
+      <header className="hidden md:flex flex-col gap-4 mb-6">
+        <div className="flex justify-between items-start gap-4">
+          <div>
+            <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">Metas e DRE</h1>
+            <p className="text-sm text-ink-subtle">Ritmo do mês, ponto de equilíbrio e o resultado de cada dia.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setEditMode(!editMode)} aria-pressed={editMode} className={editMode ? 'inline-flex items-center justify-center gap-2 h-8 px-3 rounded-lg border border-warn/40 bg-warn/10 text-warn text-sm font-medium' : btnSecondary}><Edit2 size={14} aria-hidden="true"/> {editMode ? 'Parar edição' : 'Editar planilha'}</button>
+            <button onClick={() => setIsGoalModalOpen(true)} className={btnPrimary}><Target size={14} aria-hidden="true"/> Metas</button>
+            <button type="button" onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={iconBtn}>
+              {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+            </button>
+          </div>
+        </div>
 
-      <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center w-full xl:w-auto">
-           
-           {/* SELETOR DE MCC E DATA */}
-           <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full sm:w-auto">
-               {availableMccs.length > 0 && (
-               <div className={`flex items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto`}>
-                  <div className="flex items-center gap-2 px-2 w-full">
-                     <Target size={18} aria-hidden="true" className="text-indigo-500"/>
-                     <select 
-                        aria-label="MCC ou conta"
-                        className={`bg-transparent text-sm font-bold outline-none cursor-pointer flex-1 sm:w-32 ${FOCUS_RING} ${textHead}`}
-                        value={selectedMcc}
-                        onChange={(e) => handleMccChange(e.target.value)}
-                     >
-                        <option value="all">Visão Geral (Todas)</option>
-                        {availableMccs.map(mcc => (
-                           <option key={mcc} value={mcc}>{mcc}</option>
-                        ))}
-                     </select>
-                  </div>
-               </div>
-               )}
-
-               {/* SELETOR DE DATA UNIFICADO */}
-               <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} shadow-sm w-full sm:w-auto gap-2 sm:gap-0`}>
-                    <div className="flex items-center justify-between sm:justify-start gap-2 px-2 pb-2 sm:pb-0 sm:border-r border-b sm:border-b-0 border-inherit">
-                       <div className="flex items-center gap-2">
-                          <Calendar size={18} aria-hidden="true" className="text-indigo-500"/>
-                          <select aria-label="Período" className={`bg-transparent text-sm font-bold outline-none cursor-pointer ${FOCUS_RING} ${textHead} w-auto`} value={dateRange} onChange={(e) => handlePresetChange(e.target.value)}>
-                             <option value="today">Hoje</option><option value="yesterday">Ontem</option><option value="7d">7 Dias</option><option value="30d">30 Dias</option><option value="this_month">Este Mês</option><option value="last_month">Mês Passado</option><option value="custom">Personalizado</option>
-                          </select>
-                       </div>
-                    </div>
-                    <div className="flex items-center justify-between sm:justify-start gap-2 px-2">
-                       <input type="date" aria-label="Data inicial" className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${FOCUS_RING} ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startInput.value} onChange={(e) => startInput.onChange(e.target.value)} />
-                       <span className="text-slate-500 text-xs">até</span>
-                       <input type="date" aria-label="Data final" className={`bg-transparent flex-1 sm:flex-none sm:w-[110px] text-xs font-mono font-medium outline-none cursor-pointer ${FOCUS_RING} ${textHead} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endInput.value} onChange={(e) => endInput.onChange(e.target.value)} />
-                    </div>
-               </div>
-           </div>
-           
-            <div className={`flex flex-col xl:flex-row items-stretch xl:items-center gap-4 p-3 rounded-2xl border ${bgCard} w-full xl:w-auto shadow-md`}>
-               {/* View Currency Switcher */}
-               <div className="flex flex-col gap-1.5 flex-1 sm:min-w-[140px]">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Moeda de Exibição</span>
-                  <div className={`flex items-center p-1 rounded-xl ${isDark ? 'bg-black/60' : 'bg-slate-100'} h-10`}>
-                     <button 
-                        type="button"
-                        onClick={() => handleCurrencyChange('BRL')} 
-                        className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'BRL' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
-                     >
-                        <span>R$</span>
-                        <span className="hidden sm:inline text-[9px] opacity-60 font-medium">BRL</span>
-                     </button>
-                     <button 
-                        type="button"
-                        onClick={() => handleCurrencyChange('USD')} 
-                        className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'USD' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
-                     >
-                        <span>$</span>
-                        <span className="hidden sm:inline text-[9px] opacity-60 font-medium">USD</span>
-                     </button>
-                     <button 
-                        type="button"
-                        onClick={() => handleCurrencyChange('EUR')} 
-                        className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${viewCurrency === 'EUR' ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400 hover:text-slate-200'}`}
-                     >
-                        <span>€</span>
-                        <span className="hidden sm:inline text-[9px] opacity-60 font-medium">EUR</span>
-                     </button>
-                  </div>
-               </div>
-
-               {/* Divider on Desktop */}
-               <div className={`hidden xl:block h-10 w-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
-
-               {/* Rates config stacked/row */}
-               <div className="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-none">
-                  {/* Dólar */}
-                  {rateConfig === 'USD' && (
-                     <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
-                        <div className="flex flex-col">
-                           <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Dólar Hoje</span>
-                           <span className="text-xs font-mono font-bold text-orange-400">R$ {liveDollar.toFixed(2).replace('.', ',')}</span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                           <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Dólar</span>
-                           <div className="flex items-center gap-1 mt-0.5">
-                              <span className="text-[10px] text-slate-500 font-bold">R$</span>
-                              <input 
-                                 type="text" 
-                                 inputMode="decimal"
-                                 aria-label="Meu dólar, em reais"
-                                 className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
-                                 value={dollarInput} 
-                                 onChange={(e) => handleDollarInputChange(e.target.value)} 
-                                 onBlur={handleDollarInputBlur}
-                              />
-                              <div className="flex flex-col gap-0.5 ml-0.5">
-                                 <button 
-                                    type="button"
-                                    onClick={() => handleDollarStep(0.01)}
-                                    className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"
-                                    title="Aumentar 1 centavo"
-                                    aria-label="Aumentar o dólar em 1 centavo"
-                                 >
-                                    <ChevronUp size={12} aria-hidden="true" />
-                                 </button>
-                                 <button 
-                                    type="button"
-                                    onClick={() => handleDollarStep(-0.01)}
-                                    className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"
-                                    title="Diminuir 1 centavo"
-                                    aria-label="Diminuir o dólar em 1 centavo"
-                                 >
-                                    <ChevronDown size={12} aria-hidden="true" />
-                                 </button>
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-                  )}
-
-                  {/* Euro */}
-                  {rateConfig === 'EUR' && (
-                     <div className={`flex items-center justify-between gap-3 p-2 rounded-xl border ${isDark ? 'border-slate-800 bg-black/20' : 'border-slate-100 bg-slate-50/50'} flex-1 sm:flex-none sm:min-w-[155px]`}>
-                        <div className="flex flex-col">
-                           <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider">Euro Hoje</span>
-                           <span className="text-xs font-mono font-bold text-orange-400">R$ {liveEuro.toFixed(2).replace('.', ',')}</span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                           <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Meu Euro</span>
-                           <div className="flex items-center gap-1 mt-0.5">
-                              <span className="text-[10px] text-slate-500 font-bold">R$</span>
-                              <input 
-                                 type="text" 
-                                 inputMode="decimal"
-                                 aria-label="Meu euro, em reais"
-                                 className={`w-14 text-right bg-transparent text-xs font-mono font-bold outline-none border-b focus:border-indigo-500 transition-colors pb-0.5 ${isDark ? 'border-slate-700 text-white' : 'border-slate-300 text-black'}`} 
-                                 value={euroInput} 
-                                 onChange={(e) => handleEuroInputChange(e.target.value)} 
-                                 onBlur={handleEuroInputBlur}
-                              />
-                              <div className="flex flex-col gap-0.5 ml-0.5">
-                                 <button 
-                                    type="button"
-                                    onClick={() => handleEuroStep(0.01)}
-                                    className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"
-                                    title="Aumentar 1 centavo"
-                                    aria-label="Aumentar o euro em 1 centavo"
-                                 >
-                                    <ChevronUp size={12} aria-hidden="true" />
-                                 </button>
-                                 <button 
-                                    type="button"
-                                    onClick={() => handleEuroStep(-0.01)}
-                                    className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-indigo-500"
-                                    title="Diminuir 1 centavo"
-                                    aria-label="Diminuir o euro em 1 centavo"
-                                 >
-                                    <ChevronDown size={12} aria-hidden="true" />
-                                 </button>
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-                  )}
-               </div>
-
-               {/* Theme button on Desktop */}
-               <button 
-                  type="button"
-                  onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} 
-                  className={`hidden xl:flex items-center justify-center w-10 h-10 rounded-xl border ${isDark ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:text-black hover:bg-slate-100'} transition-all`}
-               >
-                  {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-               </button>
+        <div className="flex flex-wrap gap-3 items-center">
+          {availableMccs.length > 0 && (
+            <div className="flex items-center gap-2 h-9 px-3 rounded-lg border border-line bg-surface-1">
+              <Target size={16} aria-hidden="true" className="text-ink-subtle"/>
+              <select
+                aria-label="MCC ou conta"
+                className={`bg-transparent text-sm font-medium outline-none cursor-pointer w-40 ${FOCUS_RING} text-ink`}
+                value={selectedMcc}
+                onChange={(e) => handleMccChange(e.target.value)}
+              >
+                <option value="all">Todas as MCCs</option>
+                {availableMccs.map(mcc => (
+                  <option key={mcc} value={mcc}>{mcc}</option>
+                ))}
+              </select>
             </div>
-           
-           <div className="flex gap-2 w-full sm:w-auto">
-             <button onClick={() => setEditMode(!editMode)} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-2 ${editMode ? 'bg-amber-500 text-white shadow-lg' : `${bgCard} ${textMuted}`}`}><Edit2 size={14} aria-hidden="true"/> {editMode ? 'Parar Edição' : 'Editar Planilha'}</button>
-             <button onClick={() => setIsGoalModalOpen(true)} className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-2 shadow-lg"><Target size={14} aria-hidden="true"/> Metas</button>
-           </div>
+          )}
+
+          <div className="flex items-center h-9 rounded-lg border border-line bg-surface-1">
+            <div className="flex items-center gap-2 px-3 h-full border-r border-line">
+              <Calendar size={16} aria-hidden="true" className="text-ink-subtle"/>
+              <select aria-label="Período" className={`bg-transparent text-sm font-medium outline-none cursor-pointer ${FOCUS_RING} text-ink w-auto`} value={dateRange} onChange={(e) => handlePresetChange(e.target.value)}>
+                <option value="today">Hoje</option><option value="yesterday">Ontem</option><option value="7d">7 dias</option><option value="30d">30 dias</option><option value="this_month">Este mês</option><option value="last_month">Mês passado</option><option value="custom">Personalizado</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 px-3">
+              <input type="date" aria-label="Data inicial" className={`bg-transparent w-[112px] text-xs tabular-nums outline-none cursor-pointer ${FOCUS_RING} text-ink ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startInput.value} onChange={(e) => startInput.onChange(e.target.value)} />
+              <span className="text-ink-subtle text-xs">até</span>
+              <input type="date" aria-label="Data final" className={`bg-transparent w-[112px] text-xs tabular-nums outline-none cursor-pointer ${FOCUS_RING} text-ink ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endInput.value} onChange={(e) => endInput.onChange(e.target.value)} />
+            </div>
+          </div>
+
+          <div className={segGroup} role="group" aria-label="Moeda de exibição">
+            {(['BRL', 'USD', 'EUR'] as const).map(curr => (
+              <button key={curr} type="button" onClick={() => handleCurrencyChange(curr)} aria-pressed={viewCurrency === curr}
+                className={`h-7 px-3 ${segItem(viewCurrency === curr)}`}>
+                {curr === 'BRL' ? 'R$' : curr === 'USD' ? 'US$' : '€'}
+              </button>
+            ))}
+          </div>
+
+          {rateConfig === 'USD' && rateBox('USD')}
+          {rateConfig === 'EUR' && rateBox('EUR')}
         </div>
       </header>
 
       {/* KPI SUMÁRIO — desktop only */}
-      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4 mb-8">
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-blue-500 shadow-sm`}>
-           <p className="text-xs font-bold text-slate-500 uppercase">Receita</p>
-           <p className="text-2xl font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</p>
-           {processedData.variations.revenue !== 0 && (
-             <p className={`text-[10px] font-bold mt-1 ${processedData.variations.revenue > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-               {fmtPct(processedData.variations.revenue, 1, true)} <span className="text-slate-400 font-normal">vs período anterior</span>
-             </p>
-           )}
-        </div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-orange-500 shadow-sm`}>
-           <p className="text-xs font-bold text-slate-500 uppercase">Custo Ads</p>
-           <p className="text-2xl font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</p>
-           {processedData.variations.ads_cost !== 0 && (
-             <p className={`text-[10px] font-bold mt-1 ${processedData.variations.ads_cost < 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-               {fmtPct(processedData.variations.ads_cost, 1, true)} <span className="text-slate-400 font-normal">vs período anterior</span>
-             </p>
-           )}
-        </div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.net_extra >= 0 ? 'border-t-emerald-500' : 'border-t-amber-500'} shadow-sm`}>
-           <p className="text-xs font-bold text-slate-500 uppercase">Extras Net</p>
-           <p className={`text-2xl font-bold ${processedData.totals.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(processedData.totals.net_extra)}</p>
-        </div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 ${processedData.totals.profit >= 0 ? 'border-t-emerald-500' : 'border-t-rose-500'} shadow-sm`}>
-           <p className="text-xs font-bold text-slate-500 uppercase">Lucro Líquido</p>
-           <p className={`text-2xl font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</p>
-           {processedData.variations.profit !== 0 && (
-             <p className={`text-[10px] font-bold mt-1 ${processedData.variations.profit > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-               {fmtPct(processedData.variations.profit, 1, true)} <span className="text-slate-400 font-normal">vs período anterior</span>
-             </p>
-           )}
-        </div>
-        <div className={`${bgCard} p-4 rounded-xl border-t-4 border-t-indigo-500 shadow-sm`}>
-           <p className="text-xs font-bold text-slate-500 uppercase">ROI</p>
-           <p className="text-2xl font-bold text-indigo-500">{fmtPct(processedData.totals.roi, 1)}</p>
-           {processedData.variations.roi !== 0 && (
-             <p className={`text-[10px] font-bold mt-1 ${processedData.variations.roi > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-               {fmtNum(processedData.variations.roi, 1, true)} p.p. <span className="text-slate-400 font-normal">vs período anterior</span>
-             </p>
-           )}
-        </div>
+      <div className="hidden md:grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3 mb-6">
+        {kpis.map(k => (
+          <div key={k.label} className={`${card} p-4`}>
+            <p className={`${label} mb-1.5`}>{k.label}</p>
+            <p className={`text-2xl font-semibold tabular-nums tracking-[-0.3px] ${k.cls}`}>{k.value}</p>
+            {k.extra}
+          </div>
+        ))}
       </div>
 
       {/* PAINEL DE ACOMPANHAMENTO DIÁRIO E ESTRATÉGICO — desktop only */}
       {(goal.revenue > 0 || goal.profit > 0) && (
-        <div className="hidden md:grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          
+        <div className="hidden md:grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
+
           {/* Velocímetro Diário */}
-          <div className={`${bgCard} p-5 rounded-xl border flex flex-col justify-center relative overflow-hidden shadow-sm`}>
-             <div className="absolute top-0 right-0 p-4 opacity-10"><Target size={40} aria-hidden="true" /></div>
-             <p className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><TrendingUp size={14} aria-hidden="true"/> Velocímetro Diário</p>
-             <div className="space-y-4 z-10 relative">
+          <div className={`${card} p-5`}>
+             <p className="text-sm font-medium text-ink mb-4 flex items-center gap-2"><TrendingUp size={16} aria-hidden="true" className="text-ink-subtle"/> Ritmo diário</p>
+             <div className="space-y-3">
                <div>
-                  <p className="text-[10px] uppercase text-slate-500 mb-1">Ritmo Necessário / Dia</p>
-                  <p className={`text-lg font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{formatMoney(processedData.dailyTargetRevenue)}</p>
+                  <p className={label}>Ritmo necessário por dia</p>
+                  <p className="text-lg font-semibold tabular-nums text-ink">{formatMoney(processedData.dailyTargetRevenue)}</p>
                </div>
                <div>
-                  <p className="text-[10px] uppercase text-slate-500 mb-1">Seu Ritmo Atual / Dia</p>
-                  <p className={`text-xl font-bold ${processedData.revenuePacing >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.currentDailyRevenue)}</p>
+                  <p className={label}>Seu ritmo atual por dia</p>
+                  <p className={`text-lg font-semibold tabular-nums ${processedData.revenuePacing >= 0 ? 'text-pos' : 'text-neg'}`}>{formatMoney(processedData.currentDailyRevenue)}</p>
                </div>
-               <div className={`text-xs font-bold px-3 py-2 rounded-md inline-block flex items-center gap-2 ${processedData.revenuePacing >= 0 ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'}`}>
-                 {processedData.revenuePacing >= 0 ? `🔥 Acelerado +${formatMoney(Math.abs(processedData.revenuePacing))}/dia` : `⚠️ Atrasado em -${formatMoney(Math.abs(processedData.revenuePacing))}/dia`}
+               <div className={`text-xs font-medium px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 ${processedData.revenuePacing >= 0 ? 'bg-pos/10 text-pos' : 'bg-neg/10 text-neg'}`}>
+                 {processedData.revenuePacing >= 0 ? `Acima do ritmo em ${formatMoney(Math.abs(processedData.revenuePacing))} por dia` : `Abaixo do ritmo em ${formatMoney(Math.abs(processedData.revenuePacing))} por dia`}
                </div>
              </div>
           </div>
 
           {/* Lucro Seguro */}
-          <div className={`${bgCard} p-5 rounded-xl border flex flex-col justify-center relative overflow-hidden shadow-sm transition-all ${processedData.isProfitSafe ? 'ring-1 ring-emerald-500/50 bg-emerald-500/5' : ''}`}>
-             <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign size={40} aria-hidden="true" /></div>
-             <p className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><Briefcase size={14} aria-hidden="true"/> Saúde do Lucro</p>
-             <div className="space-y-4 z-10 relative">
-               <p className="text-xs text-slate-400">Mesmo que a receita oscile, o que importa é o lucro no bolso no fim do dia.</p>
-               {processedData.isProfitSafe ? (
-                 <div className="bg-emerald-500/10 text-emerald-500 p-4 rounded-lg border border-emerald-500/30">
-                    <h4 className="font-bold mb-1 flex items-center gap-2">✅ Lucro no Alvo!</h4>
-                    <p className="text-[10px] opacity-90">Sua eficiência está alta. A média atual de <strong className="font-bold">{formatMoney(processedData.currentDailyProfit)}/dia</strong> bate a meta de <strong className="font-bold">{formatMoney(processedData.dailyTargetProfit)}/dia</strong>.</p>
-                 </div>
-               ) : (
-                 <div className="bg-amber-500/10 text-amber-500 p-4 rounded-lg border border-amber-500/30">
-                    <h4 className="font-bold mb-1 flex items-center gap-2">⏳ Atenção no ROI</h4>
-                    <p className="text-[10px] opacity-90">O lucro diário <strong className="font-bold">({formatMoney(processedData.currentDailyProfit)})</strong> está abaixo da média necessária de <strong className="font-bold">{formatMoney(processedData.dailyTargetProfit)}/dia</strong>.</p>
-                 </div>
-               )}
-             </div>
+          <div className={`${card} p-5`}>
+             <p className="text-sm font-medium text-ink mb-2 flex items-center gap-2"><Briefcase size={16} aria-hidden="true" className="text-ink-subtle"/> Saúde do lucro</p>
+             <p className="text-xs text-ink-subtle mb-3">Mesmo que a receita oscile, o que importa é o lucro no fim do dia.</p>
+             {processedData.isProfitSafe ? (
+               <div className="rounded-lg border border-pos/30 bg-pos/5 p-3">
+                  <p className="text-sm font-medium text-pos mb-1">Lucro no alvo</p>
+                  <p className="text-xs text-ink-muted">A média atual de <span className="font-medium text-ink tabular-nums">{formatMoney(processedData.currentDailyProfit)}/dia</span> bate a meta de <span className="font-medium text-ink tabular-nums">{formatMoney(processedData.dailyTargetProfit)}/dia</span>.</p>
+               </div>
+             ) : (
+               <div className="rounded-lg border border-warn/30 bg-warn/5 p-3">
+                  <p className="text-sm font-medium text-warn mb-1">Atenção ao ROI</p>
+                  <p className="text-xs text-ink-muted">O lucro diário (<span className="font-medium text-ink tabular-nums">{formatMoney(processedData.currentDailyProfit)}</span>) está abaixo da média necessária de <span className="font-medium text-ink tabular-nums">{formatMoney(processedData.dailyTargetProfit)}/dia</span>.</p>
+               </div>
+             )}
           </div>
 
           {/* Matando meu ROI (Top Offenders) */}
-          <div className={`${bgCard} p-5 rounded-xl border flex flex-col justify-start relative overflow-hidden shadow-sm`}>
-             <div className="absolute top-0 right-0 p-4 opacity-10"><AlertCircle size={40} aria-hidden="true" /></div>
-             <p className="text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-2"><AlertCircle size={14} aria-hidden="true"/> Matando meu ROI</p>
-             <p className={`text-[10px] ${textMuted} mb-3`}>No período selecionado</p>
-             <div className="space-y-2 z-10 relative overflow-y-auto max-h-44">
+          <div className={`${card} p-5`}>
+             <p className="text-sm font-medium text-ink mb-0.5 flex items-center gap-2"><AlertCircle size={16} aria-hidden="true" className="text-ink-subtle"/> Matando meu ROI</p>
+             <p className="text-xs text-ink-subtle mb-3">No período selecionado</p>
+             <div className="space-y-1.5 overflow-y-auto max-h-44 pr-1">
                {processedData.bottomCampaigns.length === 0 ? (
-                 <p className={`text-xs mt-4 p-4 border border-dashed rounded-lg text-center ${isDark ? 'text-slate-400 border-slate-700/50' : 'text-slate-500 border-slate-300'}`}>✅ Nenhuma campanha prejudicando o ROI no período!</p>
+                 <p className="text-xs p-3 border border-dashed border-line rounded-lg text-center text-ink-subtle">Nenhuma campanha prejudicando o ROI no período.</p>
                ) : (
                  processedData.bottomCampaigns.map((c, i) => {
                    const isLoss = c.profit < 0 || c.roi < 0;
                    return (
-                     <div key={i} className={`flex justify-between items-center p-2 rounded-lg border ${isLoss ? 'bg-rose-500/5 border-rose-500/15' : 'bg-amber-500/5 border-amber-500/15'}`}>
-                       <div className="min-w-0 pr-2 max-w-[58%]">
-                         <p className={`text-[11px] font-bold leading-tight ${isLoss ? (isDark ? 'text-rose-300' : 'text-rose-700') : (isDark ? 'text-amber-300' : 'text-amber-700')}`}>
-                           <Package size={9} aria-hidden="true" className="inline mr-1 opacity-60"/>{c.name}
-                         </p>
-                         <p className="text-[9px] text-slate-500 mt-0.5">{fmtPct(c.spendShare, 1)} do gasto total</p>
+                     <div key={i} className="flex justify-between items-center gap-2 py-1.5 border-b border-line last:border-b-0">
+                       <div className="min-w-0">
+                         <p className="text-xs font-medium text-ink truncate" title={c.name}>{c.name}</p>
+                         <p className="text-[11px] text-ink-subtle">{fmtPct(c.spendShare, 1)} do gasto total</p>
                        </div>
-                       <div className="text-right flex-shrink-0">
-                         <p className={`text-[10px] uppercase font-bold ${isLoss ? 'text-rose-500' : 'text-amber-500'}`}>
-                           ROI {fmtPct(c.roi, 0)}
-                         </p>
-                         <p className={`text-[10px] font-bold ${isLoss ? 'text-rose-400' : 'text-amber-400'}`}>
-                           {isLoss ? `−${formatMoney(Math.abs(c.profit))}` : `ROI méd: ${fmtPct(c.avgRoi, 0)}`}
-                         </p>
+                       <div className="text-right flex-shrink-0 tabular-nums">
+                         <p className={`text-xs font-medium ${isLoss ? 'text-neg' : 'text-warn'}`}>ROI {fmtPct(c.roi, 0)}</p>
+                         <p className="text-[11px] text-ink-subtle">{isLoss ? `−${formatMoney(Math.abs(c.profit))}` : `média ${fmtPct(c.avgRoi, 0)}`}</p>
                        </div>
                      </div>
                    );
@@ -1161,113 +1046,98 @@ export default function PlanningPage() {
       )}
 
       {/* PAINEL DE INSIGHTS ESTRATÉGICOS (PROJEÇÕES) — desktop only */}
-      <div className="hidden md:grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <div className="hidden md:grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6 lg:items-start">
          {/* Widget 1: Previsão de Fechamento (Pacing) */}
-         <div className={`${bgCard} p-5 rounded-xl border ${borderCol} flex flex-col justify-between shadow-sm`}>
-            <div>
-               <div className="flex justify-between items-start mb-2">
-                  <h3 className={`text-sm font-bold ${textHead} flex items-center gap-2`}><TrendingUp size={16} aria-hidden="true" className="text-blue-500" /> Previsão de Fechamento</h3>
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${processedData.isCurrentMonth ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
-                     {processedData.isCurrentMonth ? 'Ritmo Atual' : 'Mês Fechado'}
-                  </span>
-               </div>
-               <p className={`text-xs ${textMuted} mb-4`}>Projeção baseada na média diária de {formatMoney(processedData.currentDailyRevenue)}/dia</p>
+         <div className={`${card} p-5`}>
+            <div className="flex justify-between items-start gap-2 mb-1">
+               <h3 className="text-sm font-medium text-ink flex items-center gap-2"><TrendingUp size={16} aria-hidden="true" className="text-ink-subtle" /> Previsão de fechamento</h3>
+               <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-ink-subtle whitespace-nowrap">
+                  {processedData.isCurrentMonth ? 'Ritmo atual' : 'Mês fechado'}
+               </span>
             </div>
-            
-            <div>
-               <div className="flex justify-between items-end mb-1">
-                  <div>
-                     <span className="text-[10px] font-bold text-slate-400 uppercase">Projeção Final</span>
-                     <p className={`text-xl font-bold ${processedData.projectedRevenue >= processedData.finalGoal.revenue && processedData.finalGoal.revenue > 0 ? 'text-emerald-500' : textHead}`}>{formatMoney(processedData.projectedRevenue)}</p>
-                  </div>
-                  <div className="text-right">
-                     <span className="text-[10px] font-bold text-slate-400 uppercase">Sua Meta</span>
-                     <p className={`text-sm font-bold ${textMuted}`}>{formatMoney(processedData.finalGoal.revenue)}</p>
-                  </div>
+            <p className="text-xs text-ink-subtle mb-4">Pela média diária de <span className="tabular-nums">{formatMoney(processedData.currentDailyRevenue)}</span></p>
+            <div className="flex justify-between items-end mb-1">
+               <div>
+                  <span className={label}>Projeção final</span>
+                  <p className={`text-xl font-semibold tabular-nums ${processedData.projectedRevenue >= processedData.finalGoal.revenue && processedData.finalGoal.revenue > 0 ? 'text-pos' : 'text-ink'}`}>{formatMoney(processedData.projectedRevenue)}</p>
                </div>
-               {processedData.finalGoal.revenue > 0 && (
-                  <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 mt-2">
-                     <div className={`h-2 rounded-full ${processedData.projectedRevenue >= processedData.finalGoal.revenue ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min((processedData.projectedRevenue / processedData.finalGoal.revenue) * 100, 100)}%` }}></div>
-                  </div>
-               )}
+               <div className="text-right">
+                  <span className={label}>Sua meta</span>
+                  <p className="text-sm font-medium tabular-nums text-ink-muted">{formatMoney(processedData.finalGoal.revenue)}</p>
+               </div>
             </div>
+            {processedData.finalGoal.revenue > 0 && (
+               <div className="w-full bg-surface-3 rounded-full h-1.5 mt-2" role="progressbar" aria-label="Projeção em relação à meta" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min((processedData.projectedRevenue / processedData.finalGoal.revenue) * 100, 100))}>
+                  <div className={`h-1.5 rounded-full ${processedData.projectedRevenue >= processedData.finalGoal.revenue ? 'bg-pos' : 'bg-brand'}`} style={{ width: `${Math.min((processedData.projectedRevenue / processedData.finalGoal.revenue) * 100, 100)}%` }}></div>
+               </div>
+            )}
          </div>
 
          {/* Widget 2: Break-even Analysis */}
-         <div className={`${bgCard} p-5 rounded-xl border ${borderCol} flex flex-col justify-between shadow-sm`}>
-            <div>
-               <div className="flex items-center gap-2 mb-2">
-                  <Target size={16} aria-hidden="true" className="text-orange-500" />
-                  <h3 className={`text-sm font-bold ${textHead}`}>Ponto de Equilíbrio (Break-even)</h3>
-               </div>
-               <p className={`text-xs ${textMuted} mb-4`}>Para o lucro chegar a zero, o que os anúncios deixam precisa pagar os {formatMoney(processedData.totals.extra_cost)} de custos extras do período.</p>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
+         <div className={`${card} p-5`}>
+            <h3 className="text-sm font-medium text-ink flex items-center gap-2 mb-1"><Target size={16} aria-hidden="true" className="text-ink-subtle" /> Ponto de equilíbrio</h3>
+            <p className="text-xs text-ink-subtle mb-4">Para o lucro chegar a zero, o que os anúncios deixam precisa pagar os <span className="tabular-nums">{formatMoney(processedData.totals.extra_cost)}</span> de custos extras do período.</p>
+            <div className="flex items-center justify-between p-3 rounded-lg bg-surface-2 border border-line">
                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">ROI mínimo para empatar</span>
-                  <p className="text-2xl font-bold text-orange-500">{fmtPct(processedData.breakEvenRoi, 1)}</p>
+                  <span className={`${label} block`}>ROI mínimo para empatar</span>
+                  <p className="text-xl font-semibold tabular-nums text-ink">{fmtPct(processedData.breakEvenRoi, 1)}</p>
                </div>
                <div className="text-right">
-                   <span className="text-[10px] font-bold text-slate-400 uppercase block">ROI atual dos anúncios</span>
-                   <p className={`text-lg font-bold ${processedData.adsRoi >= processedData.breakEvenRoi ? 'text-emerald-500' : 'text-rose-500'}`}>{fmtPct(processedData.adsRoi, 1)}</p>
+                   <span className={`${label} block`}>ROI atual dos anúncios</span>
+                   <p className={`text-xl font-semibold tabular-nums ${processedData.adsRoi >= processedData.breakEvenRoi ? 'text-pos' : 'text-neg'}`}>{fmtPct(processedData.adsRoi, 1)}</p>
                </div>
             </div>
          </div>
 
          {/* Widget 3: Curva ABC de Campanhas */}
-         <div className={`${bgCard} p-5 rounded-xl border ${borderCol} flex flex-col shadow-sm`}>
-            <div className="flex items-center gap-2 mb-4">
-               <DollarSign size={16} aria-hidden="true" className="text-emerald-500" />
-               <h3 className={`text-sm font-bold ${textHead}`}>Top Campanhas (Lucratividade)</h3>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+         <div className={`${card} p-5`}>
+            <h3 className="text-sm font-medium text-ink flex items-center gap-2 mb-3"><DollarSign size={16} aria-hidden="true" className="text-ink-subtle" /> Campanhas que mais lucram</h3>
+            <div className="space-y-2.5">
                {processedData.topCampaigns.length === 0 ? (
-                  <p className={`text-xs ${textMuted} text-center py-4`}>Sem dados suficientes</p>
+                  <p className="text-xs text-ink-subtle text-center py-4">Sem dados suficientes.</p>
                ) : (
                   processedData.topCampaigns.map((camp: any, idx: number) => (
-                     <div key={idx} className="flex justify-between items-center text-xs">
-                        <div className="min-w-0 pr-2">
-                           <span className="font-bold text-slate-400 mr-2">{idx + 1}.</span>
-                           <span className={`font-medium ${textHead} break-words`}>{camp.name === 'Desconhecida' ? 'Venda Externa' : camp.name}</span>
-                           <span className="block text-[9px] text-slate-400 mt-0.5 ml-5">Traz <span className="text-emerald-500 font-bold">{fmtPct(camp.profitShare, 1)}</span> do lucro gastando <span className="text-orange-400 font-bold">{fmtPct(camp.spendShare, 1)}</span></span>
+                     <div key={idx} className="flex justify-between items-start gap-2 text-xs">
+                        <div className="min-w-0">
+                           <span className="font-medium text-ink break-words"><span className="text-ink-subtle tabular-nums mr-1.5">{idx + 1}.</span>{camp.name === 'Desconhecida' ? 'Venda Externa' : camp.name}</span>
+                           <span className="block text-[11px] text-ink-subtle mt-0.5 tabular-nums">Traz {fmtPct(camp.profitShare, 1)} do lucro gastando {fmtPct(camp.spendShare, 1)}</span>
                         </div>
-                        <span className={`font-bold whitespace-nowrap self-start ${camp.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                           {formatMoney(camp.profit)}
-                        </span>
+                        <span className={`font-medium whitespace-nowrap tabular-nums ${tone(camp.profit)}`}>{formatMoney(camp.profit)}</span>
                      </div>
                   ))
                )}
-               {processedData.bottomCampaigns.length > 0 && (
-                   <>
-                     <div className="border-t border-dashed border-slate-200 dark:border-slate-800 my-2 pt-2"></div>
-                     <span className="text-[10px] font-bold text-rose-500 uppercase block mb-2">Piores Resultados</span>
-                     {processedData.bottomCampaigns.map((camp: any, idx: number) => (
-                         <div key={`bot-${idx}`} className="flex justify-between items-center text-xs opacity-80">
-                            <div className="truncate pr-2">
-                               <span className={`font-medium ${textHead}`}>{camp.name === 'Desconhecida' ? 'Venda Externa' : camp.name}</span>
-                            </div>
-                            <span className="font-bold whitespace-nowrap text-rose-500">
-                               {formatMoney(camp.profit)}
-                            </span>
-                         </div>
-                      ))}
-                   </>
-               )}
             </div>
+            {processedData.bottomCampaigns.length > 0 && (
+              <>
+                <div className="border-t border-line mt-3 pt-3 flex items-baseline justify-between">
+                  <span className="text-xs font-medium text-neg">Piores resultados</span>
+                  <span className="text-[11px] text-ink-subtle tabular-nums">{processedData.bottomCampaigns.length} {processedData.bottomCampaigns.length === 1 ? 'campanha' : 'campanhas'}</span>
+                </div>
+                {/* Lista com altura limitada: antes esticava os três cartões da linha. */}
+                <div className="mt-1.5 max-h-48 overflow-y-auto pr-1 space-y-1">
+                  {processedData.bottomCampaigns.map((camp: any, idx: number) => (
+                    <div key={`bot-${idx}`} className="flex justify-between items-center gap-2 text-xs">
+                      <span className="truncate text-ink-muted" title={camp.name}>{camp.name === 'Desconhecida' ? 'Venda Externa' : camp.name}</span>
+                      <span className="font-medium whitespace-nowrap tabular-nums text-neg">{formatMoney(camp.profit)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
          </div>
       </div>
 
       {/* GRÁFICO */}
-      <div className={`hidden md:block ${bgCard} rounded-xl p-6 mb-8 h-64 shadow-sm`}>
+      <div className={`hidden md:block ${card} p-5 mb-6 h-64`}>
          <ResponsiveContainer width="100%" height="100%">
              <AreaChart data={processedData.chartData}>
-                <defs><linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#e2e8f0"} vertical={false} />
-                <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v/1000}k`} />
-                <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#fff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#fff' : '#000' }} formatter={(v:any) => formatMoney(v)} />
-                <Area type="monotone" dataKey="revenue" name="Receita Acumulada" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorReal)" />
-                <Line type="monotone" dataKey="ideal" name="Meta" stroke="#94a3b8" strokeDasharray="5 5" dot={false} />
+                <defs><linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={chartColor.revenue} stopOpacity={0.25}/><stop offset="95%" stopColor={chartColor.revenue} stopOpacity={0}/></linearGradient></defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColor.grid} vertical={false} />
+                <XAxis dataKey="date" stroke={chartColor.axis} fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke={chartColor.axis} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v/1000}k`} />
+                <Tooltip contentStyle={{ backgroundColor: chartColor.tipBg, borderColor: chartColor.tipLine, borderRadius: 8, color: chartColor.tipText, fontSize: 12 }} formatter={(v:any) => formatMoney(v)} />
+                <Area type="monotone" dataKey="revenue" name="Receita acumulada" stroke={chartColor.revenue} strokeWidth={2} fillOpacity={1} fill="url(#colorReal)" />
+                <Line type="monotone" dataKey="ideal" name="Meta" stroke={chartColor.goal} strokeDasharray="5 5" dot={false} />
              </AreaChart>
          </ResponsiveContainer>
       </div>
@@ -1279,55 +1149,55 @@ export default function PlanningPage() {
           const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds;
           const dateParts = day.date.split('-');
           return (
-            <div key={day.date} className={`rounded-xl border overflow-hidden ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <div className="flex items-center justify-between p-3 cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500" onClick={() => toggleExpand(day.date)}
+            <div key={day.date} className={`${card} overflow-hidden`}>
+              <div className="flex items-center justify-between p-3 cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand" onClick={() => toggleExpand(day.date)}
                 role="button" tabIndex={0} aria-expanded={!!isExpanded}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(day.date); } }}>
                 <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-medium bg-surface-2 text-ink tabular-nums">
                     {dateParts[2]}
                   </div>
                   <div>
-                    <div className={`text-xs font-bold ${textHead}`}>{dateParts[2]}/{dateParts[1]}/{dateParts[0].slice(2)}</div>
-                    <div className="text-[10px] text-slate-500">{formatMoney(day.revenue)} receita</div>
+                    <div className="text-sm font-medium text-ink">{dateParts[2]}/{dateParts[1]}/{dateParts[0].slice(2)}</div>
+                    <div className="text-xs text-ink-subtle tabular-nums">{formatMoney(day.revenue)} de receita</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <div className="text-[9px] text-slate-500 uppercase">Lucro</div>
-                    <div className={`text-sm font-bold ${profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(profit)}</div>
+                    <div className="text-[11px] text-ink-subtle">Lucro</div>
+                    <div className={`text-sm font-medium tabular-nums ${tone(profit)}`}>{formatMoney(profit)}</div>
                   </div>
-                  {isExpanded ? <ChevronDown size={14} aria-hidden="true" className="text-slate-500"/> : <ChevronRight size={14} aria-hidden="true" className="text-slate-500"/>}
+                  {isExpanded ? <ChevronDown size={14} aria-hidden="true" className="text-ink-subtle"/> : <ChevronRight size={14} aria-hidden="true" className="text-ink-subtle"/>}
                 </div>
               </div>
               {isExpanded && (
-                <div className={`border-t ${borderCol} p-3 space-y-2`}>
+                <div className="border-t border-line p-3">
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                      <div className="text-[9px] text-slate-500 uppercase mb-0.5">Receita</div>
-                      <div className="font-bold text-blue-500">{formatMoney(day.revenue)}</div>
+                    <div className="p-2 rounded-lg bg-surface-2">
+                      <div className="text-[11px] text-ink-subtle mb-0.5">Receita</div>
+                      <div className="font-medium tabular-nums text-ink">{formatMoney(day.revenue)}</div>
                     </div>
-                    <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                      <div className="text-[9px] text-slate-500 uppercase mb-0.5">Custo Ads</div>
-                      <div className="font-bold text-orange-500">{formatMoney(day.ads_cost)}</div>
+                    <div className="p-2 rounded-lg bg-surface-2">
+                      <div className="text-[11px] text-ink-subtle mb-0.5">Custo dos anúncios</div>
+                      <div className="font-medium tabular-nums text-ink">{formatMoney(day.ads_cost)}</div>
                     </div>
                     {day.refunds > 0 && (
-                      <div className={`p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                        <div className="text-[9px] text-slate-500 uppercase mb-0.5">Reembolso</div>
-                        <div className="font-bold text-rose-400">{formatMoney(day.refunds)}</div>
+                      <div className="p-2 rounded-lg bg-surface-2">
+                        <div className="text-[11px] text-ink-subtle mb-0.5">Reembolso</div>
+                        <div className="font-medium tabular-nums text-neg">{formatMoney(day.refunds)}</div>
                       </div>
                     )}
                     {day.details.length > 0 && (
-                      <div className={`p-2 rounded-lg col-span-2 ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                        <div className={`text-[9px] text-slate-500 uppercase mb-1`}>Extras ({formatMoney(day.net_extra)})</div>
+                      <div className="p-2 rounded-lg col-span-2 bg-surface-2">
+                        <div className="text-[11px] text-ink-subtle mb-1">Extras (<span className="tabular-nums">{formatMoney(day.net_extra)}</span>)</div>
                         {day.details.map((d: any) => (
                           <div key={d.id} className="flex items-center justify-between py-0.5">
-                            <span className="text-[10px] text-slate-400 truncate max-w-[55%]">{d.desc}</span>
+                            <span className="text-xs text-ink-muted truncate max-w-[55%]">{d.desc}</span>
                             <div className="flex items-center gap-1">
-                              <span className={`text-[10px] font-bold ${d.val < 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(Math.abs(d.val))}</span>
+                              <span className={`text-xs font-medium tabular-nums ${d.val < 0 ? 'text-pos' : 'text-warn'}`}>{formatMoney(Math.abs(d.val))}</span>
                               {editMode && (
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id, d.desc); }} aria-label={`Excluir o extra ${d.desc}`} className="text-rose-500 p-0.5 bg-rose-500/10 rounded">
-                                  <Trash2 size={9} aria-hidden="true" />
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id, d.desc); }} aria-label={`Excluir o extra ${d.desc}`} className="text-neg p-1 rounded hover:bg-neg/10">
+                                  <Trash2 size={12} aria-hidden="true" />
                                 </button>
                               )}
                             </div>
@@ -1342,56 +1212,54 @@ export default function PlanningPage() {
           );
         })}
         {/* Totais mobile */}
-        <div className={`rounded-xl border-2 p-3 ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-300 bg-white shadow-sm'}`}>
-          <div className="text-[10px] font-bold uppercase text-slate-500 mb-2">Totais do Período</div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div><div className="text-[9px] text-slate-500 uppercase">Receita</div><div className="font-bold text-blue-500">{formatMoney(processedData.totals.revenue)}</div></div>
-            <div><div className="text-[9px] text-slate-500 uppercase">Custo Ads</div><div className="font-bold text-orange-500">{formatMoney(processedData.totals.ads_cost)}</div></div>
-            <div><div className="text-[9px] text-slate-500 uppercase">Extras Net</div><div className={`font-bold ${processedData.totals.net_extra >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>{formatMoney(processedData.totals.net_extra)}</div></div>
-            <div><div className="text-[9px] text-slate-500 uppercase">Lucro</div><div className={`font-bold ${processedData.totals.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(processedData.totals.profit)}</div></div>
+        <div className={`${card} p-3 border-line-strong`}>
+          <div className={`${label} mb-2`}>Totais do período</div>
+          <div className="grid grid-cols-2 gap-2 text-xs tabular-nums">
+            <div><div className="text-[11px] text-ink-subtle">Receita</div><div className="font-medium text-ink">{formatMoney(processedData.totals.revenue)}</div></div>
+            <div><div className="text-[11px] text-ink-subtle">Custo dos anúncios</div><div className="font-medium text-ink">{formatMoney(processedData.totals.ads_cost)}</div></div>
+            <div><div className="text-[11px] text-ink-subtle">Extras (saldo)</div><div className={`font-medium ${processedData.totals.net_extra >= 0 ? 'text-ink' : 'text-warn'}`}>{formatMoney(processedData.totals.net_extra)}</div></div>
+            <div><div className="text-[11px] text-ink-subtle">Lucro</div><div className={`font-medium ${tone(processedData.totals.profit)}`}>{formatMoney(processedData.totals.profit)}</div></div>
           </div>
         </div>
       </div>
 
       {/* TABELA DE DRE (EXPANSÍVEL) — desktop only */}
       {(() => {
-        const tone = tableTone(isDark);
         const pad = cellPad(drePrefs.density);
         const w = (k: string) => widthStyle(drePrefs.widths[k]);
-        const head = `${pad} border-b ${tone.line} ${tone.headerBg} font-medium whitespace-nowrap`;
-        const sub = `${pad} border-b ${tone.line}`;
-        const pl = (v: number) => (v >= 0 ? tone.pos : tone.neg);
+        const head = `${pad} border-b border-line bg-surface-2 text-xs font-medium text-ink-subtle whitespace-nowrap`;
+        const sub = `${pad} border-b border-line`;
         return (
-      <div className={`hidden md:block ${bgCard} rounded-xl overflow-hidden shadow-sm border ${borderCol}`}>
-         <div className={`p-4 border-b ${borderCol} flex justify-between items-center`}>
-            <h3 className={`font-bold ${textHead}`}>Detalhamento Diário (DRE)</h3>
+      <div className={`hidden md:block ${card} overflow-hidden`}>
+         <div className="px-4 py-3 border-b border-line flex justify-between items-center">
+            <h3 className="text-sm font-medium text-ink">Dia a dia (DRE)</h3>
             <div className="flex items-center gap-2">
-            <TableControls prefs={drePrefs} isDark={isDark} />
-            <button onClick={() => setIsCostModalOpen(true)} className="flex items-center gap-2 text-xs font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition-colors">
-               <Plus size={14} aria-hidden="true"/> Lançar Extras
+            <TableControls prefs={drePrefs} isDark={isDark} tokens />
+            <button onClick={() => setIsCostModalOpen(true)} className={btnSecondary}>
+               <Plus size={14} aria-hidden="true"/> Lançar extras
             </button>
             </div>
          </div>
          <div className="overflow-x-auto">
-            <table className="w-max min-w-0 text-[13px] text-left border-collapse tabular-nums">
-               <thead className={`text-xs ${tone.head}`}>
+            <table className="w-max min-w-full text-[13px] text-left border-collapse tabular-nums">
+               <thead>
                   <tr>
                      <th className={`${head} w-10`}></th>
                      <Th colKey="date" prefs={drePrefs} className={head}>Data</Th>
                      <Th colKey="revenue" prefs={drePrefs} className={`${head} text-right`}>Receita</Th>
-                     <Th colKey="ads_cost" prefs={drePrefs} className={`${head} text-right`}>Custo Ads</Th>
+                     <Th colKey="ads_cost" prefs={drePrefs} className={`${head} text-right`}>Custo dos anúncios</Th>
                      <Th colKey="extras" prefs={drePrefs} className={`${head} text-right`}>Extras</Th>
                      <Th colKey="refunds" prefs={drePrefs} className={`${head} text-right`}>Reembolso</Th>
                      <Th colKey="profit" prefs={drePrefs} className={`${head} text-right`}>Lucro</Th>
                   </tr>
                </thead>
                <tbody>
-                  {processedData.daysArray.map((day: any, idx: number) => {
-                     const cell = `${pad} border-b ${tone.line} ${tone.rowBg(idx)} ${tone.rowHover}`;
+                  {processedData.daysArray.map((day: any) => {
                      const isExpanded = expandedRows[day.date];
+                     const cell = `${pad} border-b border-line ${isExpanded ? 'bg-surface-2' : ''} group-hover:bg-surface-2`;
                      const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds;
                      const dateParts = day.date.split('-');
-                     
+
                      return (
                         <React.Fragment key={day.date}>
                            {/* LINHA PRINCIPAL (DIA) */}
@@ -1401,82 +1269,82 @@ export default function PlanningPage() {
                                  {Object.keys(day.mccs).length > 0 && (
                                     <button type="button" onClick={(e) => { e.stopPropagation(); toggleExpand(day.date); }}
                                       aria-expanded={!!isExpanded} aria-label={`${isExpanded ? 'Fechar' : 'Abrir'} o dia ${fmtDay(day.date)}`}
-                                      className={`inline-flex p-1 ${FOCUS_RING}`}>
-                                      {isExpanded ? <ChevronDown size={16} aria-hidden="true" className={tone.muted}/> : <ChevronRight size={16} aria-hidden="true" className={tone.muted}/>}
+                                      className={`inline-flex p-1 text-ink-subtle hover:text-ink ${FOCUS_RING}`}>
+                                      {isExpanded ? <ChevronDown size={16} aria-hidden="true"/> : <ChevronRight size={16} aria-hidden="true"/>}
                                     </button>
                                  )}
                               </td>
-                              <td className={`${cell} font-semibold ${tone.text}`} style={w('date')}>{`${dateParts[2]}/${dateParts[1]}`}</td>
-                              <td className={`${cell} text-right font-semibold ${tone.revenue}`} style={w('revenue')}>{formatMoney(day.revenue)}</td>
-                              <td className={`${cell} text-right font-semibold ${tone.cost}`} style={w('ads_cost')}>{formatMoney(day.ads_cost)}</td>
-                              
+                              <td className={`${cell} font-medium text-ink`} style={w('date')}>{`${dateParts[2]}/${dateParts[1]}`}</td>
+                              <td className={`${cell} text-right text-ink`} style={w('revenue')}>{formatMoney(day.revenue)}</td>
+                              <td className={`${cell} text-right text-ink-muted`} style={w('ads_cost')}>{formatMoney(day.ads_cost)}</td>
+
                               {/* EXTRAS */}
                               <td className={`${cell} text-right relative align-top`} style={w('extras')} onClick={(e) => e.stopPropagation()}>
                                  {day.details.length > 0 ? (
                                     <div className="flex flex-col items-end gap-1">
-                                       <span className={`font-semibold ${day.net_extra >= 0 ? tone.pos : tone.warn}`}>{formatMoney(day.net_extra)}</span>
-                                       <div className={`flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed pt-1 ${isDark ? 'border-slate-700' : 'border-slate-300'}`}>
+                                       <span className={`font-medium ${day.net_extra >= 0 ? 'text-ink' : 'text-warn'}`}>{formatMoney(day.net_extra)}</span>
+                                       <div className="flex flex-col gap-1 w-full items-end mt-1 border-t border-dashed border-line pt-1">
                                           {day.details.map((d: any) => (
-                                             <div key={d.id} className="flex items-center gap-2 group/item">
-                                                <span className={`text-xs ${tone.muted} break-words min-w-0`} title={d.desc}>{d.desc}</span>
-                                                <span className={`text-xs font-semibold ${d.val < 0 ? tone.pos : tone.warn}`}>{formatMoney(Math.abs(d.val))}</span>
+                                             <div key={d.id} className="flex items-center gap-2">
+                                                <span className="text-xs text-ink-subtle break-words min-w-0" title={d.desc}>{d.desc}</span>
+                                                <span className={`text-xs font-medium ${d.val < 0 ? 'text-pos' : 'text-warn'}`}>{formatMoney(Math.abs(d.val))}</span>
                                                 {/* Botão Excluir (Só com Modo Edição) */}
                                                 {editMode && (
-                                                   <button 
-                                                     onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id, d.desc); }} 
-                                                     className="text-rose-500 hover:text-rose-400 p-1 bg-rose-500/10 rounded"
-                                                     title="Excluir Extra"
+                                                   <button
+                                                     onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id, d.desc); }}
+                                                     className="text-neg p-1 rounded hover:bg-neg/10"
+                                                     title="Excluir extra"
                                                      aria-label={`Excluir o extra ${d.desc}`}
                                                    >
-                                                      <Trash2 size={10} aria-hidden="true" />
+                                                      <Trash2 size={12} aria-hidden="true" />
                                                    </button>
                                                 )}
                                              </div>
                                           ))}
                                        </div>
                                     </div>
-                                 ) : <span className={tone.muted}>—</span>}
+                                 ) : <span className="text-ink-faint">—</span>}
                               </td>
 
-                              <td className={`${cell} text-right ${day.refunds > 0 ? tone.neg : tone.muted}`} style={w('refunds')}>{day.refunds > 0 ? formatMoney(day.refunds) : '—'}</td>
-                              <td className={`${cell} text-right font-semibold ${pl(profit)}`} style={w('profit')}>{formatMoney(profit)}</td>
+                              <td className={`${cell} text-right ${day.refunds > 0 ? 'text-neg' : 'text-ink-faint'}`} style={w('refunds')}>{day.refunds > 0 ? formatMoney(day.refunds) : '—'}</td>
+                              <td className={`${cell} text-right font-medium ${tone(profit)}`} style={w('profit')}>{formatMoney(profit)}</td>
                            </tr>
 
                            {/* LINHAS EXPANDIDAS (DETALHE MCC/CONTA) */}
                            {isExpanded && Object.values(day.mccs).map((mcc: any) => (
                               <React.Fragment key={mcc.name}>
-                                 <tr className={isDark ? 'bg-slate-950' : 'bg-slate-100'}>
-                                    <td className={`border-b ${tone.line}`}></td>
-                                    <td className={`${sub} pl-8 font-semibold ${tone.accent}`} style={w('date')}>
-                                       <span className="inline-flex items-center gap-2"><Globe size={12} aria-hidden="true"/> MCC: {mcc.name}</span>
+                                 <tr className="bg-canvas/40">
+                                    <td className="border-b border-line"></td>
+                                    <td className={`${sub} pl-6 font-medium text-ink`} style={w('date')}>
+                                       <span className="flex items-start gap-2 max-w-[360px] whitespace-normal break-words"><Globe size={12} aria-hidden="true" className="text-ink-subtle shrink-0 mt-0.5"/> {mcc.name}</span>
                                     </td>
-                                    <td className={`${sub} text-right font-medium ${tone.revenue}`}>{formatMoney(mcc.revenue)}</td>
-                                    <td className={`${sub} text-right font-medium ${tone.cost}`}>{formatMoney(mcc.ads_cost)}</td>
-                                    <td colSpan={2} className={`border-b ${tone.line}`}></td>
-                                    <td className={`${sub} text-right font-medium ${pl(mcc.revenue - mcc.ads_cost - mcc.refunds)}`}>{formatMoney(mcc.revenue - mcc.ads_cost - mcc.refunds)}</td>
+                                    <td className={`${sub} text-right text-ink-muted`}>{formatMoney(mcc.revenue)}</td>
+                                    <td className={`${sub} text-right text-ink-muted`}>{formatMoney(mcc.ads_cost)}</td>
+                                    <td colSpan={2} className="border-b border-line"></td>
+                                    <td className={`${sub} text-right font-medium ${tone(mcc.revenue - mcc.ads_cost - mcc.refunds)}`}>{formatMoney(mcc.revenue - mcc.ads_cost - mcc.refunds)}</td>
                                  </tr>
                                  {Object.values(mcc.accounts).map((acc: any) => (
                                     <React.Fragment key={acc.name}>
-                                       <tr className={isDark ? 'bg-slate-950/70' : 'bg-slate-50'}>
-                                          <td className={`border-b ${tone.line}`}></td>
-                                          <td className={`${sub} pl-14 ${tone.text}`} style={w('date')}>
-                                             <span className="inline-flex items-center gap-2"><Briefcase size={12} aria-hidden="true" className={tone.muted}/> {acc.name}</span>
+                                       <tr className="bg-canvas/40">
+                                          <td className="border-b border-line"></td>
+                                          <td className={`${sub} pl-12 text-ink`} style={w('date')}>
+                                             <span className="flex items-start gap-2 max-w-[340px] whitespace-normal break-words"><Briefcase size={12} aria-hidden="true" className="text-ink-subtle shrink-0 mt-0.5"/> {acc.name}</span>
                                           </td>
-                                          <td className={`${sub} text-right ${tone.revenue}`}>{formatMoney(acc.revenue)}</td>
-                                          <td className={`${sub} text-right ${tone.cost}`}>{formatMoney(acc.ads_cost)}</td>
-                                          <td colSpan={2} className={`border-b ${tone.line}`}></td>
-                                          <td className={`${sub} text-right font-medium ${pl(acc.revenue - acc.ads_cost - acc.refunds)}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds)}</td>
+                                          <td className={`${sub} text-right text-ink-muted`}>{formatMoney(acc.revenue)}</td>
+                                          <td className={`${sub} text-right text-ink-muted`}>{formatMoney(acc.ads_cost)}</td>
+                                          <td colSpan={2} className="border-b border-line"></td>
+                                          <td className={`${sub} text-right ${tone(acc.revenue - acc.ads_cost - acc.refunds)}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds)}</td>
                                        </tr>
                                        {Object.values(acc.campaigns).map((cmp: any) => (
-                                          <tr key={cmp.name} className={isDark ? 'bg-slate-950/40' : 'bg-white'}>
-                                             <td className={`border-b ${tone.line}`}></td>
-                                             <td className={`${sub} pl-20 ${tone.text}`} style={w('date')}>
-                                                <span className="inline-flex items-center gap-2"><Package size={12} aria-hidden="true" className={tone.muted}/> {cmp.name}</span>
+                                          <tr key={cmp.name} className="bg-canvas/40">
+                                             <td className="border-b border-line"></td>
+                                             <td className={`${sub} pl-[4.5rem] text-ink-muted`} style={w('date')}>
+                                                <span className="flex items-start gap-2 max-w-[320px] whitespace-normal break-words"><Package size={12} aria-hidden="true" className="text-ink-subtle shrink-0 mt-0.5"/> {cmp.name}</span>
                                              </td>
-                                             <td className={`${sub} text-right ${tone.revenue}`}>{formatMoney(cmp.revenue)}</td>
-                                             <td className={`${sub} text-right ${tone.cost}`}>{formatMoney(cmp.ads_cost)}</td>
-                                             <td colSpan={2} className={`border-b ${tone.line}`}></td>
-                                             <td className={`${sub} text-right font-medium ${pl(cmp.revenue - cmp.ads_cost - cmp.refunds)}`}>{formatMoney(cmp.revenue - cmp.ads_cost - cmp.refunds)}</td>
+                                             <td className={`${sub} text-right text-ink-muted`}>{formatMoney(cmp.revenue)}</td>
+                                             <td className={`${sub} text-right text-ink-muted`}>{formatMoney(cmp.ads_cost)}</td>
+                                             <td colSpan={2} className="border-b border-line"></td>
+                                             <td className={`${sub} text-right ${tone(cmp.revenue - cmp.ads_cost - cmp.refunds)}`}>{formatMoney(cmp.revenue - cmp.ads_cost - cmp.refunds)}</td>
                                           </tr>
                                        ))}
                                     </React.Fragment>
@@ -1487,15 +1355,15 @@ export default function PlanningPage() {
                      );
                   })}
                </tbody>
-               <tfoot className={`font-semibold border-t-2 ${isDark ? 'bg-slate-950 border-slate-700' : 'bg-slate-100 border-slate-300'}`}>
+               <tfoot className="font-medium bg-surface-2 border-t border-line-strong">
                   <tr>
-                     <td className={`${pad} ${tone.text}`}>Totais</td>
+                     <td className={`${pad} text-ink`}>Totais</td>
                      <td className={pad}></td>
-                     <td className={`${pad} text-right ${tone.revenue}`}>{formatMoney(processedData.totals.revenue)}</td>
-                     <td className={`${pad} text-right ${tone.cost}`}>{formatMoney(processedData.totals.ads_cost)}</td>
-                     <td className={`${pad} text-right ${processedData.totals.net_extra >= 0 ? tone.pos : tone.warn}`}>{formatMoney(processedData.totals.net_extra)}</td>
-                     <td className={`${pad} text-right ${tone.neg}`}>{formatMoney(processedData.totals.refunds)}</td>
-                     <td className={`${pad} text-right ${pl(processedData.totals.profit)}`}>{formatMoney(processedData.totals.profit)}</td>
+                     <td className={`${pad} text-right text-ink`}>{formatMoney(processedData.totals.revenue)}</td>
+                     <td className={`${pad} text-right text-ink`}>{formatMoney(processedData.totals.ads_cost)}</td>
+                     <td className={`${pad} text-right ${processedData.totals.net_extra >= 0 ? 'text-ink' : 'text-warn'}`}>{formatMoney(processedData.totals.net_extra)}</td>
+                     <td className={`${pad} text-right ${processedData.totals.refunds > 0 ? 'text-neg' : 'text-ink-faint'}`}>{formatMoney(processedData.totals.refunds)}</td>
+                     <td className={`${pad} text-right ${tone(processedData.totals.profit)}`}>{formatMoney(processedData.totals.profit)}</td>
                   </tr>
                </tfoot>
             </table>
@@ -1508,22 +1376,18 @@ export default function PlanningPage() {
       </main>
 
       {/* BOTTOM NAV */}
-      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+      <nav className="fixed bottom-0 inset-x-0 md:hidden z-40 border-t border-line bg-canvas/95 backdrop-blur-md">
         <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          {[
-            { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
-            { href: '/planning', Icon: Target, label: 'Metas', active: true },
-            { href: '/products', Icon: Package, label: 'Campanhas', active: false },
-            { href: '/analise-ia', Icon: Sparkles, label: 'Análise IA', active: false },
-            { href: '/rastreamento', Icon: Route, label: 'Rastreio', active: false },
-            { href: '/integration', Icon: Settings, label: 'Integração', active: false },
-          ].map(({ href, Icon, label, active }) => (
-            <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-              <Icon size={22} aria-hidden="true"/>
-              <span className="text-[9px] font-bold tracking-wide">{label}</span>
-              {active && <div className="w-1 h-1 rounded-full bg-indigo-500"/>}
-            </Link>
-          ))}
+          {NAV_ITEMS.map(({ href, Icon, short }) => {
+            const active = href === '/planning';
+            return (
+              <Link key={href} href={href} aria-current={active ? 'page' : undefined}
+                className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-lg transition-colors ${active ? 'text-brand-text' : 'text-ink-subtle'}`}>
+                <Icon size={22} aria-hidden="true"/>
+                <span className="text-[10px] font-medium">{short}</span>
+              </Link>
+            );
+          })}
         </div>
       </nav>
 
@@ -1531,105 +1395,91 @@ export default function PlanningPage() {
       {/* Fechado, o painel fica fora do alcance do teclado e do leitor de tela (inert). */}
       <div inert={!showFilterSheet} onKeyDown={(e) => { if (e.key === 'Escape') setShowFilterSheet(false); }}
         className={`fixed inset-0 z-50 md:hidden transition-opacity duration-300 ${showFilterSheet ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowFilterSheet(false)}/>
-        <div role="dialog" aria-modal="true" aria-labelledby="planning-filter-title" className={`absolute bottom-0 inset-x-0 rounded-t-3xl border-t transition-transform duration-300 ease-out ${showFilterSheet ? 'translate-y-0' : 'translate-y-full'} ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
-          <div className="flex justify-center pt-3 pb-2"><div className={`w-10 h-1 rounded-full ${isDark ? 'bg-slate-700' : 'bg-slate-300'}`}/></div>
+        <div className="absolute inset-0 bg-black/60" onClick={() => setShowFilterSheet(false)}/>
+        <div role="dialog" aria-modal="true" aria-labelledby="planning-filter-title" className={`absolute bottom-0 inset-x-0 rounded-t-2xl border-t border-line-strong bg-surface-1 transition-transform duration-300 ease-out ${showFilterSheet ? 'translate-y-0' : 'translate-y-full'}`}>
+          <div className="flex justify-center pt-3 pb-2"><div className="w-10 h-1 rounded-full bg-line-strong"/></div>
           <div className="flex items-center justify-between px-5 pb-4">
-            <h2 id="planning-filter-title" className={`text-base font-bold ${textHead}`}>Filtros</h2>
-            <button ref={filterCloseRef} onClick={() => setShowFilterSheet(false)} aria-label="Fechar filtros" className={`w-8 h-8 flex items-center justify-center rounded-full ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}><X size={16} aria-hidden="true"/></button>
+            <h2 id="planning-filter-title" className="text-base font-semibold text-ink">Filtros</h2>
+            <button ref={filterCloseRef} onClick={() => setShowFilterSheet(false)} aria-label="Fechar filtros" className={iconBtn}><X size={16} aria-hidden="true"/></button>
           </div>
           <div className="px-5 pb-[max(2rem,calc(env(safe-area-inset-bottom)_+_1rem))] space-y-5 overflow-y-auto max-h-[70vh]">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Período</p>
+              <p className={`${label} mb-2`}>Período</p>
               <div className="flex flex-wrap gap-2">
                 {DATE_PRESETS.map(preset => (
-                  <button key={preset} onClick={() => handlePresetChange(preset)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${dateRange === preset ? 'bg-indigo-600 text-white' : isDark ? 'bg-slate-900 text-slate-400 border border-slate-800' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                  <button key={preset} onClick={() => handlePresetChange(preset)} aria-pressed={dateRange === preset} className={chip(dateRange === preset)}>
                     {DATE_PRESET_LABELS[preset]}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Datas personalizadas</p>
-              <div className="flex gap-2">
-                <input type="date" aria-label="Data inicial" className={`flex-1 p-2 rounded-xl border text-xs bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startInput.value} onChange={e => startInput.onChange(e.target.value)} />
-                <input type="date" aria-label="Data final" className={`flex-1 p-2 rounded-xl border text-xs bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endInput.value} onChange={e => endInput.onChange(e.target.value)} />
+              <p className={`${label} mb-2`}>Datas personalizadas</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="date" aria-label="Data inicial" className={`${field} min-w-0 text-xs ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={startInput.value} onChange={e => startInput.onChange(e.target.value)} />
+                <input type="date" aria-label="Data final" className={`${field} min-w-0 text-xs ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={endInput.value} onChange={e => endInput.onChange(e.target.value)} />
               </div>
             </div>
             {availableMccs.length > 0 && (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">MCC / Conta</p>
-                <select aria-label="MCC ou conta" className={`w-full p-2 rounded-xl border text-sm bg-transparent ${textHead} ${borderCol}`} value={selectedMcc} onChange={e => handleMccChange(e.target.value)}>
-                  <option value="all">Visão Geral (Todas)</option>
+                <p className={`${label} mb-2`}>MCC ou conta</p>
+                <select aria-label="MCC ou conta" className={field} value={selectedMcc} onChange={e => handleMccChange(e.target.value)}>
+                  <option value="all">Todas as MCCs</option>
                   {availableMccs.map(mcc => <option key={mcc} value={mcc}>{mcc}</option>)}
                 </select>
               </div>
             )}
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Moeda</p>
-              <div className={`flex items-center p-1 rounded-xl ${isDark ? 'bg-black/60' : 'bg-slate-100'}`}>
+              <p className={`${label} mb-2`}>Moeda</p>
+              <div className={segGroup} role="group" aria-label="Moeda de exibição">
                 {(['BRL', 'USD', 'EUR'] as const).map(c => (
-                  <button key={c} onClick={() => handleCurrencyChange(c)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${viewCurrency === c ? (isDark ? 'bg-slate-800 text-white shadow' : 'bg-white text-indigo-600 shadow') : 'text-slate-400'}`}>{c}</button>
+                  <button key={c} onClick={() => handleCurrencyChange(c)} aria-pressed={viewCurrency === c} className={`flex-1 py-2 ${segItem(viewCurrency === c)}`}>{c}</button>
                 ))}
               </div>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Taxa de Câmbio</p>
-              <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                <div>
-                  <div className="text-[9px] font-bold text-orange-500 uppercase">{rateConfig === 'USD' ? 'Dólar Hoje' : 'Euro Hoje'}</div>
-                  <div className="text-xs font-mono font-bold text-orange-400">R$ {rateConfig === 'USD' ? liveDollar.toFixed(2).replace('.', ',') : liveEuro.toFixed(2).replace('.', ',')}</div>
-                </div>
-                <div>
-                  <div className="text-[9px] font-bold text-blue-500 uppercase">{rateConfig === 'USD' ? 'Meu Dólar' : 'Meu Euro'}</div>
-                  <input type="text" inputMode="decimal" aria-label={`Meu ${rateConfig === 'USD' ? 'dólar' : 'euro'}, em reais`} className={`w-20 text-right p-1 rounded border text-xs font-mono font-bold bg-transparent ${textHead} ${borderCol}`}
-                    value={rateConfig === 'USD' ? dollarInput : euroInput}
-                    onChange={e => rateConfig === 'USD' ? handleDollarInputChange(e.target.value) : handleEuroInputChange(e.target.value)}
-                    onBlur={() => rateConfig === 'USD' ? handleDollarInputBlur() : handleEuroInputBlur()}
-                  />
-                </div>
-              </div>
+              <p className={`${label} mb-2`}>Câmbio</p>
+              {rateBox(rateConfig)}
             </div>
-            <button onClick={() => setShowFilterSheet(false)} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl">Aplicar</button>
+            <button onClick={() => setShowFilterSheet(false)} className="w-full bg-brand hover:bg-brand-hover text-white font-medium py-3 rounded-lg text-sm transition-colors">Aplicar</button>
           </div>
         </div>
       </div>
 
       {/* MODAL EXTRAS */}
       {isCostModalOpen && (
-         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onKeyDown={(e) => { if (e.key === 'Escape') setIsCostModalOpen(false); }}>
-            <div role="dialog" aria-modal="true" aria-labelledby="cost-modal-title" className={`${bgCard} rounded-xl w-full max-w-sm p-6 shadow-2xl`}>
-               <h3 id="cost-modal-title" className={`text-lg font-bold ${textHead} mb-4`}>Lançar Extras</h3>
+         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onKeyDown={(e) => { if (e.key === 'Escape') setIsCostModalOpen(false); }}>
+            <div role="dialog" aria-modal="true" aria-labelledby="cost-modal-title" className="rounded-2xl w-full max-w-sm p-6 border border-line-strong bg-surface-1">
+               <h3 id="cost-modal-title" className="text-base font-semibold text-ink mb-4">Lançar extras</h3>
                <div className="space-y-3">
-                  <div className="flex gap-2 mb-3">
-                     <button onClick={() => setNewCost({...newCost, type: 'cost'})} className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${newCost.type === 'cost' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>Custo Extra</button>
-                     <button onClick={() => setNewCost({...newCost, type: 'revenue'})} className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${newCost.type === 'revenue' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>Receita Extra</button>
+                  <div className={`${segGroup} mb-1`} role="group" aria-label="Tipo de extra">
+                     <button onClick={() => setNewCost({...newCost, type: 'cost'})} aria-pressed={newCost.type === 'cost'} className={`flex-1 py-1.5 ${segItem(newCost.type === 'cost')}`}>Custo extra</button>
+                     <button onClick={() => setNewCost({...newCost, type: 'revenue'})} aria-pressed={newCost.type === 'revenue'} className={`flex-1 py-1.5 ${segItem(newCost.type === 'revenue')}`}>Receita extra</button>
                   </div>
                   <div>
-                    <label htmlFor="cost-date" className="text-xs uppercase font-bold text-slate-500">Data do Lançamento</label>
-                    <input id="cost-date" type="date" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
+                    <label htmlFor="cost-date" className={`${label} block mb-1.5`}>Data do lançamento</label>
+                    <input id="cost-date" type="date" className={`${field} ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} value={newCost.date} onChange={e => setNewCost({...newCost, date: e.target.value})} />
                   </div>
                   <div>
-                    <label htmlFor="cost-desc" className="text-xs uppercase font-bold text-slate-500">Descrição</label>
-                    <input id="cost-desc" type="text" placeholder="Ex: Hospedagem, Copywriter…" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.description} onChange={e => setNewCost({...newCost, description: e.target.value})} />
+                    <label htmlFor="cost-desc" className={`${label} block mb-1.5`}>Descrição</label>
+                    <input id="cost-desc" type="text" placeholder="Ex: Hospedagem, Copywriter…" className={`${field} placeholder:text-ink-faint`} value={newCost.description} onChange={e => setNewCost({...newCost, description: e.target.value})} />
                   </div>
                   <div className="flex gap-2">
                      <div className="flex-1">
-                        <label htmlFor="cost-amount" className="text-xs uppercase font-bold text-slate-500">Valor</label>
-                        <input id="cost-amount" type="number" placeholder="0.00" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.amount} onChange={e => setNewCost({...newCost, amount: parseFloat(e.target.value)})} />
+                        <label htmlFor="cost-amount" className={`${label} block mb-1.5`}>Valor</label>
+                        <input id="cost-amount" type="number" placeholder="0.00" className={field} value={newCost.amount} onChange={e => setNewCost({...newCost, amount: parseFloat(e.target.value)})} />
                      </div>
                      <div className="w-24">
-                        <label htmlFor="cost-currency" className="text-xs uppercase font-bold text-slate-500">Moeda</label>
-                        <select id="cost-currency" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={newCost.currency} onChange={e => setNewCost({...newCost, currency: e.target.value})}>
+                        <label htmlFor="cost-currency" className={`${label} block mb-1.5`}>Moeda</label>
+                        <select id="cost-currency" className={field} value={newCost.currency} onChange={e => setNewCost({...newCost, currency: e.target.value})}>
                            <option value="BRL">BRL</option>
                            <option value="USD">USD</option>
                            <option value="EUR">EUR</option>
                         </select>
                      </div>
                   </div>
-                  <button onClick={handleAddCost} className={`w-full text-white font-bold py-3 rounded mt-2 transition-colors ${newCost.type === 'revenue' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'}`}>{newCost.type === 'revenue' ? 'Salvar Receita' : 'Salvar Despesa'}</button>
-                  <button onClick={() => setIsCostModalOpen(false)} className={`w-full py-2 ${textMuted} hover:underline`}>Cancelar</button>
+                  <button onClick={handleAddCost} className="w-full bg-brand hover:bg-brand-hover text-white text-sm font-medium py-2.5 rounded-lg mt-2 transition-colors">{newCost.type === 'revenue' ? 'Salvar receita' : 'Salvar despesa'}</button>
+                  <button onClick={() => setIsCostModalOpen(false)} className="w-full py-2 text-sm text-ink-subtle hover:text-ink">Cancelar</button>
                </div>
             </div>
          </div>
@@ -1637,11 +1487,11 @@ export default function PlanningPage() {
 
       {/* MODAL METAS */}
       {isGoalModalOpen && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onKeyDown={(e) => { if (e.key === 'Escape') setIsGoalModalOpen(false); }}>
-           <div role="dialog" aria-modal="true" aria-labelledby="goal-modal-title" className={`${bgCard} rounded-xl w-full max-w-sm p-6 shadow-2xl`}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onKeyDown={(e) => { if (e.key === 'Escape') setIsGoalModalOpen(false); }}>
+           <div role="dialog" aria-modal="true" aria-labelledby="goal-modal-title" className="rounded-2xl w-full max-w-sm p-6 border border-line-strong bg-surface-1">
               <div className="flex justify-between items-start mb-4">
-                 <h2 id="goal-modal-title" className={`text-xl font-bold ${textHead}`}>Metas do Mês</h2>
-                 <select aria-label="Moeda das metas" className={`text-xs font-bold p-1 rounded border outline-none ${FOCUS_RING} ${bgCard} ${borderCol} ${textHead}`} value={goalCurrency} onChange={e => setGoalCurrency(e.target.value as any)}>
+                 <h2 id="goal-modal-title" className="text-base font-semibold text-ink">Metas do mês</h2>
+                 <select aria-label="Moeda das metas" className={`text-xs font-medium px-2 py-1 rounded-md border border-line-strong bg-surface-1 text-ink outline-none ${FOCUS_RING}`} value={goalCurrency} onChange={e => setGoalCurrency(e.target.value as any)}>
                     <option value="BRL">BRL</option>
                     <option value="USD">USD</option>
                     <option value="EUR">EUR</option>
@@ -1649,42 +1499,42 @@ export default function PlanningPage() {
               </div>
               <div className="space-y-4">
                  <div>
-                    <label htmlFor="goal-revenue" className="text-xs uppercase text-blue-500 font-bold mb-1 block">Meta Faturamento</label>
-                    <input id="goal-revenue" type="number" className={`w-full p-2 rounded border bg-transparent ${textHead} ${borderCol}`} value={tempGoal.revenue} onChange={e => setTempGoal({...tempGoal, revenue: parseFloat(e.target.value)})} />
+                    <label htmlFor="goal-revenue" className={`${label} block mb-1.5`}>Meta de faturamento</label>
+                    <input id="goal-revenue" type="number" className={field} value={tempGoal.revenue} onChange={e => setTempGoal({...tempGoal, revenue: parseFloat(e.target.value)})} />
                  </div>
-                 
+
                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                       <label htmlFor="goal-profit" className="text-xs uppercase text-emerald-500 font-bold">Meta Lucro</label>
-                       <div className="flex bg-slate-100 dark:bg-slate-800 rounded p-0.5">
-                          <button onClick={() => setProfitType('value')} aria-pressed={profitType === 'value'} className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all ${profitType === 'value' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-800 dark:text-white' : 'text-slate-500'}`}>Valor</button>
-                          <button onClick={() => setProfitType('percentage')} aria-pressed={profitType === 'percentage'} className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all ${profitType === 'percentage' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-800 dark:text-white' : 'text-slate-500'}`}>Margem %</button>
+                    <div className="flex justify-between items-center mb-1.5">
+                       <label htmlFor="goal-profit" className={label}>Meta de lucro</label>
+                       <div className={`${segGroup} p-0.5`} role="group" aria-label="Meta de lucro em">
+                          <button onClick={() => setProfitType('value')} aria-pressed={profitType === 'value'} className={`px-2 py-0.5 ${segItem(profitType === 'value')}`}>Valor</button>
+                          <button onClick={() => setProfitType('percentage')} aria-pressed={profitType === 'percentage'} className={`px-2 py-0.5 ${segItem(profitType === 'percentage')}`}>Margem %</button>
                        </div>
                     </div>
                     <div className="relative">
-                       <span className={`absolute left-3 top-1/2 -translate-y-1/2 font-bold text-xs ${textMuted}`}>{profitType === 'percentage' ? '%' : (goalCurrency === 'BRL' ? 'R$' : goalCurrency === 'USD' ? '$' : '€')}</span>
-                       <input id="goal-profit" type="number" className={`w-full p-2 pl-8 rounded border bg-transparent ${textHead} ${borderCol}`} value={profitInput} onChange={e => setProfitInput(parseFloat(e.target.value))} />
+                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ink-subtle">{profitType === 'percentage' ? '%' : (goalCurrency === 'BRL' ? 'R$' : goalCurrency === 'USD' ? '$' : '€')}</span>
+                       <input id="goal-profit" type="number" className={`${field} pl-8`} value={profitInput} onChange={e => setProfitInput(parseFloat(e.target.value))} />
                     </div>
                     {profitType === 'percentage' && tempGoal.revenue > 0 && typeof profitInput === 'number' && (
-                       <p className="text-[10px] text-slate-400 mt-1">Sua meta será focada em lucrar <strong className="text-emerald-500">{new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: goalCurrency }).format(tempGoal.revenue * (profitInput / 100))}</strong> no fim do mês.</p>
+                       <p className="text-xs text-ink-subtle mt-1.5">Sua meta será lucrar <span className="font-medium text-pos tabular-nums">{new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: goalCurrency }).format(tempGoal.revenue * (profitInput / 100))}</span> no fim do mês.</p>
                     )}
                  </div>
 
                  <div>
-                    <label htmlFor="goal-limit" className="text-xs uppercase text-amber-500 font-bold mb-1 block">
-                       Teto de Gastos <span className="text-[9px] text-slate-500 normal-case font-normal">(faturamento − lucro)</span>
+                    <label htmlFor="goal-limit" className={`${label} block mb-1.5`}>
+                       Teto de gastos <span className="font-normal">(faturamento − lucro)</span>
                     </label>
                     <input
                       id="goal-limit"
                       type="number"
                       readOnly
-                      className={`w-full p-2 rounded border bg-transparent ${borderCol} ${isDark ? 'text-slate-400' : 'text-slate-500'} cursor-not-allowed`}
+                      className={`${field} text-ink-subtle cursor-not-allowed bg-surface-2`}
                       value={parseFloat((Math.max(0, (tempGoal.revenue || 0) - (profitType === 'percentage' ? (tempGoal.revenue || 0) * ((profitInput || 0) / 100) : (profitInput || 0)))).toFixed(2))}
                     />
                  </div>
-                 
-                 <button onClick={handleSaveGoal} className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 mt-4 transition-colors">Salvar Metas</button>
-                 <button onClick={() => setIsGoalModalOpen(false)} className={`w-full py-2 text-sm font-medium ${textMuted} hover:underline`}>Cancelar</button>
+
+                 <button onClick={handleSaveGoal} className="w-full bg-brand hover:bg-brand-hover text-white text-sm font-medium py-2.5 rounded-lg mt-2 transition-colors">Salvar metas</button>
+                 <button onClick={() => setIsGoalModalOpen(false)} className="w-full py-2 text-sm text-ink-subtle hover:text-ink">Cancelar</button>
               </div>
            </div>
         </div>
