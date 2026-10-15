@@ -35,7 +35,7 @@ export function loadLevel(): Level {
 export function saveLevel(l: Level) { try { localStorage.setItem(LEVEL_KEY, l); } catch { /* sem armazenamento */ } }
 
 export type Tone = 'ativo' | 'pausado' | 'suspenso' | 'sem_veicular';
-export const DOT: Record<Tone, string> = { ativo: 'bg-emerald-500', pausado: 'bg-slate-500', suspenso: 'bg-rose-500', sem_veicular: 'bg-amber-500' };
+export const DOT: Record<Tone, string> = { ativo: 'bg-pos', pausado: 'bg-ink-faint', suspenso: 'bg-neg', sem_veicular: 'bg-warn' };
 const TONE_LABEL: Record<Tone, [string, string]> = { ativo: ['ativa', 'ativas'], pausado: ['pausada', 'pausadas'], suspenso: ['suspensa', 'suspensas'], sem_veicular: ['sem veicular', 'sem veicular'] };
 /** Ativas primeiro, depois o que pede atenção, pausadas por último: é o desempate da ordenação. */
 const TONE_ORDER: Record<Tone, number> = { ativo: 0, sem_veicular: 1, suspenso: 2, pausado: 3 };
@@ -62,13 +62,15 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
   onOpen: (product: any) => void; hrefOf: (product: any) => string; onPickAccount: (mcc: string, account: string) => void; onPickMcc: (mcc: string) => void;
   actions: (product: any) => React.ReactNode;
 }) {
-  const head = isDark ? 'text-white' : 'text-slate-900';
-  const text = isDark ? 'text-slate-200' : 'text-slate-800';
-  const muted = 'text-slate-500';
-  const zero = isDark ? 'text-slate-600' : 'text-slate-400';
-  const line = isDark ? 'border-slate-800' : 'border-slate-200';
-  const link = isDark ? 'text-indigo-300' : 'text-indigo-700';
-  const hover = isDark ? 'hover:bg-slate-800/60' : 'hover:bg-slate-50';
+  // Guia visual (DESIGN.md): tokens do tema; números neutros, cor só no lucro.
+  void isDark;
+  const head = 'text-ink';
+  const text = 'text-ink-muted';
+  const muted = 'text-ink-subtle';
+  const zero = 'text-ink-faint';
+  const line = 'border-line';
+  const link = 'text-ink';
+  const hover = 'hover:bg-surface-2';
 
   const toBRL = (value: number, currency?: string) => (currency === 'USD' ? value * rates.USD : currency === 'EUR' ? value * rates.EUR : value);
   const money = (v: number, currency = 'BRL') => new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(v);
@@ -132,15 +134,15 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
   const mixed = new Set(products.map(p => p.currency || 'BRL')).size > 1;
 
   const th = (key: SortKey, label: string, align: 'left' | 'right' = 'right', sep = false) => (
-    <th className={`px-3 py-2.5 font-semibold ${align === 'right' ? 'text-right' : 'text-left'} ${sep ? `border-l ${line}` : ''}`} aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
+    <th className={`px-3 py-2.5 font-medium ${align === 'right' ? 'text-right' : 'text-left'} ${sep ? `border-l ${line}` : ''}`} aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
       <button onClick={() => onSort({ key, desc: sort.key === key ? !sort.desc : key !== 'name' })} title={`Ordenar por ${label.toLowerCase()}`}
-        className={`inline-flex items-center gap-1 uppercase tracking-wider ${sort.key === key ? head : `${muted} hover:text-indigo-400`}`}>
+        className={`inline-flex items-center gap-1 ${sort.key === key ? head : `${muted} hover:text-ink`}`}>
         {align === 'right' && sort.key === key && (sort.desc ? <ArrowDown size={11} aria-hidden="true" /> : <ArrowUp size={11} aria-hidden="true" />)}{label}{align === 'left' && sort.key === key && (sort.desc ? <ArrowDown size={11} aria-hidden="true" /> : <ArrowUp size={11} aria-hidden="true" />)}
       </button>
     </th>
   );
   const num = (value: number, shown: string, sep = false, extra = '') => <td className={`px-3 text-right tabular-nums ${sep ? `border-l ${line}` : ''} ${value ? text : zero} ${extra}`}>{shown}</td>;
-  const profit = (n: Nums, currency: string) => <td className={`px-3 text-right tabular-nums font-semibold ${n.profit > 0 ? 'text-emerald-500' : n.profit < 0 ? 'text-rose-500' : zero}`}>{money(n.profit, currency)}</td>;
+  const profit = (n: Nums, currency: string) => <td className={`px-3 text-right tabular-nums font-medium ${n.profit > 0 ? 'text-pos' : n.profit < 0 ? 'text-neg' : zero}`}>{money(n.profit, currency)}</td>;
   /** As seis colunas de número, iguais nas três visões: tráfego e, depois da divisória, dinheiro. */
   const numbers = (n: Nums, currency: string) => (
     <>
@@ -163,16 +165,16 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
       <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-xs ${muted} px-1`}>
         <span className={head}>{products.length} {products.length === 1 ? 'campanha' : 'campanhas'}</span>
       </div>
-      <div className={`border rounded-xl overflow-x-auto ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+      <div className="border border-line bg-surface-1 rounded-xl overflow-x-auto">
         {level === 'campaigns' ? (
-          <table className="w-full table-fixed border-collapse text-[13px] min-w-[1080px]">
+          <table className="w-full table-fixed border-collapse text-[13px] min-w-[1200px]">
             <colgroup><col className="w-10" /><col className="w-6" /><col /><col className="w-[140px]" /><col className="w-[112px]" />{numberCols}<col className="w-[124px]" /></colgroup>
             <thead>
-              <tr className={`text-[11px] border-b ${line} ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
-                <th className="py-2.5 text-center"><button onClick={() => onSelectAll(ids)} aria-label="Selecionar todas" className="text-slate-400 hover:text-indigo-500 align-middle">{allSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></th>
+              <tr className={`text-xs border-b ${line} bg-surface-2`}>
+                <th className="py-2.5 text-center"><button onClick={() => onSelectAll(ids)} aria-label="Selecionar todas" className="text-ink-subtle hover:text-ink align-middle">{allSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></th>
                 <th />
                 {th('name', 'Campanha', 'left')}
-                <th className={`px-3 py-2.5 text-left font-semibold uppercase tracking-wider ${muted}`}>Conta</th>
+                <th className={`px-3 py-2.5 text-left font-medium ${muted}`}>Conta</th>
                 {th('budget', 'Orçam./dia')}
                 {numberHeads}
                 <th />
@@ -182,13 +184,13 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
               {rows.map(({ p, n, tone, title }) => {
                 const isSelected = selected.includes(p.id);
                 return (
-                  <tr key={p.id} onClick={() => onOpen(p)} className={`h-12 border-b ${line} cursor-pointer transition-colors ${isSelected ? (isDark ? 'bg-indigo-500/10' : 'bg-indigo-50') : hover} ${p.is_hidden ? 'opacity-60' : ''}`}>
-                    <td className="text-center" onClick={e => e.stopPropagation()}><button onClick={e => onToggleSelect(p.id, e)} aria-label={`Selecionar ${p.name}`} className={`align-middle ${isSelected ? 'text-indigo-500' : 'text-slate-400 hover:text-slate-300'}`}>{isSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></td>
+                  <tr key={p.id} onClick={() => onOpen(p)} className={`h-12 border-b ${line} cursor-pointer transition-colors ${isSelected ? 'bg-brand/10' : hover} ${p.is_hidden ? 'opacity-60' : ''}`}>
+                    <td className="text-center" onClick={e => e.stopPropagation()}><button onClick={e => onToggleSelect(p.id, e)} aria-label={`Selecionar ${p.name}`} className={`align-middle ${isSelected ? 'text-brand-text' : 'text-ink-subtle hover:text-ink'}`}>{isSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></td>
                     <td className="text-center">{dot(tone, title)}</td>
                     {/* O nome é um link de verdade: abre pelo teclado e aceita Cmd/Ctrl+clique para nova aba. A linha inteira continua abrindo com o mouse. */}
-                    <td className="px-3"><div className="flex items-center gap-1.5 min-w-0"><Link href={hrefOf(p)} onClick={e => e.stopPropagation()} className={`line-clamp-2 leading-tight break-words font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`} title={`${p.name}${p.campaign_id ? ` · nº ${p.campaign_id}` : ''}`}>{p.name}</Link>{p.is_hidden && <><EyeOff size={12} aria-hidden="true" className="text-amber-500 shrink-0" /><span className="sr-only">(oculta)</span></>}</div></td>
+                    <td className="px-3"><div className="flex items-center gap-1.5 min-w-0"><Link href={hrefOf(p)} onClick={e => e.stopPropagation()} className={`line-clamp-2 leading-tight break-words font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`} title={`${p.name}${p.campaign_id ? ` · nº ${p.campaign_id}` : ''}`}>{p.name}</Link>{p.is_hidden && <><EyeOff size={12} aria-hidden="true" className="text-warn shrink-0" /><span className="sr-only">(oculta)</span></>}</div></td>
                     <td className="px-3" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => onPickAccount(p.mcc_name || 'Outras', p.account_name || 'Sem Conta')} title="Ver só esta conta" className={`block w-full text-left truncate ${text} hover:text-indigo-400`}>{p.account_name || 'Sem Conta'}</button>
+                      <button onClick={() => onPickAccount(p.mcc_name || 'Outras', p.account_name || 'Sem Conta')} title="Ver só esta conta" className={`block w-full text-left truncate ${text} hover:text-ink hover:underline`}>{p.account_name || 'Sem Conta'}</button>
                       <div className={`text-[11px] truncate ${muted}`}>{p.mcc_name || 'Outras'}</div>
                     </td>
                     <td className={`px-3 text-right tabular-nums ${n.budget ? text : zero}`} title={p.metrics7d?.budgetDate ? `Lido do Google em ${String(p.metrics7d.budgetDate).split('-').reverse().join('/')}` : undefined}>{n.budget ? money(n.budget, p.currency) : '—'}</td>
@@ -199,7 +201,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
               })}
             </tbody>
             <tfoot>
-              <tr className={`h-11 font-semibold ${isDark ? 'bg-slate-950/60' : 'bg-slate-50'}`}>
+              <tr className="h-11 font-medium bg-surface-2">
                 <td /><td /><td className={`px-3 ${head}`}>{totalLabel}</td><td />
                 {num(total.budget, total.budget ? money(total.budget, total.currency) : '—')}
                 {numbers(total, total.currency)}
@@ -211,10 +213,10 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
           <table className="w-full table-fixed border-collapse text-[13px] min-w-[900px]">
             <colgroup><col className="w-9" /><col /><col className="w-[140px]" /><col className="w-[120px]" />{numberCols}</colgroup>
             <thead>
-              <tr className={`text-[11px] border-b ${line} ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
+              <tr className={`text-xs border-b ${line} bg-surface-2`}>
                 <th />
                 {th('name', level === 'mccs' ? 'MCC' : 'Conta', 'left')}
-                <th className={`px-3 py-2.5 text-right font-semibold uppercase tracking-wider ${muted}`}>Campanhas</th>
+                <th className={`px-3 py-2.5 text-right font-medium ${muted}`}>Campanhas</th>
                 {th('budget', 'Orçam./dia')}
                 {numberHeads}
               </tr>
@@ -227,7 +229,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
                   <td className="px-3">
                     {/* A linha abre com o mouse; o botão é o caminho pelo teclado. */}
                     <button type="button" onClick={e => { e.stopPropagation(); level === 'mccs' ? onPickMcc(g.mcc) : onPickAccount(g.mcc, g.name); }}
-                      className={`block w-full text-left truncate font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`}>{g.name}</button>
+                      className={`block w-full text-left truncate font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}>{g.name}</button>
                     <div className={`text-[11px] truncate ${muted}`}>{level === 'mccs' ? `${g.accounts} ${g.accounts === 1 ? 'conta' : 'contas'}` : [g.id, g.mcc].filter(Boolean).join(' · ')}</div>
                   </td>
                   <td className={`px-3 text-right tabular-nums ${g.active ? text : zero}`}>{g.active} de {g.list.length} {g.active === 1 ? 'ativa' : 'ativas'}</td>
@@ -237,7 +239,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
               ))}
             </tbody>
             <tfoot>
-              <tr className={`h-11 font-semibold ${isDark ? 'bg-slate-950/60' : 'bg-slate-50'}`}>
+              <tr className="h-11 font-medium bg-surface-2">
                 <td /><td className={`px-3 ${head}`}>{totalLabel}</td>
                 <td className={`px-3 text-right tabular-nums ${text}`}>{tally.ativo} de {products.length} ativas</td>
                 {num(total.budget, total.budget ? money(total.budget, total.currency) : '—')}

@@ -51,6 +51,10 @@ import { blockOf } from '@/lib/campaignGroups';
 import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
 import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
 import { CampaignTable, DOT, LEVELS, loadLevel, loadSort, saveLevel, saveSort, toneOf, type Level, type Sort, type Tone } from './CampaignTable';
+import { Inter } from 'next/font/google';
+
+// Fonte do guia visual (DESIGN.md), nas telas já migradas.
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -586,213 +590,227 @@ export default function ProductsPage() {
   const changeLevel = (l: Level) => { setLevel(l); saveLevel(l); };
   const changeSort = (next: Sort) => { setSort(next); saveSort(next); };
 
-  // Estilos
+  // Visual pelo guia (DESIGN.md, direção Linear): cores pelos tokens do tema.
   const isDark = theme === 'dark';
-  const bgMain = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
-  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const textMuted = 'text-slate-500';
-  const borderCol = isDark ? 'border-slate-800' : 'border-slate-200';
-  const hoverItem = isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100';
-  const activeItem = isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-black border border-slate-200';
-  const buttonPrimary = isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-600 text-white shadow';
+  const navItem = 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors';
+  const navIdle = `${navItem} text-ink-subtle hover:bg-surface-2 hover:text-ink`;
+  const iconBtn = 'w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors';
+  const segItem = (on: boolean) => `rounded-md text-xs font-medium whitespace-nowrap transition-colors ${on ? 'bg-surface-3 text-ink' : 'text-ink-subtle hover:text-ink'}`;
+  const rowAction = 'p-1.5 rounded-md text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors';
+  const field = 'w-full bg-surface-1 border border-line-strong rounded-lg px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand';
+  const NAV_ITEMS = [
+    { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', short: 'Dashboard' },
+    { href: '/planning', Icon: Target, label: 'Metas', short: 'Metas' },
+    { href: '/products', Icon: Package, label: 'Campanhas', short: 'Campanhas' },
+    { href: '/analise-ia', Icon: Sparkles, label: 'Análise de IA', short: 'Análise IA' },
+    { href: '/rastreamento', Icon: Route, label: 'Rastreamento', short: 'Rastreio' },
+    { href: '/integration', Icon: Settings, label: 'Integração', short: 'Integração' },
+  ];
 
-  if (!authChecked) return <div className="min-h-screen bg-black" />;
+  if (!authChecked) return <div className="min-h-screen bg-canvas" />;
 
   return (
-    <div className={`min-h-[100dvh] font-sans flex flex-col md:flex-row ${bgMain}`}>
-      
+    <div className={`${inter.className} min-h-[100dvh] font-sans flex flex-col md:flex-row bg-canvas text-ink-muted`}>
+
       {/* MOBILE HEADER */}
-      <div className={`md:hidden flex items-center justify-between p-4 border-b shrink-0 z-30 sticky top-0 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        <div className="flex items-center gap-3">
-           <Logo />
-        </div>
-        <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} aria-label={isMobileSidebarOpen ? 'Fechar o menu' : 'Abrir o menu'} aria-expanded={isMobileSidebarOpen} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>
-           {isMobileSidebarOpen ? <X size={24} aria-hidden="true"/> : <List size={24} aria-hidden="true"/>}
+      <div className="md:hidden flex items-center justify-between px-4 h-14 border-b border-line bg-surface-1 shrink-0 z-30 sticky top-0">
+        <Logo />
+        <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} aria-label={isMobileSidebarOpen ? 'Fechar o menu' : 'Abrir o menu'} aria-expanded={isMobileSidebarOpen} className={iconBtn}>
+          {isMobileSidebarOpen ? <X size={18} aria-hidden="true"/> : <List size={18} aria-hidden="true"/>}
         </button>
       </div>
 
       {/* SIDEBAR */}
-      <aside className={`${isMobileSidebarOpen ? 'flex' : 'hidden'} md:flex fixed md:sticky inset-0 md:inset-auto top-[73px] md:top-0 w-full md:w-72 shrink-0 border-r flex-col h-[calc(100dvh-73px)] md:h-screen z-20 ${isDark ? 'bg-slate-950 border-slate-900' : 'bg-white border-slate-200'}`}>
-        
-        <div className="hidden md:flex h-20 items-center justify-center md:justify-start md:px-6 border-b border-inherit overflow-hidden shrink-0">
-           <Logo />
+      <aside className={`${isMobileSidebarOpen ? 'flex' : 'hidden'} md:flex fixed md:sticky inset-0 md:inset-auto top-14 md:top-0 w-full md:w-64 shrink-0 border-r border-line bg-surface-1 flex-col h-[calc(100dvh-3.5rem)] md:h-screen z-20`}>
+
+        <div className="hidden md:flex h-16 items-center px-5 border-b border-line overflow-hidden shrink-0">
+          <Logo />
         </div>
-        
-        {/* Scrollable Area for Sidebar Items */}
+
         <div className="flex-1 overflow-y-auto flex flex-col custom-scrollbar">
-          <nav className="px-2 py-4 space-y-2 shrink-0">
-             <Link href="/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><LayoutGrid size={20} aria-hidden="true" /> <span className="font-medium">Dashboard</span></Link>
-             <Link href="/planning" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Target size={20} aria-hidden="true" /> <span className="font-medium">Metas</span></Link>
-             <Link href="/products" className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/20"><Briefcase size={20} aria-hidden="true" /> <span className="font-medium">Campanhas</span></Link>
-             <Link href="/analise-ia" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Sparkles size={20} aria-hidden="true" /> <span className="font-medium">Análise de IA</span></Link>
-             <Link href="/rastreamento" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Route size={20} aria-hidden="true" /> <span className="font-medium">Rastreamento</span></Link>
-             <Link href="/integration" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-900 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'}`}><Settings size={20} aria-hidden="true" /> <span className="font-medium">Integração</span></Link>
+          <nav className="px-3 py-4 space-y-0.5 shrink-0">
+            {NAV_ITEMS.map(({ href, Icon, label }) => href === '/products' ? (
+              <Link key={href} href={href} aria-current="page" className={`${navItem} bg-surface-2 text-ink`}>
+                <Icon size={18} aria-hidden="true" className="text-brand-text" /> <span>{label}</span>
+              </Link>
+            ) : (
+              <Link key={href} href={href} className={navIdle}>
+                <Icon size={18} aria-hidden="true" /> <span>{label}</span>
+              </Link>
+            ))}
           </nav>
-          
-          <div className="px-4 pb-2 mt-2 shrink-0">
-            <div className={`p-3 rounded-lg border mb-2 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Estrutura de Contas</p>
-              <div className="flex justify-between items-center">
-                <button onClick={() => setShowHidden(!showHidden)} className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${showHidden ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : `text-slate-500 border-transparent ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-200'}`}`}>
-                  {showHidden ? <Eye size={10} aria-hidden="true" /> : <EyeOff size={10} aria-hidden="true" />}
-                  {showHidden ? 'Ver Ativos' : 'Ver Ocultos'}
+
+          <div className="px-3 pt-2 pb-2 shrink-0 border-t border-line">
+            <div className="flex justify-between items-center px-2 py-2">
+              <p className="text-xs font-medium text-ink-subtle">Contas</p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setShowHidden(!showHidden)} aria-pressed={showHidden}
+                  className={`text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${showHidden ? 'bg-warn/10 text-warn' : 'text-ink-subtle hover:text-ink hover:bg-surface-2'}`}>
+                  {showHidden ? <Eye size={12} aria-hidden="true" /> : <EyeOff size={12} aria-hidden="true" />}
+                  {showHidden ? 'Ver ativas' : 'Ver ocultas'}
                 </button>
-                <button onClick={resetFilters} className="text-[10px] text-indigo-400 hover:underline">Limpar</button>
+                <button onClick={resetFilters} className="text-xs px-2 py-1 rounded-md text-brand-text hover:bg-surface-2">Limpar</button>
               </div>
             </div>
           </div>
 
-          <div className="px-4 pb-4 space-y-1">
-             {structure.length === 0 && !loading && (
-                 <div className="text-center py-4 px-2"><p className="text-xs text-slate-500">Nenhuma conta encontrada.</p></div>
-             )}
+          <div className="px-3 pb-4 space-y-0.5">
+            {structure.length === 0 && !loading && (
+              <div className="text-center py-4 px-2"><p className="text-xs text-ink-subtle">Nenhuma conta encontrada.</p></div>
+            )}
 
-             {structure.map(mcc => {
-               const isMccActive = selectedMcc === mcc.name && !selectedAccount;
-               const isExpanded = expandedMccs.includes(mcc.name);
-               return (
-                 <div key={mcc.name} className="mb-2">
-                   <div className="flex items-center gap-1 group relative pr-2">
-                      <button onClick={() => toggleMccExpand(mcc.name)} aria-label={`${isExpanded ? 'Recolher' : 'Mostrar'} as contas de ${mcc.name}`} aria-expanded={isExpanded} className={`p-2 transition-colors ${textMuted} hover:text-indigo-500`}>{isExpanded ? <ChevronDown size={14} aria-hidden="true"/> : <ChevronRight size={14} aria-hidden="true"/>}</button>
-                      <button onClick={() => handleSelectMcc(mcc.name)} className={`w-full flex-1 min-w-0 text-left py-2 px-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${isMccActive ? 'bg-indigo-600 text-white shadow' : `${textMuted} ${hoverItem}`}`}>
-                         <Globe size={14} aria-hidden="true" className={`shrink-0 ${isMccActive ? 'text-white' : 'text-slate-500'}`}/>
-                         <span className="break-all min-w-0">{mcc.name}</span>
-                      </button>
-                      <button onClick={(e) => handleDeleteMcc(mcc.name, e)} aria-label={`Excluir a MCC ${mcc.name}`} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"><Trash2 size={12} aria-hidden="true"/></button>
-                   </div>
-                   {isExpanded && (
-                     <div className={`ml-4 pl-3 border-l mt-1 space-y-1 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                        {mcc.accounts.map(acc => {
-                          const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
-                          const accProds = products.filter(p => (p.mcc_name || 'Outras') === mcc.name && (p.account_name || 'Sem Conta') === acc);
-                          const isHidden = accProds.length > 0 && accProds.every(p => p.is_hidden);
+            {structure.map(mcc => {
+              const isMccActive = selectedMcc === mcc.name && !selectedAccount;
+              const isExpanded = expandedMccs.includes(mcc.name);
+              return (
+                <div key={mcc.name}>
+                  <div className="flex items-center gap-0.5 group relative">
+                    <button onClick={() => toggleMccExpand(mcc.name)} aria-label={`${isExpanded ? 'Recolher' : 'Mostrar'} as contas de ${mcc.name}`} aria-expanded={isExpanded} className="p-1.5 rounded-md text-ink-subtle hover:text-ink">{isExpanded ? <ChevronDown size={14} aria-hidden="true"/> : <ChevronRight size={14} aria-hidden="true"/>}</button>
+                    <button onClick={() => handleSelectMcc(mcc.name)} aria-current={isMccActive ? 'true' : undefined}
+                      className={`flex-1 min-w-0 text-left py-1.5 px-2 rounded-md flex items-center gap-2 text-[13px] font-medium transition-colors ${isMccActive ? 'bg-surface-2 text-ink' : 'text-ink-subtle hover:bg-surface-2 hover:text-ink'}`}>
+                      <Globe size={14} aria-hidden="true" className={`shrink-0 ${isMccActive ? 'text-brand-text' : ''}`}/>
+                      <span className="break-all min-w-0">{mcc.name}</span>
+                    </button>
+                    <button onClick={(e) => handleDeleteMcc(mcc.name, e)} aria-label={`Excluir a MCC ${mcc.name}`} className="p-1.5 rounded-md text-ink-subtle hover:text-neg opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"><Trash2 size={12} aria-hidden="true"/></button>
+                  </div>
+                  {isExpanded && (
+                    <div className="ml-4 pl-2 border-l border-line my-0.5 space-y-0.5">
+                      {mcc.accounts.map(acc => {
+                        const isAccActive = selectedAccount === acc && selectedMcc === mcc.name;
+                        const accProds = products.filter(p => (p.mcc_name || 'Outras') === mcc.name && (p.account_name || 'Sem Conta') === acc);
+                        const isHidden = accProds.length > 0 && accProds.every(p => p.is_hidden);
 
-                          return (
-                            <div key={acc} className="flex items-center group/acc pr-2">
-                              <button onClick={() => handleSelectAccount(mcc.name, acc)} className={`w-full flex-1 min-w-0 text-left px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all ${isAccActive ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : `${textMuted} ${hoverItem}`}`}>
-                                  <Briefcase size={12} aria-hidden="true" className="shrink-0"/> <span className={`break-all min-w-0 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
-                              </button>
-                              <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 focus-visible:opacity-100 transition-opacity ml-1 ${isHidden ? 'text-amber-500 hover:text-amber-400' : `text-slate-500 ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`} title={isHidden ? "Restaurar Conta" : "Ocultar Conta"} aria-label={`${isHidden ? 'Restaurar' : 'Ocultar'} a conta ${acc}`}>
-                                 {isHidden ? <Eye size={12} aria-hidden="true"/> : <EyeOff size={12} aria-hidden="true"/>}
-                              </button>
-                              <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 text-slate-500 hover:text-rose-500 opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 focus-visible:opacity-100 transition-opacity ml-0.5" title="Excluir" aria-label={`Excluir a conta ${acc}`}><Trash2 size={12} aria-hidden="true"/></button>
-                            </div>
-                          );
-                        })}
-                     </div>
-                   )}
-                 </div>
-               )
-             })}
+                        return (
+                          <div key={acc} className="flex items-center group/acc">
+                            <button onClick={() => handleSelectAccount(mcc.name, acc)} aria-current={isAccActive ? 'true' : undefined}
+                              className={`flex-1 min-w-0 text-left px-2 py-1.5 rounded-md flex items-center gap-2 text-xs transition-colors ${isAccActive ? 'bg-surface-2 text-ink font-medium' : 'text-ink-subtle hover:bg-surface-2 hover:text-ink'}`}>
+                              <Briefcase size={12} aria-hidden="true" className={`shrink-0 ${isAccActive ? 'text-brand-text' : ''}`}/> <span className={`break-all min-w-0 ${isHidden ? 'opacity-50 line-through' : ''}`}>{acc}</span>
+                            </button>
+                            <button onClick={(e) => toggleAccountFromSidebar(mcc.name, acc, e)} className={`p-1.5 rounded-md opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 focus-visible:opacity-100 transition-opacity ${isHidden ? 'text-warn' : 'text-ink-subtle hover:text-ink'}`} title={isHidden ? "Restaurar conta" : "Ocultar conta"} aria-label={`${isHidden ? 'Restaurar' : 'Ocultar'} a conta ${acc}`}>
+                              {isHidden ? <Eye size={12} aria-hidden="true"/> : <EyeOff size={12} aria-hidden="true"/>}
+                            </button>
+                            <button onClick={(e) => handleDeleteAccount(mcc.name, acc, e)} className="p-1.5 rounded-md text-ink-subtle hover:text-neg opacity-100 md:opacity-0 md:group-hover/acc:opacity-100 focus-visible:opacity-100 transition-opacity" title="Excluir" aria-label={`Excluir a conta ${acc}`}><Trash2 size={12} aria-hidden="true"/></button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
-        
-        <div className="p-4 border-t border-inherit shrink-0">
-           <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-rose-500 hover:bg-rose-500/10`}><LogOut size={20} aria-hidden="true" /> <span className="font-medium">Sair</span></button>
+
+        <div className="p-3 border-t border-line shrink-0">
+          <button onClick={handleLogout} className={`${navItem} text-ink-subtle hover:text-neg hover:bg-neg/10`}><LogOut size={18} aria-hidden="true" /> <span>Sair</span></button>
         </div>
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto md:h-screen min-h-[calc(100vh-73px)] relative">
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div>
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto md:h-screen min-h-[calc(100vh-3.5rem)] relative">
+
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <div className="min-w-0">
             {/* O que a tabela está mostrando. Com MCC ou conta escolhida, cada etiqueta tem um ✕ e há um botão que volta a mostrar tudo. */}
-            <div className={`flex flex-wrap items-center gap-2 text-xs ${textMuted} mb-1`}>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-ink-subtle mb-1.5">
               {!selectedMcc && !selectedAccount ? (
-                <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>Todas as MCCs</span>
+                <span>Todas as MCCs</span>
               ) : (
                 <>
                   {selectedMcc && (
-                    <span className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>
-                      MCC: <b className={textHead}>{selectedMcc}</b>
-                      <button onClick={resetFilters} aria-label={`Tirar a MCC ${selectedMcc}`} title="Tirar esta MCC" className="p-0.5 rounded hover:text-rose-500"><X size={12} aria-hidden="true" /></button>
+                    <span className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-surface-2 border border-line">
+                      MCC: <span className="font-medium text-ink">{selectedMcc}</span>
+                      <button onClick={resetFilters} aria-label={`Tirar a MCC ${selectedMcc}`} title="Tirar esta MCC" className="p-0.5 rounded hover:text-neg"><X size={12} aria-hidden="true" /></button>
                     </span>
                   )}
                   {selectedAccount && (
-                    <span className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>
-                      Conta: <b className="text-indigo-500">{selectedAccount}</b>
-                      <button onClick={clearAccount} aria-label={`Tirar a conta ${selectedAccount}`} title="Tirar esta conta e ficar na MCC" className="p-0.5 rounded hover:text-rose-500"><X size={12} aria-hidden="true" /></button>
+                    <span className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-surface-2 border border-line">
+                      Conta: <span className="font-medium text-ink">{selectedAccount}</span>
+                      <button onClick={clearAccount} aria-label={`Tirar a conta ${selectedAccount}`} title="Tirar esta conta e ficar na MCC" className="p-0.5 rounded hover:text-neg"><X size={12} aria-hidden="true" /></button>
                     </span>
                   )}
-                  <button onClick={resetFilters} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border font-bold transition-colors ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-500 hover:text-indigo-300' : 'border-slate-300 text-slate-700 hover:border-indigo-500 hover:text-indigo-700'}`}>
+                  <button onClick={resetFilters} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-line font-medium text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors">
                     <X size={12} aria-hidden="true" /> Limpar e ver todas as MCCs
                   </button>
                 </>
               )}
             </div>
-            <h1 className={`text-2xl font-bold flex flex-wrap items-center gap-2 ${textHead}`}>{selectedAccount || selectedMcc || 'Gerenciador de Campanhas'}</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink break-words">{selectedAccount || selectedMcc || 'Campanhas'}</h1>
           </div>
-          
-          <div className="flex flex-wrap gap-3">
-             <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`hidden md:block p-2.5 rounded-lg border transition-colors ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-500'}`}>{isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}</button>
-             {canCreate && <Link href="/criar-campanha" className="flex-1 md:flex-none justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg"><Plus size={18} aria-hidden="true" /> Criar campanha no Google</Link>}
+
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className={`hidden md:flex ${iconBtn}`}>{isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}</button>
+            {canCreate && <Link href="/criar-campanha" className="flex-1 md:flex-none justify-center bg-brand hover:bg-brand-hover text-white h-9 px-4 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"><Plus size={16} aria-hidden="true" /> Criar campanha no Google</Link>}
           </div>
         </div>
 
         {/* BARRA DE FERRAMENTAS E FILTROS */}
-        <div className="flex flex-col gap-4 mb-6">
-           <div className={`p-1.5 rounded-xl flex flex-wrap gap-2 md:gap-4 items-center border ${bgCard}`}>
-             <div className="pl-3 text-slate-500"><Search size={18} aria-hidden="true" /></div>
-             <input type="search" aria-label="Buscar campanha" placeholder="Buscar campanha…" className={`bg-transparent flex-1 outline-none rounded focus-visible:ring-2 focus-visible:ring-indigo-500 min-w-[120px] px-2 md:px-0 placeholder:text-slate-600 ${textHead}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-             
-             {/* Situação das campanhas */}
-             <div className={`flex flex-wrap items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                {([['ALL', 'Todas'], ['ativo', 'Ativas'], ['pausado', 'Pausadas'], ['suspenso', 'Suspensas'], ['sem_veicular', 'Sem veicular']] as const).map(([key, label]) => (
-                  <button key={key} onClick={() => changeStatusFilter(key)} aria-pressed={key === 'ALL' ? !statusFilter.length : statusFilter.includes(key)}
-                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${(key === 'ALL' ? !statusFilter.length : statusFilter.includes(key)) ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : `text-slate-500 ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`}>
-                    {key !== 'ALL' && <span className={`w-2 h-2 rounded-full ${DOT[key]}`} />}{label} <span className="font-normal tabular-nums opacity-70">{key === 'ALL' ? filteredProducts.length : statusCount[key]}</span>
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="rounded-xl border border-line bg-surface-1 p-1.5 flex flex-wrap gap-2 md:gap-3 items-center">
+            <div className="flex items-center gap-2 flex-1 min-w-[180px] pl-2">
+              <Search size={16} aria-hidden="true" className="text-ink-subtle shrink-0" />
+              <input type="search" aria-label="Buscar campanha" placeholder="Buscar campanha…" className="bg-transparent flex-1 min-w-0 h-8 outline-none rounded text-sm text-ink placeholder:text-ink-faint focus-visible:ring-2 focus-visible:ring-brand" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+
+            {/* Situação das campanhas */}
+            <div className="flex flex-wrap items-center gap-1 px-1 md:px-2 border-t md:border-t-0 md:border-l border-line w-full md:w-auto pt-2 md:pt-0">
+              {([['ALL', 'Todas'], ['ativo', 'Ativas'], ['pausado', 'Pausadas'], ['suspenso', 'Suspensas'], ['sem_veicular', 'Sem veicular']] as const).map(([key, label]) => {
+                const on = key === 'ALL' ? !statusFilter.length : statusFilter.includes(key);
+                return (
+                  <button key={key} onClick={() => changeStatusFilter(key)} aria-pressed={on}
+                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 ${segItem(on)}`}>
+                    {key !== 'ALL' && <span className={`w-1.5 h-1.5 rounded-full ${DOT[key]}`} />}{label} <span className="tabular-nums text-ink-subtle">{key === 'ALL' ? filteredProducts.length : statusCount[key]}</span>
                   </button>
-                ))}
-             </div>
+                );
+              })}
+            </div>
 
-             {/* O que cada linha da tabela é */}
-             <div className={`flex items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                {LEVELS.map(l => (
-                  <button key={l.key} onClick={() => changeLevel(l.key)} aria-pressed={level === l.key}
-                    className={`flex-1 md:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${level === l.key ? (isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-black') : `text-slate-500 ${isDark ? 'hover:text-slate-200' : 'hover:text-slate-800'}`}`}>{l.label}</button>
-                ))}
-             </div>
+            {/* O que cada linha da tabela é */}
+            <div className="flex items-center gap-1 px-1 md:px-2 border-t md:border-t-0 md:border-l border-line w-full md:w-auto pt-2 md:pt-0">
+              {LEVELS.map(l => (
+                <button key={l.key} onClick={() => changeLevel(l.key)} aria-pressed={level === l.key}
+                  className={`flex-1 md:flex-none px-3 py-1.5 ${segItem(level === l.key)}`}>{l.label}</button>
+              ))}
+            </div>
 
-             {/* Filtro de Data */}
-             <div className={`flex items-center gap-1 px-2 border-t md:border-t-0 md:border-l w-full md:w-auto pt-2 md:pt-0 ${isDark ? 'border-slate-800' : 'border-slate-200'} relative`}>
-               <Calendar size={16} aria-hidden="true" className="text-slate-500 mr-1" />
-               <select 
-                 aria-label="Período"
-                 className={`bg-transparent outline-none rounded focus-visible:ring-2 focus-visible:ring-indigo-500 text-xs font-bold ${isDark ? 'text-white [&>option]:bg-slate-900' : 'text-black [&>option]:bg-white'} cursor-pointer appearance-none pr-4`}
-                 value={dateFilter}
-                 onChange={(e) => handleDateFilterChange(e.target.value)}
-               >
-                 <option value="today">Hoje</option>
-                 <option value="yesterday">Ontem</option>
-                 <option value="7d">Últimos 7 dias</option>
-                 <option value="14d">Últimos 14 dias</option>
-                 <option value="this_month">Este mês</option>
-                 <option value="custom">Personalizado</option>
-               </select>
-               <ChevronDown size={14} aria-hidden="true" className="text-slate-500 absolute right-2 pointer-events-none" />
-             </div>
+            {/* Filtro de Data */}
+            <div className="flex items-center gap-1.5 px-2 border-t md:border-t-0 md:border-l border-line w-full md:w-auto pt-2 md:pt-0 relative">
+              <Calendar size={14} aria-hidden="true" className="text-ink-subtle" />
+              <select
+                aria-label="Período"
+                className="bg-transparent outline-none rounded focus-visible:ring-2 focus-visible:ring-brand text-xs font-medium text-ink cursor-pointer appearance-none pr-5"
+                value={dateFilter}
+                onChange={(e) => handleDateFilterChange(e.target.value)}
+              >
+                <option value="today">Hoje</option>
+                <option value="yesterday">Ontem</option>
+                <option value="7d">Últimos 7 dias</option>
+                <option value="14d">Últimos 14 dias</option>
+                <option value="this_month">Este mês</option>
+                <option value="custom">Personalizado</option>
+              </select>
+              <ChevronDown size={14} aria-hidden="true" className="text-ink-subtle absolute right-2 pointer-events-none" />
+            </div>
 
-             <button onClick={handleReload} className={`p-2 rounded-lg transition-colors hidden md:block mr-1 ${hoverItem}`} title="Recarregar" aria-label="Recarregar"><RefreshCw size={18} aria-hidden="true" className={loading ? "animate-spin text-indigo-500" : "text-slate-400"} /></button>
-           </div>
-           
-           {showHidden && <div className="bg-amber-500/10 border border-amber-500/20 p-2 md:px-4 rounded-xl flex items-center justify-center gap-2 text-amber-500 text-xs font-bold"><AlertTriangle size={16} aria-hidden="true" /> Exibindo Ocultos</div>}
+            <button onClick={handleReload} className={`hidden md:flex ${rowAction}`} title="Recarregar" aria-label="Recarregar"><RefreshCw size={16} aria-hidden="true" className={loading ? 'animate-spin text-brand-text' : ''} /></button>
+          </div>
+
+          {showHidden && <div className="rounded-lg border border-warn/30 bg-warn/5 px-3 py-2 flex items-center justify-center gap-2 text-warn text-xs font-medium"><AlertTriangle size={14} aria-hidden="true" /> Exibindo campanhas ocultas</div>}
         </div>
 
-        <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} />
+        <CampaignGroupsBar groups={groups} onChange={setGroups} campaignNames={campaignNames} isDark={isDark} tokens />
 
         {/* TABELA */}
         {loading && products.length === 0 ? (
-          <div className="flex justify-center items-center h-64 text-slate-500">Carregando campanhas…</div>
+          <div className="flex justify-center items-center h-64 text-sm text-ink-subtle">Carregando campanhas…</div>
         ) : shownProducts.length === 0 ? (
-           <div className={`flex flex-col items-center justify-center h-64 text-slate-500 border border-dashed rounded-xl ${isDark ? 'border-slate-800' : 'border-slate-300'}`}><Layers size={32} aria-hidden="true" className="mb-2 opacity-50"/><p>Nenhuma campanha encontrada com os filtros atuais.</p>
-             {hasFilters && (
-               <button onClick={clearAllFilters} className={`mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors ${isDark ? 'border-slate-700 text-slate-200 hover:border-indigo-500 hover:text-indigo-300' : 'border-slate-300 text-slate-700 hover:border-indigo-500 hover:text-indigo-700'}`}>
-                 <X size={12} aria-hidden="true" /> Limpar filtros
-               </button>
-             )}
-           </div>
+          <div className="flex flex-col items-center justify-center h-64 text-sm text-ink-subtle border border-dashed border-line rounded-xl"><Layers size={28} aria-hidden="true" className="mb-2 opacity-60"/><p>Nenhuma campanha encontrada com os filtros atuais.</p>
+            {hasFilters && (
+              <button onClick={clearAllFilters} className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-line text-xs font-medium text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors">
+                <X size={12} aria-hidden="true" /> Limpar filtros
+              </button>
+            )}
+          </div>
         ) : (
           <CampaignTable products={shownProducts} level={level} sort={sort} onSort={changeSort} rates={rates} isDark={isDark}
             selected={selectedProducts} onToggleSelect={toggleSelectProduct} onSelectAll={handleSelectAll}
@@ -802,53 +820,44 @@ export default function ProductsPage() {
             onPickMcc={mcc => { handleSelectMcc(mcc); changeLevel('accounts'); }}
             actions={product => (
               <>
-                <CampaignStatusToggle product={product} isDark={isDark} onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
-                <button onClick={(e) => copyPostback(product.id, e)} className={`p-1.5 rounded-lg transition-colors ${copiedPostback === product.id ? 'text-emerald-500 bg-emerald-500/10' : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200')}`} title="Copiar Postback" aria-label={`Copiar o postback de ${product.name}`}>{copiedPostback === product.id ? <Check size={14} aria-hidden="true"/> : <Copy size={14} aria-hidden="true"/>}</button>
-                <button onClick={(e) => toggleProductVisibility(product, e)} className={`p-1.5 rounded-lg transition-colors ${product.is_hidden ? 'text-amber-500 bg-amber-500/10' : (isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-200')}`} title={product.is_hidden ? 'Restaurar' : 'Ocultar'} aria-label={`${product.is_hidden ? 'Restaurar' : 'Ocultar'} ${product.name}`}>{product.is_hidden ? <Eye size={14} aria-hidden="true"/> : <EyeOff size={14} aria-hidden="true"/>}</button>
-                <button onClick={(e) => handleDeleteProduct(product.id, e)} className={`p-1.5 rounded-lg transition-colors hover:text-rose-500 ${isDark ? 'text-slate-400 hover:bg-rose-500/20' : 'text-slate-500 hover:bg-rose-100'}`} title="Excluir" aria-label={`Excluir ${product.name}`}><Trash2 size={14} aria-hidden="true" /></button>
+                <CampaignStatusToggle product={product} isDark={isDark} tokens onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
+                <button onClick={(e) => copyPostback(product.id, e)} className={copiedPostback === product.id ? 'p-1.5 rounded-md text-pos bg-pos/10' : rowAction} title="Copiar postback" aria-label={`Copiar o postback de ${product.name}`}>{copiedPostback === product.id ? <Check size={14} aria-hidden="true"/> : <Copy size={14} aria-hidden="true"/>}</button>
+                <button onClick={(e) => toggleProductVisibility(product, e)} className={product.is_hidden ? 'p-1.5 rounded-md text-warn bg-warn/10' : rowAction} title={product.is_hidden ? 'Restaurar' : 'Ocultar'} aria-label={`${product.is_hidden ? 'Restaurar' : 'Ocultar'} ${product.name}`}>{product.is_hidden ? <Eye size={14} aria-hidden="true"/> : <EyeOff size={14} aria-hidden="true"/>}</button>
+                <button onClick={(e) => handleDeleteProduct(product.id, e)} className="p-1.5 rounded-md text-ink-subtle hover:text-neg hover:bg-neg/10 transition-colors" title="Excluir" aria-label={`Excluir ${product.name}`}><Trash2 size={14} aria-hidden="true" /></button>
               </>
             )} />
         )}
 
         {/* BULK ACTION BAR */}
         {selectedProducts.length > 0 && (
-          <div className={`fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 border px-6 flex items-center gap-6 z-50 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300 ${isDark ? 'bg-slate-900 border-slate-700 text-white shadow-indigo-500/10' : 'bg-white border-slate-300 text-slate-900 shadow-slate-300'}`}>
-            <div className="flex items-center gap-3 py-4">
-               <div className="bg-indigo-600 text-white w-8 h-8 rounded-full flex justify-center items-center font-bold text-sm shadow-inner">{selectedProducts.length}</div>
-               <span className="font-medium text-sm">Selecionados</span>
-            </div>
-            
-            <div className={`w-px h-8 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
-
-            <div className="flex items-center gap-2 py-4">
-               <button onClick={()=>handleBulkAction('hide')} disabled={bulkActionLoading} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg transition-colors ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}><EyeOff size={14} aria-hidden="true"/> Ocultar</button>
-               <button onClick={()=>handleBulkAction('delete')} disabled={bulkActionLoading} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg transition-colors ${isDark ? 'hover:bg-rose-500/20 hover:text-rose-400' : 'hover:bg-rose-100 hover:text-rose-600'}`}><Trash2 size={14} aria-hidden="true"/> Excluir</button>
-            </div>
-            
-            <div className={`w-px h-8 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}></div>
-            
-            <button onClick={()=>setSelectedProducts([])} className={`p-4 transition-colors border-l ${isDark ? 'text-slate-400 hover:text-white border-slate-800' : 'text-slate-500 hover:text-black border-slate-200'}`} title="Cancelar" aria-label="Cancelar a seleção"><X size={18} aria-hidden="true"/></button>
+          <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl border border-line-strong bg-surface-1 text-ink px-2 py-2">
+            <span className="px-3 text-sm"><span className="font-semibold tabular-nums">{selectedProducts.length}</span> <span className="text-ink-subtle">{selectedProducts.length === 1 ? 'selecionada' : 'selecionadas'}</span></span>
+            <span className="w-px h-6 bg-line" />
+            <button onClick={()=>handleBulkAction('hide')} disabled={bulkActionLoading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"><EyeOff size={14} aria-hidden="true"/> Ocultar</button>
+            <button onClick={()=>handleBulkAction('delete')} disabled={bulkActionLoading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-ink-subtle hover:text-neg hover:bg-neg/10 transition-colors"><Trash2 size={14} aria-hidden="true"/> Excluir</button>
+            <span className="w-px h-6 bg-line" />
+            <button onClick={()=>setSelectedProducts([])} className={rowAction} title="Cancelar" aria-label="Cancelar a seleção"><X size={16} aria-hidden="true"/></button>
           </div>
         )}
 
         {/* Modal Data Personalizada */}
         {isCustomDateModalOpen && (
-          <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onKeyDown={e => { if (e.key === 'Escape') closeCustomDateModal(); }}>
-            <div role="dialog" aria-modal="true" aria-labelledby="custom-date-title" className={`rounded-xl w-full max-w-sm p-6 shadow-2xl border ${bgCard}`}>
-              <div className="flex justify-between items-center mb-6">
-                <h2 id="custom-date-title" className={`text-xl font-bold ${textHead}`}>Data Personalizada</h2>
-                <button onClick={closeCustomDateModal} aria-label="Fechar"><X size={24} aria-hidden="true" className="text-slate-400 hover:text-indigo-500" /></button>
+          <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4" onKeyDown={e => { if (e.key === 'Escape') closeCustomDateModal(); }}>
+            <div role="dialog" aria-modal="true" aria-labelledby="custom-date-title" className="rounded-2xl w-full max-w-sm p-6 border border-line-strong bg-surface-1">
+              <div className="flex justify-between items-center mb-5">
+                <h2 id="custom-date-title" className="text-base font-semibold text-ink">Período personalizado</h2>
+                <button onClick={closeCustomDateModal} aria-label="Fechar" className={iconBtn}><X size={16} aria-hidden="true" /></button>
               </div>
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="custom-date-start" className="block text-sm font-medium mb-1 text-slate-500">Data Inicial</label>
-                  <input id="custom-date-start" type="date" className={`w-full border rounded-lg p-3 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} style={isDark ? {colorScheme: 'dark'} : {}} value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+                  <label htmlFor="custom-date-start" className="block text-xs font-medium mb-1.5 text-ink-subtle">Data inicial</label>
+                  <input id="custom-date-start" type="date" className={field} style={isDark ? {colorScheme: 'dark'} : {}} value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
                 </div>
                 <div>
-                  <label htmlFor="custom-date-end" className="block text-sm font-medium mb-1 text-slate-500">Data Final</label>
-                  <input id="custom-date-end" type="date" className={`w-full border rounded-lg p-3 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-slate-50 border-slate-200 text-black'}`} style={isDark ? {colorScheme: 'dark'} : {}} value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+                  <label htmlFor="custom-date-end" className="block text-xs font-medium mb-1.5 text-ink-subtle">Data final</label>
+                  <input id="custom-date-end" type="date" className={field} style={isDark ? {colorScheme: 'dark'} : {}} value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
                 </div>
-                <button onClick={handleCustomDateApply} className="w-full bg-indigo-600 py-3 rounded-lg text-white font-bold hover:bg-indigo-700">Aplicar</button>
+                <button onClick={handleCustomDateApply} className="w-full bg-brand hover:bg-brand-hover py-2.5 rounded-lg text-white text-sm font-medium transition-colors">Aplicar</button>
               </div>
             </div>
           </div>
@@ -857,22 +866,18 @@ export default function ProductsPage() {
       </main>
 
       {/* BOTTOM NAV */}
-      <nav className={`fixed bottom-0 inset-x-0 md:hidden z-40 border-t backdrop-blur-md ${isDark ? 'bg-slate-950/95 border-slate-900' : 'bg-white/95 border-slate-200'}`}>
+      <nav className="fixed bottom-0 inset-x-0 md:hidden z-40 border-t border-line bg-canvas/95 backdrop-blur-md">
         <div className="flex justify-around items-center px-2 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          {[
-            { href: '/dashboard', Icon: LayoutGrid, label: 'Dashboard', active: false },
-            { href: '/planning', Icon: Target, label: 'Metas', active: false },
-            { href: '/products', Icon: Package, label: 'Campanhas', active: true },
-            { href: '/analise-ia', Icon: Sparkles, label: 'Análise IA', active: false },
-            { href: '/rastreamento', Icon: Route, label: 'Rastreio', active: false },
-            { href: '/integration', Icon: Settings, label: 'Integração', active: false },
-          ].map(({ href, Icon, label, active }) => (
-            <Link key={href} href={href} className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-colors ${active ? 'text-indigo-500' : isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-              <Icon size={22} aria-hidden="true"/>
-              <span className="text-[9px] font-bold tracking-wide">{label}</span>
-              {active && <div className="w-1 h-1 rounded-full bg-indigo-500"/>}
-            </Link>
-          ))}
+          {NAV_ITEMS.map(({ href, Icon, short }) => {
+            const active = href === '/products';
+            return (
+              <Link key={href} href={href} aria-current={active ? 'page' : undefined}
+                className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-lg transition-colors ${active ? 'text-brand-text' : 'text-ink-subtle'}`}>
+                <Icon size={22} aria-hidden="true"/>
+                <span className="text-[10px] font-medium">{short}</span>
+              </Link>
+            );
+          })}
         </div>
       </nav>
 

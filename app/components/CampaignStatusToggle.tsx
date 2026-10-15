@@ -10,6 +10,8 @@ const SEM_ACAO = new Set(['REMOVIDA', 'CONTA_SUSPENSA', 'CONTA_ENCERRADA']);
 interface Props {
   product: any;
   isDark: boolean;
+  /** Estilo do guia visual (DESIGN.md) nas telas já migradas. */
+  tokens?: boolean;
   /** Recebe os campos atualizados do produto depois da mudança. */
   onChanged: (patch: Record<string, any>) => void;
 }
@@ -20,7 +22,7 @@ interface Props {
  * Decide pelo google_status (e não pelo "Ativo/Pausado/Suspenso" exibido):
  * campanha suspensa pelo Google continua ENABLED e pode ser pausada.
  */
-export function CampaignStatusToggle({ product, isDark, onChanged }: Props) {
+export function CampaignStatusToggle({ product, isDark, onChanged, tokens = false }: Props) {
   const [loading, setLoading] = useState(false);
 
   const campaignId = product.google_ads_campaign_id;
@@ -61,7 +63,9 @@ export function CampaignStatusToggle({ product, isDark, onChanged }: Props) {
     }
   };
 
-  const tone = isPaused
+  const tone = tokens
+    ? `${isPaused ? 'text-pos' : 'text-warn'} hover:bg-surface-2`
+    : isPaused
     ? (isDark ? 'bg-slate-800 text-emerald-400 hover:bg-emerald-500 hover:text-white' : 'bg-slate-100 text-emerald-600 hover:bg-emerald-100')
     : (isDark ? 'bg-slate-800 text-amber-400 hover:bg-amber-500 hover:text-white' : 'bg-slate-100 text-amber-600 hover:bg-amber-100');
 
