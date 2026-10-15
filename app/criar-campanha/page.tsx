@@ -12,6 +12,10 @@ import { StepCampaign } from './StepCampaign';
 import { StepWhere } from './StepWhere';
 import { StepAd } from './StepAd';
 import { StepReview } from './StepReview';
+import { Inter } from 'next/font/google';
+
+// Fonte do guia visual (DESIGN.md), nas telas já migradas.
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 /**
  * Criador de campanhas de Pesquisa. Passo 1: escolher uma campanha que já
@@ -99,13 +103,13 @@ export default function CampaignBuilderPage() {
   }, [list, filter]);
 
   const isDark = theme === 'dark';
-  const page = isDark ? 'bg-black text-slate-200' : 'bg-slate-50 text-slate-900';
-  const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200';
-  const head = isDark ? 'text-white' : 'text-slate-900';
-  const muted = isDark ? 'text-slate-400' : 'text-slate-500';
-  const line = isDark ? 'border-slate-800' : 'border-slate-200';
-  const soft = isDark ? 'bg-slate-950' : 'bg-slate-50';
-  const label = `text-[11px] font-semibold tracking-wide uppercase ${muted}`;
+  const page = 'bg-canvas text-ink-muted';
+  const card = 'bg-surface-1 border-line';
+  const head = 'text-ink';
+  const muted = 'text-ink-subtle';
+  const line = 'border-line';
+  const soft = 'bg-surface-2';
+  const label = `text-xs font-medium ${muted}`;
 
   if (!authChecked) return null;
   const t = result?.template;
@@ -118,7 +122,7 @@ export default function CampaignBuilderPage() {
   );
   const Block = ({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) => (
     <div className={`${card} border rounded-xl p-4 space-y-3`}>
-      <div className={`text-sm font-bold ${head}`}>{title}{count !== undefined && <span className={`ml-2 text-xs font-normal ${muted}`}>{count}</span>}</div>
+      <div className={`text-sm font-semibold ${head}`}>{title}{count !== undefined && <span className={`ml-2 text-xs font-normal ${muted}`}>{count}</span>}</div>
       {children}
     </div>
   );
@@ -131,12 +135,12 @@ export default function CampaignBuilderPage() {
   );
 
   return (
-    <div className={`min-h-screen ${page}`}>
+    <div className={`${inter.className} min-h-screen ${page}`}>
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
         <div className="flex items-center gap-3">
-          <Link href="/products" aria-label="Voltar para Campanhas" className={`p-2 rounded-lg border ${line} ${muted} hover:text-indigo-400`}><ArrowLeft size={16} aria-hidden="true" /></Link>
+          <Link href="/products" aria-label="Voltar para Campanhas" className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"><ArrowLeft size={16} aria-hidden="true" /></Link>
           <div>
-            <h1 className={`text-xl font-extrabold ${head}`}>Criar campanha</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">Criar campanha</h1>
             <div className={`text-xs ${muted}`}>Rede de Pesquisa · o ensaio não cria nada; a criação só acontece no passo 5, com a sua confirmação, e a campanha já nasce ativa</div>
           </div>
         </div>
@@ -147,8 +151,8 @@ export default function CampaignBuilderPage() {
             const open = i === 0 || !!draft;
             return (
               <button key={s} disabled={!open} onClick={() => setStep(i)} aria-current={step === i ? 'step' : undefined}
-                className={`shrink-0 sm:shrink text-left rounded-lg border px-3 py-2 text-xs ${step === i ? 'border-indigo-500 text-indigo-400' : `${line} ${muted} ${open ? 'hover:border-indigo-500/50' : ''}`}`}>
-                <b className="block text-[13px] whitespace-nowrap sm:whitespace-normal">{i + 1}. {s}</b><span className="hidden sm:inline">{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : i === 2 ? (draft ? 'palavras, textos e IA' : 'escolha um modelo') : i === 3 ? (draft ? 'páginas, MCCs e contas' : 'escolha um modelo') : (draft ? 'ensaio e criação' : 'escolha um modelo')}</span>
+                className={`shrink-0 sm:shrink text-left rounded-lg border px-3 py-2 text-xs ${step === i ? 'border-line-strong bg-surface-2 text-ink' : `${line} ${muted} ${open ? 'hover:text-ink hover:bg-surface-1' : 'opacity-60'}`}`}>
+                <span className="block text-[13px] font-medium whitespace-nowrap sm:whitespace-normal">{i + 1}. {s}</span><span className="hidden sm:inline">{i === 0 ? 'copiar ou do zero' : i === 1 ? (draft ? 'lance, locais, grupos' : 'escolha um modelo') : i === 2 ? (draft ? 'palavras, textos e IA' : 'escolha um modelo') : i === 3 ? (draft ? 'páginas, MCCs e contas' : 'escolha um modelo') : (draft ? 'ensaio e criação' : 'escolha um modelo')}</span>
               </button>
             );
           })}
@@ -171,20 +175,20 @@ export default function CampaignBuilderPage() {
               <div className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border ${line} ${soft} px-3 py-2 text-xs`}>
                 <span className={head}>Há um rascunho em andamento: <b>{draft.nome || 'sem nome'}</b></span>
                 <span className="flex gap-2">
-                  <button onClick={() => setStep(1)} className="font-bold text-indigo-400 hover:underline">Continuar</button>
-                  <button onClick={() => { setDraftState(null); keep(null); }} className={`${muted} hover:text-rose-400`}>Descartar</button>
+                  <button onClick={() => setStep(1)} className="font-medium text-brand-text hover:underline">Continuar</button>
+                  <button onClick={() => { setDraftState(null); keep(null); }} className={`${muted} hover:text-neg`}>Descartar</button>
                 </span>
               </div>
             )}
-            <div className={`text-sm font-bold ${head}`}>Escolha a campanha que serve de modelo</div>
+            <div className={`text-sm font-semibold ${head}`}>Escolha a campanha que serve de modelo</div>
             <div className={`text-xs ${muted}`}>O Autometrics lê do Google a configuração, a meta de conversão, os locais, as negativas, os grupos, as palavras-chave, os anúncios, os sitelinks e as frases de destaque. Ler não altera nada na campanha.</div>
-            {list.migration && <div className="text-xs text-amber-500">Para guardar os modelos, rode migration_criador.sql no Supabase. Sem ela a leitura funciona, mas o modelo não fica salvo.</div>}
+            {list.migration && <div className="text-xs text-warn">Para guardar os modelos, rode migration_criador.sql no Supabase. Sem ela a leitura funciona, mas o modelo não fica salvo.</div>}
             {list.templates?.length > 0 && (
               <div>
                 <div className={`${label} mb-1.5`}>Modelos já lidos</div>
                 <div className="flex flex-wrap gap-1.5">
                   {list.templates.map((m: any) => (
-                    <button key={m.id} onClick={() => read(`/api/campaign-builder?template=${m.id}`)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${line} ${head} hover:border-indigo-500`}>{m.name}</button>
+                    <button key={m.id} onClick={() => read(`/api/campaign-builder?template=${m.id}`)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${line} ${head} hover:border-brand`}>{m.name}</button>
                   ))}
                 </div>
               </div>
@@ -192,11 +196,11 @@ export default function CampaignBuilderPage() {
             <div className="relative">
               <Search size={14} aria-hidden="true" className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
               <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Nome da campanha, da conta ou da MCC" aria-label="Procurar campanha"
-                className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-3 py-2 text-[13px] outline-none focus:border-indigo-500`} />
+                className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-3 py-2 text-[13px] outline-none focus:border-brand`} />
             </div>
-            <div className={`max-h-64 overflow-y-auto rounded-lg border ${line} divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+            <div className={`max-h-64 overflow-y-auto rounded-lg border ${line} divide-y divide-line`}>
               {shown.map((c: any) => (
-                <button key={c.id} onClick={() => setPicked(c.id)} aria-pressed={picked === c.id} className={`w-full text-left px-3 py-2 text-[13px] ${picked === c.id ? 'bg-indigo-600/15' : ''} ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}>
+                <button key={c.id} onClick={() => setPicked(c.id)} aria-pressed={picked === c.id} className={`w-full text-left px-3 py-2 text-[13px] ${picked === c.id ? 'bg-surface-3' : 'hover:bg-surface-2'}`}>
                   <span className={head}>{c.name}</span>
                   <span className={`block text-xs ${muted}`}>{[c.account, c.mcc].filter(Boolean).join(' · ') || 'conta sem nome'}</span>
                 </button>
@@ -205,30 +209,30 @@ export default function CampaignBuilderPage() {
             </div>
             <div className="flex items-center gap-3">
               <button disabled={!picked || reading} onClick={() => read(`/api/campaign-builder?product_id=${picked}`)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2">
+                className="bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-2">
                 {reading && <Loader2 size={13} aria-hidden="true" className="animate-spin" />} Ler do Google
               </button>
-              <button onClick={() => start(emptyDraft(), 'USD')} className={`px-4 py-2 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400`}>Começar do zero</button>
+              <button onClick={() => start(emptyDraft(), 'USD')} className={`px-4 py-2 rounded-lg border ${line} text-xs font-medium ${muted} hover:text-ink hover:bg-surface-2`}>Começar do zero</button>
               {(list.campaigns || []).length > 40 && !filter && <span className={`text-xs ${muted}`}>Mostrando 40 de {list.campaigns.length}; use a busca.</span>}
             </div>
-            <div aria-live="polite">{error && <div className="text-xs text-rose-500">{error}</div>}</div>
+            <div aria-live="polite">{error && <div className="text-xs text-neg">{error}</div>}</div>
           </div>
         )}
 
         {t && step === 0 && (
           <>
-            <div className={`${card} border !border-indigo-500/50 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3`}>
+            <div className={`${card} border !border-brand/50 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3`}>
               <div className={`text-xs ${muted}`}>Confira abaixo o que foi lido. Usar como modelo copia tudo para um rascunho que você edita; a campanha original não muda. A IA Max entra desligada no rascunho.</div>
-              <button onClick={() => start(draftFromTemplate(t), result?.currency || 'USD')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold">Usar como modelo</button>
+              <button onClick={() => start(draftFromTemplate(t), result?.currency || 'USD')} className="bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium">Usar como modelo</button>
             </div>
             <div className={`flex items-baseline justify-between gap-3 flex-wrap`}>
-              <div className={`text-base font-extrabold ${head}`}>{t.origem.nome}</div>
+              <div className={`text-base font-semibold ${head}`}>{t.origem.nome}</div>
               <div className={`text-xs ${muted}`}>conta {t.origem.conta_id} · lido em {new Date(t.origem.lido_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
             </div>
-            {result?.migration && <div className="text-xs text-amber-500">Este modelo não ficou salvo: rode migration_criador.sql no Supabase.</div>}
+            {result?.migration && <div className="text-xs text-warn">Este modelo não ficou salvo: rode migration_criador.sql no Supabase.</div>}
             {t.avisos.length > 0 && (
-              <div className={`${card} border !border-amber-500/40 rounded-xl p-4 text-xs text-amber-500 space-y-1`}>
-                <div className="font-bold">O Google não devolveu tudo</div>
+              <div className={`${card} border !border-warn/40 rounded-xl p-4 text-xs text-warn space-y-1`}>
+                <div className="font-medium">O Google não devolveu tudo</div>
                 {t.avisos.map((a, i) => <div key={i}>{a}</div>)}
               </div>
             )}

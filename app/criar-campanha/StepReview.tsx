@@ -67,16 +67,16 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
     setAgreed(false);
   };
 
-  const good = isDark ? 'text-emerald-400' : 'text-emerald-700', bad = isDark ? 'text-rose-400' : 'text-rose-600', warn = isDark ? 'text-amber-300' : 'text-amber-700';
-  const solid = 'bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2';
+  const good = 'text-pos', bad = 'text-neg', warn = 'text-warn';
+  const solid = 'bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-2';
   const items = Object.values(states).map(s => ('result' in s ? s.result.itens : 0)).find(n => n > 0) || 0;
 
   if (blocking.length) {
     return (
       <div className={`${card} border rounded-xl p-4 space-y-2`}>
-        <div className={`text-sm font-bold ${head}`}>Falta completar antes de conferir</div>
+        <div className={`text-sm font-semibold ${head}`}>Falta completar antes de conferir</div>
         {blocking.map(([where, step, text], i) => (
-          <div key={i} className="text-xs text-amber-500">{where}: {text} <button onClick={() => goTo(step)} className="text-indigo-400 hover:underline">ir para lá</button></div>
+          <div key={i} className="text-xs text-warn">{where}: {text} <button onClick={() => goTo(step)} className="text-brand-text hover:underline">ir para lá</button></div>
         ))}
       </div>
     );
@@ -85,7 +85,7 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
   return (
     <div className="space-y-4">
       <div className={`${card} border rounded-xl p-4 space-y-2`}>
-        <div className={`text-sm font-bold ${head}`}>Como funciona</div>
+        <div className={`text-sm font-semibold ${head}`}>Como funciona</div>
         <ol className={`text-xs ${muted} list-decimal pl-5 space-y-1`}>
           <li><b className={head}>Ensaiar no Google</b>: o Google confere cada campanha inteira (orçamento, lance, locais, palavras-chave, anúncio, sitelinks e frases) e diz se aceita. <b className={head}>Nada é criado.</b></li>
           <li><b className={head}>Criar</b>: só as que passaram no ensaio, uma conta por vez. Cada campanha entra inteira ou não entra; se o Google recusar no meio, nada dela fica para trás.</li>
@@ -95,14 +95,14 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
       </div>
 
       <div className={`${card} border rounded-xl p-4 space-y-3`}>
-        <div className={`text-sm font-bold ${head}`}>{plan.length} {plan.length === 1 ? 'campanha' : 'campanhas'} neste lançamento</div>
+        <div className={`text-sm font-semibold ${head}`}>{plan.length} {plan.length === 1 ? 'campanha' : 'campanhas'} neste lançamento</div>
         {plan.map((r, i) => {
           const k = keyOf(r), s = states[k], done = created[k];
           return (
             <div key={i} className={`rounded-lg border ${line} ${soft} p-3 space-y-1.5`}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className={`text-[13px] font-bold ${head}`}>{r.nome}</div>
-                <div className="text-xs font-bold inline-flex items-center gap-1.5" aria-live="polite">
+                <div className={`text-[13px] font-medium ${head}`}>{r.nome}</div>
+                <div className="text-xs font-medium inline-flex items-center gap-1.5" aria-live="polite">
                   {done ? <span className={done.endsWith('|pausada') ? warn : good}><Check size={13} aria-hidden="true" className="inline" /> criada{done.endsWith('|pausada') ? ', mas pausada' : done.endsWith('|ativa') ? ', ativa' : ''}{/^\d/.test(done) ? ` · nº ${done.split('|')[0]}` : ''}</span>
                     : !s ? <span className={muted}>ainda não ensaiada</span>
                       : s.fase === 'ensaiando' ? <span className={muted}><Loader2 size={12} aria-hidden="true" className="inline animate-spin" /> ensaiando…</span>
@@ -113,17 +113,17 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
               </div>
               <div className={`text-xs ${muted} break-all`}>{r.conta.mcc} › {r.conta.nome} ({dashed(r.conta.id)}) · meta {r.conta.meta_nome || 'não usa'} · {r.url.replace(/^https?:\/\//, '')}</div>
               {s && 'result' in s && s.result.problemas.map((p, j) => (
-                <div key={j} className={`rounded-lg border ${isDark ? 'border-rose-500/40 bg-rose-500/5' : 'border-rose-300 bg-rose-50'} px-3 py-2 text-xs space-y-1`}>
-                  <div className={`font-bold ${bad}`}>{p.onde}</div>
+                <div key={j} className={`rounded-lg border border-neg/30 bg-neg/5 px-3 py-2 text-xs space-y-1`}>
+                  <div className={`font-medium ${bad}`}>{p.onde}</div>
                   <div className={head}>{p.texto}</div>
                   {p.corrigir && <div className={head}><b>Como corrigir:</b> {p.corrigir}</div>}
                   {!p.corrigir && p.google && <div className={muted}>Resposta do Google: {p.google}</div>}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     {p.palavra && draft.palavras.some(k => k.texto === p.palavra!.texto && k.tipo === p.palavra!.tipo) && (
                       <button onClick={() => setDraft(d => ({ ...d, palavras: d.palavras.filter(k => !(k.texto === p.palavra!.texto && k.tipo === p.palavra!.tipo)) }))} disabled={running !== ''}
-                        className={`font-bold px-2 py-1 rounded border ${line} ${head} hover:border-rose-500 disabled:opacity-40`}>Tirar esta palavra-chave da campanha</button>
+                        className={`font-medium px-2 py-1 rounded border ${line} ${head} hover:border-neg disabled:opacity-40`}>Tirar esta palavra-chave da campanha</button>
                     )}
-                    {p.palavra && <button onClick={() => goTo(2)} className="text-indigo-400 hover:underline">editar no passo Anúncio</button>}
+                    {p.palavra && <button onClick={() => goTo(2)} className="text-brand-text hover:underline">editar no passo Anúncio</button>}
                     {p.codigo && <span className={muted}>código do Google: {p.codigo}</span>}
                   </div>
                 </div>
@@ -133,7 +133,7 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
                 const refused = s && 'result' in s ? s.result.problemas.map(p => p.palavra).filter((w): w is { texto: string; tipo: string } => !!w && draft.palavras.some(k => k.texto === w.texto && k.tipo === w.tipo)) : [];
                 return refused.length > 1 && (
                   <button onClick={() => setDraft(d => ({ ...d, palavras: d.palavras.filter(k => !refused.some(w => w.texto === k.texto && w.tipo === k.tipo)) }))} disabled={running !== ''}
-                    className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border ${line} ${head} hover:border-rose-500 disabled:opacity-40`}>Tirar as {refused.length} palavras-chave recusadas</button>
+                    className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border ${line} ${head} hover:border-neg disabled:opacity-40`}>Tirar as {refused.length} palavras-chave recusadas</button>
                 );
               })()}
               {s && 'result' in s && s.result.avisos.map((a, j) => <div key={j} className={`text-xs ${warn}`}>{a}</div>)}
@@ -144,17 +144,17 @@ export function StepReview({ draft, setDraft, css, api, goTo }: { draft: Draft; 
 
       <div className={`${card} border rounded-xl p-4 space-y-3`}>
         {pending.length === 0 ? (
-          <div className={`text-sm ${good} font-bold`}>Todas as campanhas deste lançamento já foram criadas no Google Ads.</div>
+          <div className={`text-sm ${good} font-medium`}>Todas as campanhas deste lançamento já foram criadas no Google Ads.</div>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-3">
-              <button onClick={rehearse} disabled={running !== ''} className={`px-4 py-2 rounded-lg border text-xs font-bold inline-flex items-center gap-2 disabled:opacity-40 ${isDark ? 'border-slate-600 text-slate-100 hover:border-indigo-400' : 'border-slate-300 text-slate-800 hover:border-indigo-500'}`}>
+              <button onClick={rehearse} disabled={running !== ''} className={`px-4 py-2 rounded-lg border text-xs font-medium inline-flex items-center gap-2 disabled:opacity-40 border-line-strong text-ink hover:border-brand`}>
                 {running === 'ensaio' && <Loader2 size={13} aria-hidden="true" className="animate-spin" />} 1. Ensaiar no Google ({pending.length})
               </button>
               <span className={`text-xs ${stale ? warn : muted}`}>{stale ? 'O rascunho mudou depois do último ensaio: ensaie de novo. ' : ''}{accepted.length ? `${accepted.length} de ${pending.length} aceitas.` : 'Não cria nada.'}{items ? ` Cada campanha leva ${items} itens; o ensaio e a criação contam na cota diária do Google.` : ''}</span>
             </div>
             {accepted.length > 0 && (
-              <div className={`rounded-lg border ${isDark ? 'border-amber-500/40 bg-amber-500/5' : 'border-amber-300 bg-amber-50'} p-3 space-y-2`}>
+              <div className={`rounded-lg border border-warn/30 bg-warn/5 p-3 space-y-2`}>
                 <label className={`flex items-start gap-2 text-[13px] cursor-pointer ${head}`}>
                   <input type="checkbox" className="mt-0.5" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
                   <span>Entendi: isto cria {accepted.length} {accepted.length === 1 ? 'campanha de verdade' : 'campanhas de verdade'} nas contas acima, e elas já nascem ATIVAS: começam a gastar assim que o Google aprovar os anúncios. Não dá para desfazer por aqui; para pausar ou apagar, é no Google Ads ou na tela de Campanhas.</span>

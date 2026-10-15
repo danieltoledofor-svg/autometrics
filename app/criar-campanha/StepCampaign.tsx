@@ -27,7 +27,7 @@ const toNumber = (text: string) => { const v = Number(String(text).replace(',', 
 export function Block({ title, hint, css, children }: { title: string; hint?: string; css: Css; children: React.ReactNode }) {
   return (
     <div className={`${css.card} border rounded-xl p-4 space-y-3`}>
-      <div><div className={`text-sm font-bold ${css.head}`}>{title}</div>{hint && <div className={`text-xs ${css.muted} mt-0.5`}>{hint}</div>}</div>
+      <div><div className={`text-sm font-semibold ${css.head}`}>{title}</div>{hint && <div className={`text-xs ${css.muted} mt-0.5`}>{hint}</div>}</div>
       {children}
     </div>
   );
@@ -39,7 +39,7 @@ function NumberField({ value, onChange, css, width = 'w-28', placeholder, label 
   return (
     <input value={text} inputMode="decimal" placeholder={placeholder} aria-label={label}
       onChange={e => { setText(e.target.value); onChange(toNumber(e.target.value)); }}
-      className={`${width} rounded-lg border ${css.line} ${css.soft} ${css.head} px-2.5 py-1.5 text-right text-[13px] tabular-nums outline-none focus:border-indigo-500`} />
+      className={`${width} rounded-lg border ${css.line} ${css.soft} ${css.head} px-2.5 py-1.5 text-right text-[13px] tabular-nums outline-none focus:border-brand`} />
   );
 }
 
@@ -126,7 +126,7 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
     setNegatives('');
   };
 
-  const choice = (on: boolean) => `px-3 py-1.5 text-xs font-semibold rounded-lg border ${on ? 'bg-indigo-600 border-indigo-600 text-white' : `${line} ${muted} ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}`;
+  const choice = (on: boolean) => `px-3 py-1.5 text-xs font-medium rounded-lg border ${on ? 'bg-brand/15 border-brand/60 text-ink' : `${line} ${muted} hover:bg-surface-2`}`;
   const check = (on: boolean, text: string, onChange: (v: boolean) => void, disabled = false) => (
     <label className={`flex items-start gap-2 text-[13px] ${disabled ? 'opacity-50' : 'cursor-pointer'} ${head}`}>
       <input type="checkbox" className="mt-0.5" checked={on} disabled={disabled} onChange={e => onChange(e.target.checked)} /> <span>{text}</span>
@@ -144,7 +144,7 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
           <span className={`text-xs ${muted}`}>{draft.funil === 'fundo' ? 'Quem busca já conhece o produto: recursos com preço, garantia, frete e site oficial.' : 'Quem busca ainda não conhece o produto: recursos pelo assunto buscado, até a página e a VSL.'}</span>
         </div>
         <input value={draft.nome} onChange={e => set({ nome: e.target.value })} placeholder="[WL] SITE - PRODUTO - 08/10" aria-label="Nome da campanha"
-          className={`w-full rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500`} />
+          className={`w-full rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-brand`} />
       </Block>
 
       <Block css={css} title="Lance e orçamento">
@@ -165,14 +165,14 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
         {draft.grupos.map((g, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">
             <input value={g.nome} onChange={e => setDraft(d => ({ ...d, grupos: d.grupos.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)) }))} aria-label={`Nome do grupo ${i + 1}`}
-              className={`flex-1 min-w-[180px] rounded-lg border ${line} ${soft} ${head} px-3 py-1.5 text-[13px] outline-none focus:border-indigo-500`} />
+              className={`flex-1 min-w-[180px] rounded-lg border ${line} ${soft} ${head} px-3 py-1.5 text-[13px] outline-none focus:border-brand`} />
             <span className={`text-xs ${muted}`}>meta de CPA {symbol}</span>
             <NumberField key={`g${i}-${draft.grupos.length}`} label={`Meta de CPA do grupo ${i + 1}`} value={g.meta_cpa} css={css} placeholder="da campanha"
               onChange={v => setDraft(d => ({ ...d, grupos: d.grupos.map((x, j) => (j === i ? { ...x, meta_cpa: v } : x)) }))} />
-            {draft.grupos.length > 1 && <button onClick={() => setDraft(d => ({ ...d, grupos: d.grupos.filter((_, j) => j !== i) }))} aria-label={`Remover o grupo ${g.nome}`} className={`${muted} hover:text-rose-400`}><X size={15} aria-hidden="true" /></button>}
+            {draft.grupos.length > 1 && <button onClick={() => setDraft(d => ({ ...d, grupos: d.grupos.filter((_, j) => j !== i) }))} aria-label={`Remover o grupo ${g.nome}`} className={`${muted} hover:text-neg`}><X size={15} aria-hidden="true" /></button>}
           </div>
         ))}
-        <button onClick={() => setDraft(d => ({ ...d, grupos: [...d.grupos, { nome: `Grupo ${String(d.grupos.length + 1).padStart(2, '0')}`, meta_cpa: null }] }))} className={`text-xs font-bold inline-flex items-center gap-1 ${muted} hover:text-indigo-400`}><Plus size={13} aria-hidden="true" /> Outro grupo</button>
+        <button onClick={() => setDraft(d => ({ ...d, grupos: [...d.grupos, { nome: `Grupo ${String(d.grupos.length + 1).padStart(2, '0')}`, meta_cpa: null }] }))} className={`text-xs font-medium inline-flex items-center gap-1 ${muted} hover:text-ink`}><Plus size={13} aria-hidden="true" /> Outro grupo</button>
       </Block>
 
       <Block css={css} title="Redes">
@@ -193,7 +193,7 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
               {list.map(l => (
                 <span key={l.id} className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded border ${line} ${head}`}>
                   {l.nome}
-                  <button onClick={() => setDraft(d => ({ ...d, locais: d.locais.filter(x => x.id !== l.id) }))} aria-label={`Remover ${l.nome}`} className={`${muted} hover:text-rose-400`}><X size={12} aria-hidden="true" /></button>
+                  <button onClick={() => setDraft(d => ({ ...d, locais: d.locais.filter(x => x.id !== l.id) }))} aria-label={`Remover ${l.nome}`} className={`${muted} hover:text-neg`}><X size={12} aria-hidden="true" /></button>
                 </span>
               ))}
               {!list.length && <span className={`text-xs ${muted}`}>{none}</span>}
@@ -203,39 +203,39 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
         <div className="relative">
           <Search size={14} aria-hidden="true" className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
           <input ref={placeInput} value={placeText} onChange={e => setPlaceText(e.target.value)} placeholder="Comece a digitar: país, estado ou cidade" aria-label="Procurar local" autoComplete="off"
-            className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-9 py-2 text-[13px] outline-none focus:border-indigo-500`} />
+            className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-9 py-2 text-[13px] outline-none focus:border-brand`} />
           {searching && <Loader2 size={14} aria-hidden="true" className={`absolute right-3 top-1/2 -translate-y-1/2 animate-spin ${muted}`} />}
         </div>
         {placeText.trim().length < 2 && <div className={`text-xs ${muted}`}>Os locais aparecem enquanto você digita, a partir da segunda letra.</div>}
-        {placeError && !searching && <div className="text-xs text-amber-500">{placeError}</div>}
+        {placeError && !searching && <div className="text-xs text-warn">{placeError}</div>}
         {!bulkOpen ? (
-          <button onClick={() => setBulkOpen(true)} className={`text-xs font-bold inline-flex items-center gap-1 ${muted} hover:text-indigo-400`}><Plus size={13} aria-hidden="true" /> Colar uma lista de países</button>
+          <button onClick={() => setBulkOpen(true)} className={`text-xs font-medium inline-flex items-center gap-1 ${muted} hover:text-ink`}><Plus size={13} aria-hidden="true" /> Colar uma lista de países</button>
         ) : (
           <div className={`rounded-lg border ${line} p-3 space-y-2`}>
             <div className={`text-xs ${muted}`}>Um país por linha, ou separados por vírgula. Vale o nome em português, em inglês ou a sigla (Brasil, Brazil ou BR).</div>
             <textarea value={bulkText} onChange={e => { setBulkText(e.target.value); setBulkResult(null); }} rows={4} placeholder={'Estados Unidos\nCanadá\nReino Unido\nAustrália'} aria-label="Lista de países"
-              className={`w-full rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
+              className={`w-full rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-brand resize-y`} />
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => addMany(false)} disabled={!bulkNames.length || bulkBusy !== ''} className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${line} ${head} hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-40 inline-flex items-center gap-1.5`}>{bulkBusy === 'incluir' && <Loader2 size={12} aria-hidden="true" className="animate-spin" />} Incluir {bulkNames.length > 1 ? `os ${bulkNames.length}` : ''}</button>
-              <button onClick={() => addMany(true)} disabled={!bulkNames.length || bulkBusy !== ''} className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${line} ${head} hover:border-rose-500 hover:text-rose-400 disabled:opacity-40 inline-flex items-center gap-1.5`}>{bulkBusy === 'excluir' && <Loader2 size={12} aria-hidden="true" className="animate-spin" />} Excluir {bulkNames.length > 1 ? `os ${bulkNames.length}` : ''}</button>
-              <button onClick={() => { setBulkOpen(false); setBulkText(''); setBulkResult(null); }} className={`text-xs ${muted} hover:text-indigo-400`}>Fechar</button>
+              <button onClick={() => addMany(false)} disabled={!bulkNames.length || bulkBusy !== ''} className={`text-xs font-medium px-3 py-1.5 rounded-lg border ${line} ${head} hover:border-pos hover:text-pos disabled:opacity-40 inline-flex items-center gap-1.5`}>{bulkBusy === 'incluir' && <Loader2 size={12} aria-hidden="true" className="animate-spin" />} Incluir {bulkNames.length > 1 ? `os ${bulkNames.length}` : ''}</button>
+              <button onClick={() => addMany(true)} disabled={!bulkNames.length || bulkBusy !== ''} className={`text-xs font-medium px-3 py-1.5 rounded-lg border ${line} ${head} hover:border-neg hover:text-neg disabled:opacity-40 inline-flex items-center gap-1.5`}>{bulkBusy === 'excluir' && <Loader2 size={12} aria-hidden="true" className="animate-spin" />} Excluir {bulkNames.length > 1 ? `os ${bulkNames.length}` : ''}</button>
+              <button onClick={() => { setBulkOpen(false); setBulkText(''); setBulkResult(null); }} className={`text-xs ${muted} hover:text-ink`}>Fechar</button>
             </div>
             {/* Resultado da lista colada: o leitor de tela avisa quando chega. */}
             <div aria-live="polite" className="space-y-1">
-            {bulkResult?.ok && <div className="text-xs text-emerald-500">{bulkResult.ok}</div>}
-            {bulkResult?.error && <div className="text-xs text-amber-500">{bulkResult.error}</div>}
-            {!!bulkResult?.missing.length && <div className="text-xs text-amber-500">O Google não achou: {bulkResult.missing.join(', ')}. Eles continuam no campo acima: confira a grafia e tente de novo.</div>}
+            {bulkResult?.ok && <div className="text-xs text-pos">{bulkResult.ok}</div>}
+            {bulkResult?.error && <div className="text-xs text-warn">{bulkResult.error}</div>}
+            {!!bulkResult?.missing.length && <div className="text-xs text-warn">O Google não achou: {bulkResult.missing.join(', ')}. Eles continuam no campo acima: confira a grafia e tente de novo.</div>}
             </div>
           </div>
         )}
         {places.length > 0 && (
-          <div className={`rounded-lg border ${line} divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+          <div className={`rounded-lg border ${line} divide-y divide-line`}>
             {places.map(p => (
               <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-1.5 text-[13px]">
                 <span className={head}>{p.nome} <span className={`text-xs ${muted}`}>· {PLACE[p.tipo] || p.tipo.toLowerCase()}</span></span>
                 <span className="flex gap-1.5 shrink-0">
-                  <button onClick={() => addPlace(p, false)} className={`text-[11px] font-bold px-2 py-1 rounded border ${line} ${muted} hover:text-emerald-400`}>Incluir</button>
-                  <button onClick={() => addPlace(p, true)} className={`text-[11px] font-bold px-2 py-1 rounded border ${line} ${muted} hover:text-rose-400`}>Excluir</button>
+                  <button onClick={() => addPlace(p, false)} className={`text-[11px] font-medium px-2 py-1 rounded border ${line} ${muted} hover:text-pos`}>Incluir</button>
+                  <button onClick={() => addPlace(p, true)} className={`text-[11px] font-medium px-2 py-1 rounded border ${line} ${muted} hover:text-neg`}>Excluir</button>
                 </span>
               </div>
             ))}
@@ -247,7 +247,7 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
         <div className="flex flex-wrap gap-1.5">
           {draft.idiomas.map(i => (
             <span key={i.id} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${line} ${head}`}>{i.nome}
-              <button onClick={() => set({ idiomas: draft.idiomas.filter(x => x.id !== i.id) })} aria-label={`Remover ${i.nome}`} className={`${muted} hover:text-rose-400`}><X size={12} aria-hidden="true" /></button></span>
+              <button onClick={() => set({ idiomas: draft.idiomas.filter(x => x.id !== i.id) })} aria-label={`Remover ${i.nome}`} className={`${muted} hover:text-neg`}><X size={12} aria-hidden="true" /></button></span>
           ))}
           {!draft.idiomas.length && <span className={`text-xs ${muted}`}>todos os idiomas</span>}
         </div>
@@ -257,17 +257,17 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
               <Search size={14} aria-hidden="true" className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
               <input value={langText} onChange={e => setLangText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && langQuery && langMatches[0]) addLanguage(langMatches[0]); }}
                 placeholder="Comece a digitar: inglês, espanhol, francês…" aria-label="Procurar idioma" autoComplete="off"
-                className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-3 py-2 text-[13px] outline-none focus:border-indigo-500`} />
+                className={`w-full rounded-lg border ${line} ${soft} ${head} pl-9 pr-3 py-2 text-[13px] outline-none focus:border-brand`} />
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {langMatches.map((l, i) => <button key={l.id} onClick={() => addLanguage(l)} className={`${choice(false)} ${langQuery && i === 0 ? '!border-indigo-500' : ''}`}>{l.nome}</button>)}
+              {langMatches.map((l, i) => <button key={l.id} onClick={() => addLanguage(l)} className={`${choice(false)} ${langQuery && i === 0 ? '!border-brand' : ''}`}>{l.nome}</button>)}
             </div>
-            <div className={`text-xs ${langQuery && !langMatches.length ? 'text-amber-500' : muted}`}>
+            <div className={`text-xs ${langQuery && !langMatches.length ? 'text-warn' : muted}`}>
               {!langQuery ? `Aparecem os mais usados; digite para achar qualquer outro dos ${languages.length}.` : langMatches.length ? 'Clique no idioma, ou aperte Enter para escolher o primeiro.' : 'Nenhum idioma com esse nome.'}
             </div>
           </>
         ) : languages ? (
-          <div className="text-xs text-amber-500">A lista de idiomas do Google não veio. {reloadLanguages && <button onClick={reloadLanguages} className="font-bold text-indigo-400 hover:underline">Tentar de novo</button>}</div>
+          <div className="text-xs text-warn">A lista de idiomas do Google não veio. {reloadLanguages && <button onClick={reloadLanguages} className="font-medium text-brand-text hover:underline">Tentar de novo</button>}</div>
         ) : <div className={`text-xs ${muted}`}>Carregando os idiomas do Google…</div>}
       </Block>
 
@@ -281,14 +281,14 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
         <div className="flex flex-wrap gap-1.5">
           {draft.negativas.slice(0, 80).map((n, i) => (
             <span key={i} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${line} ${head}`}>{keyword(n)}
-              <button onClick={() => setDraft(d => ({ ...d, negativas: d.negativas.filter((_, j) => j !== i) }))} aria-label={`Remover a negativa ${n.texto}`} className={`${muted} hover:text-rose-400`}><X size={12} aria-hidden="true" /></button></span>
+              <button onClick={() => setDraft(d => ({ ...d, negativas: d.negativas.filter((_, j) => j !== i) }))} aria-label={`Remover a negativa ${n.texto}`} className={`${muted} hover:text-neg`}><X size={12} aria-hidden="true" /></button></span>
           ))}
           {draft.negativas.length > 80 && <span className={`text-xs ${muted} px-2 py-1`}>e mais {draft.negativas.length - 80}</span>}
         </div>
         <div className="flex gap-2 items-end">
           <textarea value={negatives} onChange={e => setNegatives(e.target.value)} rows={2} placeholder={'free\n[baking soda uses]\n"how to clean"'} aria-label="Novas negativas"
-            className={`flex-1 rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500 resize-y`} />
-          <button onClick={addNegatives} disabled={!negatives.trim()} className={`px-3 py-2 rounded-lg border ${line} text-xs font-bold ${muted} hover:text-indigo-400 disabled:opacity-40`}>Adicionar</button>
+            className={`flex-1 rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-brand resize-y`} />
+          <button onClick={addNegatives} disabled={!negatives.trim()} className={`px-3 py-2 rounded-lg border ${line} text-xs font-medium ${muted} hover:text-ink disabled:opacity-40`}>Adicionar</button>
         </div>
       </Block>
 
@@ -305,9 +305,9 @@ export function StepCampaign({ draft, setDraft, symbol, css, findPlaces, findMan
 
       <div className={`${card} border rounded-xl p-4 flex flex-wrap items-center justify-between gap-3`}>
         <div className="text-xs space-y-0.5">
-          {problems.length ? problems.map(p => <div key={p} className="text-amber-500">{p}</div>) : <div className={muted}>Configuração completa. Nada foi enviado ao Google.</div>}
+          {problems.length ? problems.map(p => <div key={p} className="text-warn">{p}</div>) : <div className={muted}>Configuração completa. Nada foi enviado ao Google.</div>}
         </div>
-        <button onClick={onNext} disabled={problems.length > 0} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40">Seguir para o anúncio</button>
+        <button onClick={onNext} disabled={problems.length > 0} className="bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40">Seguir para o anúncio</button>
       </div>
     </div>
   );

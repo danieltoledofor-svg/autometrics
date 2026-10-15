@@ -43,22 +43,22 @@ function AccountPicker({ accounts, picked, elsewhere, onToggle, hidden, onHide, 
     }
     return [...map.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   }, [accounts, filter, onlyFree, hidden, showHidden]);
-  const warn = isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300';
+  const warn = 'bg-warn/10 text-warn border-warn/30';
   return (
     <div className={`rounded-lg border ${line} ${soft} p-2.5 space-y-2`}>
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[220px]">
           <Search size={14} aria-hidden="true" className={`absolute left-3 top-1/2 -translate-y-1/2 ${muted}`} />
           <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Nome da MCC, da conta ou o número" aria-label="Procurar MCC ou conta"
-            className={`w-full rounded-lg border ${line} ${isDark ? 'bg-slate-900' : 'bg-white'} ${head} pl-9 pr-3 py-1.5 text-[13px] outline-none focus:border-indigo-500`} />
+            className={`w-full rounded-lg border ${line} bg-surface-1 ${head} pl-9 pr-3 py-1.5 text-[13px] outline-none focus:border-brand`} />
         </div>
         <label className={`flex items-center gap-1.5 text-xs cursor-pointer ${head}`}><input type="checkbox" checked={onlyFree} onChange={e => setOnlyFree(e.target.checked)} /> Só contas sem campanha ativa</label>
         {hidden.size > 0 && <label className={`flex items-center gap-1.5 text-xs cursor-pointer ${head}`}><input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} /> Mostrar as {hidden.size} que escondi</label>}
       </div>
-      <div className={`max-h-72 overflow-y-auto rounded-lg border ${line} ${isDark ? 'bg-slate-900' : 'bg-white'} divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+      <div className={`max-h-72 overflow-y-auto rounded-lg border ${line} bg-surface-1 divide-y divide-line`}>
         {groups.map(([mcc, list]) => (
           <div key={mcc} className="px-3 py-2">
-            <label className={`flex items-center gap-2 text-xs font-bold cursor-pointer ${head}`}>
+            <label className={`flex items-center gap-2 text-xs font-medium cursor-pointer ${head}`}>
               <input type="checkbox" checked={list.every(a => picked.has(a.id))} onChange={e => onToggle(list.filter(a => !hidden.has(a.id) || picked.has(a.id)), e.target.checked)} /> {mcc}
               <span className={`font-normal ${muted}`}>· {list.length} {list.length === 1 ? 'conta' : 'contas'} · marcar todas</span>
             </label>
@@ -72,7 +72,7 @@ function AccountPicker({ accounts, picked, elsewhere, onToggle, hidden, onHide, 
                   {a.ativas.length > 0 && <span title={`Rodando agora: ${a.ativas.slice(0, 6).join(' · ')}`} className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${warn}`}>{running(a)}</span>}
                   {(elsewhere.get(a.id) || 0) > 0 && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${line} ${muted}`}>outra página deste lançamento</span>}
                   <button onClick={() => onHide(a.id, !hidden.has(a.id))} title={hidden.has(a.id) ? 'Voltar a mostrar esta conta' : 'Esconder esta conta da lista (por exemplo, se ela está suspensa)'}
-                    className={`shrink-0 text-[11px] inline-flex items-center gap-1 ${muted} hover:text-rose-400 ${hidden.has(a.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100'}`}>
+                    className={`shrink-0 text-[11px] inline-flex items-center gap-1 ${muted} hover:text-neg ${hidden.has(a.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100'}`}>
                     <EyeOff size={12} aria-hidden="true" /> {hidden.has(a.id) ? 'mostrar' : 'esconder'}
                   </button>
                 </div>
@@ -146,16 +146,16 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
     setDraft(d => ({ ...d, contas: d.contas.map(c => (c.id === accountId ? { ...c, meta_id: goal?.id || null, meta_nome: goal?.nome || null } : c)) }));
     try { const all = JSON.parse(localStorage.getItem(REMEMBER) || '{}'); if (goal) all[accountId] = goal.id; else delete all[accountId]; localStorage.setItem(REMEMBER, JSON.stringify(all)); } catch { /* sem armazenamento */ }
   };
-  const field = `rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-indigo-500`;
+  const field = `rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-brand`;
   const needGoal = draft.lance.estrategia === 'MAXIMIZE_CONVERSIONS';
-  const chip = isDark ? 'bg-emerald-500/15 border-emerald-500/60 text-emerald-300' : 'bg-emerald-50 border-emerald-500 text-emerald-800';
-  const warn = isDark ? 'text-amber-300' : 'text-amber-700';
+  const chip = 'bg-pos/10 border-pos/50 text-pos';
+  const warn = 'text-warn';
   const tracker = draft.rastreador === 'nenhum' ? 'nenhum' : draft.rastreador === 'autometrics' ? 'Autometrics' : 'FlowTracking';
 
   return (
     <div className="space-y-4">
       <div className={`${card} border rounded-xl p-4 space-y-1`}>
-        <div className={`text-sm font-bold ${head}`}>Onde cada campanha vai subir</div>
+        <div className={`text-sm font-semibold ${head}`}>Onde cada campanha vai subir</div>
         <div className={`text-xs ${muted}`}>Cada cartão abaixo é uma página. Em cada um você diz o endereço, o nome da campanha e marca a MCC e as contas que recebem aquela página: sai uma campanha por conta marcada. Todas levam a mesma configuração e o mesmo anúncio. Cole só o endereço da página; o rastreador ({tracker}) entra sozinho.</div>
         <div className={`text-xs ${muted}`}>{accounts ? `${accounts.length} contas que o Google dá como ativas. Não aparecem as suspensas, as canceladas${hiddenInGoogle ? ` nem as ${hiddenInGoogle} que você ocultou na MCC, no Google Ads` : ' nem as que você ocultou na MCC, no Google Ads'}. Para tirar mais alguma daqui, passe o mouse nela e clique em "esconder".` : 'Carregando as contas…'}</div>
       </div>
@@ -167,8 +167,8 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
         return (
           <div key={i} className={`${card} border rounded-xl p-4 space-y-3`}>
             <div className="flex items-center justify-between gap-3">
-              <div className={`text-sm font-bold ${head}`}>Página {i + 1} <span className={`text-xs font-normal ${muted}`}>· {p.contas.length ? `${p.contas.length} ${p.contas.length === 1 ? 'campanha' : 'campanhas'}` : 'nenhuma conta escolhida'}</span></div>
-              {draft.paginas.length > 1 && <button onClick={() => { setPages(pages => pages.filter((_, j) => j !== i)); setOpen(null); }} className={`text-xs inline-flex items-center gap-1 ${muted} hover:text-rose-400`}><X size={13} aria-hidden="true" /> Tirar esta página</button>}
+              <div className={`text-sm font-semibold ${head}`}>Página {i + 1} <span className={`text-xs font-normal ${muted}`}>· {p.contas.length ? `${p.contas.length} ${p.contas.length === 1 ? 'campanha' : 'campanhas'}` : 'nenhuma conta escolhida'}</span></div>
+              {draft.paginas.length > 1 && <button onClick={() => { setPages(pages => pages.filter((_, j) => j !== i)); setOpen(null); }} className={`text-xs inline-flex items-center gap-1 ${muted} hover:text-neg`}><X size={13} aria-hidden="true" /> Tirar esta página</button>}
             </div>
             <div className="grid md:grid-cols-2 gap-2">
               <div><div className={`text-xs ${muted} mb-1`}>Endereço da página</div>
@@ -187,12 +187,12 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
                     <span key={id} className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded border ${chip}`}>
                       <Check size={12} aria-hidden="true" /> {c?.mcc ? `${c.mcc} › ` : ''}{c?.nome || dashed(id)}
                       {a && a.ativas.length > 0 && <span className={warn} title={`Rodando agora: ${a.ativas.slice(0, 6).join(' · ')}`}>· {running(a)}</span>}
-                      <button onClick={() => toggle(i, [{ id }], false)} aria-label={`Tirar a conta ${c?.nome || id}`} className="hover:text-rose-400"><X size={12} aria-hidden="true" /></button>
+                      <button onClick={() => toggle(i, [{ id }], false)} aria-label={`Tirar a conta ${c?.nome || id}`} className="hover:text-neg"><X size={12} aria-hidden="true" /></button>
                     </span>
                   );
                 })}
                 <button onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i}
-                  className={`text-xs font-bold px-2.5 py-1 rounded border inline-flex items-center gap-1 ${isDark ? 'border-slate-600 text-slate-100 hover:border-indigo-400' : 'border-slate-300 text-slate-800 hover:border-indigo-500'}`}>
+                  className={`text-xs font-medium px-2.5 py-1 rounded border inline-flex items-center gap-1 border-line-strong text-ink hover:border-brand`}>
                   {open === i ? 'Fechar a lista de contas' : <><Plus size={13} aria-hidden="true" /> Escolher MCC e contas</>}
                 </button>
               </div>
@@ -204,12 +204,12 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
         );
       })}
       <button onClick={() => { setPages(pages => [...pages, { url: '', nome: draft.nome, contas: [] }]); setOpen(draft.paginas.length); }}
-        className={`w-full rounded-xl border border-dashed ${line} py-3 text-xs font-bold inline-flex items-center justify-center gap-1.5 ${muted} hover:text-indigo-400 hover:border-indigo-500`}><Plus size={14} aria-hidden="true" /> Outra página, para outras contas</button>
+        className={`w-full rounded-xl border border-dashed ${line} py-3 text-xs font-medium inline-flex items-center justify-center gap-1.5 ${muted} hover:text-ink hover:border-brand`}><Plus size={14} aria-hidden="true" /> Outra página, para outras contas</button>
 
       {draft.contas.length > 0 && (
         <div className={`${card} border rounded-xl p-4 space-y-3`}>
           <div>
-            <div className={`text-sm font-bold ${head}`}>Meta de conversão de cada conta</div>
+            <div className={`text-sm font-semibold ${head}`}>Meta de conversão de cada conta</div>
             <div className={`text-xs ${muted} mt-0.5`}>As metas são as que cada conta enxerga no Google (da MCC, ou da própria conta). A escolha fica lembrada para a próxima vez.</div>
           </div>
           {draft.contas.map(c => {
@@ -218,14 +218,14 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
               <div key={c.id} className={`flex flex-wrap items-center gap-2 py-1.5 border-t ${line} text-[13px]`}>
                 <div className="flex-1 min-w-[200px]"><span className={head}>{c.nome}</span> <span className={`text-xs ${muted}`}>· {c.mcc} · {dashed(c.id)}</span></div>
                 {g?.loading || !g ? <span className={`text-xs ${muted} inline-flex items-center gap-1.5`}><Loader2 size={12} aria-hidden="true" className="animate-spin" /> lendo as metas…</span>
-                  : g.error ? <span className="text-xs text-rose-500 max-w-[320px]">{g.error}</span>
+                  : g.error ? <span className="text-xs text-neg max-w-[320px]">{g.error}</span>
                     : g.list?.length ? (
                       <select value={c.meta_id || ''} onChange={e => setGoal(c.id, e.target.value)} aria-label={`Meta de conversão de ${c.nome}`}
-                        className={`rounded-lg border ${!c.meta_id && needGoal ? 'border-amber-500/70' : line} ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'} px-2 py-1.5 text-[13px]`}>
+                        className={`rounded-lg border ${!c.meta_id && needGoal ? 'border-warn/70' : line} bg-surface-2 text-ink px-2 py-1.5 text-[13px]`}>
                         <option value="">Escolha a meta</option>
                         {g.list.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
                       </select>
-                    ) : <span className="text-xs text-amber-500">Esta conta não tem meta personalizada. Crie a meta no Google Ads antes de subir a campanha.</span>}
+                    ) : <span className="text-xs text-warn">Esta conta não tem meta personalizada. Crie a meta no Google Ads antes de subir a campanha.</span>}
               </div>
             );
           })}
@@ -234,10 +234,10 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
 
       {plan.length > 0 && (
         <div className={`${card} border rounded-xl p-4 space-y-2`}>
-          <div className={`text-sm font-bold ${head}`}>O que este lançamento cria <span className={`text-xs font-normal ${muted}`}>· {plan.length} {plan.length === 1 ? 'campanha' : 'campanhas'}, que já nascem ativas</span></div>
+          <div className={`text-sm font-semibold ${head}`}>O que este lançamento cria <span className={`text-xs font-normal ${muted}`}>· {plan.length} {plan.length === 1 ? 'campanha' : 'campanhas'}, que já nascem ativas</span></div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
-              <thead><tr className={`text-left text-[11px] uppercase tracking-wide ${muted}`}><th className="py-1.5 pr-3 font-semibold">Campanha</th><th className="py-1.5 pr-3 font-semibold">MCC › conta</th><th className="py-1.5 pr-3 font-semibold">Meta</th><th className="py-1.5 font-semibold">Página</th></tr></thead>
+              <thead><tr className={`text-left text-xs ${muted}`}><th className="py-1.5 pr-3 font-semibold">Campanha</th><th className="py-1.5 pr-3 font-semibold">MCC › conta</th><th className="py-1.5 pr-3 font-semibold">Meta</th><th className="py-1.5 font-semibold">Página</th></tr></thead>
               <tbody>
                 {plan.slice(0, 60).map((r, i) => {
                   const a = byId.get(r.conta.id);
@@ -245,7 +245,7 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
                     <tr key={i} className={`border-t ${line}`}>
                       <td className={`py-1.5 pr-3 ${head}`}>{r.nome}</td>
                       <td className={`py-1.5 pr-3 ${head}`}>{r.conta.mcc} › {r.conta.nome}{a && a.ativas.length > 0 && <span className={`ml-1.5 text-xs ${warn}`}>· {running(a)}</span>}</td>
-                      <td className={`py-1.5 pr-3 ${r.conta.meta_nome ? head : 'text-amber-500'}`}>{r.conta.meta_nome || (needGoal ? 'falta escolher' : 'não usa')}</td>
+                      <td className={`py-1.5 pr-3 ${r.conta.meta_nome ? head : 'text-warn'}`}>{r.conta.meta_nome || (needGoal ? 'falta escolher' : 'não usa')}</td>
                       <td className={`py-1.5 ${muted} break-all`}>{r.url.replace(/^https?:\/\//, '')}</td>
                     </tr>
                   );
@@ -259,10 +259,10 @@ export function StepWhere({ draft, setDraft, css, api, onNext }: {
 
       <div className={`${card} border rounded-xl p-4 flex flex-wrap items-center justify-between gap-3`}>
         <div className="text-xs space-y-0.5">
-          {problems.length ? problems.map(p => <div key={p} className="text-amber-500">{p}</div>) : <div className={muted}>Tudo definido. Nada foi enviado ao Google.</div>}
+          {problems.length ? problems.map(p => <div key={p} className="text-warn">{p}</div>) : <div className={muted}>Tudo definido. Nada foi enviado ao Google.</div>}
           <div className={muted}>A mesma oferta com os mesmos textos em muitas contas é um dos motivos de suspensão no Google; a escolha de quantas contas usar é sua.</div>
         </div>
-        <button onClick={onNext} disabled={problems.length > 0} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40">Seguir para a conferência</button>
+        <button onClick={onNext} disabled={problems.length > 0} className="bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40">Seguir para a conferência</button>
       </div>
     </div>
   );
