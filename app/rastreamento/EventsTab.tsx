@@ -13,10 +13,10 @@ import { api, qty, money, when, gap, place, DEVICE, type Ui } from './shared';
  */
 
 const GOOGLE: Record<string, { label: string; cls: string }> = {
-  enviada: { label: 'Enviada', cls: 'bg-emerald-500/15 text-emerald-500' },
-  aguardando: { label: 'Aguardando o Google', cls: 'bg-amber-500/15 text-amber-500' },
-  falhou: { label: 'Recusada', cls: 'bg-rose-500/15 text-rose-500' },
-  ignorada: { label: 'Não enviada', cls: 'bg-slate-500/15 text-slate-400' },
+  enviada: { label: 'Enviada', cls: 'bg-pos/10 text-pos' },
+  aguardando: { label: 'Aguardando o Google', cls: 'bg-warn/10 text-warn' },
+  falhou: { label: 'Recusada', cls: 'bg-neg/10 text-neg' },
+  ignorada: { label: 'Não enviada', cls: 'bg-surface-3 text-ink-subtle' },
 };
 
 export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 'sale' | 'checkout' }) {
@@ -38,12 +38,12 @@ export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 
   useEffect(() => { load(); }, [load]);
 
   const { card, head, muted, th, td } = ui;
-  if (error) return <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>;
+  if (error) return <div className={`${card} border rounded-xl p-4 text-sm text-neg`}>{error}</div>;
   if (!data) return <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Carregando…</div>;
 
   const values = Object.entries(data.value as Record<string, number>).sort((a, b) => b[1] - a[1]);
   const stat = (label: string, value: React.ReactNode) => (
-    <div className={`${card} border rounded-xl p-4`}><div className={`text-xs font-medium ${muted}`}>{label}</div><div className={`text-2xl font-bold mt-1 tabular-nums ${head}`}>{value}</div></div>
+    <div className={`${card} border rounded-xl p-4`}><div className={`text-xs font-medium ${muted}`}>{label}</div><div className={`text-lg sm:text-xl font-semibold mt-1 tabular-nums whitespace-nowrap ${head}`}>{value}</div></div>
   );
 
   return (
@@ -81,14 +81,14 @@ export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 
                 {data.events.map((e: any, i: number) => (
                   <tr key={i}>
                     <td className={`${td} tabular-nums whitespace-nowrap`}>{e.at_text || when(e.at)}</td>
-                    {sale && <td className={`${td} ${head} text-right tabular-nums font-bold whitespace-nowrap`}>{money(e.amount, e.currency)}</td>}
-                    <td className={`${td} max-w-[260px] truncate`} title={e.campaign}><Link href={`/products/${e.product_id}`} className={`${head} hover:text-indigo-400 hover:underline`}>{e.campaign}</Link></td>
+                    {sale && <td className={`${td} ${head} text-right tabular-nums font-medium whitespace-nowrap`}>{money(e.amount, e.currency)}</td>}
+                    <td className={`${td} max-w-[260px] truncate`} title={e.campaign}><Link href={`/products/${e.product_id}`} className={`${head} hover:text-brand-text hover:underline`}>{e.campaign}</Link></td>
                     <td className={`${td} max-w-[200px] truncate`}>{e.click?.keyword || <span className={muted}>—</span>}</td>
                     <td className={`${td} max-w-[180px] truncate`}>{place(e.click) || <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>{e.click ? [DEVICE[e.click.device], e.click.os].filter(Boolean).join(' · ') : <span className={muted}>sem clique ligado</span>}</td>
                     <td className={`${td} tabular-nums whitespace-nowrap`}>{e.click ? gap(e.click.created_at, e.at) : <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>{e.source || <span className={muted}>—</span>}</td>
-                    {sale && <td className={`${td} whitespace-nowrap`}>{e.google ? <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${GOOGLE[e.google.status]?.cls || ''}`} title={e.google.reason || ''}>{GOOGLE[e.google.status]?.label || e.google.status}{e.google.reason && <span className="sr-only">: {e.google.reason}</span>}</span> : <span className={muted}>—</span>}</td>}
+                    {sale && <td className={`${td} whitespace-nowrap`}>{e.google ? <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${GOOGLE[e.google.status]?.cls || ''}`} title={e.google.reason || ''}>{GOOGLE[e.google.status]?.label || e.google.status}{e.google.reason && <span className="sr-only">: {e.google.reason}</span>}</span> : <span className={muted}>—</span>}</td>}
                   </tr>
                 ))}
               </tbody>

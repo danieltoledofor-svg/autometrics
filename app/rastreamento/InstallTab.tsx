@@ -38,9 +38,9 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     setCopiedPostback(key);
     setTimeout(() => setCopiedPostback(null), 2000);
   };
-  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const textMuted = 'text-slate-500';
+  const bgCard = 'bg-surface-1 border-line';
+  const textHead = 'text-ink';
+  const textMuted = 'text-ink-subtle';
 
   const origin = typeof window !== "undefined" ? window.location.origin : "https://autometrics.cloud";
 
@@ -65,7 +65,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     buygoods: {
       name: 'BuyGoods',
       postback: pb('BuyGoods', 'event={CONV_TYPE}&cy=USD&amount={COMMISSION_AMOUNT}&orderid={ORDERID}&product={PRODUCT_CODENAME}&subid1={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}'),
-      note: <>A mesma URL recebe venda frontend e upsell — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{CONV_TYPE}'}</code> identifica o evento.</>,
+      note: <>A mesma URL recebe venda frontend e upsell — o <code className="px-1 rounded bg-surface-3 text-brand-text">{'{CONV_TYPE}'}</code> identifica o evento.</>,
       details: [
         { label: 'event', value: '{CONV_TYPE} (frontend / upsell / sale)' },
         { label: 'subid1', value: '{SUBID} (ftsession)' },
@@ -82,7 +82,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     clickbank: {
       name: 'ClickBank',
       postback: pb('ClickBank', 'event={event_type}&cy=USD&amount={affiliate_earnings}&orderid={receipt_id}&product={vendor}&subid1={aff_sub1}&subid2={tid}&subid3={extclid}&subid4={aff_sub2}&subid5={aff_sub3}'),
-      note: <>A mesma URL recebe a compra e o upsell — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{event_type}'}</code> identifica o evento. O valor é a sua comissão, em dólar.</>,
+      note: <>A mesma URL recebe a compra e o upsell — o <code className="px-1 rounded bg-surface-3 text-brand-text">{'{event_type}'}</code> identifica o evento. O valor é a sua comissão, em dólar.</>,
       details: [
         { label: 'event', value: '{event_type} (Purchase / Upsell)' },
         { label: 'subid1', value: '{aff_sub1} (gclid)' },
@@ -100,7 +100,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     digistore: {
       name: 'Digistore',
       postback: pb('Digistore', 'event={transaction_type}&cy={currency}&amount={amount_affiliate}&orderid={transaction_id}&product={product_name}&cid={cid}&subid1={sid1}&subid2={sid2}&subid3={sid3}&subid4={sid4}&subid5={sid5}'),
-      note: <>A Digistore avisa o tipo em <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{transaction_type}'}</code>: pagamento entra como venda; os outros avisos são ignorados.</>,
+      note: <>A Digistore avisa o tipo em <code className="px-1 rounded bg-surface-3 text-brand-text">{'{transaction_type}'}</code>: pagamento entra como venda; os outros avisos são ignorados.</>,
       details: [
         { label: 'event', value: '{transaction_type}' },
         { label: 'cid', value: '{cid} (gclid)' },
@@ -137,7 +137,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     maxweb: {
       name: 'MaxWeb',
       postback: pb('MaxWeb', 'event={CONV_TYPE}&cy=USD&amount={COMMISSION_AMOUNT}&orderid={ORDERID}&product={PRODUCT_CODENAME}&subid1={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}'),
-      note: <>A mesma URL recebe venda frontend e upsell — o <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>{'{CONV_TYPE}'}</code> identifica o evento.</>,
+      note: <>A mesma URL recebe venda frontend e upsell — o <code className="px-1 rounded bg-surface-3 text-brand-text">{'{CONV_TYPE}'}</code> identifica o evento.</>,
       details: [
         { label: 'event', value: '{CONV_TYPE}' },
         { label: 'subid1', value: '{SUBID}' },
@@ -177,12 +177,12 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
   const platformKeys = Object.keys(platforms) as (keyof typeof platforms)[];
   const plat = platforms[convPlatform];
   const stepBadge = (n: number) => (
-    <span className="bg-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white shrink-0">{n}</span>
+    <span className="bg-brand w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium text-white shrink-0">{n}</span>
   );
-  const subTabClass = (active: boolean) => `px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${active ? 'bg-indigo-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-black'}`}`;
+  const subTabClass = (active: boolean) => `px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${active ? 'bg-surface-3 text-ink' : 'bg-surface-2 text-ink-subtle hover:text-ink'}`;
   const copyBtn = (text: string, key: string, label: string) => (
     <button onClick={() => copyPostback(text, key)}
-      className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copiedPostback === key ? 'bg-emerald-500 text-white' : `${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}`}>
+      className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${copiedPostback === key ? 'bg-pos text-white' : 'bg-surface-2 text-ink-subtle hover:text-ink'}`}>
       {copiedPostback === key ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
       {copiedPostback === key ? 'Copiado!' : label}
     </button>
@@ -192,20 +192,20 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     <div className="space-y-6">
       <div className={`rounded-xl p-6 border ${bgCard}`}>
         <div className="flex items-center gap-3 mb-1">
-          <Zap size={20} aria-hidden="true" className="text-amber-400" />
-          <h2 className={`text-lg font-bold ${textHead}`}>Conversão Automática</h2>
+          <Zap size={20} aria-hidden="true" className="text-warn" />
+          <h2 className={`text-base font-semibold ${textHead}`}>Conversão Automática</h2>
         </div>
         <p className={`text-sm ${textMuted} mb-5`}>
           Cada venda feita na plataforma entra automaticamente na campanha certa do AutoMetrics,
           funcionando <strong>junto</strong> com o seu tracker — nada do que ele já faz é alterado.
         </p>
 
-        <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>Tracker</p>
+        <p className={`text-xs font-medium mb-2 ${textMuted}`}>Tracker</p>
         <div className="flex flex-wrap gap-2 mb-4">
           <button onClick={() => setConvTracker('flowtracking')} aria-pressed={convTracker === 'flowtracking'} className={subTabClass(convTracker === 'flowtracking')}>FlowTracking</button>
         </div>
 
-        <p className={`text-xs font-bold uppercase mb-2 ${textMuted}`}>Plataforma de venda</p>
+        <p className={`text-xs font-medium mb-2 ${textMuted}`}>Plataforma de venda</p>
         <div className="flex flex-wrap gap-2">
           {platformKeys.map(k => (
             <button key={k} onClick={() => setConvPlatform(k)} aria-pressed={convPlatform === k} className={subTabClass(convPlatform === k)}>{platforms[k].name}</button>
@@ -213,25 +213,25 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
         </div>
       </div>
 
-      <div className={`flex flex-wrap items-center gap-2 text-xs font-mono p-4 rounded-lg border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-        <span className="bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded">Clique (gclid + ft_sid)</span>
+      <div className={`flex flex-wrap items-center gap-2 text-xs font-mono p-4 rounded-lg border bg-surface-2 border-line`}>
+        <span className="bg-brand/15 text-brand-text px-2 py-1 rounded">Clique (gclid + ft_sid)</span>
         <span className={textMuted}>→ script liga à campanha →</span>
-        <span className="bg-cyan-500/20 text-cyan-400 px-2 py-1 rounded">FlowTracking preenche os subids</span>
+        <span className="bg-surface-3 text-ink-muted px-2 py-1 rounded">FlowTracking preenche os subids</span>
         <span className={textMuted}>→</span>
-        <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">{plat.name} dispara postback → venda na campanha</span>
+        <span className="bg-pos/10 text-pos px-2 py-1 rounded">{plat.name} dispara postback → venda na campanha</span>
       </div>
 
       {/* PASSO 1: SCRIPT */}
       <div className={`rounded-xl p-6 border ${bgCard}`}>
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${textHead}`}>{stepBadge(1)} Script nas páginas do funil</h3>
+          <h3 className={`text-sm font-semibold flex items-center gap-2 ${textHead}`}>{stepBadge(1)} Script nas páginas do funil</h3>
           {copyBtn(flowScript, 'conv_flow_script', 'Copiar Script')}
         </div>
         <p className={`text-xs mb-3 ${textMuted}`}>
-          Cole antes do <code className={`px-1 rounded ${isDark ? 'bg-slate-800 text-indigo-300' : 'bg-slate-100 text-indigo-600'}`}>&lt;/body&gt;</code> em <strong>todas as páginas antes do checkout</strong> (pré-lander e VSL),
+          Cole antes do <code className="px-1 rounded bg-surface-3 text-brand-text">&lt;/body&gt;</code> em <strong>todas as páginas antes do checkout</strong> (pré-lander e VSL),
           junto com o script da FlowTracking. Ele liga o <strong>gclid</strong> e a sessão da FlowTracking à campanha do clique.
         </p>
-        <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-50 text-slate-700'}`}>{flowScript}</pre>
+        <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed bg-surface-2 text-ink-muted`}>{flowScript}</pre>
       </div>
 
       {/* Endereço do anúncio, com os campos que o script lê */}
@@ -240,17 +240,17 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
       {/* PASSO 2: POSTBACK */}
       <div className={`rounded-xl p-6 border ${bgCard}`}>
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${textHead}`}>{stepBadge(2)} Postback na {plat.name}</h3>
+          <h3 className={`text-sm font-semibold flex items-center gap-2 ${textHead}`}>{stepBadge(2)} Postback na {plat.name}</h3>
           {copyBtn(plat.postback, `conv_pb_${convPlatform}`, 'Copiar URL')}
         </div>
         <p className={`text-xs mb-3 ${textMuted}`}>
           {plat.note}
         </p>
-        <code className={`block text-[11px] font-mono break-all p-3 rounded border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'} ${textMuted}`}>{plat.postback}</code>
+        <code className={`block text-[11px] font-mono break-all p-3 rounded border bg-surface-2 border-line ${textMuted}`}>{plat.postback}</code>
         <div className="flex flex-wrap gap-2 mt-3">
           {plat.details.map(d => (
-            <span key={d.label} className={`text-[10px] px-2 py-0.5 rounded font-mono ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-500'}`}>
-              <span className="text-indigo-400">{d.label}</span>=<span className="text-blue-400">{d.value}</span>
+            <span key={d.label} className={`text-[10px] px-2 py-0.5 rounded font-mono bg-surface-3 text-ink-subtle`}>
+              <span className="text-brand-text">{d.label}</span>=<span className="text-ink">{d.value}</span>
             </span>
           ))}
         </div>
@@ -258,7 +258,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
 
       {/* PASSO 3: CONFIGURAR NA PLATAFORMA */}
       <div className={`rounded-xl p-6 border ${bgCard}`}>
-        <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${textHead}`}>{stepBadge(3)} Configurar na {plat.name}</h3>
+        <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${textHead}`}>{stepBadge(3)} Configurar na {plat.name}</h3>
         <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
           {plat.steps.map((s, i) => <li key={i}>{s}</li>)}
         </ol>
@@ -266,19 +266,19 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
 
       {/* RELÓGIO DA PLATAFORMA */}
       <div className={`rounded-xl p-6 border ${bgCard}`}>
-        <h3 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${textHead}`}><Clock size={16} aria-hidden="true" className="text-indigo-400" /> Relógio da {plat.name}</h3>
+        <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${textHead}`}><Clock size={16} aria-hidden="true" className="text-brand-text" /> Relógio da {plat.name}</h3>
         <p className={`text-xs mb-3 ${textMuted}`}>
           A venda entra no dia em que aconteceu no relógio da {plat.name}, para o dia do AutoMetrics fechar igual ao relatório dela.
           Uma venda perto da meia-noite pode cair num dia diferente do de Brasília.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <select value={clockOf(convPlatform, clocks)} onChange={e => saveClock(convPlatform, e.target.value)} aria-label={`Relógio da ${plat.name}`}
-            className={`text-xs font-bold rounded-lg px-3 py-2 border outline-none ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-white border-slate-300 text-slate-800'}`}>
+            className={`text-xs font-medium rounded-lg px-3 py-2 border outline-none bg-surface-2 border-line text-ink focus:border-brand`}>
             {CLOCK_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <span className={`text-xs ${textMuted}`}>Agora na {plat.name}: <strong className={textHead}>{timeInClock(clockOf(convPlatform, clocks))}</strong></span>
         </div>
-        {clockNote && <p className={`text-xs mt-3 ${clockNote.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{clockNote.text}</p>}
+        {clockNote && <p className={`text-xs mt-3 ${clockNote.ok ? 'text-pos' : 'text-neg'}`}>{clockNote.text}</p>}
       </div>
 
       <ConversionUploadCard isDark={isDark} />

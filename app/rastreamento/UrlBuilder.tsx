@@ -25,9 +25,9 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
     { key: 'device', value: '{device}', locked: false, own: false },
     { key: 'amclid', value: 'am_{gclid}_am', locked: false, own: true },
   ]);
-  const bgCard = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
-  const textHead = isDark ? 'text-white' : 'text-slate-900';
-  const textMuted = 'text-slate-500';
+  const bgCard = 'bg-surface-1 border-line';
+  const textHead = 'text-ink';
+  const textMuted = 'text-ink-subtle';
 
   const buildUrl = () => {
     if (!urlBase.trim()) return '';
@@ -60,8 +60,8 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
     <div className="space-y-6">
       <div className={`rounded-xl p-6 border ${bgCard}`}>
         <div className="flex items-center gap-3 mb-1">
-          <LinkIcon size={20} aria-hidden="true" className="text-emerald-500" />
-          <h2 className={`text-lg font-bold ${textHead}`}>Construtor de URL</h2>
+          <LinkIcon size={20} aria-hidden="true" className="text-pos" />
+          <h2 className={`text-base font-semibold ${textHead}`}>Construtor de URL</h2>
         </div>
         <p className={`text-sm ${textMuted} mb-5`}>
           Cole o endereço da sua página abaixo. Os campos já vêm preenchidos com o que o Google troca na hora do clique (campanha, grupo de anúncios, palavra-chave, anúncio) e com o identificador do clique para o Autometrics.
@@ -69,16 +69,16 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
 
         {/* URL BASE */}
         <div className="mb-5">
-          <label htmlFor="url-builder-base" className={`block text-xs font-bold mb-2 ${textMuted}`}>Endereço da página (pré-venda ou página de vendas)</label>
-          <div className={`flex items-center gap-2 rounded-xl border px-4 py-3 ${isDark ? 'bg-slate-950 border-slate-700 focus-within:border-emerald-500' : 'bg-white border-slate-200 focus-within:border-emerald-400'} transition-colors`}>
-            <ExternalLink size={15} aria-hidden="true" className="text-emerald-400 shrink-0" />
+          <label htmlFor="url-builder-base" className={`block text-xs font-medium mb-2 ${textMuted}`}>Endereço da página (pré-venda ou página de vendas)</label>
+          <div className={`flex items-center gap-2 rounded-xl border px-4 py-3 bg-surface-2 border-line focus-within:border-brand transition-colors`}>
+            <ExternalLink size={15} aria-hidden="true" className="text-ink-subtle shrink-0" />
             <input
               id="url-builder-base"
               type="url"
               value={urlBase}
               onChange={e => setUrlBase(e.target.value)}
               placeholder="https://seusite.com/presell"
-              className={`flex-1 bg-transparent outline-none text-sm ${textHead} placeholder:text-slate-500`}
+              className={`flex-1 bg-transparent outline-none text-sm ${textHead} placeholder:text-ink-faint`}
             />
           </div>
         </div>
@@ -86,21 +86,21 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
         {/* PARÂMETROS */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-3">
-            <p className={`text-xs font-bold uppercase ${textMuted}`}>Parâmetros</p>
-            <button onClick={addParam} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-200 text-slate-600 hover:text-black'}`}>
+            <p className={`text-xs font-medium ${textMuted}`}>Parâmetros</p>
+            <button onClick={addParam} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-surface-2 text-ink-subtle hover:text-ink`}>
               <Plus size={12} aria-hidden="true" /> Adicionar
             </button>
           </div>
 
           <div className="space-y-2">
             {urlParams.map((param, idx) => (
-              <div key={idx} className={`flex flex-wrap items-center gap-2 p-2 rounded-xl border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <div key={idx} className={`flex flex-wrap items-center gap-2 p-2 rounded-xl border bg-surface-2 border-line`}>
                 {/* Padrão (Key Section) */}
                 <div className="flex items-center gap-2 min-w-[140px]">
                   {/* Badge tipo */}
-                  <span className={`shrink-0 text-[8px] sm:text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${param.locked ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' :
-                    param.own ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                      'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                  <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${param.locked ? 'bg-brand/15 text-brand-text border border-brand/30' :
+                    param.own ? 'bg-warn/10 text-warn border border-warn/30' :
+                      'bg-surface-3 text-ink-subtle border border-line'
                     }`}>
                     {param.locked ? 'UTM*' : param.own ? 'Autometrics' : 'UTM'}
                   </span>
@@ -115,11 +115,11 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
                   />
                 </div>
 
-                <span className={`text-slate-500 shrink-0 hidden sm:inline`}>=</span>
+                <span className="text-ink-faint shrink-0 hidden sm:inline">=</span>
                 
                 {/* Value Section */}
                 <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
-                  <span className={`text-slate-500 shrink-0 sm:hidden block`}>=</span>
+                  <span className="text-ink-faint shrink-0 sm:hidden block">=</span>
                   <input
                     type="text"
                     value={param.value}
@@ -129,7 +129,7 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
                   />
                   {/* Remove */}
                   {!param.locked && (
-                    <button onClick={() => removeParam(idx)} aria-label={`Remover o parâmetro ${param.key || idx + 1}`} className="shrink-0 p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-auto">
+                    <button onClick={() => removeParam(idx)} aria-label={`Remover o parâmetro ${param.key || idx + 1}`} className="shrink-0 p-1.5 rounded text-ink-subtle hover:text-neg hover:bg-neg/10 transition-colors ml-auto">
                       <Trash2 size={14} aria-hidden="true" />
                     </button>
                   )}
@@ -141,20 +141,20 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
 
         {/* LEGENDA */}
         <div className="flex flex-wrap gap-3 mb-5 text-[10px]">
-          <span className="flex items-center gap-1"><span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded font-bold">UTM*</span> <span className={textMuted}>Obrigatório para o Autometrics</span></span>
-          <span className="flex items-center gap-1"><span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold">Autometrics</span> <span className={textMuted}>Identificador do clique para o rastreamento do Autometrics</span></span>
-          <span className="flex items-center gap-1"><span className="bg-slate-500/20 text-slate-400 border border-slate-500/30 px-1.5 py-0.5 rounded font-bold">UTM</span> <span className={textMuted}>Campo opcional (pode editar ou remover)</span></span>
+          <span className="flex items-center gap-1"><span className="bg-brand/15 text-brand-text border border-brand/30 px-1.5 py-0.5 rounded font-medium">UTM*</span> <span className={textMuted}>Obrigatório para o Autometrics</span></span>
+          <span className="flex items-center gap-1"><span className="bg-warn/10 text-warn border border-warn/30 px-1.5 py-0.5 rounded font-medium">Autometrics</span> <span className={textMuted}>Identificador do clique para o rastreamento do Autometrics</span></span>
+          <span className="flex items-center gap-1"><span className="bg-surface-3 text-ink-subtle border border-line px-1.5 py-0.5 rounded font-medium">UTM</span> <span className={textMuted}>Campo opcional (pode editar ou remover)</span></span>
         </div>
       </div>
 
       {/* URL GERADA */}
       <div className={`rounded-xl p-6 border ${bgCard}`}>
         <div className="flex items-center justify-between mb-3">
-          <p className={`text-sm font-bold ${textHead}`}>URL Final Gerada</p>
+          <p className={`text-sm font-medium ${textHead}`}>URL Final Gerada</p>
           <button
             onClick={copyUrl}
             disabled={!finalUrl}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shrink-0 ${urlCopied ? 'bg-emerald-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-30 disabled:cursor-not-allowed'
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors shrink-0 ${urlCopied ? 'bg-pos text-white' : 'bg-brand hover:bg-brand-hover text-white disabled:opacity-30 disabled:cursor-not-allowed'
               }`}
           >
             {urlCopied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
@@ -162,19 +162,18 @@ export function UrlBuilder({ isDark }: { isDark: boolean }) {
           </button>
         </div>
 
-        <div className={`rounded-xl p-4 font-mono text-xs break-all leading-relaxed border ${isDark ? 'bg-slate-950 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
-          }`}>
+        <div className={`rounded-xl p-4 font-mono text-xs break-all leading-relaxed border bg-surface-2 border-line text-ink-muted`}>
           {finalUrl || (
-            <span className="text-slate-500">Cole a URL base acima para ver o resultado aqui.</span>
+            <span className="text-ink-faint">Cole a URL base acima para ver o resultado aqui.</span>
           )}
         </div>
 
         {finalUrl && (
-          <div className={`mt-4 p-3 rounded-lg border ${isDark ? 'bg-blue-500/5 border-blue-500/20' : 'bg-blue-50 border-blue-200'}`}>
-            <p className="text-xs text-blue-400 font-bold mb-1">📋 Onde usar esta URL:</p>
+          <div className={`mt-4 p-3 rounded-lg border bg-brand/5 border-brand/20`}>
+            <p className="text-xs text-brand-text font-medium mb-1">Onde usar esta URL:</p>
             <p className={`text-xs ${textMuted}`}>
               Esta URL vai no campo <strong>URL Final</strong> do seu anúncio no Google Ads.
-              Os valores entre chaves <code className={`${isDark ? 'bg-slate-800' : 'bg-slate-200'} px-1 rounded`}>{'{keyword}'}</code> serão substituídos automaticamente pelo Google no momento do clique.
+              Os valores entre chaves <code className="bg-surface-3 px-1 rounded">{'{keyword}'}</code> serão substituídos automaticamente pelo Google no momento do clique.
             </p>
           </div>
         )}

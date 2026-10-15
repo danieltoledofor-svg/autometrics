@@ -32,19 +32,20 @@ export const TRAFFIC: Record<string, string> = { pago: 'Anúncio', organico: 'Bu
 export const place = (v: any) => [v?.city, v?.region, v?.country].filter(Boolean).join(', ');
 export const path = (url: string) => { try { const u = new URL(url); return u.hostname.replace(/^www\./, '') + u.pathname; } catch { return url || ''; } };
 
+/** Estilo do guia visual (DESIGN.md): as cores vêm dos tokens e seguem o tema sozinhas. */
 export function styles(isDark: boolean) {
-  const muted = isDark ? 'text-slate-400' : 'text-slate-500';
-  const line = isDark ? 'border-slate-800' : 'border-slate-200';
-  const soft = isDark ? 'bg-slate-950' : 'bg-slate-50';
+  const muted = 'text-ink-subtle';
+  const line = 'border-line';
+  const soft = 'bg-surface-2';
   return {
     isDark, muted, line, soft,
-    card: isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200',
-    head: isDark ? 'text-white' : 'text-slate-900',
-    th: `px-3 py-2 text-[10.5px] uppercase tracking-wider font-bold ${muted} ${soft} whitespace-nowrap border-b ${line}`,
+    card: 'bg-surface-1 border-line',
+    head: 'text-ink',
+    th: `px-3 py-2 text-xs font-medium ${muted} ${soft} whitespace-nowrap border-b ${line}`,
     td: `px-3 py-2 text-[13px] border-b ${line}`,
-    title: `text-[11px] uppercase tracking-wider font-extrabold ${muted}`,
-    tabOn: isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-900',
-    field: `rounded-lg border ${line} ${soft} ${isDark ? 'text-white' : 'text-slate-900'} px-2 py-1.5 text-[13px] outline-none focus:border-indigo-500`,
+    title: 'text-sm font-medium text-ink',
+    tabOn: 'bg-surface-3 text-ink',
+    field: `rounded-lg border ${line} bg-surface-2 text-ink px-2 py-1.5 text-[13px] outline-none focus:border-brand`,
   };
 }
 export type Ui = ReturnType<typeof styles>;

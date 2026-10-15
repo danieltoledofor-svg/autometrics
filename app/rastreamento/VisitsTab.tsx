@@ -13,9 +13,9 @@ import { api, qty, money, when, clock, lasted, place, path, DEVICE, TRAFFIC, typ
  */
 
 const REACHED: Record<string, { label: string; cls: string }> = {
-  venda: { label: 'Venda', cls: 'bg-emerald-500/15 text-emerald-500' },
-  checkout: { label: 'Checkout', cls: 'bg-amber-500/15 text-amber-500' },
-  video: { label: 'Segunda página', cls: 'bg-indigo-500/15 text-indigo-400' },
+  venda: { label: 'Venda', cls: 'bg-pos/10 text-pos' },
+  checkout: { label: 'Checkout', cls: 'bg-warn/10 text-warn' },
+  video: { label: 'Segunda página', cls: 'bg-brand/15 text-brand-text' },
   entrada: { label: 'Só a entrada', cls: '' },
 };
 /** Nome simples de cada campo que chega na URL do anúncio. */
@@ -68,7 +68,7 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
   };
 
   const { card, head, muted, line, th, td, title, field } = ui;
-  const chip = (on: boolean) => `px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-colors ${on ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : `${line} ${muted} hover:text-indigo-400`}`;
+  const chip = (on: boolean) => `px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${on ? 'bg-surface-3 border-line-strong text-ink' : `${line} ${muted} hover:text-ink`}`;
   const info = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-3 py-1 text-[13px]"><span className={muted}>{label}</span><span className={`${head} text-right break-all`}>{value || <span className={muted}>—</span>}</span></div>
   );
@@ -77,7 +77,7 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
     <div ref={detailRef} tabIndex={-1} aria-label="Detalhe da visita" className={`${card} border rounded-xl p-4 space-y-4 scroll-mt-4 focus:outline-none`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className={`text-sm font-bold ${head}`}>Visita de {when(open.created_at)}{place(open) ? ` · ${place(open)}` : ''}</div>
+          <div className={`text-sm font-medium ${head}`}>Visita de {when(open.created_at)}{place(open) ? ` · ${place(open)}` : ''}</div>
           <div className={`text-xs mt-0.5 ${muted}`}>{open.campaign || 'Sem campanha ligada'}</div>
         </div>
         <button onClick={() => setOpen(null)} aria-label="Fechar a visita" className={muted}><X size={18} aria-hidden="true" /></button>
@@ -105,7 +105,7 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
           {info('Navegador', open.browser)}
           {info('Tela', open.screen ? open.screen.replace('x', ' × ') : '')}
           {info('Idioma', open.language)}
-          {open.is_bot && <div className="text-xs text-amber-500 mt-1">Parece um robô, não uma pessoa.</div>}
+          {open.is_bot && <div className="text-xs text-warn mt-1">Parece um robô, não uma pessoa.</div>}
         </div>
         <div>
           <div className={title}>Na página</div>
@@ -117,7 +117,7 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
             {open.timeline.map((t: any, i: number) => (
               <div key={i} className="text-[13px] flex gap-2">
                 <span className={`tabular-nums shrink-0 ${muted}`}>{clock(t.at)}</span>
-                <span className={`min-w-0 break-all ${t.kind === 'sale' ? 'text-emerald-500 font-bold' : t.kind === 'checkout' || t.kind === 'saida' ? 'text-amber-500' : head}`}>
+                <span className={`min-w-0 break-all ${t.kind === 'sale' ? 'text-pos font-medium' : t.kind === 'checkout' || t.kind === 'saida' ? 'text-warn' : head}`}>
                   {t.kind === 'pagina' ? `abriu ${path(t.text)}`
                     : t.kind === 'saida' ? `saiu para comprar em ${path(t.text)}`
                     : t.kind === 'checkout' ? `checkout${t.text ? ` na ${t.text}` : ''}`
@@ -169,7 +169,7 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
         {loading && <Loader2 size={14} aria-hidden="true" className={`animate-spin ${muted}`} />}
       </div>
 
-      <div aria-live="polite">{error && <div className={`${card} border rounded-xl p-4 text-sm text-rose-500`}>{error}</div>}</div>
+      <div aria-live="polite">{error && <div className={`${card} border rounded-xl p-4 text-sm text-neg`}>{error}</div>}</div>
       {detail}
 
       {data && (
@@ -193,13 +193,13 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
               <tbody>
                 {data.visits.map((v: any) => (
                   <tr key={v.click_id} onClick={() => show(v.click_id)}
-                    className={`cursor-pointer transition-colors ${open?.click_id === v.click_id ? (ui.isDark ? 'bg-slate-800/60' : 'bg-indigo-50') : ui.isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}`}>
+                    className={`cursor-pointer transition-colors ${open?.click_id === v.click_id ? 'bg-surface-3' : 'hover:bg-surface-2'}`}>
                     <td className={`${td} tabular-nums whitespace-nowrap`}>{opening === v.click_id ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : (
                       <button type="button" onClick={e => { e.stopPropagation(); show(v.click_id); }} aria-label={`Ver a visita de ${when(v.created_at)}`}
-                        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{when(v.created_at)}</button>
+                        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{when(v.created_at)}</button>
                     )}</td>
                     <td className={`${td} ${head} max-w-[200px] truncate`} title={place(v)}>{place(v) || <span className={muted}>—</span>}</td>
-                    <td className={`${td} whitespace-nowrap`}>{[DEVICE[v.device], v.os, v.browser].filter(Boolean).join(' · ') || <span className={muted}>—</span>}{v.is_bot ? <span className="text-amber-500"> · robô</span> : null}</td>
+                    <td className={`${td} whitespace-nowrap`}>{[DEVICE[v.device], v.os, v.browser].filter(Boolean).join(' · ') || <span className={muted}>—</span>}{v.is_bot ? <span className="text-warn"> · robô</span> : null}</td>
                     <td className={`${td} whitespace-nowrap`}>{TRAFFIC[v.traffic] || <span className={muted}>—</span>}</td>
                     <td className={`${td} ${head} max-w-[220px] truncate`} title={v.keyword || ''}>{v.keyword || <span className={muted}>—</span>}</td>
                     <td className={`${td} max-w-[220px] truncate`} title={v.campaign}>{v.campaign || <span className={muted}>—</span>}</td>
@@ -207,7 +207,7 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
                     <td className={`${td} text-right tabular-nums whitespace-nowrap`}>{v.seconds ? lasted(v.seconds) : <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>
                       {v.reached === 'entrada' ? <span className={muted}>Só a entrada</span>
-                        : <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${REACHED[v.reached].cls}`}>{REACHED[v.reached].label}{v.sale ? ` ${money(v.sale.amount, v.sale.currency)}` : ''}</span>}
+                        : <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${REACHED[v.reached].cls}`}>{REACHED[v.reached].label}{v.sale ? ` ${money(v.sale.amount, v.sale.currency)}` : ''}</span>}
                     </td>
                   </tr>
                 ))}
@@ -219,9 +219,9 @@ export function VisitsTab({ ui, period, campaigns }: { ui: Ui; period: string; c
             <span>Localização por IP: <a href="https://db-ip.com" target="_blank" rel="noreferrer" className="hover:underline">DB-IP</a>. A cidade é aproximada.</span>
             {data.pages > 1 && (
               <span className="flex items-center gap-2">
-                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="font-bold disabled:opacity-40 hover:text-indigo-400">Anterior</button>
+                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="font-medium disabled:opacity-40 hover:text-ink">Anterior</button>
                 <span className="tabular-nums">{page + 1} de {data.pages}</span>
-                <button disabled={page + 1 >= data.pages} onClick={() => setPage(p => p + 1)} className="font-bold disabled:opacity-40 hover:text-indigo-400">Próxima</button>
+                <button disabled={page + 1 >= data.pages} onClick={() => setPage(p => p + 1)} className="font-medium disabled:opacity-40 hover:text-ink">Próxima</button>
               </span>
             )}
           </div>
