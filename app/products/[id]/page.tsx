@@ -16,6 +16,7 @@ import { applyTheme } from '@/lib/theme';
 import { useDayInput, isValidDay } from '@/lib/useDayInput';
 import Link from 'next/link';
 import { Logo } from '@/app/components/Logo';
+import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
 import { Inter } from 'next/font/google';
 
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
@@ -675,10 +676,12 @@ export default function ProductDetailPage() {
             <h1 className={`text-sm font-semibold truncate ${textHead}`}>{product.name}</h1>
             <span className={`text-[11px] ${textMuted}`}>{product.platform}</span>
           </div>
-          <span className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border ${headerStatus.badge}`} title={headerStatus.hint}>
-            {headerStatus.key === 'ativo' ? <PlayCircle size={10} aria-hidden="true" /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={10} aria-hidden="true" /> : <PauseCircle size={10} aria-hidden="true" />}
-            {headerStatus.label}
-          </span>
+          <CampaignStatusToggle product={product} isDark={isDark} tokens onChanged={patch => setProduct((p: any) => ({ ...p, ...patch }))}
+            badge={{
+              className: `flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border ${headerStatus.badge}`,
+              hint: headerStatus.hint,
+              content: <>{headerStatus.key === 'ativo' ? <PlayCircle size={10} aria-hidden="true" /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={10} aria-hidden="true" /> : <PauseCircle size={10} aria-hidden="true" />} {headerStatus.label}</>,
+            }} />
           <button onClick={toggleTheme} aria-label={isDark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'} className="flex-shrink-0 p-1.5 rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink">
             {isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
           </button>
@@ -697,9 +700,12 @@ export default function ProductDetailPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink break-words">{product.name}</h1>
-              <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border ${headerStatus.badge}`} title={headerStatus.hint}>
-                {headerStatus.key === 'ativo' ? <PlayCircle size={12} aria-hidden="true" /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={12} aria-hidden="true" /> : <PauseCircle size={12} aria-hidden="true" />} {headerStatus.label}
-              </span>
+              <CampaignStatusToggle product={product} isDark={isDark} tokens onChanged={patch => setProduct((p: any) => ({ ...p, ...patch }))}
+                badge={{
+                  className: `flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border ${headerStatus.badge}`,
+                  hint: headerStatus.hint,
+                  content: <>{headerStatus.key === 'ativo' ? <PlayCircle size={12} aria-hidden="true" /> : headerStatus.key === 'suspenso' ? <AlertTriangle size={12} aria-hidden="true" /> : <PauseCircle size={12} aria-hidden="true" />} {headerStatus.label}</>,
+                }} />
             </div>
             <div className={`flex items-center gap-3 text-sm ${textMuted} mt-1`}><span className="flex items-center gap-1"><ExternalLink size={12} aria-hidden="true" /> {product.platform}</span><span>•</span><span className={`font-mono text-xs px-1 rounded flex items-center gap-1 bg-surface-2`}><Hash size={10} aria-hidden="true" /> {product.google_ads_campaign_id || 'N/A'}</span></div>
           </div>

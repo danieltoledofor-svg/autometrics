@@ -14,6 +14,11 @@ interface Props {
   tokens?: boolean;
   /** Recebe os campos atualizados do produto depois da mudança. */
   onChanged: (patch: Record<string, any>) => void;
+  /**
+   * Modo selo: o próprio selo de status ("Ativo", "Pausado") vira o botão.
+   * Quando não há o que pausar ou ativar, o selo aparece sem ação.
+   */
+  badge?: { className: string; content: React.ReactNode; hint?: string };
 }
 
 /**
@@ -22,12 +27,14 @@ interface Props {
  * Decide pelo google_status (e não pelo "Ativo/Pausado/Suspenso" exibido):
  * campanha suspensa pelo Google continua ENABLED e pode ser pausada.
  */
-export function CampaignStatusToggle({ product, isDark, onChanged, tokens = false }: Props) {
+export function CampaignStatusToggle({ product, isDark, onChanged, tokens = false, badge }: Props) {
   const [loading, setLoading] = useState(false);
 
   const campaignId = product.google_ads_campaign_id;
   const status = String(product.google_status || '').toUpperCase();
-  if (!campaignId || campaignId === 'undefined' || SEM_ACAO.has(status)) return null;
+  if (!campaignId || campaignId === 'undefined' || SEM_ACAO.has(status)) {
+    return badge ? <span className={badge.className} title={badge.hint}>{badge.content}</span> : null;
+  }
 
   const isPaused = status === 'PAUSADA' || (!status && product.status === 'paused');
   const target = isPaused ? 'ENABLED' : 'PAUSED';
@@ -62,6 +69,19 @@ export function CampaignStatusToggle({ product, isDark, onChanged, tokens = fals
       setLoading(false);
     }
   };
+
+  if (badge) {
+    const acao = isPaused ? 'Clique para ativar' : 'Clique para pausar';
+    return (
+      <button type="button" onClick={handleClick} disabled={loading}
+        className={`${badge.className} cursor-pointer transition-[filter,opacity] hover:ring-1 hover:ring-current disabled:opacity-60`}
+        title={`${badge.hint ? `${badge.hint} — ` : ''}${acao} no Google Ads`}
+        aria-label={`${isPaused ? 'Ativar' : 'Pausar'} ${product.name} no Google Ads`}>
+        {loading ? <><Loader2 size={12} aria-hidden="true" className="animate-spin" /> {isPaused ? 'Ativando…' : 'Pausando…'}</> : badge.content}
+        {!loading && (isPaused ? <Play size={10} aria-hidden="true" className="opacity-70" /> : <Pause size={10} aria-hidden="true" className="opacity-70" />)}
+      </button>
+    );
+  }
 
   const tone = tokens
     ? `${isPaused ? 'text-pos' : 'text-warn'} hover:bg-surface-2`

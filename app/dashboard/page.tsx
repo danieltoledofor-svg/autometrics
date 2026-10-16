@@ -20,6 +20,7 @@ import { saleMoney } from '@/app/components/SaleAlerts';
 import { closeAllSales, closeSale, usePendingSales } from '@/lib/saleAlerts';
 import { Logo } from '@/app/components/Logo';
 import { resolveCampaignStatus, resolveProductStatus, STATUS_SEVERITY, type CampaignStatus } from '@/lib/campaignStatus';
+import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
 import { QuickEntryModal, type QuickEntryTarget } from '@/app/components/QuickEntryModal';
 import { METRIC_SORTS, loadMetricSort, saveMetricSort, sortByMetric, type MetricSort } from '@/lib/metricSort';
 import { MAIN_BLOCK, blockName, blockOf } from '@/lib/campaignGroups';
@@ -235,7 +236,7 @@ export default function DashboardPage() {
     while (m_prod) {
       const { data } = await supabase
         .from('products')
-        .select('id, currency, name, google_ads_campaign_name, account_name, mcc_name, google_status, google_status_reasons, status')
+        .select('id, currency, name, google_ads_campaign_name, google_ads_campaign_id, account_name, mcc_name, google_status, google_status_reasons, status')
         .eq('user_id', userId)
         .range(p_prod * 1000, (p_prod + 1) * 1000 - 1);
 
@@ -697,12 +698,22 @@ export default function DashboardPage() {
   const quickEntryButton = (cmp: any, date: string) => (
     <button
       onClick={(e) => { e.stopPropagation(); setQuickEntry({ productId: cmp.productId, productName: cmp.name, accountCurrency: cmp.currency, date }); }}
-      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border border-line text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border bg-pos/10 text-pos border-pos/30 hover:bg-pos/20 transition-colors"
       title={`Lançar vendas de ${date.split('-').reverse().join('/')}`}
     >
       <FileText size={12} aria-hidden="true" /> Lançar
     </button>
   );
+
+  // Pausar/ativar no Google Ads, antes do nome da campanha.
+  const statusToggle = (cmp: any) => {
+    const product = cmp.productId && products.find(p => p.id === cmp.productId);
+    if (!product) return null;
+    return (
+      <CampaignStatusToggle product={product} isDark={isDark} tokens
+        onChanged={(patch) => setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...patch } : p))} />
+    );
+  };
 
   return (
     <div className={`${inter.className} min-h-screen font-sans flex ${bgMain}`}>
@@ -1082,6 +1093,7 @@ export default function DashboardPage() {
                               <td></td>
                               <td className="px-4 py-2 pl-14">
                                 <div className="flex items-center gap-2 flex-wrap">
+                                  {statusToggle(cmp)}
                                   {cmp.productId ? (
                                     <Link href={`/products/${cmp.productId}`} target="_blank" rel="noopener noreferrer" className="text-ink hover:text-brand-text hover:underline transition-colors">
                                       {cmp.name}
@@ -1182,7 +1194,8 @@ export default function DashboardPage() {
                           {(acc.campaignList || []).map((cmp: any) => (
                             <div key={cmp.name} className="px-6 py-2.5 border-b border-line bg-canvas/40">
                               <div className="flex items-start justify-between gap-2">
-                                <span className="text-[13px] break-words min-w-0 text-ink">
+                                <span className="-my-1 shrink-0">{statusToggle(cmp)}</span>
+                                <span className="text-[13px] break-words min-w-0 flex-1 text-ink">
                                   {cmp.productId ? (
                                     <Link href={`/products/${cmp.productId}`} className="hover:text-brand-text active:text-brand-text">
                                       {cmp.name}
