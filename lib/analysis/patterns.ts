@@ -3,6 +3,7 @@ import { MAIN_BLOCK, MAIN_BLOCK_NAME, blockOf, normalizeGroups, type CampaignGro
 import { addDays, todayIn, fetchAll } from './compute';
 import { audienceLabel, deviceLabel, formatMoney, keywordLabel } from './labels';
 import { resolveProductStatus } from '@/lib/campaignStatus';
+import { normalizeLocations } from '@/lib/geoNames';
 
 /**
  * Análise de IA entre campanhas parecidas — a parte dos números, sem IA.
@@ -276,7 +277,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
       byChunks(ids, (chunk, a, b) => ranged(db.from('audiences').select('product_id, date, audience_type, audience_name, cost, clicks, conversions').in('product_id', chunk).in('audience_type', ['Age', 'Gender'])).range(a, b)),
       byChunks(ids, (chunk, a, b) => ranged(db.from('locations').select('product_id, date, location_name, cost, clicks, conversions').in('product_id', chunk)).range(a, b)),
     ]);
-    const ages = people.filter(r => r.audience_type === 'Age' && sane(r)), genders = people.filter(r => r.audience_type === 'Gender' && sane(r)), locs = places.filter(sane);
+    const ages = people.filter(r => r.audience_type === 'Age' && sane(r)), genders = people.filter(r => r.audience_type === 'Gender' && sane(r)), locs = normalizeLocations(places).filter(sane);
     [ages, genders, locs].forEach(shareSales);
     const group = (rows: any[], nameOfRow: (r: any) => string, limit: number) => {
       const m = new Map<string, { cost: number; conv: number; campaigns: Set<string> }>();

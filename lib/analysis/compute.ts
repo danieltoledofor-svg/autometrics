@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/googleAds/server';
 import { audienceLabel, deviceLabel, keywordLabel, TERM_MATCH_TAG, ASSET_TAG, formatMoney } from './labels';
+import { normalizeLocations } from '@/lib/geoNames';
 
 /**
  * Leitura da campanha pelos números — sem IA.
@@ -483,7 +484,7 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
 
   // ── 5. Locais ───────────────────────────────────────────────────────────
   const locAcc = new Map<string, Acc>();
-  for (const l of locations) {
+  for (const l of normalizeLocations(locations)) {
     const k = String(l.location_name || '');
     if (!locAcc.has(k)) locAcc.set(k, newAcc());
     addTo(locAcc.get(k)!, l.date, d3start, l);

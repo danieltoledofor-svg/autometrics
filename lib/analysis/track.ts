@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/googleAds/server';
 import { addDays } from './compute';
 import { recordLearning } from './memory';
+import { countryLabel, normalizeLocations } from '@/lib/geoNames';
 
 /**
  * Acompanhamento das sugestões.
@@ -145,7 +146,11 @@ async function itemWindow(s: any, from: string, to: string) {
   else if (s.item === 'publicos') {
     const [type, code] = String(s.target_key).split('|');
     rows = (await base('audiences').eq('audience_type', type).eq('audience_name', code)).data || [];
-  } else if (s.item === 'locais') rows = (await base('locations').eq('location_name', s.target_key)).data || [];
+  } else if (s.item === 'locais') {
+    // Dias antigos podem ter o país gravado como "País 2554" ou em inglês.
+    const all = (await base('locations', 'date, location_name, impressions, cost, conversions')).data || [];
+    rows = normalizeLocations(all as any[]).filter(r => r.location_name === countryLabel(s.target_key));
+  }
   const cost = rows.reduce((a, r) => a + num(r.cost), 0);
   const conv = rows.reduce((a, r) => a + num(r.conversions), 0);
   return { cost, conv, cost_day: cost / days };

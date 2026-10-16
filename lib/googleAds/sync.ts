@@ -8,6 +8,7 @@ import type { ActionCounts } from '@/lib/metrics/dimension';
 import { syncEntities, EntitySyncResult } from './entities';
 import { syncAssets } from './assets';
 import { syncClicks } from './clicks';
+import { GEO_NAMES } from '@/lib/geoNames';
 
 /**
  * Coleta direta pela Google Ads API.
@@ -74,15 +75,7 @@ const DEEP_DAYS_BACK = 3;
 const TOP_SEARCH_TERMS = 200;
 const INGEST_CONCURRENCY = 4;
 
-const GEO_NAMES: Record<string, string> = {
-  '2076': 'Brasil', '2840': 'Estados Unidos', '2826': 'Reino Unido',
-  '2124': 'Canadá', '2036': 'Austrália', '2250': 'França',
-  '2276': 'Alemanha', '2724': 'Espanha', '2380': 'Itália',
-  '2392': 'Japão', '2484': 'México', '2032': 'Argentina',
-  '2152': 'Chile', '2170': 'Colômbia', '2604': 'Peru',
-  '2620': 'Portugal', '2703': 'Eslováquia', '2528': 'Países Baixos',
-  '2056': 'Bélgica', '2040': 'Áustria', '2616': 'Polônia',
-};
+// Países fora da lista são buscados no Google (nome em inglês).
 const geoCache = new Map<string, string>(Object.entries(GEO_NAMES));
 
 // ── datas ───────────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import type { CustomColumnsApi } from '@/app/components/metrics/useCustomColumns
 import type { CampaignDay, DayRow } from '@/lib/metrics/dimension';
 import { useGoogleControls, type GoogleControl } from './useGoogleControls';
 import { BidCell } from './BidCell';
+import { countryId, normalizeLocations } from '@/lib/geoNames';
 import { KeywordForm, LocationsBox, ResultLine, RowAction, useManage, type Result } from './ManageBox';
 
 /**
@@ -160,6 +161,7 @@ export function SegmentTab(props: Props) {
 
   const scoped = useMemo(() => {
     if (kind === 'audiences') return rows.filter(r => r.audience_type === audienceType);
+    if (kind === 'locations') return normalizeLocations(rows);
     if (kind !== 'search_terms') return rows;
     // Enquanto o script roda junto, o mesmo dia pode ter o termo sem
     // palavra-chave (script) e com (API). Vale o da API.
@@ -252,8 +254,11 @@ export function SegmentTab(props: Props) {
   const BID_KIND: Record<string, string> = { Age: 'idade', Gender: 'genero', Device: 'aparelho', Income: 'renda' };
   const controlOf = (i: DimItem): GoogleControl | undefined => {
     if (kind === 'audiences') return google.controls.find(c => c.kind === BID_KIND[audienceType] && c.key === i.raw);
+    // Pelo ID do país (o critério de local da campanha usa o mesmo número);
+    // o nome não serve: aqui está em português, no Google vem em inglês.
+    const id = countryId(i.raw);
     const name = String(i.raw || '').toLowerCase();
-    return google.controls.find(c => c.kind === 'local' && (c.label.toLowerCase() === name || c.label.toLowerCase().startsWith(`${name},`)));
+    return google.controls.find(c => c.kind === 'local' && (id ? c.key === id : c.label.toLowerCase() === name || c.label.toLowerCase().startsWith(`${name},`)));
   };
   if (kind !== 'search_terms' && google.allowed && !google.loading && !google.error && (kind === 'locations' || BID_KIND[audienceType])) {
     dims.push({

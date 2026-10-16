@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { resolveCampaignStatus, resolveEffectiveStatus } from '@/lib/campaignStatus';
 import { mergeGoogleMetrics } from '@/lib/metrics/catalog';
 import { mergeAutoNotes } from '@/lib/googleAds/changeNotes';
+import { countryLabel } from '@/lib/geoNames';
 
 // Configuração do Cliente Supabase
 // Tenta usar a Service Role (Admin) se disponível, senão usa a Anon
@@ -506,7 +507,8 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
   if (locations && locations.length > 0) {
     const locPayload = locations.map((loc: any) => ({
       product_id: product.id, date: date, 
-      location_name: loc.n || loc.name,
+      // Mesmo nome para o script e a API: "Nova Zelândia", nunca "País 2554" ou "New Zealand".
+      location_name: countryLabel(loc.n || loc.name),
       location_type: loc.tp || loc.type,
       campaign_name: campaign_name, 
       impressions: loc.i ?? loc.impressions ?? 0, 

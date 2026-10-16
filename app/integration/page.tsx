@@ -14,6 +14,7 @@ import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
+import { GEO_NAMES } from '@/lib/geoNames';
 import { GoogleAdsApiPanel } from './GoogleAdsApiPanel';
 import { Inter } from 'next/font/google';
 
@@ -498,15 +499,7 @@ function processCampaignRow(row, dateString, account, accountStatus) {
 
     // 4. Localizações — geographic_view
     try {
-      const GEO_NAMES = {
-        '2076': 'Brasil', '2840': 'Estados Unidos', '2826': 'Reino Unido',
-        '2124': 'Canadá', '2036': 'Austrália', '2250': 'França',
-        '2276': 'Alemanha', '2724': 'Espanha', '2380': 'Itália',
-        '2392': 'Japão', '2484': 'México', '2032': 'Argentina',
-        '2152': 'Chile', '2170': 'Colômbia', '2604': 'Peru',
-        '2620': 'Portugal', '2703': 'Eslováquia', '2528': 'Países Baixos',
-        '2056': 'Bélgica', '2040': 'Áustria', '2616': 'Polônia'
-      };
+      const GEO_NAMES = ${JSON.stringify(GEO_NAMES)};
       const locQuery = \`
         SELECT campaign.id, geographic_view.country_criterion_id, geographic_view.location_type,
                metrics.impressions, metrics.clicks, metrics.cost_micros
