@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 backup_notas_antes.json
+
+# Teste por fora do Jev (scripts/jev-teste.mjs) — tem termos e números de clientes
+jev-teste-respostas.json
+jev-teste-resultado.md
