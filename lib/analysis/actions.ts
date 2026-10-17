@@ -34,12 +34,39 @@ export const ACTIONS_BY_ITEM: Record<ItemKey, string[]> = {
   pagina: ['ajuste_pagina'],
 };
 
+/**
+ * Alterações que cortam o item de vez, e a alteração branda que fica no lugar.
+ * Só valem para o que gasta sem vender há dias: nenhuma venda em 7 dias e
+ * gasto também antes dos últimos 3 (item novo ainda não tem histórico).
+ * Termo, público ou local que vendeu fica com o ajuste — a IA não decide isso.
+ */
+const STRONG: Record<string, string> = {
+  negativa: 'lance_palavra',
+  excluir_publico: 'ajuste_publico',
+  excluir_local: 'ajuste_local',
+};
+
+function spendsWithoutSelling(row: Row): boolean {
+  return row.conv3 <= 0 && row.conv7 <= 0 && row.cost7 - row.cost3 > 0;
+}
+
+/** Alterações que a IA pode escolher para este item, já sem as que cortam o que vende. */
+export function allowedActions(item: ItemKey, row: Row): string[] {
+  const all = ACTIONS_BY_ITEM[item];
+  return spendsWithoutSelling(row) ? all : all.filter(a => !STRONG[a]);
+}
+
+/** Troca a alteração que corta o item pela branda quando o item vendeu ou ainda é novo. */
+export function guardAction(item: ItemKey, row: Row, action: string): string {
+  return STRONG[action] && !spendsWithoutSelling(row) ? STRONG[action] : action;
+}
+
 /** Escolha do código quando a IA não responde. */
 export function defaultAction(item: ItemKey, row: Row): string {
-  if (item === 'termos') return row.conv3 > 0 ? 'lance_palavra' : 'negativa';
+  if (item === 'termos') return guardAction(item, row, 'negativa');
   if (item === 'palavras_chave') return row.conv7 > 0 ? 'lance_palavra' : 'pausar_palavra';
   if (item === 'publicos') return 'ajuste_publico';
-  if (item === 'locais') return row.conv7 > 0 ? 'ajuste_local' : 'excluir_local';
+  if (item === 'locais') return guardAction(item, row, 'excluir_local');
   if (item === 'anuncios') return row.conv7 > 0 ? 'trocar_texto' : 'pausar_anuncio';
   if (item === 'sitelinks') return 'trocar_sitelink';
   return ACTIONS_BY_ITEM[item][0];
@@ -50,7 +77,7 @@ export function templateText(item: ItemKey, action: string, row: Row, keyword?: 
   const q = `"${row.label}"`;
   switch (action) {
     case 'negativa': return `Negativa exata ${q}${keyword ? ` (acionado por ${keyword})` : ''}`;
-    case 'lance_palavra': return item === 'termos' && keyword ? `Lance da palavra-chave ${keyword}, que aciona ${q}` : `Lance da palavra-chave ${row.label}`;
+    case 'lance_palavra': return item === 'termos' ? (keyword ? `Lance da palavra-chave ${keyword}, que aciona ${q}` : `Lance da palavra-chave que aciona ${q}`) : `Lance da palavra-chave ${row.label}`;
     case 'pausar_palavra': return `Pausa da palavra-chave ${row.label}`;
     case 'ajuste_dispositivo': return `Ajuste de lance no dispositivo ${row.label.toLowerCase()}`;
     case 'ajuste_publico': return `Ajuste de lance negativo na faixa ${q}`;

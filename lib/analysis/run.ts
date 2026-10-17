@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { supabaseAdmin } from '@/lib/googleAds/server';
 import { aiEnabled, askJson } from '@/lib/ai/openrouter';
 import { computeAnalysis, addDays, todayIn, ITEMS, worst, type Computed, type Item, type ItemKey, type Row, type Status } from './compute';
-import { ACTIONS, ACTIONS_BY_ITEM, defaultAction, templateText, languageProblems } from './actions';
+import { ACTIONS, allowedActions, defaultAction, guardAction, templateText, languageProblems } from './actions';
 import { situationFor, learningsFor, campaignHistory } from './memory';
 import { detectApplied, evaluateApplied, markPageApplied } from './track';
 import { analyzePage, fetchPageText, landingUrl, pageHash, pageStatus, type PageResult } from './page';
@@ -124,6 +124,18 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
   // Sugestão aberta que ficou com o texto padrão (a IA estava desligada ou
   // falhou quando ela nasceu): a IA reescreve junto com os outros textos.
   const rowsNow = new Map(c.items.flatMap(it => it.rows.map(r => [`${it.key}|${r.key}`, r] as const)));
+  // Sugestão aberta que corta o que vendeu (negativar termo, excluir público ou
+  // local): volta para o ajuste, com o texto padrão — a IA reescreve logo abaixo.
+  for (const s of existing || []) {
+    if (s.status !== 'aberta' || s.item === 'pagina' || !s.baseline?.row) continue;
+    const item = s.item as ItemKey;
+    const row = rowsNow.get(`${item}|${s.target_key}`) || s.baseline.row;
+    const action = guardAction(item, row, s.action);
+    if (action === s.action) continue;
+    const text = templateText(item, action, s.baseline.row, s.baseline.keyword || null);
+    const { error: fixError } = await db.from('analysis_suggestions').update({ action, text, updated_at: new Date().toISOString() }).eq('id', s.id).eq('status', 'aberta');
+    if (!fixError) Object.assign(s, { action, text });
+  }
   const retext: (Candidate & { suggestionId: string; text: string })[] = [];
   for (const s of existing || []) {
     if (s.status !== 'aberta' || s.item === 'pagina' || !s.baseline?.row) continue;
@@ -317,7 +329,7 @@ async function writeTexts(c: Computed, items: Item[], candidates: Candidate[], u
       ? `CPA 3d ${money(r.cpa3!)} (${Math.round((r.pct || 0) * 100)}% ${c.reference.of}), CPA 7d ${n(r.cpa7, money)}, gasto 3d ${money(r.cost3)}, vendas 3d ${r.conv3}`
       : `gasto 3d ${money(r.cost3)} sem venda (${Math.round((r.pct || 0) * 100)}% ${c.reference.of}), gasto 7d ${money(r.cost7)}, vendas 7d ${r.conv7}`;
     const extra = r.extra ? Object.entries(r.extra).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => `${k}: ${typeof v === 'number' && v < 1 && v > 0 ? pctf(v) : v}`).join(', ') : '';
-    const allowed = ACTIONS_BY_ITEM[cd.item].map(a => `${a} (${ACTIONS[a]})`).join(', ');
+    const allowed = allowedActions(cd.item, cd.row).map(a => `${a} (${ACTIONS[a]})`).join(', ');
     return `- id ${cd.id} · ${ITEMS.find(i => i.key === cd.item)!.title} · ${r.label}${r.tag ? ` [${r.tag}]` : ''}${cd.keyword ? ` · acionado pela palavra-chave ${keywordText(cd.keyword)}` : ''} · ${r.status} · ${nums}${rateio}${extra ? ` · ${extra}` : ''}\n  permitidas: ${allowed}`;
   }).join('\n');
 
@@ -356,7 +368,7 @@ ${learnings.join('\n') || '(nenhum ainda)'}${adjustments ? `\n\n${adjustments}` 
   for (const p of Array.isArray(raw?.pontos) ? raw.pontos : []) {
     const cd = candidates.find(x => x.id === p?.id);
     if (!cd) continue;
-    const action = ACTIONS_BY_ITEM[cd.item].includes(p.acao) ? p.acao : defaultAction(cd.item, cd.row);
+    const action = allowedActions(cd.item, cd.row).includes(p.acao) ? p.acao : defaultAction(cd.item, cd.row);
     const text = String(p.texto || '').trim().slice(0, 200);
     if (text && !languageProblems(text).length) out.set(cd.id, { action, text });
     else out.set(cd.id, { action, text: templateText(cd.item, action, cd.row, cd.keyword ? keywordText(cd.keyword) : null) });
