@@ -381,7 +381,16 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
         <div key={s.id} className={`rounded-r-lg border-l-[3px] border-brand ${soft} px-3 py-2`}>
           <div className="flex flex-wrap items-start gap-2">
             <div className="flex-1 min-w-[220px]">
-              <div className={`text-[10.5px] font-medium ${textMuted}`}>✦ Ponto de alteração · {s.target_label}</div>
+              <div className={`text-[10.5px] font-medium ${textMuted} flex flex-wrap items-center gap-1.5`}>
+                <span>✦ Ponto de alteração · {s.target_label}</span>
+                {/* Jev (lib/ai/jev.ts): opinião rápida se dá para esperar o item voltar ao normal sozinho. */}
+                {s.status === 'aberta' && s.baseline?.jev && (
+                  <span title="Opinião do Jev, um modelo rápido treinado para decidir. No teste, dos itens que voltaram ao normal sozinhos, ele mandou esperar em 73%."
+                    className={`px-1.5 py-px rounded ${s.baseline.jev.choice === 'esperar' ? 'bg-surface-3 text-ink-subtle' : 'bg-neg/10 text-neg'}`}>
+                    {s.baseline.jev.choice === 'esperar' ? 'Jev: pode esperar uns dias' : 'Jev: mexer agora'} · {Math.round(s.baseline.jev.confidence * 100)}%
+                  </span>
+                )}
+              </div>
               <div className={`text-[13px] text-brand-text`}>{s.text}</div>
             </div>
             {s.status === 'aberta' && (

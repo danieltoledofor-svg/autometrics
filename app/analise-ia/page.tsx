@@ -61,8 +61,10 @@ export default function PatternsPage() {
   const [from, setFrom] = useState(dayStr(-7));
   const [to, setTo] = useState(dayStr(-1));
   const [ready, setReady] = useState(false);
+  // opts: só as opções dos filtros, lidas ao abrir. data: a análise, só quando a pessoa pede.
+  const [opts, setOpts] = useState<any>(null);
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [reading, setReading] = useState<any>(null);
   const [asking, setAsking] = useState(false);
@@ -96,30 +98,39 @@ export default function PatternsPage() {
   const datesOk = !custom || (validDay(from) && validDay(to));
   const query = `tag=${encodeURIComponent(tag)}&period=${period}&blocks=${encodeURIComponent(blocks.join(','))}&mcc=${encodeURIComponent(mcc)}${custom ? `&from=${from}&to=${to}` : ''}`;
   const selection = { tag, period, blocks: blocks.join(','), mcc, ...(custom ? { from, to } : {}) };
-  const readingKey = `${SAVED}_ia_${query}`;
 
-  const load = useCallback(async () => {
+  // Ao abrir e a cada troca de filtro, só as opções (rápido). A análise do
+  // conjunto e a leitura da IA saem apenas quando a pessoa pede.
+  const loadOptions = useCallback(async () => {
+    const id = ++request.current;
+    setError('');
+    const { ok, body } = await api(`/api/patterns?${query}&only=options`);
+    if (id !== request.current) return;
+    if (!ok) setError(body.error || 'Não foi possível carregar.');
+    else setOpts(body);
+  }, [query]);
+
+  const load = async () => {
     const id = ++request.current;
     setLoading(true);
     setError('');
     const { ok, body } = await api(`/api/patterns?${query}`);
     if (id !== request.current) return;
     if (!ok) setError(body.error || 'Não foi possível carregar.');
-    else setData(body);
+    else { setData(body); setOpts(body); }
     setLoading(false);
-  }, [query]);
+  };
 
   useEffect(() => {
     // Data pela metade enquanto é digitada: espera ficar completa.
     if (!authChecked || !ready || !datesOk) return;
     try { localStorage.setItem(SAVED, JSON.stringify({ tag, period, blocks, mcc, from, to })); } catch { /* sem armazenamento */ }
     setAiError('');
-    try {
-      const saved = JSON.parse(localStorage.getItem(readingKey) || 'null');
-      setReading(saved && saved.day === new Date().toDateString() ? saved.reading : null);
-    } catch { setReading(null); }
-    load();
-  }, [authChecked, ready, load, datesOk]); // eslint-disable-line react-hooks/exhaustive-deps
+    setData(null);
+    setReading(null);
+    setLoading(false);
+    loadOptions();
+  }, [authChecked, ready, loadOptions, datesOk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const askAi = async () => {
     setAsking(true);
@@ -128,7 +139,6 @@ export default function PatternsPage() {
     if (!ok) setAiError(body.error || 'A IA não respondeu.');
     else {
       setReading(body.reading);
-      try { localStorage.setItem(readingKey, JSON.stringify({ day: new Date().toDateString(), reading: body.reading })); } catch { /* sem armazenamento */ }
     }
     setAsking(false);
   };
@@ -150,7 +160,7 @@ export default function PatternsPage() {
   // Resposta que vale guardar vira uma decisão na memória da IA.
   const keep = async (i: number) => {
     const c = chat[i];
-    const { ok, body } = await api('/api/memory', { method: 'POST', body: JSON.stringify({ kind: 'decisao', title: c.q.slice(0, 160), content: c.a, scope: (data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) ? tag.toUpperCase() : '' }) });
+    const { ok, body } = await api('/api/memory', { method: 'POST', body: JSON.stringify({ kind: 'decisao', title: c.q.slice(0, 160), content: c.a, scope: (meta?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) ? tag.toUpperCase() : '' }) });
     if (!ok) setAskError(body.error || 'Não foi possível guardar.');
     else { setKept(k => [...k, i]); setMemoryTick(t => t + 1); }
   };
@@ -232,6 +242,7 @@ export default function PatternsPage() {
   if (!authChecked) return <div className="min-h-screen bg-black" />;
 
   const d = data && !data.empty ? data : null;
+  const meta = data || opts;
   const fewSales = d && d.totals.sales < 5;
   const toggleBlock = (id: string) => setBlocks(b => {
     const next = b.includes(id) ? b.filter(x => x !== id) : [...b, id];
@@ -276,11 +287,11 @@ export default function PatternsPage() {
         </div>
 
         {/* Conjunto, período e blocos */}
-        {(data?.options?.mccs || []).length > 1 && (
+        {(meta?.options?.mccs || []).length > 1 && (
           // No celular, uma linha que rola para o lado; a partir do tablet, quebra em várias linhas.
           <div className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0">
-            {[{ name: '', label: 'Todas as MCCs', count: data.options.mccs.reduce((n: number, m: any) => n + m.count, 0) },
-              ...data.options.mccs.map((m: any) => ({ name: m.name, label: m.name, count: m.count }))].map((m: any) => (
+            {[{ name: '', label: 'Todas as MCCs', count: meta.options.mccs.reduce((n: number, m: any) => n + m.count, 0) },
+              ...meta.options.mccs.map((m: any) => ({ name: m.name, label: m.name, count: m.count }))].map((m: any) => (
               <button key={m.name || 'todas'} onClick={() => setMcc(m.name)} aria-pressed={mcc === m.name}
                 className={`shrink-0 md:shrink text-left rounded-xl border px-3.5 py-2.5 min-w-[130px] transition-colors ${mcc === m.name ? chipOn : `${card} ${muted} hover:border-line-strong`}`}>
                 <div className={`text-[13px] font-medium ${mcc === m.name ? '' : head}`}>{m.label}</div>
@@ -292,13 +303,13 @@ export default function PatternsPage() {
 
         <div className={`${card} border rounded-xl p-3 space-y-3`}>
           <div className="flex flex-wrap items-center gap-2">
-            <select value={(data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) ? tag.toUpperCase() : tag ? '__outro' : ''}
+            <select value={(meta?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) ? tag.toUpperCase() : tag ? '__outro' : ''}
               onChange={e => { if (e.target.value !== '__outro') setTag(e.target.value); }}
               aria-label="Conjunto de campanhas"
               className={`rounded-lg border border-line-strong bg-surface-1 ${head} px-2 py-1.5 text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand`}>
               <option value="">Todas as campanhas</option>
-              {(data?.options?.tags || []).map((t: any) => <option key={t.tag} value={t.tag}>{t.tag} · {t.count}</option>)}
-              {tag && !(data?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) && <option value="__outro">Contém “{tag}”</option>}
+              {(meta?.options?.tags || []).map((t: any) => <option key={t.tag} value={t.tag}>{t.tag} · {t.count}</option>)}
+              {tag && !(meta?.options?.tags || []).some((t: any) => t.tag.toLowerCase() === tag.toLowerCase()) && <option value="__outro">Contém “{tag}”</option>}
             </select>
             <input defaultValue="" placeholder="ou um trecho do nome" aria-label="Trecho do nome da campanha (Enter para usar)" key={tag}
               onKeyDown={e => { if (e.key === 'Enter') setTag((e.target as HTMLInputElement).value.trim()); }}
@@ -323,10 +334,10 @@ export default function PatternsPage() {
                 className={`rounded-lg border ${line} ${soft} ${head} px-2 py-1.5 text-[13px] ${isDark ? '[&::-webkit-calendar-picker-indicator]:invert' : ''}`} />
             </div>
           )}
-          {(data?.options?.blocks || []).length > 1 && (
+          {(meta?.options?.blocks || []).length > 1 && (
             <div className="flex flex-wrap items-center gap-2">
               <span className={`text-xs font-medium ${muted}`}>Grupos que entram</span>
-              {data.options.blocks.map((b: any) => {
+              {meta.options.blocks.map((b: any) => {
                 const on = blocks.includes(b.id);
                 return (
                   <button key={b.id} onClick={() => toggleBlock(b.id)} aria-pressed={on}
@@ -339,9 +350,57 @@ export default function PatternsPage() {
           )}
         </div>
 
-        {loading && !data && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Calculando…</div>}
+        {!meta && !error && <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Carregando…</div>}
         <div aria-live="polite">{error && <div className="text-sm text-neg">{error}</div>}</div>
-        {data?.empty && <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>Nenhuma campanha com esse nome nos grupos marcados.</div>}
+        {meta?.empty && !meta?.pending && <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>Nenhuma campanha com esse nome nos grupos marcados.</div>}
+
+        {meta?.pending && !d && (
+          <div className={`${card} border rounded-xl p-4 flex flex-wrap items-center gap-3`}>
+            <div className={`flex-1 min-w-[220px] text-sm ${muted}`}>
+              {meta.set_size} {meta.set_size === 1 ? 'campanha' : 'campanhas'} neste conjunto. Os números, termos e padrões só são calculados quando você pedir.
+            </div>
+            <button onClick={load} disabled={loading} className={`h-9 px-4 ${brandBtn}`}>
+              {loading ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Sparkles size={13} aria-hidden="true" />} {loading ? 'Calculando…' : 'Analisar este conjunto'}
+            </button>
+          </div>
+        )}
+
+          {/* Pergunta para a IA */}
+          {meta?.ai && !(meta.empty && !meta.pending) && (
+            <div className={`${card} border rounded-xl p-4 space-y-3`}>
+              <div className={title}>Pergunte à IA sobre este conjunto</div>
+              {/* As respostas chegam sozinhas: o leitor de tela lê quando aparecem. */}
+              <div aria-live="polite" className="space-y-3">
+              {chat.map((c, i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className={`text-[13px] font-medium ${head}`}>{c.q}</div>
+                  <div className={`rounded-lg border ${line} ${soft} p-3 text-[13px] leading-relaxed whitespace-pre-wrap`}>{c.a}</div>
+                  {c.missing && <div className={`text-[11px] ${muted}`}>Faltou para responder melhor: {c.missing}</div>}
+                  {kept.includes(i)
+                    ? <div className="text-[11px] text-pos">Guardado na memória da IA.</div>
+                    : <button onClick={() => keep(i)} className="text-[11px] text-brand-text hover:underline">Guardar esta resposta na memória da IA</button>}
+                </div>
+              ))}
+              </div>
+              <div aria-live="polite">{askError && <div className="text-xs text-neg">{askError}</div>}</div>
+              <div className="flex gap-2 items-end">
+                <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2} maxLength={1000} aria-label="Pergunta para a IA (Enter envia, Shift+Enter quebra a linha)"
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }}
+                  placeholder="Qual campanha piorou mais nesta semana e em qual termo?"
+                  className={`flex-1 rounded-lg border border-line-strong bg-surface-1 ${head} px-3 py-2 text-[13px] outline-none placeholder:text-ink-faint focus-visible:ring-2 focus-visible:ring-brand resize-y`} />
+                <VoiceButton onText={t => setQuestion(p => (p.trim() ? `${p.trim()} ${t}` : t))} />
+                <button onClick={ask} disabled={answering || !question.trim()}
+                  className={`px-3 py-2 ${brandBtn}`}>
+                  {answering ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Send size={13} aria-hidden="true" />} Perguntar
+                </button>
+              </div>
+              <div className={`text-[11px] ${muted}`}>
+                A IA recebe os dados do conjunto e do período escolhidos acima: cada campanha, dia a dia, termos, dispositivos, idade, gênero, locais e vídeo. Ela vê os melhores termos e palavras-chave, e a situação de cada campanha. Para olhar uma campanha só, escreva o nome dela no campo de trecho do nome.
+              </div>
+            </div>
+          )}
+
+          <MemoryCard api={api} tags={meta?.options?.tags || []} reloadKey={memoryTick} css={{ card, head, muted, line, soft, title }} />
 
         {d && (
           <div className={`space-y-5 transition-opacity ${loading ? 'opacity-50' : ''}`}>
@@ -397,42 +456,6 @@ export default function PatternsPage() {
               ))}
             </div>
 
-            {/* Pergunta para a IA */}
-            {data.ai && (
-              <div className={`${card} border rounded-xl p-4 space-y-3`}>
-                <div className={title}>Pergunte à IA sobre este conjunto</div>
-                {/* As respostas chegam sozinhas: o leitor de tela lê quando aparecem. */}
-                <div aria-live="polite" className="space-y-3">
-                {chat.map((c, i) => (
-                  <div key={i} className="space-y-1.5">
-                    <div className={`text-[13px] font-medium ${head}`}>{c.q}</div>
-                    <div className={`rounded-lg border ${line} ${soft} p-3 text-[13px] leading-relaxed whitespace-pre-wrap`}>{c.a}</div>
-                    {c.missing && <div className={`text-[11px] ${muted}`}>Faltou para responder melhor: {c.missing}</div>}
-                    {kept.includes(i)
-                      ? <div className="text-[11px] text-pos">Guardado na memória da IA.</div>
-                      : <button onClick={() => keep(i)} className="text-[11px] text-brand-text hover:underline">Guardar esta resposta na memória da IA</button>}
-                  </div>
-                ))}
-                </div>
-                <div aria-live="polite">{askError && <div className="text-xs text-neg">{askError}</div>}</div>
-                <div className="flex gap-2 items-end">
-                  <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2} maxLength={1000} aria-label="Pergunta para a IA (Enter envia, Shift+Enter quebra a linha)"
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }}
-                    placeholder="Qual campanha piorou mais nesta semana e em qual termo?"
-                    className={`flex-1 rounded-lg border border-line-strong bg-surface-1 ${head} px-3 py-2 text-[13px] outline-none placeholder:text-ink-faint focus-visible:ring-2 focus-visible:ring-brand resize-y`} />
-                  <VoiceButton onText={t => setQuestion(p => (p.trim() ? `${p.trim()} ${t}` : t))} />
-                  <button onClick={ask} disabled={answering || !question.trim()}
-                    className={`px-3 py-2 ${brandBtn}`}>
-                    {answering ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Send size={13} aria-hidden="true" />} Perguntar
-                  </button>
-                </div>
-                <div className={`text-[11px] ${muted}`}>
-                  A IA recebe os dados do conjunto e do período escolhidos acima: cada campanha, dia a dia, termos, dispositivos, idade, gênero, locais e vídeo. Ela vê os melhores termos e palavras-chave, e a situação de cada campanha. Para olhar uma campanha só, escreva o nome dela no campo de trecho do nome.
-                </div>
-              </div>
-            )}
-
-            <MemoryCard api={api} tags={data.options?.tags || []} reloadKey={memoryTick} css={{ card, head, muted, line, soft, title }} />
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <TermTable best={d.terms_best} waste={d.terms_waste} label="Termos de pesquisa que mais vendem" first="Termo" />

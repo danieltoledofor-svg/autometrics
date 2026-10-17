@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
  * Tela "Análise de IA": o que se repete nas campanhas parecidas do próprio usuário.
  *
  * GET   ?tag=&period=&blocks=&mcc=&from=&to=   números e padrões, calculados na hora, sem IA
+ *       &only=options  só as opções dos filtros (a tela abre assim e só calcula quando a pessoa pede)
  * POST  { tag, period, blocks } leitura da IA em cima desses mesmos números
  * POST  { …, question, history } resposta da IA a uma pergunta do usuário
  *
@@ -36,6 +37,10 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
   const q = new URL(request.url).searchParams;
   try {
+    if (q.get('only') === 'options') {
+      const data = await computePatterns(user.id, { ...options(Object.fromEntries(q)), optionsOnly: true });
+      return NextResponse.json({ ...data, ai: aiEnabled() });
+    }
     const [data, adjustments] = await Promise.all([
       computePatterns(user.id, options(Object.fromEntries(q))),
       adjustmentSummary(user.id).catch(() => []),

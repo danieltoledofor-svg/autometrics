@@ -81,6 +81,8 @@ export interface PatternsOptions {
   to?: string;
   /** Dados a mais para a IA responder perguntas: campanha a campanha, dia a dia, termos, idade, gênero e locais. */
   detail?: boolean;
+  /** Só as opções da tela (MCCs, marcações, grupos), sem calcular os números: a tela abre sem analisar nada. */
+  optionsOnly?: boolean;
 }
 
 export async function computePatterns(userId: string, opts: PatternsOptions) {
@@ -143,6 +145,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     currency, other_currency: otherCurrency, set_size: set.length,
   };
   if (!ids.length) return { ...base, empty: true as const };
+  if (opts.optionsOnly) return { ...base, empty: true as const, pending: true };
 
   // ── Dias de cada campanha (a vida inteira, para o veredito) ──────────────
   const days = await byChunks(ids, (chunk, a, b) => db.from('daily_metrics')

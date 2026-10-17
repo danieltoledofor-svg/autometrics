@@ -11,6 +11,7 @@ import { funnelFor, vturbSuggestions, vturbFlagged, detectVturbApplied, pageHash
 import { buildTopo, topoHash, writeTopoText } from '@/lib/vturb/topo';
 import { memoryBlock, memoryFor } from './userMemory';
 import { adjustmentBlock, adjustmentSummary } from './changes';
+import { jevWaitOrAct } from '@/lib/ai/jev';
 
 /**
  * Análise de uma campanha, do começo ao fim:
@@ -215,6 +216,17 @@ export async function runAnalysis(productId: string, opts: { force?: boolean } =
       situation: situationFor(cd.item, cd.row, c.reference, campaignCost3),
     };
   });
+  // Jev (lib/ai/jev.ts): mexer agora ou esperar, todas em paralelo. Sem resposta, a sugestão nasce sem a marca.
+  await Promise.all(rows.map(async r => {
+    const v = await jevWaitOrAct({ userId, productId, item: r.item, row: r.baseline.row, campaign: c.numbers.d3, refMode: c.reference.mode, keyword: r.baseline.keyword });
+    if (v) (r.baseline as any).jev = { ...v, at: new Date().toISOString() };
+  }));
+  // Abertas de antes do Jev: ganham a marca uma vez, com os números de agora.
+  await Promise.all((existing || []).filter(s => s.status === 'aberta' && s.item !== 'pagina' && s.baseline?.row && !s.baseline?.jev).slice(0, 20).map(async s => {
+    const row = rowsNow.get(`${s.item as ItemKey}|${s.target_key}`) || s.baseline.row;
+    const v = await jevWaitOrAct({ userId, productId, item: s.item, row, campaign: c.numbers.d3, refMode: c.reference.mode, keyword: s.baseline.keyword || null });
+    if (v) await db.from('analysis_suggestions').update({ baseline: { ...s.baseline, jev: { ...v, at: new Date().toISOString() } } }).eq('id', s.id).eq('status', 'aberta');
+  }));
   if (newPage && page && !page.error) {
     const { data: openPage } = await db.from('analysis_suggestions').select('target_key').eq('product_id', productId).eq('item', 'pagina').in('status', ['aberta', 'aplicada']);
     const have = new Set((openPage || []).map(s => s.target_key));
