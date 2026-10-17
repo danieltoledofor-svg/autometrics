@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, FileUp, Loader2, Save, Trash2 } from 'lucide-react';
+import { VoiceButton } from '@/app/components/VoiceButton';
 
 /**
  * Memória da IA: decisões, observações e materiais (.md / .txt) que o usuário
@@ -99,6 +100,7 @@ export function MemoryCard({ api, tags, css, reloadKey }: { api: Api; tags: { ta
         <div className="flex flex-wrap items-center gap-2">
           <input ref={file} type="file" accept=".md,.txt,.markdown,text/plain,text/markdown" className="hidden"
             onChange={e => { pickFile(e.target.files?.[0]); e.target.value = ''; }} />
+          <VoiceButton onText={t => setText(p => (p.trim() ? `${p.trim()} ${t}` : t))} />
           <button onClick={() => file.current?.click()} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${line} text-xs font-medium ${muted} hover:text-ink`}>
             <FileUp size={13} aria-hidden="true" /> Enviar arquivo .md ou .txt
           </button>

@@ -27,6 +27,7 @@ import { MAIN_BLOCK, blockName, blockOf } from '@/lib/campaignGroups';
 import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
 import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
 import { spendAlert } from '@/lib/alerts/spendRule';
+import { lossAlert, turnAlert, type DaySum } from '@/lib/alerts/marginRules';
 import { Inter } from 'next/font/google';
 
 // Fonte do guia visual (DESIGN.md). Por enquanto só na Dashboard, a primeira tela migrada.
@@ -593,6 +594,50 @@ export default function DashboardPage() {
   }, [metrics, products, loading, selectedMcc, todayStr]);
   const openAlerts = spendAlerts.filter(a => !seenAlerts.includes(a.id));
 
+  // ── Regras de margem ──────────────────────────────────────────────────────
+  // As mesmas do Telegram (lib/alerts/marginRules), com os limites e o liga e
+  // desliga escolhidos em Integração → Telegram. Sem essa leitura, valem os padrões.
+  const [marginPrefs, setMarginPrefs] = useState({ prejuizo: { on: true, margin: 10 }, virada: { on: true, margin: 20, hour: 12 } });
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/telegram?settings=1', { headers: { Authorization: `Bearer ${session?.access_token || ''}` } }).catch(() => null);
+      const a = (await res?.json().catch(() => null))?.settings?.alerts;
+      if (a?.prejuizo && a?.virada) setMarginPrefs({ prejuizo: a.prejuizo, virada: a.virada });
+    })();
+  }, [user]);
+
+  const marginAlerts = useMemo(() => {
+    if (loading || !metrics.length) return [];
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const yesterdayStr = getLocalYYYYMMDD(y);
+    const hourNow = new Date().getHours();
+    const empty = (): DaySum => ({ cost: 0, revenue: 0, refunds: 0, sales: 0 });
+    const byProduct = new Map<string, { today: DaySum; yesterday: DaySum }>();
+    for (const row of metrics) {
+      if (row.date !== todayStr && row.date !== yesterdayStr) continue;
+      if (!byProduct.has(row.product_id)) byProduct.set(row.product_id, { today: empty(), yesterday: empty() });
+      const d = byProduct.get(row.product_id)![row.date === todayStr ? 'today' : 'yesterday'];
+      d.cost += Number(row.cost || 0); d.revenue += Number(row.conversion_value || 0); d.refunds += Number(row.refunds || 0); d.sales += Number(row.conversions || 0);
+    }
+    const out: any[] = [];
+    for (const [id, p] of byProduct) {
+      const product = products.find(x => x.id === id);
+      if (!product) continue;
+      const mccName = product.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
+      if (selectedMcc !== 'all' && mccName !== selectedMcc) continue;
+      const base = { name: product.name, currency: product.currency || 'BRL', today: p.today, yesterday: p.yesterday, productId: id };
+      const turn = marginPrefs.virada.on ? turnAlert(p.yesterday, p.today, hourNow, marginPrefs.virada.margin, marginPrefs.virada.hour) : null;
+      // A virada já diz que hoje está no vermelho: não repete o aviso de custo passando da receita.
+      if (turn) { out.push({ ...base, id: `virada:${id}`, kind: 'virada', turn, weight: 2 }); continue; }
+      const loss = marginPrefs.prejuizo.on ? lossAlert(p.today, marginPrefs.prejuizo.margin) : null;
+      if (loss) out.push({ ...base, id: `prejuizo:${loss.level}:${id}`, kind: 'prejuizo', loss, weight: loss.level === 'perdendo' ? 1 : 0 });
+    }
+    return out.sort((a, b) => b.weight - a.weight);
+  }, [metrics, products, loading, selectedMcc, todayStr, marginPrefs]);
+  const openMarginAlerts = marginAlerts.filter(a => !seenAlerts.includes(a.id));
+
   // Vendas que chegaram e ainda não foram marcadas como vistas (lib/saleAlerts.ts).
   const pendingSales = usePendingSales();
 
@@ -878,6 +923,39 @@ export default function DashboardPage() {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ── REGRAS DE MARGEM ── */}
+        {openMarginAlerts.length > 0 && (
+          <div className="rounded-xl border border-neg/30 bg-neg/5 mb-4 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 pt-3 pb-2 text-neg">
+              <AlertTriangle size={15} aria-hidden="true" />
+              <span className="text-[13px] font-medium">Campanhas para olhar agora · {openMarginAlerts.length}</span>
+            </div>
+            {openMarginAlerts.map(a => {
+              const m = (v: number) => new Intl.NumberFormat(a.currency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: a.currency }).format(v);
+              const signed = (v: number) => `${v >= 0 ? '+' : '−'}${m(Math.abs(v))}`;
+              const pct = (v: number) => `${Math.round(v)}%`;
+              return (
+                <div key={a.id} className="flex items-start gap-3 px-4 py-2 border-t border-neg/15">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-medium text-neg">
+                      {a.kind === 'virada' ? 'Dia apertado seguido de manhã ruim' : a.loss.level === 'perdendo' ? 'Custo passou da receita' : 'Custo empatando com a receita'}
+                    </div>
+                    <Link href={`/products/${a.productId}`} target="_blank" rel="noopener noreferrer" className="text-[13px] font-medium break-words text-ink hover:underline">{a.name}</Link>
+                    <div className="text-xs text-ink-subtle">
+                      {a.kind === 'virada'
+                        ? <>Ontem fechou com {signed(a.turn.yesterday)} ({pct(a.turn.yesterdayMargin)} sobre o custo). Hoje até agora: custo {m(a.today.cost)}, receita {m(a.today.revenue)}, resultado {signed(a.turn.today)}.</>
+                        : <>Hoje: custo {m(a.today.cost)}, receita {m(a.today.revenue)}, {String(a.today.sales).replace('.', ',')} {a.today.sales === 1 ? 'venda' : 'vendas'}. Resultado {signed(a.loss.result)} ({pct(a.loss.margin)} sobre o custo).</>}
+                    </div>
+                  </div>
+                  <button onClick={() => markAlertSeen(a.id)} className="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium border border-line text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors">
+                    Visto
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 

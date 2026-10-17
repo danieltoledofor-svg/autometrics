@@ -4,7 +4,7 @@
  * rotina (lib/alerts/run.ts) leem daqui.
  */
 
-export type AlertKey = 'gasto' | 'suspensa' | 'sem_venda' | 'cpa' | 'venda' | 'primeira_venda' | 'reembolso' | 'orcamento' | 'parou' | 'ajuste' | 'resumo' | 'coleta' | 'cota'
+export type AlertKey = 'gasto' | 'suspensa' | 'sem_venda' | 'prejuizo' | 'virada' | 'cpa' | 'venda' | 'primeira_venda' | 'reembolso' | 'orcamento' | 'parou' | 'ajuste' | 'resumo' | 'coleta' | 'cota'
   | 'lr_codigo' | 'lr_cobranca' | 'lr_recusada' | 'lr_credito';
 
 export interface AlertParam { key: string; label: string; unit: string; min: number; max: number; step: number; value: number | null }
@@ -22,6 +22,16 @@ export const ALERTS: AlertInfo[] = [
   { key: 'sem_venda', title: 'Gasto sem venda', on: true,
     when: 'A campanha gastou hoje mais que o valor de uma venda dela e não vendeu.',
     params: [{ key: 'mult', label: 'Avisar quando o gasto do dia passar de', unit: '× o valor de uma venda', min: 0.5, max: 5, step: 0.1, value: 1 }] },
+  // Regras de margem (lib/alerts/marginRules.ts): também aparecem como aviso na Dashboard.
+  { key: 'prejuizo', title: 'Custo passando da receita', on: true,
+    when: 'A campanha já vendeu hoje, mas o custo empatou com a receita ou passou dela. Avisa de novo se sair do empate e passar a perder. Também aparece como aviso na Dashboard.',
+    params: [{ key: 'margin', label: 'Avisar quando o lucro do dia ficar abaixo de', unit: '% do custo', min: 0, max: 50, step: 1, value: 10 }] },
+  { key: 'virada', title: 'Dia apertado seguido de manhã ruim', on: true,
+    when: 'Ontem a campanha fechou com lucro pequeno (receita pouco acima do custo) e hoje, a partir do horário escolhido, o custo já passou da receita. Também aparece como aviso na Dashboard, para você olhar a campanha.',
+    params: [
+      { key: 'margin', label: 'Ontem com lucro de até', unit: '% do custo', min: 5, max: 50, step: 1, value: 20 },
+      { key: 'hour', label: 'Conferir hoje a partir das', unit: 'horas', min: 8, max: 20, step: 1, value: 12 },
+    ] },
   { key: 'cpa', title: 'CPA acima do limite', on: false,
     when: 'O CPA dos últimos 3 dias fechados passou de uma parte do valor de uma venda da própria campanha. Cada campanha é comparada com a venda dela, então serve para produtos de valores diferentes.',
     params: [{ key: 'pct', label: 'Avisar quando o CPA passar de', unit: '% do valor de uma venda', min: 10, max: 300, step: 5, value: 80 }] },

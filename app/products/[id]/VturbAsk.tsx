@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Loader2, Send, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
+import { VoiceButton } from '@/app/components/VoiceButton';
 
 /**
  * "Pergunte à IA" da aba VTurb. A IA recebe o que a aba mostra desta campanha
@@ -85,6 +86,7 @@ export function VturbAsk({ productId, startDate, endDate, period, ui }: { produc
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }}
           placeholder="O celular vale o que custa nesta campanha?"
           className={`flex-1 rounded-lg border ${borderCol} ${soft} ${textHead} px-3 py-2 text-[13px] outline-none focus:border-brand resize-y`} />
+        <VoiceButton onText={t => setQuestion(p => (p.trim() ? `${p.trim()} ${t}` : t))} />
         <button onClick={() => ask()} disabled={answering || !question.trim()}
           className="bg-brand hover:bg-brand-hover text-white px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5">
           {answering ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Perguntar

@@ -8,6 +8,7 @@ import { ACTIONS } from '@/lib/analysis/actions';
 import { formatMoney } from '@/lib/analysis/labels';
 import { ChangeNotes } from './ChangeNotes';
 import { useGoogleControls, adjustText, type ChangeBody, type GoogleControl } from './useGoogleControls';
+import { VoiceButton } from '@/app/components/VoiceButton';
 
 /**
  * Aba "Análise": checklist fixo de 8 itens, sempre na mesma ordem.
@@ -64,6 +65,7 @@ function CorrectionBox({ ui, initial = '', onSave, onCancel }: { ui: Ui; initial
         placeholder="O que você faria nesta campanha? Ex.: esse termo vende bem para mim, eu manteria e só baixaria o lance no celular."
         className={`w-full rounded-lg border ${borderCol} bg-surface-2 ${textHead} px-3 py-2 text-[13px] outline-none focus:border-brand resize-y`} />
       <div className="flex flex-wrap items-center gap-3">
+        <VoiceButton onText={t => setText(p => (p.trim() ? `${p.trim()} ${t}` : t))} />
         <label className={`flex items-center gap-1.5 text-[11.5px] ${textMuted} cursor-pointer`}>
           <input type="checkbox" checked={general} onChange={e => setGeneral(e.target.checked)} /> Vale para todas as minhas campanhas (desmarque se for algo só deste produto ou nicho)
         </label>

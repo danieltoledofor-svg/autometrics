@@ -9,6 +9,7 @@ import { applyTheme } from '@/lib/theme';
 import { Logo } from '@/app/components/Logo';
 import { MemoryCard } from './MemoryCard';
 import { Inter } from 'next/font/google';
+import { VoiceButton } from '@/app/components/VoiceButton';
 
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
@@ -419,6 +420,7 @@ export default function PatternsPage() {
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }}
                     placeholder="Qual campanha piorou mais nesta semana e em qual termo?"
                     className={`flex-1 rounded-lg border border-line-strong bg-surface-1 ${head} px-3 py-2 text-[13px] outline-none placeholder:text-ink-faint focus-visible:ring-2 focus-visible:ring-brand resize-y`} />
+                  <VoiceButton onText={t => setQuestion(p => (p.trim() ? `${p.trim()} ${t}` : t))} />
                   <button onClick={ask} disabled={answering || !question.trim()}
                     className={`px-3 py-2 ${brandBtn}`}>
                     {answering ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Send size={13} aria-hidden="true" />} Perguntar

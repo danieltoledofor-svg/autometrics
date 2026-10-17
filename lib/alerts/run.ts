@@ -5,6 +5,7 @@ import { addDays, fetchAll } from '@/lib/analysis/compute';
 import { userChangeEvents } from '@/lib/analysis/changes';
 import { explainReasons, resolveProductStatus } from '@/lib/campaignStatus';
 import { spendAlert } from './spendRule';
+import { lossAlert, turnAlert } from './marginRules';
 import { isQuiet, resolveSettings, describeRule, RULE_METRICS, RULE_WINDOWS, type AlertSettings } from './catalog';
 import { isOwner } from '@/lib/ai/openrouter';
 import { usageToday, DAILY_QUOTA } from '@/lib/googleAds/sync';
@@ -109,13 +110,16 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
       .in('product_id', ids.slice(i, i + 150)).gte('date', addDays(day, -30)).lte('date', day).or('cost.gt.0,conversions.gt.0,refunds.gt.0').range(a, b)));
   }
 
-  interface Camp { today: number; sales: number; revenue: number; refunds: number; past7: number; days7: number; cost3: number; sales3: number; sales30: number; revenue30: number; lostYesterday: number }
+  interface Camp { today: number; sales: number; revenue: number; refunds: number; yesterday: { cost: number; revenue: number; refunds: number; sales: number }; past7: number; days7: number; cost3: number; sales3: number; sales30: number; revenue30: number; lostYesterday: number }
   const camps = new Map<string, Camp>();
   const d7 = addDays(day, -7), d3 = addDays(day, -3);
   for (const r of rows) {
-    if (!camps.has(r.product_id)) camps.set(r.product_id, { today: 0, sales: 0, revenue: 0, refunds: 0, past7: 0, days7: 0, cost3: 0, sales3: 0, sales30: 0, revenue30: 0, lostYesterday: 0 });
+    if (!camps.has(r.product_id)) camps.set(r.product_id, { today: 0, sales: 0, revenue: 0, refunds: 0, yesterday: { cost: 0, revenue: 0, refunds: 0, sales: 0 }, past7: 0, days7: 0, cost3: 0, sales3: 0, sales30: 0, revenue30: 0, lostYesterday: 0 });
     const c = camps.get(r.product_id)!;
-    if (r.date === addDays(day, -1)) c.lostYesterday = num(r.lost_budget);
+    if (r.date === addDays(day, -1)) {
+      c.lostYesterday = num(r.lost_budget);
+      c.yesterday = { cost: num(r.cost), revenue: num(r.conversion_value), refunds: num(r.refunds), sales: num(r.conversions) };
+    }
     const cost = num(r.cost), sales = num(r.conversions);
     c.sales30 += sales; c.revenue30 += num(r.conversion_value);
     if (r.date === day) { c.today += cost; c.sales += sales; c.revenue += num(r.conversion_value); c.refunds += num(r.refunds); continue; }
@@ -177,6 +181,44 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
       const sale = c.sales30 > 0 && c.revenue30 > 0 ? c.revenue30 / c.sales30 : userSale;
       if (sale > 0 && c.today >= sale * on.sem_venda.mult) {
         await notify('sem_venda', id, id, `💸 <b>Gasto sem venda hoje</b>\n${name}\n\nJá gastou <b>${money(c.today)}</b> hoje sem vender. Uma venda vale em média ${money(sale)}.\n\n${link_(id)}`, { today: c.today, sale });
+      }
+    }
+
+    // Custo empatando ou passando da receita no dia, mesmo com venda.
+    const todaySum = { cost: c.today, revenue: c.revenue, refunds: c.refunds, sales: c.sales };
+    const pct = (v: number) => `${v >= 0 ? '' : '−'}${Math.abs(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`;
+    const signed = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`;
+    if (on.prejuizo.on) {
+      const a = lossAlert(todaySum, on.prejuizo.margin);
+      if (a) {
+        const head = a.level === 'perdendo' ? '🔻 <b>Custo passou da receita</b>' : '⚖️ <b>Custo empatando com a receita</b>';
+        await notify('prejuizo', `${id}:${a.level}`, id,
+          `${head}
+${name}
+
+Hoje: custo <b>${money(c.today)}</b>, receita ${money(c.revenue)}${c.refunds > 0 ? ` (${money(c.refunds)} de reembolso)` : ''}, ${String(c.sales).replace('.', ',')} ${c.sales === 1 ? 'venda' : 'vendas'}.
+Resultado do dia: <b>${signed(a.result)}</b> (${pct(a.margin)} sobre o custo).
+
+${link_(id)}`,
+          { result: a.result, margin: a.margin });
+      }
+    }
+
+    // Ontem fechou apertado e hoje, a partir do horário escolhido, já está no vermelho.
+    if (on.virada.on) {
+      const a = turnAlert(c.yesterday, todaySum, hour, on.virada.margin, on.virada.hour);
+      if (a) {
+        await notify('virada', id, id,
+          `🚨 <b>Dia apertado seguido de manhã ruim</b>
+${name}
+
+Ontem fechou com ${signed(a.yesterday)} (${pct(a.yesterdayMargin)} sobre o custo de ${money(c.yesterday.cost)}).
+Hoje até agora: custo <b>${money(c.today)}</b>, receita ${money(c.revenue)}, resultado <b>${signed(a.today)}</b>.
+
+Vale olhar esta campanha. O aviso também ficou na Dashboard.
+
+${link_(id)}`,
+          { yesterday: a.yesterday, today: a.today });
       }
     }
 

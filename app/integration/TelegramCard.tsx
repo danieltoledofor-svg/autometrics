@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Pencil, Send, Sparkles, Trash2 } from 'lucide-react';
 import { describeRule, sanitizeRule, RULE_METRICS, RULE_WINDOWS, RULE_BASES } from '@/lib/alerts/catalog';
 import { supabase } from '@/lib/supabaseClient';
+import { VoiceButton } from '@/app/components/VoiceButton';
 
 /**
  * Aba Telegram da Integração.
@@ -238,6 +239,7 @@ export function TelegramCard({ isDark }: { isDark: boolean }) {
                 placeholder="Me avise quando o CPA dos últimos 3 dias passar de 70% do valor da venda nas campanhas BP"
                 className={`${field} w-full !py-2 resize-y`} />
               <div className="flex flex-wrap items-center gap-2 mt-2">
+                <VoiceButton onText={t => setRuleText(p => (p.trim() ? `${p.trim()} ${t}` : t))} />
                 <button onClick={askRule} disabled={drafting || !ruleText.trim()} className={solid}>
                   {drafting ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Sparkles size={12} aria-hidden="true" />} Montar a regra com a IA
                 </button>

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Ligação do usuário com o bot do Telegram (Integração → Alertas no Telegram).
  *
- * GET   situação: bot configurado, conversa ligada, alertas ligados
+ * GET   situação: bot configurado, conversa ligada, alertas ligados (?settings=1: só as escolhas)
  * POST  { action }
  *   code    gera o código que a pessoa manda para o bot (vale 30 minutos)
  *   check   procura esse código nas mensagens recebidas pelo bot e liga a conversa
@@ -64,6 +64,11 @@ async function status(userId: string, email?: string) {
 export async function GET(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
+  // ?settings=1: só as escolhas dos alertas (a Dashboard usa os limites das regras de margem), sem falar com o Telegram.
+  if (new URL(request.url).searchParams.get('settings')) {
+    const { data } = await supabaseAdmin().from('telegram_links').select('settings').eq('user_id', user.id).maybeSingle();
+    return NextResponse.json({ settings: resolveSettings(data?.settings) });
+  }
   return NextResponse.json(await status(user.id, user.email));
 }
 

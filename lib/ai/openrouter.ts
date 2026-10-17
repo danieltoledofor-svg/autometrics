@@ -8,7 +8,7 @@ import { supabaseAdmin, appUrl } from '@/lib/googleAds/server';
  * Sem OPENROUTER_API_KEY a análise segue só com os números e os textos padrão.
  */
 
-export type AiFunction = 'leitura' | 'pagina' | 'padroes' | 'recursos';
+export type AiFunction = 'leitura' | 'pagina' | 'padroes' | 'recursos' | 'audio';
 
 /**
  * Padrão barato de cada função; o dono troca em /ia sem precisar publicar.
@@ -20,6 +20,8 @@ export const DEFAULT_MODELS: Record<AiFunction, string> = {
   pagina: process.env.AI_MODEL_PAGINA || 'google/gemini-3.5-flash-lite',
   padroes: process.env.AI_MODEL_PADROES || 'deepseek/deepseek-v4.1-flash',
   recursos: process.env.AI_MODEL_RECURSOS || 'google/gemini-3.8-flash',
+  // Precisa ser um modelo que ouve áudio (Gemini); os de texto puro não servem aqui.
+  audio: process.env.AI_MODEL_AUDIO || 'google/gemini-3.5-flash-lite',
 };
 
 export const FUNCTION_LABELS: Record<AiFunction, { label: string; when: string }> = {
@@ -27,6 +29,7 @@ export const FUNCTION_LABELS: Record<AiFunction, { label: string; when: string }
   pagina: { label: 'Anúncio × página × VSL', when: 'quando a página, a VSL ou os termos principais mudam, e 1 vez por semana' },
   padroes: { label: 'Análise de IA (leitura do grupo e perguntas)', when: 'só quando o usuário pede a leitura ou faz uma pergunta na tela Análise de IA' },
   recursos: { label: 'Títulos, descrições, sitelinks e frases de destaque', when: 'só quando o usuário pede os recursos ao criar uma campanha' },
+  audio: { label: 'Áudio virando texto (precisa ser um modelo que ouve áudio, como o Gemini)', when: 'só quando o usuário grava um áudio numa caixa de pergunta ou de regra' },
 };
 
 export const aiEnabled = () => !!process.env.OPENROUTER_API_KEY;
@@ -68,6 +71,8 @@ export interface AiCall {
   textField?: string;
   /** Quanto a IA varia o texto. Leitura de números fica em 0,2 (padrão); escrita de anúncio pede mais variedade. */
   temperature?: number;
+  /** Áudio junto da mensagem, em base64 (só modelos que ouvem áudio). */
+  audio?: { data: string; format: 'wav' };
 }
 
 /**
@@ -109,7 +114,12 @@ async function askOnce<T>(call: AiCall, maxTokens: number, lastTry: boolean): Pr
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'system', content: call.system }, { role: 'user', content: call.user }],
+        messages: [{ role: 'system', content: call.system }, {
+          role: 'user',
+          content: call.audio
+            ? [{ type: 'text', text: call.user }, { type: 'input_audio', input_audio: { data: call.audio.data, format: call.audio.format } }]
+            : call.user,
+        }],
         response_format: { type: 'json_object' },
         temperature: call.temperature ?? 0.2,
         max_tokens: maxTokens,
