@@ -12,6 +12,8 @@ import { improveProblems } from '@/lib/campaignBuilder/explain';
 import { aiEnabled } from '@/lib/ai/openrouter';
 import { createCampaign } from '@/lib/campaignBuilder/create';
 import type { Draft } from '@/lib/campaignBuilder/draft';
+import { duplicateCampaign, type DuplicateSettings } from '@/lib/campaignBuilder/duplicate';
+import type { Template } from '@/lib/campaignBuilder/template';
 import { decryptSecret } from '@/lib/googleAds/server';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +35,7 @@ export const maxDuration = 60;
  *                                                `fonte` é o código colado pelo usuário, quando a página recusa o servidor
  * POST { action: 'recursos', funil, … }          títulos, descrições, sitelinks e frases de destaque pela IA
  * POST { action: 'criar', draft, linha, ensaio }  ensaia (ou cria, já ativa) uma campanha em uma conta; o que o Google recusar volta explicado pela IA
+ * POST { action: 'duplicar', modelo, ajustes, linha, ensaio }  copia uma campanha lida para uma conta, com orçamento e CPA novos e sem ajuste de lance
  *
  * Só para os logins liberados (lib/googleAds/edit).
  */
@@ -132,7 +135,7 @@ export async function GET(request: Request) {
   if (q.get('contas')) {
     // Conta suspensa ou cancelada não recebe campanha: fica fora da lista.
     const [{ data: accounts }, { data: running }] = await Promise.all([
-      db.from('google_ads_accounts').select('customer_id, login_customer_id, connection_id, name, mcc_name, status').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
+      db.from('google_ads_accounts').select('customer_id, login_customer_id, connection_id, name, mcc_name, status, currency_code').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
       db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name, status, mcc_name').eq('user_id', user.id).not('google_ads_customer_id', 'is', null).limit(5000),
     ]);
     // Campanhas rodando em cada conta, para não subir duas na mesma conta sem querer.
@@ -168,7 +171,7 @@ export async function GET(request: Request) {
       hidden_in_google: (accounts || []).length - visible.length,
       accounts: visible.map(a => ({
         id: a.customer_id, nome: a.name || `Conta ${a.customer_id}`,
-        mcc: groupOf(a),
+        mcc: groupOf(a), moeda: a.currency_code || null,
         ativas: active.get(a.customer_id) || [],
       })),
     });
@@ -251,6 +254,36 @@ export async function POST(request: Request) {
 
   // Lista de países colada pelo usuário. Quem é país conhecido (nome em português, em inglês ou sigla) é
   // achado pela sigla, numa consulta só e sem ambiguidade; o resto vai para a busca por nome do Google.
+  if (body.action === 'duplicar') {
+    const t = body.modelo as Template, line = body.linha || {}, a = body.ajustes || {};
+    const accountId = String(line.conta_id || '').replace(/\D/g, '');
+    if (!t?.origem || !Array.isArray(t.grupos) || !accountId) return NextResponse.json({ error: 'Pedido incompleto.' }, { status: 400 });
+    const ctx = await accountContext(user.id, accountId);
+    if (!ctx) return NextResponse.json({ error: 'Esta conta não está ligada, ou a ligação expirou. Reconecte em Integração.' }, { status: 409 });
+    const num = (v: any) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+    const settings: DuplicateSettings = {
+      orcamento_diario: num(a.orcamento_diario), meta_cpa: num(a.meta_cpa), limite_cpc: num(a.limite_cpc),
+      grupos: Object.fromEntries(Object.entries(a.grupos || {}).map(([id, v]) => [id, num(v)])),
+    };
+    const ensaio = body.ensaio !== false;
+    const name = String(line.nome || '').trim().slice(0, 250);
+    try {
+      const result = await duplicateCampaign(ctx, t, settings, { conta_id: accountId, nome: name, meta_id: line.meta_id ? String(line.meta_id) : null }, ensaio);
+      await addUsage(result.calls).catch(() => {});
+      if (!result.ok && aiEnabled()) result.problemas = await improveProblems(user.id, result.problemas);
+      if (!ensaio) {
+        await supabaseAdmin().from('google_ads_actions').insert({
+          user_id: user.id, customer_id: accountId, campaign_id: result.campanha_id, action: 'duplicar', kind: 'campanha', target: name,
+          target_key: `origem ${t.origem.conta_id}/${t.origem.campanha_id}`,
+          new_status: result.ok ? (result.situacao || 'ENABLED') : null, ok: result.ok, error: result.ok ? (result.avisos.join(' | ') || null) : result.problemas.map(p => `${p.onde}: ${p.texto}`).join(' | ').slice(0, 1000),
+        }).then(() => null, () => null);
+      }
+      return NextResponse.json({ result });
+    } catch (e: any) {
+      return NextResponse.json({ result: { ok: false, ensaio, campanha_id: null, situacao: null, problemas: [{ onde: 'Google', texto: `O Google não respondeu ao pedido: ${String(e.message).slice(0, 300)}`, corrigir: 'Tente de novo em alguns minutos.' }], avisos: [], calls: 0, itens: 0 } });
+    }
+  }
+
   if (body.action === 'locais') {
     const asked: string[] = [...new Set<string>((Array.isArray(body.nomes) ? body.nomes : []).map((n: any) => String(n || '').trim().slice(0, 80)).filter(Boolean))].slice(0, 250);
     if (!asked.length) return NextResponse.json({ error: 'Informe pelo menos um país.' }, { status: 400 });

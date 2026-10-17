@@ -34,7 +34,7 @@ export function Block({ title, hint, css, children }: { title: string; hint?: st
 }
 
 /** Campo de número que aceita vírgula e fica em branco quando não há valor. */
-function NumberField({ value, onChange, css, width = 'w-28', placeholder, label }: { value: number | null; onChange: (v: number | null) => void; css: Css; width?: string; placeholder?: string; label: string }) {
+export function NumberField({ value, onChange, css, width = 'w-28', placeholder, label }: { value: number | null; onChange: (v: number | null) => void; css: Css; width?: string; placeholder?: string; label: string }) {
   const [text, setText] = useState(value === null || value === undefined ? '' : String(value).replace('.', ','));
   return (
     <input value={text} inputMode="decimal" placeholder={placeholder} aria-label={label}

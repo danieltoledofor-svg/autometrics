@@ -133,7 +133,7 @@ const PLAIN: [RegExp, string, string][] = [
 ];
 
 /** Transforma os erros do Google em problemas da campanha. O mesmo erro repetido em cada grupo vira um só. */
-function explain(problems: MutateProblem[], labels: Label[]): Problem[] {
+export function explain(problems: MutateProblem[], labels: Label[]): Problem[] {
   const out = new Map<string, Problem & { grupos: Set<string> }>();
   for (const p of problems) {
     const label = p.operation !== null ? labels[p.operation] : undefined;
@@ -165,17 +165,29 @@ export async function createCampaign(ctx: AdsContext, d: Draft, line: Line, ensa
   if (d.lance.estrategia === 'MAXIMIZE_CONVERSIONS' && !line.meta_id) blocking.push('Falta a meta de conversão desta conta.');
   if (blocking.length) { out.problemas = blocking.map(texto => ({ onde: 'rascunho', texto })); return out; }
 
+  return submitCampaign(ctx, out, status => buildOperations(d, line, ctx.customerId, status), line.meta_id, d.ia_max.ligada);
+}
+
+/**
+ * Envia ao Google as operações de uma campanha nova (do criador ou da
+ * duplicação): ensaia, cria e, com meta de conversão, cria pausada, aplica a
+ * meta e ativa. No fim lê a campanha para conferir como ela ficou.
+ */
+export async function submitCampaign(
+  ctx: AdsContext, out: CreateResult, build: (status: 'ENABLED' | 'PAUSED') => { operations: any[]; labels: Label[] }, metaId: string | null, iaMax: boolean,
+): Promise<CreateResult> {
+  const ensaio = out.ensaio;
   // A meta de conversão precisa existir na conta antes de criar qualquer coisa.
   let goal: string | null = null;
-  if (line.meta_id) {
+  if (metaId) {
     out.calls++;
     const rows = await search(ctx, 'SELECT custom_conversion_goal.resource_name, custom_conversion_goal.id, custom_conversion_goal.status FROM custom_conversion_goal');
-    goal = rows.map(r => r.customConversionGoal || {}).find(g => String(g.id) === String(line.meta_id) && g.status !== 'REMOVED')?.resourceName || null;
-    if (!goal) { out.problemas = [{ onde: 'meta de conversão', texto: 'A meta escolhida não existe mais nesta conta.', corrigir: 'Escolha outra meta no passo Onde subir.' }]; return out; }
+    goal = rows.map(r => r.customConversionGoal || {}).find(g => String(g.id) === String(metaId) && g.status !== 'REMOVED')?.resourceName || null;
+    if (!goal) { out.problemas = [{ onde: 'meta de conversão', texto: 'A meta escolhida não existe mais nesta conta.', corrigir: 'Escolha outra meta de conversão para esta conta.' }]; return out; }
   }
 
   // Com meta de conversão, a campanha entra pausada e só é ativada depois que a meta estiver aplicada.
-  const { operations, labels } = buildOperations(d, line, ctx.customerId, goal ? 'PAUSED' : 'ENABLED');
+  const { operations, labels } = build(goal ? 'PAUSED' : 'ENABLED');
   out.itens = operations.length;
   out.calls += operations.length;
   const rehearsal = await mutateAll(ctx, operations, true);
@@ -223,7 +235,7 @@ export async function createCampaign(ctx: AdsContext, d: Draft, line: Line, ensa
       if (status !== out.situacao && !out.avisos.length) out.avisos.push(`Atenção: a campanha ficou ${status === 'PAUSED' ? 'PAUSADA' : 'ATIVA'} no Google, diferente do esperado.`);
       out.situacao = status;
     }
-    if (!!row?.campaign?.aiMaxSetting?.enableAiMax !== d.ia_max.ligada) out.avisos.push(`A IA Max ficou ${row?.campaign?.aiMaxSetting?.enableAiMax ? 'ligada' : 'desligada'} no Google, diferente do pedido. Ajuste no Google Ads.`);
+    if (!!row?.campaign?.aiMaxSetting?.enableAiMax !== iaMax) out.avisos.push(`A IA Max ficou ${row?.campaign?.aiMaxSetting?.enableAiMax ? 'ligada' : 'desligada'} no Google, diferente do pedido. Ajuste no Google Ads.`);
   } catch { /* a conferência é um extra: sem ela, vale o que o Google respondeu na criação */ }
   return out;
 }

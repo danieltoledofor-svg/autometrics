@@ -14,15 +14,15 @@ import type { Css } from './StepCampaign';
  * lista de metas muda de uma conta para outra; a escolha fica lembrada.
  */
 
-interface Account { id: string; nome: string; mcc: string; ativas: string[] }
+export interface Account { id: string; nome: string; mcc: string; moeda?: string | null; ativas: string[] }
 type Goals = { list?: { id: string; nome: string }[]; error?: string; loading?: boolean };
-const REMEMBER = 'autometrics_criador_metas';
-const HIDDEN = 'autometrics_criador_contas_ocultas';
-const dashed = (id: string) => (id.length === 10 ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id);
-const running = (a: Account) => (a.ativas.length ? `${a.ativas.length} ${a.ativas.length === 1 ? 'campanha ativa' : 'campanhas ativas'}` : '');
+export const REMEMBER = 'autometrics_criador_metas';
+export const HIDDEN = 'autometrics_criador_contas_ocultas';
+export const dashed = (id: string) => (id.length === 10 ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id);
+export const running = (a: Account) => (a.ativas.length ? `${a.ativas.length} ${a.ativas.length === 1 ? 'campanha ativa' : 'campanhas ativas'}` : '');
 
 /** Lista de contas por MCC para um cartão. Fora do passo de propósito: guarda a própria busca sem redesenhar o resto. */
-function AccountPicker({ accounts, picked, elsewhere, onToggle, hidden, onHide, css }: {
+export function AccountPicker({ accounts, picked, elsewhere, onToggle, hidden, onHide, css }: {
   accounts: Account[]; picked: Set<string>; elsewhere: Map<string, number>; onToggle: (list: Account[], on: boolean) => void;
   /** Contas que o usuário escondeu à mão (o Google ainda as dá como ativas). */
   hidden: Set<string>; onHide: (id: string, hide: boolean) => void; css: Css;

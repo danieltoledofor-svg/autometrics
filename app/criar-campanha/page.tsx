@@ -12,6 +12,7 @@ import { StepCampaign } from './StepCampaign';
 import { StepWhere } from './StepWhere';
 import { StepAd } from './StepAd';
 import { StepReview } from './StepReview';
+import { Duplicate } from './Duplicate';
 import { Inter } from 'next/font/google';
 
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
@@ -23,6 +24,8 @@ const inter = Inter({ subsets: ['latin'], display: 'swap' });
  * nada), ou começar do zero. Depois: a configuração da campanha, o anúncio,
  * onde subir e a conferência, que ensaia no Google e, com a confirmação do
  * usuário, cria as campanhas, que já nascem ativas.
+ * Ao lado, separado do criador, o "Duplicar campanha" (./Duplicate): copia uma
+ * campanha que já roda para outras contas, sem os ajustes de lance.
  * Só para os logins liberados.
  */
 
@@ -61,6 +64,16 @@ export default function CampaignBuilderPage() {
   const [step, setStep] = useState(0);
   const [draft, setDraftState] = useState<Draft | null>(null);
   const [currency, setCurrency] = useState('USD');
+  // Criar e Duplicar ficam na mesma tela, em abas separadas; ?modo=duplicar abre direto na duplicação.
+  const [mode, setModeState] = useState<'criar' | 'duplicar'>('criar');
+  useEffect(() => { if (new URLSearchParams(window.location.search).get('modo') === 'duplicar') setModeState('duplicar'); }, []);
+  const setMode = (m: 'criar' | 'duplicar') => {
+    setModeState(m);
+    const url = new URL(window.location.href);
+    if (m === 'duplicar') url.searchParams.set('modo', 'duplicar'); else url.searchParams.delete('modo');
+    window.history.replaceState(null, '', url.toString());
+  };
+  const creating = mode === 'criar';
 
   // O rascunho fica guardado neste navegador, para não se perder ao fechar a aba.
   useEffect(() => {
@@ -140,13 +153,26 @@ export default function CampaignBuilderPage() {
         <div className="flex items-center gap-3">
           <Link href="/products" aria-label="Voltar para Campanhas" className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"><ArrowLeft size={16} aria-hidden="true" /></Link>
           <div>
-            <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">Criar campanha</h1>
-            <div className={`text-xs ${muted}`}>Rede de Pesquisa · o ensaio não cria nada; a criação só acontece no passo 5, com a sua confirmação, e a campanha já nasce ativa</div>
+            <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">{creating ? 'Criar campanha' : 'Duplicar campanha'}</h1>
+            <div className={`text-xs ${muted}`}>{creating
+              ? 'Rede de Pesquisa · o ensaio não cria nada; a criação só acontece no passo 5, com a sua confirmação, e a campanha já nasce ativa'
+              : 'Rede de Pesquisa · copia uma campanha que já roda para a mesma conta, outras contas ou outras MCCs, sem os ajustes de lance; a cópia já nasce ativa'}</div>
           </div>
         </div>
 
+        {list?.allowed && (
+          <div role="tablist" aria-label="O que fazer" className="inline-flex rounded-lg border border-line bg-surface-1 p-0.5">
+            {([['criar', 'Criar campanha', 'do zero ou a partir de um modelo'], ['duplicar', 'Duplicar campanha', 'copiar uma que já roda para outras contas']] as const).map(([id, name, hint]) => (
+              <button key={id} role="tab" aria-selected={mode === id} onClick={() => setMode(id)} title={hint}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === id ? 'bg-surface-3 text-ink' : 'text-ink-subtle hover:text-ink'}`}>{name}</button>
+            ))}
+          </div>
+        )}
+
+        {list?.allowed && !creating && <Duplicate campaigns={list.campaigns || []} css={css} api={api} />}
+
         {/* No celular, só número e nome numa linha que rola para o lado; a descrição de cada passo aparece a partir do tablet. */}
-        <div className="flex gap-1.5 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-visible">
+        {creating && <div className="flex gap-1.5 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-visible">
           {STEPS.map((s, i) => {
             const open = i === 0 || !!draft;
             return (
@@ -156,20 +182,20 @@ export default function CampaignBuilderPage() {
               </button>
             );
           })}
-        </div>
+        </div>}
 
         {list && list.allowed === false && <div className={`${card} border rounded-xl p-5 text-sm ${muted}`}>O criador de campanhas ainda não está liberado para este login.</div>}
 
-        {list?.allowed && step === 1 && draft && (
+        {creating && list?.allowed && step === 1 && draft && (
           <StepCampaign draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} languages={languages} reloadLanguages={() => setLanguages(null)} onNext={() => setStep(2)}
             findPlaces={async text => (await api(`/api/campaign-builder?local=${encodeURIComponent(text)}`)).body}
             findManyPlaces={async names => (await api('/api/campaign-builder', { action: 'locais', nomes: names })).body} />
         )}
-        {list?.allowed && step === 2 && draft && <StepAd draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} api={api} onNext={() => setStep(3)} />}
-        {list?.allowed && step === 3 && draft && <StepWhere draft={draft} setDraft={setDraft} css={css} api={api} onNext={() => setStep(4)} />}
-        {list?.allowed && step === 4 && draft && <StepReview draft={draft} setDraft={setDraft} css={css} api={api} goTo={setStep} />}
+        {creating && list?.allowed && step === 2 && draft && <StepAd draft={draft} setDraft={setDraft} symbol={symbolOf(currency)} css={css} api={api} onNext={() => setStep(3)} />}
+        {creating && list?.allowed && step === 3 && draft && <StepWhere draft={draft} setDraft={setDraft} css={css} api={api} onNext={() => setStep(4)} />}
+        {creating && list?.allowed && step === 4 && draft && <StepReview draft={draft} setDraft={setDraft} css={css} api={api} goTo={setStep} />}
 
-        {list?.allowed && step === 0 && (
+        {creating && list?.allowed && step === 0 && (
           <div className={`${card} border rounded-xl p-4 space-y-3`}>
             {draft && (
               <div className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border ${line} ${soft} px-3 py-2 text-xs`}>
@@ -219,7 +245,7 @@ export default function CampaignBuilderPage() {
           </div>
         )}
 
-        {t && step === 0 && (
+        {creating && t && step === 0 && (
           <>
             <div className={`${card} border !border-brand/50 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3`}>
               <div className={`text-xs ${muted}`}>Confira abaixo o que foi lido. Usar como modelo copia tudo para um rascunho que você edita; a campanha original não muda. A IA Max entra desligada no rascunho.</div>
