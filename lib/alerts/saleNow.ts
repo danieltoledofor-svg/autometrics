@@ -33,3 +33,18 @@ export async function notifySaleNow(userId: string, productId: string, day: stri
   const added = sales - last, money = (v: number) => formatMoney(v, product.currency), n = (v: number) => String(v).replace('.', ',');
   await sendTelegram(link.chat_id, `💰 <b>${added === 1 ? 'Venda nova' : `${n(added)} vendas novas`}</b>\n${escapeHtml(String(product.name || ''))}\n\nHoje: ${n(sales)} ${sales === 1 ? 'venda' : 'vendas'}, ${money(Number(row?.conversion_value) || 0)} de receita e ${money(Number(row?.cost) || 0)} de custo.`);
 }
+
+/**
+ * Aviso da venda que chegou sem campanha (o postback não trouxe nada que a ligue a um clique).
+ * Ela fica em Rastreamento → Vendas até ser ligada a uma visita.
+ */
+export async function notifyUnmatchedSale(userId: string, amount: number, currency: string, order: string): Promise<void> {
+  if (!telegramEnabled()) return;
+  const db = supabaseAdmin();
+  const { data: link } = await db.from('telegram_links').select('chat_id, enabled, settings').eq('user_id', userId).maybeSingle();
+  if (!link?.chat_id || link.enabled === false) return;
+  const settings = resolveSettings(link.settings);
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }).format(new Date())) % 24;
+  if (!settings.alerts.venda.on || isQuiet(settings, hour)) return;
+  await sendTelegram(link.chat_id, `💰 <b>Venda nova, sem campanha</b>\n${formatMoney(amount, currency)}${order ? ` · pedido ${escapeHtml(order)}` : ''}\n\nA plataforma não disse de qual clique veio. Ligue a venda à visita em Rastreamento → Vendas.`);
+}

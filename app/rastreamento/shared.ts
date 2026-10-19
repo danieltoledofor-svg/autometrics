@@ -8,6 +8,12 @@ export async function api(path: string) {
   return { ok: res.ok, body: await res.json().catch(() => ({})) };
 }
 
+export async function post(path: string, payload: unknown) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(path, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  return { ok: res.ok, body: await res.json().catch(() => ({})) };
+}
+
 export const qty = (v: number) => Number(v || 0).toLocaleString('pt-BR');
 export const money = (v: number, currency?: string) =>
   `${currency === 'BRL' ? 'R$' : currency === 'EUR' ? '€' : 'US$'} ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

@@ -23,7 +23,7 @@ async function productNames(db: SupabaseClient, userId: string) {
   return new Map<string, string>(products.map((p: any) => [p.id, p.google_ads_campaign_name || p.name || 'Campanha sem nome']));
 }
 
-export interface VisitFilters { productId?: string; traffic?: string; device?: string; q?: string; bought?: boolean; bots?: boolean; page?: number }
+export interface VisitFilters { productId?: string; traffic?: string; device?: string; q?: string; bought?: boolean; checkout?: boolean; bots?: boolean; page?: number }
 
 export async function listVisits(db: SupabaseClient, userId: string, since: string, until: string, days: Days, f: VisitFilters) {
   const names = await productNames(db, userId);
@@ -36,6 +36,14 @@ export async function listVisits(db: SupabaseClient, userId: string, since: stri
     const sales = await fetchAll((a, b) => db.from('postback_events').select('click_id, product_id, source, created_at')
       .eq('event_type', 'sale').not('click_id', 'is', null).gte('created_at', wide.since).lt('created_at', wide.until).order('created_at').range(a, b));
     buyers = [...new Set(sales.filter((s: any) => names.has(s.product_id) && inDays(s, clocks, days.from, days.to)).map((s: any) => s.click_id as string))].slice(0, 300);
+    if (!buyers.length) return { ready: true, total: 0, page, pages: 0, visits: [] };
+  }
+
+  // "Saíram para comprar": quem clicou no link de compra no período (para achar a visita de uma venda sem campanha).
+  if (f.checkout && !buyers) {
+    const out = await fetchAll((a, b) => db.from('tracking_pageviews').select('click_id').eq('user_id', userId).eq('kind', 'checkout')
+      .gte('created_at', since).lt('created_at', until).order('created_at').range(a, b));
+    buyers = [...new Set(out.map((p: any) => p.click_id as string))].slice(-120);
     if (!buyers.length) return { ready: true, total: 0, page, pages: 0, visits: [] };
   }
 
@@ -81,6 +89,19 @@ export async function listVisits(db: SupabaseClient, userId: string, since: stri
     };
   });
   return { ready: true, total: count || 0, page, pages: Math.ceil((count || 0) / PAGE), visits };
+}
+
+/** Campanhas que tiveram visita no período, com quantas visitas, para a busca por nome na aba Visitas. */
+export async function visitCampaigns(db: SupabaseClient, userId: string, since: string, until: string) {
+  const [names, rows] = await Promise.all([
+    productNames(db, userId),
+    fetchAll((a, b) => db.from('tracking_clicks').select('product_id').eq('user_id', userId).eq('is_bot', false).not('product_id', 'is', null)
+      .gte('created_at', since).lt('created_at', until).order('created_at').range(a, b)),
+  ]);
+  const count = new Map<string, number>();
+  for (const r of rows) count.set(r.product_id, (count.get(r.product_id) || 0) + 1);
+  return [...count].filter(([id]) => names.has(id)).map(([id, visits]) => ({ id, name: names.get(id)!, visits }))
+    .sort((a, b) => b.visits - a.visits || a.name.localeCompare(b.name));
 }
 
 /** Uma visita inteira: tudo o que veio na URL, o visitante e a linha do tempo. */

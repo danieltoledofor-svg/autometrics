@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { notifySaleNow } from '@/lib/alerts/saleNow';
+import { notifySaleNow, notifyUnmatchedSale } from '@/lib/alerts/saleNow';
 import { clockOf, dayInClock } from './platformClock';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -24,9 +24,10 @@ export function serverDay(d = new Date()): string {
  *
  * `replay` é a segunda tentativa de um postback que não tinha achado a campanha
  * (lib/tracking/unmatched.ts): `at` é a hora em que a venda chegou, e se a campanha
- * continuar sem ser achada nada é guardado de novo.
+ * continuar sem ser achada nada é guardado de novo. Na venda ligada à mão a uma visita
+ * (lib/tracking/manualSale.ts), `productId` e `clickId` dizem a campanha e o clique.
  */
-export async function processPostback(searchParams: URLSearchParams, userId: string, replay?: { at: string }): Promise<Response> {
+export async function processPostback(searchParams: URLSearchParams, userId: string, replay?: { at: string; productId?: string; clickId?: string }): Promise<Response> {
     try {
 
         // Modo teste: resolve a campanha e responde em JSON o que seria gravado,
@@ -103,11 +104,19 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
         if (!validEvents.includes(event)) return ignore(`evento desconhecido: ${rawEvent}`);
         if (rejected) return ignore(`venda recusada: ${status}`);
 
-        // Precisa de pelo menos um identificador de campanha
-        if (!candidateIds.length && !campaignName) return ignore('sem identificador de campanha');
+        // Sem nenhum identificador a campanha não tem como ser achada; a venda e o
+        // reembolso seguem assim mesmo, para ficarem guardados entre as vendas sem campanha.
+        if (!candidateIds.length && !campaignName && !replay?.productId && event !== 'sale' && event !== 'refund') return ignore('sem identificador de campanha');
 
         // ── 1. Localizar o produto ──────────────────────────────────────
         let product: { id: string; currency: string } | null = null;
+
+        // Venda ligada à mão: a campanha é a da visita escolhida.
+        if (replay?.productId) {
+            const { data } = await supabase.from('products').select('id, currency').eq('id', replay.productId).eq('user_id', userId).maybeSingle();
+            product = data;
+            trace.push(`campanha escolhida: ${data ? 'encontrada' : 'não'}`);
+        }
 
         // 1a. Busca direta pelo campaign_id numérico
         for (const id of candidateIds) {
@@ -163,8 +172,8 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
 
         // Clique que gerou a venda (script de rastreamento): pelo gclid ou pela
         // sessão da FlowTracking. Também resolve a campanha quando nada acima achou.
-        let clickId: string | null = null;
-        if (candidateIds.length) {
+        let clickId: string | null = replay?.clickId || null;
+        if (!clickId && candidateIds.length) {
             const pickClick = async (column: 'click_id' | 'gclid' | 'ft_sid', values: string[]) => {
                 if (!values.length) return null;
                 const { data } = await supabase.from('tracking_clicks').select('click_id, product_id')
@@ -223,11 +232,21 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
             if (replay) return new Response('NOT_FOUND', { status: 404, headers: corsHeaders });
             // Fica guardado (migration_postback_sem_campanha.sql) e é tentado de novo pelo agendador: o Google
             // leva alguns minutos para informar o clique. Antes da migração a tabela não existe e nada muda.
-            if (!replay && (event === 'sale' || event === 'refund')) await supabase.from('postback_unmatched').insert({
-                user_id: userId, event_type: event, amount, currency, transaction_id: tid || null,
-                source: searchParams.has('CONV_TYPE') ? 'BuyGoods' : searchParams.get('source') || null,
-                ref_ids: candidateIds, campaign_name: campaignName || null, query: searchParams.toString().slice(0, 4000),
-            }).then(() => null, () => null);
+            if (event === 'sale' || event === 'refund') {
+                // A plataforma pode reenviar o mesmo pedido: guarda uma vez só.
+                const { data: seen } = tid
+                    ? await supabase.from('postback_unmatched').select('id').eq('user_id', userId).eq('transaction_id', tid).eq('event_type', event).limit(1)
+                    : { data: null };
+                if (!seen?.length) {
+                    const { error: keepError } = await supabase.from('postback_unmatched').insert({
+                        user_id: userId, event_type: event, amount, currency, transaction_id: tid || null,
+                        source: searchParams.has('CONV_TYPE') ? 'BuyGoods' : searchParams.get('source') || null,
+                        ref_ids: candidateIds, campaign_name: campaignName || null, query: searchParams.toString().slice(0, 4000),
+                    });
+                    // A venda é avisada mesmo sem a campanha: ela aparece na aba Vendas para ser ligada a uma visita.
+                    if (!keepError && event === 'sale') await notifyUnmatchedSale(userId, amount, currency, tid).catch((e: any) => console.warn('[Postback] Aviso de venda sem campanha:', e?.message));
+                }
+            }
             return new Response('OK', { status: 200, headers: corsHeaders });
         }
 
@@ -251,9 +270,10 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
             const row = { product_id: product.id, transaction_id: tid, event_type: event, amount, currency, source };
             // click_id e ref_ids ligam a venda ao clique; antes de
             // migration_rastreamento_vendas.sql as colunas não existem.
-            let { error: dupError } = await supabase.from('postback_events').insert({ ...row, click_id: clickId, ref_ids: candidateIds });
+            // Na repetição a venda fica com a hora em que chegou, não a de agora (o Google recebe essa hora).
+            let { error: dupError } = await supabase.from('postback_events').insert({ ...row, click_id: clickId, ref_ids: candidateIds, ...(replay ? { created_at: replay.at } : {}) });
             if (dupError && dupError.code !== '23505' && /click_id|ref_ids/.test(dupError.message || '')) {
-                ({ error: dupError } = await supabase.from('postback_events').insert(row));
+                ({ error: dupError } = await supabase.from('postback_events').insert({ ...row, ...(replay ? { created_at: replay.at } : {}) }));
             }
 
             if (dupError) {

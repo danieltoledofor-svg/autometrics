@@ -9,7 +9,7 @@ import { applyTheme } from '@/lib/theme';
 import { Logo } from '@/app/components/Logo';
 import { Inter } from 'next/font/google';
 import { styles } from './shared';
-import { VisitsTab } from './VisitsTab';
+import { VisitsTab, type UnmatchedSale } from './VisitsTab';
 import { EventsTab } from './EventsTab';
 import { InstallTab } from './InstallTab';
 
@@ -73,6 +73,8 @@ export default function TrackingPage() {
   const [email, setEmail] = useState('');
   const [userId, setUserId] = useState('');
   const [tab, setTab] = useState<Tab>('overview');
+  // Venda sem campanha sendo ligada a uma visita: vai da aba Vendas para a aba Visitas.
+  const [linking, setLinking] = useState<UnmatchedSale | null>(null);
   const request = useRef(0);
 
   useEffect(() => {
@@ -217,8 +219,8 @@ export default function TrackingPage() {
           </div>
         )}
 
-        {tab === 'visits' && datesOk && <VisitsTab ui={ui} period={query} campaigns={data?.campaigns || []} />}
-        {tab === 'sales' && datesOk && <EventsTab ui={ui} period={query} type="sale" />}
+        {tab === 'visits' && datesOk && <VisitsTab ui={ui} period={query} linking={linking} onLinkDone={() => setLinking(null)} />}
+        {tab === 'sales' && datesOk && <EventsTab ui={ui} period={query} type="sale" onLink={sale => { setLinking(sale); setTab('visits'); }} />}
         {tab === 'checkouts' && datesOk && <EventsTab ui={ui} period={query} type="checkout" />}
         {tab === 'install' && userId && <InstallTab isDark={isDark} userId={userId} />}
 

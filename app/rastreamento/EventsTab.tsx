@@ -4,10 +4,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { api, qty, money, when, gap, place, DEVICE, type Ui } from './shared';
+import type { UnmatchedSale } from './VisitsTab';
 
 /**
  * Abas Vendas e Checkouts: cada evento que a plataforma avisou, com o clique
  * que o gerou e, na venda, se ela foi enviada ao Google.
+ *
+ * Nas vendas, as que chegaram sem campanha (o postback não disse de qual
+ * clique veio) aparecem à parte, com o botão para ligar a uma visita.
  *
  * Rota: /api/tracking/events.
  */
@@ -19,7 +23,7 @@ const GOOGLE: Record<string, { label: string; cls: string }> = {
   ignorada: { label: 'Não enviada', cls: 'bg-surface-3 text-ink-subtle' },
 };
 
-export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 'sale' | 'checkout' }) {
+export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string; type: 'sale' | 'checkout'; onLink?: (sale: UnmatchedSale) => void }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -41,6 +45,7 @@ export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 
   if (error) return <div className={`${card} border rounded-xl p-4 text-sm text-neg`}>{error}</div>;
   if (!data) return <div className={`flex items-center gap-2 text-sm ${muted}`}><Loader2 size={16} aria-hidden="true" className="animate-spin" /> Carregando…</div>;
 
+  const unmatched: UnmatchedSale[] = data.unmatched || [];
   const values = Object.entries(data.value as Record<string, number>).sort((a, b) => b[1] - a[1]);
   const stat = (label: string, value: React.ReactNode) => (
     <div className={`${card} border rounded-xl p-4`}><div className={`text-xs font-medium ${muted}`}>{label}</div><div className={`text-lg sm:text-xl font-semibold mt-1 tabular-nums whitespace-nowrap ${head}`}>{value}</div></div>
@@ -54,9 +59,36 @@ export function EventsTab({ ui, period, type }: { ui: Ui; period: string; type: 
         {sale && stat('Valor vendido', values.length ? values.map(([c, v]) => money(v, c)).join(' + ') : money(0))}
       </div>
 
+      {sale && unmatched.length > 0 && (
+        <div className="bg-surface-1 border border-warn/40 rounded-xl overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-line">
+            <div className={`text-sm font-medium ${head}`}>{unmatched.length === 1 ? '1 venda sem campanha' : `${unmatched.length} vendas sem campanha`}</div>
+            <div className={`text-xs mt-0.5 ${muted}`}>A plataforma avisou a venda, mas não disse de qual clique veio. Ela ainda não soma em nenhuma campanha: ligue à visita que gerou a venda e ela entra na campanha e vai para o Google.</div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <tbody>
+                {unmatched.map(u => (
+                  <tr key={u.id}>
+                    <td className={`${td} tabular-nums whitespace-nowrap`}>{u.at_text || when(u.at)}</td>
+                    <td className={`${td} ${head} text-right tabular-nums font-medium whitespace-nowrap`}>{money(u.amount, u.currency)}</td>
+                    <td className={`${td} whitespace-nowrap`}>{u.source || <span className={muted}>—</span>}</td>
+                    <td className={`${td} max-w-[200px] truncate`} title={u.product}>{u.product || <span className={muted}>—</span>}</td>
+                    <td className={`${td} whitespace-nowrap ${muted}`}>{u.order ? `pedido ${u.order}` : ''}</td>
+                    <td className={`${td} text-right whitespace-nowrap`}>
+                      {onLink && <button onClick={() => onLink(u)} className="px-2.5 py-1 rounded-lg border border-line text-xs font-medium text-ink hover:bg-surface-2">Ligar a uma visita</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <p className={`text-xs ${muted}`}>Dia e hora no relógio de cada plataforma (Instalação → Relógio), o mesmo dia em que {sale ? 'a venda' : 'o checkout'} entra no painel.</p>
 
-      {data.total === 0 ? (
+      {data.total === 0 && unmatched.length > 0 ? null : data.total === 0 ? (
         <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>
           {sale ? 'Nenhuma venda neste período.' : 'Nenhum checkout avisado pela plataforma neste período. Confira se o postback do Autometrics na plataforma também está marcado para o evento de checkout.'}
         </div>
