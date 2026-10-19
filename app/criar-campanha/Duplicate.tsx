@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, Plus, Search, X } from 'lucide-react';
 import type { Template } from '@/lib/campaignBuilder/template';
 import type { CreateResult } from '@/lib/campaignBuilder/create';
-import { droppedAdjustments, duplicateProblems, duplicateSettings, needsGoal, usesTargetSpend, type DuplicateSettings } from '@/lib/campaignBuilder/duplicate';
+import { droppedAdjustments, duplicateProblems, duplicateSettings, lineSettings, needsGoal, usesTargetSpend, valueProblems, type DuplicateSettings } from '@/lib/campaignBuilder/duplicate';
 import { Block, NumberField, type Css } from './StepCampaign';
 import { AccountPicker, HIDDEN, REMEMBER, dashed, running, type Account } from './StepWhere';
 
@@ -14,12 +14,18 @@ import { AccountPicker, HIDDEN, REMEMBER, dashed, running, type Account } from '
  * conta, para outras contas ou para contas de outras MCCs. Na cópia o usuário
  * só muda orçamento e CPA; os ajustes de lance da original não passam
  * (lib/campaignBuilder/duplicate). Antes de criar, o Google ensaia cada cópia.
+ * Com uma cópia, orçamento e CPA ficam num bloco só; com duas ou mais, cada
+ * linha da lista de contas tem o seu, começando pelos valores da original.
  */
 
 type Api = (path: string, body?: Record<string, any>) => Promise<{ ok: boolean; body: any }>;
 type Goals = { list?: { id: string; nome: string }[]; error?: string; loading?: boolean };
 type State = { fase: 'ensaiando' | 'criando' } | { fase: 'aceita' | 'recusada' | 'criada' | 'falhou'; result: CreateResult };
-interface Target { id: string; nome: string; mcc: string; moeda: string | null; campanha: string; meta_id: string | null; meta_nome: string | null }
+interface Target {
+  id: string; nome: string; mcc: string; moeda: string | null; campanha: string; meta_id: string | null; meta_nome: string | null;
+  /** Orçamento e CPA (ou limite de CPC) desta cópia, quando há duas ou mais. Ausente = os do bloco geral. */
+  orcamento?: number | null; cpa?: number | null;
+}
 const CREATED = 'autometrics_duplicar_criadas';
 const symbolOf = (c?: string | null) => (c === 'BRL' ? 'R$' : c === 'EUR' ? '€' : c === 'USD' || !c ? 'US$' : c);
 
@@ -43,6 +49,9 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
   const [busy, setBusy] = useState<'' | 'ensaio' | 'criar'>('');
   const [agreed, setAgreed] = useState(false);
   const [stale, setStale] = useState(false);
+  /** Campos com texto que não é número: 'geral|orcamento', '<conta>|cpa'… */
+  const [notNumber, setBad] = useState<Set<string>>(new Set());
+  const markBad = (k: string, on: boolean) => setBad(b => { if (b.has(k) === on) return b; const next = new Set(b); if (on) next.add(k); else next.delete(k); return next; });
 
   useEffect(() => {
     try { setHidden(new Set(JSON.parse(localStorage.getItem(HIDDEN) || '[]'))); } catch { /* sem lembrança */ }
@@ -82,6 +91,19 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
       if (hit) setTargets(ts => ts.map(x => (x.id === next.id && !x.meta_id ? { ...x, meta_id: hit.id, meta_nome: hit.nome } : x)));
     });
   }, [targets, t, api]);
+
+  // Voltou a uma cópia só: os valores dela passam para o bloco geral, que volta a aparecer.
+  const multi = targets.length > 1;
+  useEffect(() => {
+    setBad(b => new Set([...b].filter(k => k.startsWith('grupo|'))));
+    if (multi || targets.length !== 1) return;
+    const [x] = targets;
+    if (x.orcamento === undefined && x.cpa === undefined) return;
+    const spend = !!t && usesTargetSpend(t);
+    setS(v => v && { ...v, ...(x.orcamento !== undefined ? { orcamento_diario: x.orcamento } : {}), ...(x.cpa !== undefined ? (spend ? { limite_cpc: x.cpa } : { meta_cpa: x.cpa }) : {}) });
+    setTargets(ts => ts.map(y => ({ ...y, orcamento: undefined, cpa: undefined })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multi]);
 
   const byId = useMemo(() => new Map((accounts || []).map(a => [a.id, a])), [accounts]);
   const toggle = (list: Account[], on: boolean) => setTargets(ts => {
@@ -148,7 +170,28 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
   const negatives = t.negativas.length + t.grupos.reduce((n, g) => n + g.negativas.length, 0);
   const goalNeeded = needsGoal(t);
   const keyOf = (x: Target) => `${t.origem.campanha_id}|${x.id}|${x.campanha.trim().toLowerCase()}`;
-  const problems = [...duplicateProblems(t, s)];
+  // Os valores de cada cópia: os da linha, quando há duas ou mais; senão os do bloco geral.
+  const own = (x: Target) => {
+    const budget = x.orcamento !== undefined ? x.orcamento : s.orcamento_diario;
+    const cpa = x.cpa !== undefined ? x.cpa : spend ? s.limite_cpc : s.meta_cpa;
+    return { orcamento_diario: budget, meta_cpa: spend ? null : cpa, limite_cpc: spend ? cpa : null };
+  };
+  const cpaName = spend ? 'o limite de CPC' : 'a meta de CPA';
+  const problems: string[] = [];
+  if (multi) {
+    problems.push(...duplicateProblems(t, { ...s, orcamento_diario: 1, meta_cpa: null, limite_cpc: null }));
+    for (const x of targets) {
+      const where = `Cópia em ${x.nome}`;
+      if (notNumber.has(`${x.id}|orcamento`)) problems.push(`${where}: o orçamento diário não é um número. Use só números, como 50 ou 49,90.`);
+      if (notNumber.has(`${x.id}|cpa`)) problems.push(`${where}: ${cpaName} não é um número. Use só números, como 25 ou 24,50, ou deixe em branco.`);
+      if (!notNumber.has(`${x.id}|orcamento`) && !notNumber.has(`${x.id}|cpa`)) problems.push(...valueProblems(lineSettings(s, own(x))).map(p => `${where}: ${p.charAt(0).toLowerCase()}${p.slice(1)}`));
+    }
+  } else {
+    problems.push(...duplicateProblems(t, s));
+    if (notNumber.has('geral|orcamento')) problems.push('O orçamento diário não é um número. Use só números, como 50 ou 49,90.');
+    if (notNumber.has('geral|cpa')) problems.push(`${spend ? 'O limite de CPC' : 'A meta de CPA'} não é um número. Use só números, como 25 ou 24,50, ou deixe em branco.`);
+  }
+  if ([...notNumber].some(k => k.startsWith('grupo|'))) problems.push('A meta de CPA de um grupo não é um número. Use só números, como 25 ou 24,50, ou deixe em branco.');
   if (!targets.length) problems.push('Escolha pelo menos uma conta para receber a cópia.');
   if (targets.some(x => !x.campanha.trim())) problems.push('Toda cópia precisa de um nome.');
   if (targets.some(x => x.id === t.origem.conta_id && x.campanha.trim().toLowerCase() === t.origem.nome.trim().toLowerCase())) problems.push('Na mesma conta da original, a cópia precisa de outro nome.');
@@ -158,7 +201,7 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
   const set = (k: string, st: State) => setStates(x => ({ ...x, [k]: st }));
 
   const send = async (x: Target, ensaio: boolean): Promise<CreateResult> => {
-    const { body } = await api('/api/campaign-builder', { action: 'duplicar', ensaio, modelo: t, ajustes: s, linha: { conta_id: x.id, nome: x.campanha, meta_id: x.meta_id } });
+    const { body } = await api('/api/campaign-builder', { action: 'duplicar', ensaio, modelo: t, ajustes: s, linha: { conta_id: x.id, nome: x.campanha, meta_id: x.meta_id, ...(multi ? own(x) : {}) } });
     return body.result || { ok: false, ensaio, campanha_id: null, situacao: null, problemas: [{ onde: 'pedido', texto: body.error || 'O servidor não respondeu.' }], avisos: [], calls: 0, itens: 0 };
   };
   const rehearse = async () => {
@@ -212,24 +255,26 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
           : <div className={`text-xs ${muted}`}>A original não tem ajuste de lance.</div>}
       </Block>
 
-      <Block title="Orçamento e CPA da cópia" hint={`Começa com os valores da original (${symbol}). O que você mudar aqui vale para todas as cópias.`} css={css}>
-        <div className="flex flex-wrap gap-4">
+      <Block title={multi ? 'CPA dos grupos' : 'Orçamento e CPA da cópia'} hint={multi
+        ? `Com mais de uma cópia, o orçamento e ${cpaName} de cada uma ficam na lista de contas abaixo, começando com os valores da original (${symbol}).${!spend && t.grupos.length ? ' As metas de CPA dos grupos valem para todas as cópias.' : ''}`
+        : `Começa com os valores da original (${symbol}). Se você escolher mais de uma conta, cada cópia ganha o próprio orçamento e CPA na lista de contas.`} css={css}>
+        {!multi && <div className="flex flex-wrap gap-4">
           <label className="space-y-1"><div className={label}>Orçamento diário</div>
-            <div className="flex items-center gap-2"><span className={`text-xs ${muted}`}>{symbol}</span><NumberField value={s.orcamento_diario} onChange={v => setS(x => x && { ...x, orcamento_diario: v })} css={css} label="Orçamento diário da cópia" /></div>
+            <div className="flex items-center gap-2"><span className={`text-xs ${muted}`}>{symbol}</span><NumberField value={s.orcamento_diario} onChange={v => setS(x => x && { ...x, orcamento_diario: v })} onBad={b => markBad('geral|orcamento', b)} css={css} label="Orçamento diário da cópia" /></div>
             <div className={`text-[11px] ${muted}`}>original: {money(t.campanha.orcamento_diario)}</div>
           </label>
           {spend ? (
             <label className="space-y-1"><div className={label}>Limite de CPC</div>
-              <div className="flex items-center gap-2"><span className={`text-xs ${muted}`}>{symbol}</span><NumberField value={s.limite_cpc} onChange={v => setS(x => x && { ...x, limite_cpc: v })} css={css} placeholder="sem limite" label="Limite de CPC da cópia" /></div>
+              <div className="flex items-center gap-2"><span className={`text-xs ${muted}`}>{symbol}</span><NumberField value={s.limite_cpc} onChange={v => setS(x => x && { ...x, limite_cpc: v })} onBad={b => markBad('geral|cpa', b)} css={css} placeholder="sem limite" label="Limite de CPC da cópia" /></div>
               <div className={`text-[11px] ${muted}`}>original: {money(t.campanha.lance.limite_cpc)}</div>
             </label>
           ) : (
             <label className="space-y-1"><div className={label}>Meta de CPA da campanha</div>
-              <div className="flex items-center gap-2"><span className={`text-xs ${muted}`}>{symbol}</span><NumberField value={s.meta_cpa} onChange={v => setS(x => x && { ...x, meta_cpa: v })} css={css} placeholder="sem meta" label="Meta de CPA da cópia" /></div>
+              <div className="flex items-center gap-2"><span className={`text-xs ${muted}`}>{symbol}</span><NumberField value={s.meta_cpa} onChange={v => setS(x => x && { ...x, meta_cpa: v })} onBad={b => markBad('geral|cpa', b)} css={css} placeholder="sem meta" label="Meta de CPA da cópia" /></div>
               <div className={`text-[11px] ${muted}`}>original: {money(t.campanha.lance.meta_cpa)}</div>
             </label>
           )}
-        </div>
+        </div>}
         {!spend && t.grupos.length > 0 && (
           <div className="space-y-1.5">
             <div className={label}>Meta de CPA de cada grupo <span className="font-normal">(em branco, o grupo segue a meta da campanha)</span></div>
@@ -238,7 +283,7 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
                 <span className={`flex-1 min-w-[180px] ${head}`}>{g.nome}{g.status === 'PAUSED' && <span className={`ml-1.5 text-xs ${muted}`}>· pausado, vai pausado</span>}</span>
                 <span className={`text-xs ${muted}`}>original: {money(g.meta_cpa)}</span>
                 <span className={`text-xs ${muted}`}>{symbol}</span>
-                <NumberField value={s.grupos[g.id] ?? null} onChange={v => setS(x => x && { ...x, grupos: { ...x.grupos, [g.id]: v } })} css={css} placeholder="da campanha" label={`Meta de CPA do grupo ${g.nome}`} />
+                <NumberField value={s.grupos[g.id] ?? null} onChange={v => setS(x => x && { ...x, grupos: { ...x.grupos, [g.id]: v } })} onBad={b => markBad(`grupo|${g.id}`, b)} css={css} placeholder="da campanha" label={`Meta de CPA do grupo ${g.nome}`} />
               </div>
             ))}
           </div>
@@ -292,6 +337,17 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
                           </select>
                         ) : <span className={`text-xs ${goalNeeded ? warn : muted}`}>{goalNeeded ? 'Esta conta não tem meta personalizada. Crie a meta no Google Ads antes de duplicar.' : 'Usa as metas da conta, como a original.'}</span>}
                   </div>
+                  {multi && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <label className={`inline-flex items-center gap-2 text-xs ${muted}`}>Orçamento diário {symbol}
+                        <NumberField key={`${x.id}|orcamento`} value={own(x).orcamento_diario} onChange={v => setTarget(x.id, { orcamento: v })} onBad={b => markBad(`${x.id}|orcamento`, b)} css={css} label={`Orçamento diário da cópia em ${x.nome}`} />
+                      </label>
+                      <label className={`inline-flex items-center gap-2 text-xs ${muted}`}>{spend ? 'Limite de CPC' : 'Meta de CPA'} {symbol}
+                        <NumberField key={`${x.id}|cpa`} value={spend ? own(x).limite_cpc : own(x).meta_cpa} onChange={v => setTarget(x.id, { cpa: v })} onBad={b => markBad(`${x.id}|cpa`, b)} css={css} placeholder={spend ? 'sem limite' : 'sem meta'} label={`${spend ? 'Limite de CPC' : 'Meta de CPA'} da cópia em ${x.nome}`} />
+                      </label>
+                      <span className={`text-[11px] ${muted}`}>original: {money(t.campanha.orcamento_diario)} · {money(spend ? t.campanha.lance.limite_cpc : t.campanha.lance.meta_cpa)}</span>
+                    </div>
+                  )}
                   {otherCurrency && <div className={`text-xs ${warn}`}>Esta conta usa {symbolOf(x.moeda)}, não {symbol}: o orçamento e o CPA entram nela como {symbolOf(x.moeda)} com os mesmos números.</div>}
                   {st && 'result' in st && st.result.problemas.map((p, j) => (
                     <div key={j} className="rounded-lg border border-neg/30 bg-neg/5 px-3 py-2 text-xs space-y-1">

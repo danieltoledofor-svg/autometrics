@@ -34,12 +34,14 @@ export function Block({ title, hint, css, children }: { title: string; hint?: st
 }
 
 /** Campo de número que aceita vírgula e fica em branco quando não há valor. */
-export function NumberField({ value, onChange, css, width = 'w-28', placeholder, label }: { value: number | null; onChange: (v: number | null) => void; css: Css; width?: string; placeholder?: string; label: string }) {
+/** onBad: avisa quando o texto digitado não é um número (em branco não conta), para a tela mostrar o erro em vez de tratar como vazio. */
+export function NumberField({ value, onChange, onBad, css, width = 'w-28', placeholder, label }: { value: number | null; onChange: (v: number | null) => void; onBad?: (bad: boolean) => void; css: Css; width?: string; placeholder?: string; label: string }) {
   const [text, setText] = useState(value === null || value === undefined ? '' : String(value).replace('.', ','));
+  const bad = text.trim() !== '' && toNumber(text) === null;
   return (
-    <input value={text} inputMode="decimal" placeholder={placeholder} aria-label={label}
-      onChange={e => { setText(e.target.value); onChange(toNumber(e.target.value)); }}
-      className={`${width} rounded-lg border ${css.line} ${css.soft} ${css.head} px-2.5 py-1.5 text-right text-[13px] tabular-nums outline-none focus:border-brand`} />
+    <input value={text} inputMode="decimal" placeholder={placeholder} aria-label={label} aria-invalid={bad || undefined}
+      onChange={e => { setText(e.target.value); onChange(toNumber(e.target.value)); onBad?.(e.target.value.trim() !== '' && toNumber(e.target.value) === null); }}
+      className={`${width} rounded-lg border ${bad ? 'border-neg/70' : css.line} ${css.soft} ${css.head} px-2.5 py-1.5 text-right text-[13px] tabular-nums outline-none focus:border-brand`} />
   );
 }
 

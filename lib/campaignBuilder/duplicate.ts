@@ -27,7 +27,24 @@ export interface DuplicateSettings {
   /** Meta de CPA de cada grupo, pelo número do grupo na campanha original. Vazio = segue a da campanha. */
   grupos: Record<string, number | null>;
 }
-export interface DuplicateLine { conta_id: string; nome: string; meta_id: string | null }
+/**
+ * Uma cópia. Com duas cópias ou mais, cada linha traz o próprio orçamento e a
+ * própria meta de CPA (ou limite de CPC); ausente = vale o dos ajustes gerais.
+ */
+export interface DuplicateLine {
+  conta_id: string; nome: string; meta_id: string | null;
+  orcamento_diario?: number | null; meta_cpa?: number | null; limite_cpc?: number | null;
+}
+
+/** Os valores desta cópia: os gerais, trocados pelos da linha quando ela traz os seus. */
+export function lineSettings(s: DuplicateSettings, line: Pick<DuplicateLine, 'orcamento_diario' | 'meta_cpa' | 'limite_cpc'>): DuplicateSettings {
+  return {
+    ...s,
+    orcamento_diario: line.orcamento_diario !== undefined ? line.orcamento_diario : s.orcamento_diario,
+    meta_cpa: line.meta_cpa !== undefined ? line.meta_cpa : s.meta_cpa,
+    limite_cpc: line.limite_cpc !== undefined ? line.limite_cpc : s.limite_cpc,
+  };
+}
 
 /** Estratégias que a cópia sabe montar. As outras precisam ser escolhidas no Google. */
 const SUPPORTED = ['MAXIMIZE_CONVERSIONS', 'TARGET_CPA', 'TARGET_SPEND'];
@@ -74,11 +91,21 @@ export function duplicateProblems(t: Template, s: DuplicateSettings): string[] {
   if (t.avisos.length) out.push('O Google não devolveu a campanha inteira na leitura. Leia de novo antes de duplicar, para a cópia não sair faltando partes.');
   if (!t.grupos.length) out.push('A campanha original não tem grupo de anúncios.');
   if (!t.grupos.some(g => g.anuncios.length)) out.push('A campanha original não tem anúncio de pesquisa responsivo.');
+  return [...out, ...valueProblems(s), ...groupProblems(s)];
+}
+
+/** Orçamento e CPA (ou limite de CPC) de uma cópia. */
+export function valueProblems(s: Pick<DuplicateSettings, 'orcamento_diario' | 'meta_cpa' | 'limite_cpc'>): string[] {
+  const out: string[] = [];
   if (!s.orcamento_diario || s.orcamento_diario <= 0) out.push('Informe o orçamento diário.');
   if (s.meta_cpa !== null && s.meta_cpa <= 0) out.push('A meta de CPA precisa ser maior que zero (ou fique em branco).');
   if (s.limite_cpc !== null && s.limite_cpc <= 0) out.push('O limite de CPC precisa ser maior que zero (ou fique em branco).');
-  if (Object.values(s.grupos).some(v => v !== null && v <= 0)) out.push('A meta de CPA de um grupo precisa ser maior que zero (ou fique em branco).');
   return out;
+}
+
+/** Metas de CPA dos grupos, que valem para todas as cópias. */
+export function groupProblems(s: DuplicateSettings): string[] {
+  return Object.values(s.grupos).some(v => v !== null && v <= 0) ? ['A meta de CPA de um grupo precisa ser maior que zero (ou fique em branco).'] : [];
 }
 
 /** As operações da cópia, num pedido só, cada uma com rótulo para dizer onde o Google reclamou. */
@@ -161,7 +188,8 @@ export function buildDuplicateOperations(t: Template, s: DuplicateSettings, line
   return { operations, labels };
 }
 
-export async function duplicateCampaign(ctx: AdsContext, t: Template, s: DuplicateSettings, line: DuplicateLine, ensaio: boolean): Promise<CreateResult> {
+export async function duplicateCampaign(ctx: AdsContext, t: Template, general: DuplicateSettings, line: DuplicateLine, ensaio: boolean): Promise<CreateResult> {
+  const s = lineSettings(general, line);
   const out: CreateResult = { ok: false, ensaio, campanha_id: null, situacao: null, problemas: [], avisos: [], calls: 0, itens: 0 };
   // O servidor confere de novo o que a tela já conferiu: a campanha lida e os valores vêm do navegador.
   const blocking = duplicateProblems(t, s);

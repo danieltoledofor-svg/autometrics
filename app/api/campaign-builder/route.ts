@@ -35,7 +35,7 @@ export const maxDuration = 60;
  *                                                `fonte` é o código colado pelo usuário, quando a página recusa o servidor
  * POST { action: 'recursos', funil, … }          títulos, descrições, sitelinks e frases de destaque pela IA
  * POST { action: 'criar', draft, linha, ensaio }  ensaia (ou cria, já ativa) uma campanha em uma conta; o que o Google recusar volta explicado pela IA
- * POST { action: 'duplicar', modelo, ajustes, linha, ensaio }  copia uma campanha lida para uma conta, com orçamento e CPA novos e sem ajuste de lance
+ * POST { action: 'duplicar', modelo, ajustes, linha, ensaio }  copia uma campanha lida para uma conta, com orçamento e CPA novos (os da linha, quando ela traz) e sem ajuste de lance
  *
  * Só para os logins liberados (lib/googleAds/edit).
  */
@@ -267,8 +267,13 @@ export async function POST(request: Request) {
     };
     const ensaio = body.ensaio !== false;
     const name = String(line.nome || '').trim().slice(0, 250);
+    // Com duas cópias ou mais, cada linha traz o próprio orçamento e CPA; o que a linha não traz vem dos ajustes gerais.
+    const own = (k: 'orcamento_diario' | 'meta_cpa' | 'limite_cpc') => (k in line ? num(line[k]) : undefined);
     try {
-      const result = await duplicateCampaign(ctx, t, settings, { conta_id: accountId, nome: name, meta_id: line.meta_id ? String(line.meta_id) : null }, ensaio);
+      const result = await duplicateCampaign(ctx, t, settings, {
+        conta_id: accountId, nome: name, meta_id: line.meta_id ? String(line.meta_id) : null,
+        orcamento_diario: own('orcamento_diario'), meta_cpa: own('meta_cpa'), limite_cpc: own('limite_cpc'),
+      }, ensaio);
       await addUsage(result.calls).catch(() => {});
       if (!result.ok && aiEnabled()) result.problemas = await improveProblems(user.id, result.problemas);
       if (!ensaio) {
