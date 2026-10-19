@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { Link2, Loader2 } from 'lucide-react';
 import { api, qty, money, when, gap, place, DEVICE, type Ui } from './shared';
 import type { UnmatchedSale } from './VisitsTab';
 
@@ -76,7 +76,7 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                     <td className={`${td} max-w-[200px] truncate`} title={u.product}>{u.product || <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap ${muted}`}>{u.order ? `pedido ${u.order}` : ''}</td>
                     <td className={`${td} text-right whitespace-nowrap`}>
-                      {onLink && <button onClick={() => onLink(u)} className="px-2.5 py-1 rounded-lg border border-line text-xs font-medium text-ink hover:bg-surface-2">Ligar a uma visita</button>}
+                      {onLink && <button onClick={() => onLink(u)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-semibold shadow-sm transition-colors"><Link2 size={14} aria-hidden="true" /> Ligar a uma visita</button>}
                     </td>
                   </tr>
                 ))}

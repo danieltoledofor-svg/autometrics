@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Search, X } from 'lucide-react';
+import { BadgeDollarSign, Loader2, Search, X } from 'lucide-react';
 import { api, post, qty, money, when, clock, lasted, place, path, DEVICE, TRAFFIC, type Ui } from './shared';
 
 /**
@@ -76,8 +76,9 @@ export function VisitsTab({ ui, period, linking, onLinkDone }: { ui: Ui; period:
   };
   const linked = () => { if (open) show(open.click_id, true); load(); onLinkDone?.(); };
 
-  const { card, head, muted, line, th, td, title, field } = ui;
-  const chip = (on: boolean) => `px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${on ? 'bg-surface-3 border-line-strong text-ink' : `${line} ${muted} hover:text-ink`}`;
+  const { card, head, muted, th, td, title, field } = ui;
+  // Filtros com cara de botão: fundo e borda visíveis no tema claro; ligado fica na cor da marca.
+  const chip = (on: boolean) => `px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${on ? 'bg-brand/15 border-brand text-brand-text' : 'bg-surface-2 border-line-strong text-ink hover:bg-surface-3'}`;
   const info = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-3 py-1 text-[13px]"><span className={muted}>{label}</span><span className={`${head} text-right break-all`}>{value || <span className={muted}>—</span>}</span></div>
   );
@@ -349,7 +350,7 @@ function SaleLinker({ ui, visit, preset, onDone }: { ui: Ui; visit: any; preset:
     <div>
       <div className="flex flex-wrap items-center gap-3">
         <div className={title}>Venda</div>
-        {!openForm && <button onClick={() => { setOpenForm(true); setMsg(null); }} className="px-2.5 py-1 rounded-lg border border-line text-xs font-medium text-ink hover:bg-surface-2">Esta visita gerou uma venda</button>}
+        {!openForm && <button onClick={() => { setOpenForm(true); setMsg(null); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-semibold shadow-sm transition-colors"><BadgeDollarSign size={14} aria-hidden="true" /> Esta visita gerou uma venda</button>}
       </div>
       <div aria-live="polite">{msg && <p className={`text-[13px] mt-2 ${msg.ok ? 'text-pos' : 'text-neg'}`}>{msg.text}</p>}</div>
       {openForm && (
