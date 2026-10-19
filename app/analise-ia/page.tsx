@@ -70,7 +70,7 @@ export default function PatternsPage() {
   const [asking, setAsking] = useState(false);
   const [aiError, setAiError] = useState('');
   const [question, setQuestion] = useState('');
-  const [chat, setChat] = useState<{ q: string; a: string; missing?: string }[]>([]);
+  const [chat, setChat] = useState<{ q: string; a: string; missing?: string; period?: string }[]>([]);
   const [answering, setAnswering] = useState(false);
   const [askError, setAskError] = useState('');
   const [memoryTick, setMemoryTick] = useState(0);
@@ -153,7 +153,7 @@ export default function PatternsPage() {
       body: JSON.stringify({ ...selection, question: q, history: chat.map(c => ({ q: c.q, a: c.a })) }),
     });
     if (!ok) setAskError(body.error || 'A IA não respondeu.');
-    else { setChat(c => [...c, { q, a: body.answer.text, missing: body.answer.missing }]); setQuestion(''); }
+    else { setChat(c => [...c, { q, a: body.answer.text, missing: body.answer.missing, period: body.answer.period }]); setQuestion(''); }
     setAnswering(false);
   };
 
@@ -375,6 +375,7 @@ export default function PatternsPage() {
                 <div key={i} className="space-y-1.5">
                   <div className={`text-[13px] font-medium ${head}`}>{c.q}</div>
                   <div className={`rounded-lg border ${line} ${soft} p-3 text-[13px] leading-relaxed whitespace-pre-wrap`}>{c.a}</div>
+                  {c.period && <div className={`text-[11px] ${muted}`}>Números calculados para {c.period}, como pedido na pergunta.</div>}
                   {c.missing && <div className={`text-[11px] ${muted}`}>Faltou para responder melhor: {c.missing}</div>}
                   {kept.includes(i)
                     ? <div className="text-[11px] text-pos">Guardado na memória da IA.</div>

@@ -304,7 +304,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     }
     detail = {
       monthly,
-      campaigns: [...inWindow].filter(([, c]) => c.cost > 0).sort((a, b) => b[1].cost - a[1].cost).slice(0, 50)
+      campaigns: [...inWindow].filter(([, c]) => c.cost > 0).sort((a, b) => b[1].cost - a[1].cost).slice(0, 150)
         .map(([id, c]) => ({ name: nameOf.get(id) || '', mcc: placeOf.get(id)?.mcc || '', account: placeOf.get(id)?.account || '', cost: round(c.cost), sales: round(c.sales), cpa: cpaOf(c.cost, c.sales), clicks: c.clicks, result: hasReal ? result(c) : null })),
       series: [...series].sort((a, b) => a[0].localeCompare(b[0])).slice(-36)
         .map(([when, c]) => ({ when, cost: round(c.cost), sales: round(c.sales), cpa: cpaOf(c.cost, c.sales), result: hasReal ? result(c) : null })),

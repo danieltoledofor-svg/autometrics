@@ -6,6 +6,7 @@ import { languageProblems } from '@/lib/analysis/actions';
 import { formatMoney } from '@/lib/analysis/labels';
 import { memoryBlock, memoryFor } from '@/lib/analysis/userMemory';
 import { adjustmentBlock, adjustmentSummary } from '@/lib/analysis/changes';
+import { addDays, todayIn } from '@/lib/analysis/compute';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,9 @@ export const dynamic = 'force-dynamic';
  * GET   ?tag=&period=&blocks=&mcc=&from=&to=   números e padrões, calculados na hora, sem IA
  *       &only=options  só as opções dos filtros (a tela abre assim e só calcula quando a pessoa pede)
  * POST  { tag, period, blocks } leitura da IA em cima desses mesmos números
- * POST  { …, question, history } resposta da IA a uma pergunta do usuário
+ * POST  { …, question, history } resposta da IA a uma pergunta do usuário; se a
+ *       pergunta fala de um período ("últimos 3 dias", "outubro", "de 01/10 a 05/10"),
+ *       os números são calculados para esse período, não o da tela
  *
  * Só entram campanhas de quem está logado.
  */
@@ -110,8 +113,50 @@ Regras, obrigatórias:
 - Se pedirem opinião sobre o que fazer, descreva o que os números mostram e os caminhos possíveis; a decisão é do afiliado.
 - Fale só das campanhas deste pedido e do que o próprio afiliado fez (bloco dos ajustes e anotações dele, que valem para todas as campanhas dele). Nunca mencione campanhas, contas ou usuários de fora.
 - Ao usar o bloco dos ajustes, diga quantas vezes aconteceu; com menos de 5 repetições, avise que ainda é pouco para virar regra.
+- Os números já vêm calculados para o período que o afiliado pediu (linha PERÍODO). Diga no começo qual período usou, com as datas. Quando vierem dois ou mais períodos, compare usando o bloco de cada um.
 
 Responda só com JSON: {"resposta": "texto em parágrafos curtos; use quebra de linha para separar parágrafos e '- ' para listas", "faltou": "dado que faltou para responder melhor, ou vazio"}`;
+
+function campaignBlock(p: Extract<Patterns, { empty: false }>) {
+  const money = (v: number | null) => (v === null ? '—' : formatMoney(v, p.currency));
+  return `CAMPANHA A CAMPANHA NO PERÍODO (com a MCC e a conta de cada uma):\n${(p.detail?.campaigns || []).map((c: any) => `- ${c.name}${c.mcc ? ` · MCC ${c.mcc}` : ''}${c.account ? ` · conta ${c.account}` : ''}: custo ${money(c.cost)} · vendas ${c.sales} · CPA ${money(c.cpa)} · cliques ${c.clicks}${c.result !== null ? ` · resultado ${money(c.result)}` : ''}`).join('\n') || '(sem dados)'}`;
+}
+
+/** Período da tela ou da pergunta, em palavras, para a IA e para a resposta. */
+function periodText(p: Extract<Patterns, { empty: false }>) {
+  const br = (d: string) => d.split('-').reverse().join('/');
+  return p.period.from ? `de ${br(p.period.from)} a ${br(p.period.to)}` : `todo o período (até ${br(p.period.to)})`;
+}
+
+const PERIOD_SYSTEM = `Você lê a pergunta de um afiliado sobre as campanhas dele e diz de quais períodos de datas ela precisa. Não responde a pergunta.
+
+Regras:
+- "últimos N dias" são N dias fechados: começa em hoje menos N e termina ontem. "Hoje" é só hoje; "ontem" é só ontem.
+- "esta semana" vai da segunda-feira desta semana até hoje; "semana passada" é de segunda a domingo da semana anterior.
+- Mês sem ano: o deste ano; se esse mês ainda não chegou, o do ano passado. "Este mês" vai do dia 1 até hoje.
+- "desde X" vai de X até hoje. Datas sem ano são deste ano.
+- Comparação ("3 dias contra 7 dias", "outubro e setembro"): até 3 períodos, na ordem em que aparecem.
+- Pergunta sem período, ou "período todo", "desde o começo", "no total": lista vazia.
+- Pergunta curta que continua a conversa ("e nos últimos 5?") usa o período dela; se não disser período, vale o da pergunta anterior.
+
+Responda só com JSON: {"periodos": [{"de": "AAAA-MM-DD", "ate": "AAAA-MM-DD"}]}`;
+
+const isDay = (v: any) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+
+/** Períodos que a pergunta pede; vazio = vale o da tela. */
+async function askedPeriods(userId: string, question: string, history: any): Promise<{ from: string; to: string }[]> {
+  const today = todayIn('America/Sao_Paulo');
+  const weekday = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][new Date(`${today}T12:00:00Z`).getUTCDay()];
+  const past = (Array.isArray(history) ? history : []).slice(-2).map((h: any) => `- ${String(h?.q || '').slice(0, 300)}`).join('\n');
+  const raw = await askJson<any>({
+    fn: 'padroes', userId, system: PERIOD_SYSTEM, maxTokens: 300,
+    user: `Hoje é ${today} (${weekday}); ontem foi ${addDays(today, -1)}.\n${past ? `PERGUNTAS ANTERIORES:\n${past}\n` : ''}PERGUNTA:\n${question}`,
+  }).catch(() => null);
+  return (Array.isArray(raw?.periodos) ? raw.periodos : [])
+    .filter((x: any) => isDay(x?.de) && isDay(x?.ate))
+    .map((x: any) => ({ from: String(x.de), to: String(x.ate) }))
+    .slice(0, 3);
+}
 
 function dataPack(p: Extract<Patterns, { empty: false }>, tag: string) {
   const money = (v: number | null) => (v === null ? '—' : formatMoney(v, p.currency));
@@ -120,8 +165,8 @@ function dataPack(p: Extract<Patterns, { empty: false }>, tag: string) {
   const block = (title: string, lines: string[]) => `${title}:\n${lines.join('\n') || '(sem dados)'}`;
   return [
     prompt(p, tag),
-    block('CAMPANHA A CAMPANHA NO PERÍODO (com a MCC e a conta de cada uma)', (d.campaigns || []).map((c: any) => `- ${c.name}${c.mcc ? ` · MCC ${c.mcc}` : ''}${c.account ? ` · conta ${c.account}` : ''}: custo ${money(c.cost)} · vendas ${c.sales} · CPA ${money(c.cpa)} · cliques ${c.clicks}${c.result !== null ? ` · resultado ${money(c.result)}` : ''}`)),
-    block(d.monthly ? 'MÊS A MÊS' : 'DIA A DIA', (d.series || []).map((s: any) => `- ${s.when}: custo ${money(s.cost)} · vendas ${s.sales} · CPA ${money(s.cpa)}${s.result !== null ? ` · resultado ${money(s.result)}` : ''}`)),
+    campaignBlock(p),
+    block(d.monthly ? 'MÊS A MÊS' : 'DIA A DIA', (d.series || []).map((c: any) => (s: any) => `- ${s.when}: custo ${money(s.cost)} · vendas ${s.sales} · CPA ${money(s.cpa)}${s.result !== null ? ` · resultado ${money(s.result)}` : ''}`)),
     block('CAMPANHAS RODANDO, VIDA INTEIRA E ÚLTIMOS 7 DIAS', p.verdicts.slice(0, 40).map(v => `- ${v.name}: ${v.days} dias com gasto desde ${v.since} · custo ${money(v.cost)} · vendas ${v.sales} · CPA ${money(v.cpa)} · resultado ${money(v.result)} · últimos 7 dias: custo ${money(v.cost7)}, vendas ${v.sales7}, resultado ${money(v.result7)} · ${v.verdict} · situação hoje: ${v.status.label}`)),
     block('TERMOS DE PESQUISA COM MAIS GASTO', (d.terms || []).map(row)),
     block('IDADE', (d.ages || []).map(row)),
@@ -131,13 +176,24 @@ function dataPack(p: Extract<Patterns, { empty: false }>, tag: string) {
 }
 
 async function answer(userId: string, opts: ReturnType<typeof options>, question: string, history: any) {
-  const p = await computePatterns(userId, { ...opts, detail: true });
+  // O período sai da pergunta quando ela fala de um; senão, vale o da tela.
+  const asked = await askedPeriods(userId, question, history);
+  const runs = asked.length
+    ? asked.map(r => ({ ...opts, period: 'custom' as PeriodKey, from: r.from, to: r.to }))
+    : [opts];
+  const packs = await Promise.all(runs.map(o => computePatterns(userId, { ...o, detail: true })));
+  const p = packs[0];
   if (p.empty) return NextResponse.json({ error: 'Nenhuma campanha neste conjunto para a IA olhar.' }, { status: 400 });
+  const used = packs.filter((x): x is Extract<Patterns, { empty: false }> => !x.empty);
+  const money = (v: number | null) => (v === null ? '—' : formatMoney(v, p.currency));
+  // Os outros períodos da comparação: total e campanha a campanha de cada um.
+  const extra = used.slice(1).map(x => `PERÍODO ${periodText(x)}:\nTOTAL DO GRUPO: ${x.totals.campaigns} campanhas com gasto · custo ${money(x.totals.cost)} · vendas ${x.totals.sales} · CPA ${money(x.totals.cpa)}${x.totals.result !== null ? ` · resultado ${money(x.totals.result)}` : ''}\n\n${campaignBlock(x)}`).join('\n\n');
+  const header = `PERÍODO${used.length > 1 ? 'S' : ''}: ${used.map(periodText).join(' · ')}${asked.length ? ' (tirado da pergunta)' : ' (o da tela)'}`;
   const past = (Array.isArray(history) ? history : []).slice(-3)
     .map((h: any) => `Pergunta: ${String(h?.q || '').slice(0, 500)}\nResposta: ${String(h?.a || '').slice(0, 1200)}`).join('\n\n');
   const notes = memoryBlock(await memoryFor(userId, { text: opts.tag }));
   const adjustments = adjustmentBlock(await adjustmentSummary(userId).catch(() => []));
-  const user = `${dataPack(p, opts.tag)}\n\n${adjustments ? `${adjustments}\n\n` : ''}${notes ? `${notes}\n\n` : ''}${past ? `CONVERSA ATÉ AQUI:\n${past}\n\n` : ''}PERGUNTA DO AFILIADO:\n${question}`;
+  const user = `${header}\n\n${dataPack(p, opts.tag)}\n\n${extra ? `${extra}\n\n` : ''}${adjustments ? `${adjustments}\n\n` : ''}${notes ? `${notes}\n\n` : ''}${past ? `CONVERSA ATÉ AQUI:\n${past}\n\n` : ''}PERGUNTA DO AFILIADO:\n${question}`;
   let raw: any = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     raw = await askJson<any>({ fn: 'padroes', userId, system: ASK_SYSTEM, user: attempt ? `${user}\n\nATENÇÃO: a resposta anterior usou palavras proibidas. Reescreva em português simples.` : user, maxTokens: 4000, textField: 'resposta' });
@@ -145,7 +201,7 @@ async function answer(userId: string, opts: ReturnType<typeof options>, question
   }
   const text = String(raw?.resposta || '').trim().slice(0, 6000);
   if (!text) return NextResponse.json({ error: 'A IA não devolveu uma resposta. Tente de novo.' }, { status: 502 });
-  return NextResponse.json({ answer: { text, missing: String(raw?.faltou || '').trim().slice(0, 400), at: new Date().toISOString() } });
+  return NextResponse.json({ answer: { text, missing: String(raw?.faltou || '').trim().slice(0, 400), period: asked.length ? used.map(periodText).join(' · ') : '', at: new Date().toISOString() } });
 }
 
 export async function POST(request: Request) {
