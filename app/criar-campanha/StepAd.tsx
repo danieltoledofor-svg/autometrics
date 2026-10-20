@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import { BookmarkPlus, Check, ChevronDown, ChevronRight, Loader2, Plus, ScanSearch, Sparkles, Trash2, Undo2, Wand2, X } from 'lucide-react';
 import { AD_MAX, adProblems, keywordProblem, type Draft } from '@/lib/campaignBuilder/draft';
-import { LIMITS, TOP_ANGLES, VARIATIONS, count, type Item, type Offer, type ResourceKind } from '@/lib/campaignBuilder/rules';
+import { LIMITS, TOP_ANGLES, VARIATIONS, count, problemOf, type Item, type Offer, type ResourceKind } from '@/lib/campaignBuilder/rules';
 import type { Similar, SimilarRow } from '@/lib/campaignBuilder/similar';
-import type { Sweep, SweepAd } from '@/lib/campaignBuilder/sweep';
+import type { Sweep, SweepAd, SweepText } from '@/lib/campaignBuilder/sweep';
 import { VoiceButton } from '@/app/components/VoiceButton';
 import { Block, type Css } from './StepCampaign';
 
@@ -91,6 +91,8 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
   /** Varredura dos anúncios do mecanismo (topo de funil): vai junto em cada pedido de recursos. */
   const [sweep, setSweep] = useState<Sweep | null>(null);
   const [sweepOpen, setSweepOpen] = useState(false);
+  const [sweepFilter, setSweepFilter] = useState<'todos' | 'venderam' | 'sem'>('todos');
+  const [sweepMore, setSweepMore] = useState(false);
   /** Direção do usuário para a IA reescrever títulos e descrições (texto ou áudio). */
   const [direction, setDirection] = useState('');
   const [saved, setSaved] = useState('');
@@ -127,7 +129,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
   const runSweep = () => run('varredura', async () => {
     const { ok, body } = await api(`/api/campaign-builder?varredura=${encodeURIComponent(draft.ia.parecidas.trim())}`);
     if (!ok || !body.sweep) return body.error || 'Não foi possível varrer os anúncios.';
-    setSweep(body.sweep); setSweepOpen(true);
+    setSweep(body.sweep); setSweepOpen(false); setSweepMore(false);
   });
   // Só os textos e o resultado vão para a IA, sem nome de campanha.
   const asModel = (a: SweepAd) => ({ situacao: a.situacao, resultado: a.resultado, titulos: a.titulos, descricoes: a.descricoes });
@@ -347,26 +349,73 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
                 <button onClick={runSweep} disabled={busy !== '' || draft.ia.parecidas.trim().length < 2} className={solid}>{busy === 'varredura' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <ScanSearch size={13} aria-hidden="true" />} Varrer anúncios</button>
               </div>
               {busy === 'varredura' && <div className={`text-xs ${muted}`}>Lendo os anúncios e perguntando ao Jev; leva alguns segundos.</div>}
-              {sweep && (
-                <div className="space-y-2">
-                  <div className={`text-xs ${muted}`}>
-                    {sweep.campanhas.ativo + sweep.campanhas.pausado + sweep.campanhas.suspenso} campanhas com "{sweep.trecho}" ({sweep.campanhas.ativo} ativas, {sweep.campanhas.pausado} pausadas, {sweep.campanhas.suspenso} suspensas ou sem veicular) · {sweep.anuncios} modelos de anúncio, {sweep.analisados} com dados para julgar
-                    {sweep.analisados > 0 && ` · ${sweep.jev ? `${sweep.jev} julgados pelo Jev${sweep.jev < sweep.analisados ? `, ${sweep.analisados - sweep.jev} pela regra (o Jev não respondeu)` : ''}` : 'julgados pela regra (o Jev não respondeu)'}`}.
-                    {' '}<b className={head}>{sweep.copiar.length} para copiar e {sweep.evitar.length} para evitar</b> vão junto no próximo pedido.
-                    {(sweep.copiar.length > 0 || sweep.evitar.length > 0) && <button onClick={() => setSweepOpen(v => !v)} className="ml-2 inline-flex items-center gap-0.5 text-brand-text hover:underline">{sweepOpen ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}{sweepOpen ? 'Esconder' : 'Ver'}</button>}
-                  </div>
-                  {sweepOpen && (['copiar', 'evitar'] as const).map(kind => sweep[kind].length > 0 && (
-                    <div key={kind}><div className={`${label} mb-1`}>{kind === 'copiar' ? 'Vale copiar' : 'Melhor evitar'}</div>
-                      {sweep[kind].map((a, i) => (
-                        <div key={i} className={`py-1.5 border-t ${line} text-xs`}>
-                          <div className={head}>{a.titulos.slice(0, 6).join(' · ')}{a.titulos.length > 6 ? ' …' : ''}</div>
-                          <div className={muted}>{a.resultado} · {a.situacao}{a.por === 'regra' ? ' · pela regra' : ''} · {a.campanhas.slice(0, 2).join(', ')}{a.campanhas.length > 2 ? ` e mais ${a.campanhas.length - 2}` : ''}</div>
+              {sweep && (() => {
+                const total = sweep.campanhas.ativo + sweep.campanhas.pausado + sweep.campanhas.suspenso;
+                const keep = (t: SweepText) => (sweepFilter === 'venderam' ? t.conversoes > 0 : sweepFilter === 'sem' ? t.conversoes <= 0 : true);
+                const titles = sweep.titulos.filter(keep), descs = sweep.descricoes.filter(keep);
+                const show = sweepMore ? 80 : 12;
+                const tag = (t: SweepText) => (t.conversoes > 0
+                  ? <span className="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-pos/10 text-pos">{String(t.conversoes).replace('.', ',')} {t.conversoes === 1 ? 'conversão' : 'conversões'} · CPA {money(t.cpa)}</span>
+                  : <span className="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-neg/10 text-neg">sem conversão · gastou {money(t.custo)}</span>);
+                const row = (t: SweepText, on: boolean, full: boolean, toggle: () => void, kind: 'titulo' | 'descricao') => {
+                  const off = problemOf('topo', kind, t.texto);
+                  return (
+                    <div key={t.texto} className={`flex items-start gap-2 py-1.5 border-t ${line}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[13px] ${on ? 'text-pos' : head}`}>{t.texto}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          {tag(t)}
+                          <span className={`text-[11px] ${muted}`}>em {t.anuncios} {t.anuncios === 1 ? 'anúncio' : 'anúncios'}, {t.campanhas} {t.campanhas === 1 ? 'campanha' : 'campanhas'}</span>
+                          {off && <span className="text-[11px] text-warn" title={off}>· fora da regra do topo ({off.split(';')[0]})</span>}
                         </div>
-                      ))}
+                      </div>
+                      <Pick on={on} full={full} css={css} onClick={toggle} />
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                };
+                const filterBtn = (key: typeof sweepFilter, text: string) => (
+                  <button key={key} onClick={() => setSweepFilter(key)} aria-pressed={sweepFilter === key}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-lg border ${sweepFilter === key ? 'bg-brand/15 border-brand text-brand-text' : 'bg-surface-2 border-line-strong text-ink-subtle hover:text-ink'}`}>{text}</button>
+                );
+                return (
+                  <div className="space-y-3">
+                    <div className={`text-xs ${muted}`}>{total} campanhas com "{sweep.trecho}": {sweep.campanhas.ativo} ativas, {sweep.campanhas.pausado} pausadas, {sweep.campanhas.suspenso} suspensas ou sem veicular · {sweep.anuncios} anúncios diferentes nos últimos {sweep.dias} dias.</div>
+                    {sweep.titulos.length > 0 && (
+                      <>
+                        {tally}
+                        <div className={`text-xs ${muted}`}>Clique em <b className={head}>Usar</b> para levar o título ou a descrição para a campanha nova. Ao lado de cada um está quanto venderam os anúncios em que ele apareceu (o Google não conta venda por título): <span className="text-pos font-medium">verde vendeu</span>, <span className="text-neg font-medium">vermelho gastou sem vender</span>.</div>
+                        <div className="flex flex-wrap gap-1.5">{filterBtn('todos', 'Todos')}{filterBtn('venderam', 'Só os que venderam')}{filterBtn('sem', 'Só os sem conversão')}</div>
+                        <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
+                          <div><div className={`${label} mb-1`}>Títulos ({titles.length})</div>
+                            {titles.slice(0, show).map(t => row(t, used.t.has(t.texto), titlesFull, () => toggleTitle(t.texto), 'titulo'))}
+                            {!titles.length && <div className={`text-xs ${muted}`}>Nenhum neste filtro.</div>}</div>
+                          <div><div className={`${label} mb-1`}>Descrições ({descs.length})</div>
+                            {descs.slice(0, show).map(t => row(t, used.d.has(t.texto), descsFull, () => toggleDescription(t.texto), 'descricao'))}
+                            {!descs.length && <div className={`text-xs ${muted}`}>Nenhuma neste filtro.</div>}</div>
+                        </div>
+                        {(titles.length > 12 || descs.length > 12) && <button onClick={() => setSweepMore(v => !v)} className="text-xs font-medium text-brand-text hover:underline">{sweepMore ? 'Mostrar menos' : `Mostrar todos (${titles.length} títulos, ${descs.length} descrições)`}</button>}
+                      </>
+                    )}
+                    {(sweep.copiar.length > 0 || sweep.evitar.length > 0) && (
+                      <div className={`rounded-lg ${soft} px-3 py-2 text-xs ${muted}`}>
+                        <b className={head}>Isto vai sozinho para a IA:</b> {sweep.copiar.length} anúncios inteiros como exemplo do que vendeu e {sweep.evitar.length} como exemplo do que não vendeu
+                        {sweep.analisados > 0 && ` (separados ${sweep.jev ? `pelo Jev${sweep.jev < sweep.analisados ? ' e pela regra do CPA, onde ele não respondeu' : ''}` : 'pela regra do CPA; o Jev não respondeu'})`}. Você não precisa fazer nada com eles.
+                        <button onClick={() => setSweepOpen(v => !v)} className="ml-2 inline-flex items-center gap-0.5 text-brand-text hover:underline">{sweepOpen ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}{sweepOpen ? 'Esconder' : 'Ver quais'}</button>
+                        {sweepOpen && (['copiar', 'evitar'] as const).map(kind => sweep[kind].length > 0 && (
+                          <div key={kind} className="mt-2"><div className={`${label} mb-1`}>{kind === 'copiar' ? 'Exemplos do que vendeu' : 'Exemplos do que não vendeu'}</div>
+                            {sweep[kind].map((a, i) => (
+                              <div key={i} className={`py-1.5 border-t ${line}`}>
+                                <div className={head}>{a.titulos.slice(0, 6).join(' · ')}{a.titulos.length > 6 ? ' …' : ''}</div>
+                                <div>{a.resultado} · {a.situacao}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </>
         )}

@@ -21,6 +21,11 @@ const DAYS = 180;
 const n = (v: any) => Number(v) || 0;
 
 export interface SweepAd extends AdModel { campanhas: string[]; conversoes: number; custo: number; cpa: number | null; ctr: number | null; por: 'jev' | 'regra' }
+/**
+ * Um título ou uma descrição, com a soma dos anúncios em que apareceu. O Google
+ * não conta conversão por título: o número é o dos anúncios que o usaram.
+ */
+export interface SweepText { texto: string; conversoes: number; custo: number; cpa: number | null; anuncios: number; campanhas: number }
 export interface Sweep {
   trecho: string; dias: number;
   campanhas: Record<StatusKey, number>;
@@ -28,6 +33,8 @@ export interface Sweep {
   analisados: number;        // com dados suficientes para julgar
   jev: number;               // quantos o Jev julgou
   copiar: SweepAd[]; evitar: SweepAd[];
+  /** Cada título e cada descrição usados, dos que mais converteram para os que nada converteram. */
+  titulos: SweepText[]; descricoes: SweepText[];
 }
 
 async function all(build: (a: number, b: number) => any): Promise<any[]> {
@@ -81,7 +88,7 @@ const QUESTIONS = {
 export async function sweepAds(userId: string, piece: string): Promise<Sweep> {
   const db = supabaseAdmin();
   const trecho = piece.trim().slice(0, 60);
-  const empty: Sweep = { trecho, dias: DAYS, campanhas: { ativo: 0, pausado: 0, suspenso: 0 }, anuncios: 0, analisados: 0, jev: 0, copiar: [], evitar: [] };
+  const empty: Sweep = { trecho, dias: DAYS, campanhas: { ativo: 0, pausado: 0, suspenso: 0 }, anuncios: 0, analisados: 0, jev: 0, copiar: [], evitar: [], titulos: [], descricoes: [] };
   if (trecho.length < 2) return empty;
   const safe = trecho.replace(/[%_\\]/g, m => `\\${m}`).replace(/[,()]/g, ' ');
   const { data: products } = await db.from('products').select('id, name, google_ads_campaign_name, status, google_status, google_status_reasons').eq('user_id', userId)
@@ -125,6 +132,19 @@ export async function sweepAds(userId: string, piece: string): Promise<Sweep> {
   }
   const used = [...models.values()].filter(x => x.imp > 0);
   const tot = used.reduce((a, x) => ({ cost: a.cost + x.cost, conv: a.conv + x.conv, clicks: a.clicks + x.clicks, imp: a.imp + x.imp }), { cost: 0, conv: 0, clicks: 0, imp: 0 });
+  const texts = (pick: (x: Acc) => string[]): SweepText[] => {
+    const map = new Map<string, { texto: string; conv: number; cost: number; ads: number; products: Set<string> }>();
+    for (const x of used) for (const t of new Set(pick(x))) {
+      const k = t.toLowerCase();
+      if (!map.has(k)) map.set(k, { texto: t, conv: 0, cost: 0, ads: 0, products: new Set() });
+      const y = map.get(k)!;
+      y.conv += x.conv; y.cost += x.cost; y.ads++; x.products.forEach(p => y.products.add(p));
+    }
+    return [...map.values()].sort((a, b) => b.conv - a.conv || a.cost - b.cost).map(y => ({
+      texto: y.texto, conversoes: Math.round(y.conv * 10) / 10, custo: Math.round(y.cost * 100) / 100,
+      cpa: y.conv > 0 ? Math.round((y.cost / y.conv) * 100) / 100 : null, anuncios: y.ads, campanhas: y.products.size,
+    }));
+  };
   const avgCpa = tot.conv > 0 ? tot.cost / tot.conv : null, avgCtr = tot.imp > 0 ? tot.clicks / tot.imp : null;
 
   // Dados suficientes: 30 cliques ou o gasto de meia venda média. Os de mais gasto primeiro; até 60 vão ao Jev.
@@ -170,5 +190,6 @@ export async function sweepAds(userId: string, piece: string): Promise<Sweep> {
     trecho, dias: DAYS, campanhas, anuncios: used.length, analisados: judged.length, jev: byJev,
     copiar: out.filter(a => a.verdict === 'copiar').sort((a, b) => b.conversoes - a.conversoes).slice(0, 8).map(strip),
     evitar: out.filter(a => a.verdict === 'evitar').sort((a, b) => b.custo - a.custo).slice(0, 6).map(strip),
+    titulos: texts(x => x.titulos).slice(0, 80), descricoes: texts(x => x.descricoes).slice(0, 30),
   };
 }
