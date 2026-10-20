@@ -280,7 +280,10 @@ export async function removeLocation(ctx: AdsContext, campaignId: string, criter
 
 // ── Edição do anúncio, com o desempenho de cada texto ────────────────────────
 
-export interface AdText { texto: string; pin: string | null; impressoes: number; cliques: number; conversoes: number; nota: string | null }
+export interface AdText { texto: string; pin: string | null; impressoes: number; cliques: number; conversoes: number; custo: number; nota: string | null }
+
+/** Consulta com o custo; se o Google recusar o campo, repete sem ele, para não perder impressões e cliques. */
+const withCost = (ctx: AdsContext, query: (cost: string) => string) => search(ctx, query(', metrics.cost_micros')).catch(() => search(ctx, query('')));
 
 /**
  * Um anúncio de pesquisa responsivo com cada título e descrição ao lado do que rendeu nos últimos 30 dias.
@@ -298,8 +301,8 @@ export async function readAdDetail(ctx: AdsContext, campaignId: string, adKey: s
              ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions,
              ad_group_ad.ad.responsive_search_ad.path1, ad_group_ad.ad.responsive_search_ad.path2
       FROM ad_group_ad WHERE ${where}`),
-    search(ctx, `
-      SELECT campaign.id, ad_group.id, ad_group_ad.ad.id, ad_group_ad_asset_view.field_type, asset.text_asset.text, metrics.impressions, metrics.clicks, metrics.conversions
+    withCost(ctx, cost => `
+      SELECT campaign.id, ad_group.id, ad_group_ad.ad.id, ad_group_ad_asset_view.field_type, asset.text_asset.text, metrics.impressions, metrics.clicks, metrics.conversions${cost}
       FROM ad_group_ad_asset_view WHERE ${where} AND segments.date DURING LAST_30_DAYS`).catch((e: any) => { warning = String(e?.message || e).slice(0, 200); return [] as any[]; }),
     search(ctx, `
       SELECT campaign.id, ad_group.id, ad_group_ad.ad.id, ad_group_ad_asset_view.field_type, ad_group_ad_asset_view.performance_label, ad_group_ad_asset_view.enabled, asset.text_asset.text
@@ -309,10 +312,10 @@ export async function readAdDetail(ctx: AdsContext, campaignId: string, adKey: s
   if (!a || row.adGroupAd.status === 'REMOVED') throw new Error('Este anúncio não existe mais na campanha.');
   if (a.type !== 'RESPONSIVE_SEARCH_AD') throw new Error('Só o anúncio de pesquisa responsivo pode ser editado por aqui.');
   const keyOf = (type: string, text: string) => `${type}|${String(text || '').trim().toLowerCase()}`;
-  const numbers = new Map<string, { impressoes: number; cliques: number; conversoes: number }>();
+  const numbers = new Map<string, { impressoes: number; cliques: number; conversoes: number; custo: number }>();
   for (const r of perf) {
-    const k = keyOf(r.adGroupAdAssetView?.fieldType, r.asset?.textAsset?.text), cur = numbers.get(k) || { impressoes: 0, cliques: 0, conversoes: 0 };
-    cur.impressoes += Number(r.metrics?.impressions) || 0; cur.cliques += Number(r.metrics?.clicks) || 0; cur.conversoes += Number(r.metrics?.conversions) || 0;
+    const k = keyOf(r.adGroupAdAssetView?.fieldType, r.asset?.textAsset?.text), cur = numbers.get(k) || { impressoes: 0, cliques: 0, conversoes: 0, custo: 0 };
+    cur.impressoes += Number(r.metrics?.impressions) || 0; cur.cliques += Number(r.metrics?.clicks) || 0; cur.conversoes += Number(r.metrics?.conversions) || 0; cur.custo += (Number(r.metrics?.costMicros) || 0) / 1e6;
     numbers.set(k, cur);
   }
   const NOTE: Record<string, string> = { BEST: 'melhor', GOOD: 'bom', LOW: 'baixo', LEARNING: 'aprendendo', PENDING: 'em análise' };
@@ -321,7 +324,7 @@ export async function readAdDetail(ctx: AdsContext, campaignId: string, adKey: s
   const rsa = a.responsiveSearchAd || {};
   const texts = (list: any[], type: string): AdText[] => (list || []).map(x => ({
     texto: String(x.text || ''), pin: x.pinnedField || null, nota: note.get(keyOf(type, x.text)) || null,
-    ...(numbers.get(keyOf(type, x.text)) || { impressoes: 0, cliques: 0, conversoes: 0 }),
+    ...(numbers.get(keyOf(type, x.text)) || { impressoes: 0, cliques: 0, conversoes: 0, custo: 0 }),
   }));
   return {
     id: adKey, group_id: groupId, group: String(row.adGroup?.name || ''), status: String(row.adGroupAd.status || ''),
@@ -360,7 +363,7 @@ export async function updateAd(ctx: AdsContext, campaignId: string, adKey: strin
 
 // ── Sitelinks e frases de destaque da campanha ──────────────────────────────
 
-export interface CampaignAsset { resource: string; tipo: 'sitelink' | 'destaque'; texto: string; desc1: string; desc2: string; url: string; impressoes: number; cliques: number }
+export interface CampaignAsset { resource: string; tipo: 'sitelink' | 'destaque'; texto: string; desc1: string; desc2: string; url: string; impressoes: number; cliques: number; conversoes: number; custo: number }
 
 // Nas consultas de campaign_asset o Google exige campaign.id no SELECT quando ele está no WHERE.
 export async function readCampaignAssets(ctx: AdsContext, campaignId: string): Promise<{ assets: CampaignAsset[]; aviso: string; calls: number }> {
@@ -371,16 +374,20 @@ export async function readCampaignAssets(ctx: AdsContext, campaignId: string): P
       SELECT campaign.id, campaign_asset.resource_name, campaign_asset.field_type, campaign_asset.status, asset.final_urls,
              asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2, asset.callout_asset.callout_text
       FROM campaign_asset WHERE campaign.id = ${id} AND campaign_asset.status != 'REMOVED' AND ${types}`),
-    search(ctx, `SELECT campaign.id, campaign_asset.resource_name, campaign_asset.field_type, metrics.impressions, metrics.clicks FROM campaign_asset WHERE campaign.id = ${id} AND ${types} AND segments.date DURING LAST_30_DAYS`).catch((e: any) => { warning = String(e?.message || e).slice(0, 200); return [] as any[]; }),
+    withCost(ctx, cost => `SELECT campaign.id, campaign_asset.resource_name, campaign_asset.field_type, metrics.impressions, metrics.clicks, metrics.conversions${cost} FROM campaign_asset WHERE campaign.id = ${id} AND ${types} AND segments.date DURING LAST_30_DAYS`).catch((e: any) => { warning = String(e?.message || e).slice(0, 200); return [] as any[]; }),
   ]);
-  const numbers = new Map<string, { impressoes: number; cliques: number }>();
-  for (const r of perf) { const k = r.campaignAsset?.resourceName, cur = numbers.get(k) || { impressoes: 0, cliques: 0 }; cur.impressoes += Number(r.metrics?.impressions) || 0; cur.cliques += Number(r.metrics?.clicks) || 0; numbers.set(k, cur); }
+  const numbers = new Map<string, { impressoes: number; cliques: number; conversoes: number; custo: number }>();
+  for (const r of perf) {
+    const k = r.campaignAsset?.resourceName, cur = numbers.get(k) || { impressoes: 0, cliques: 0, conversoes: 0, custo: 0 };
+    cur.impressoes += Number(r.metrics?.impressions) || 0; cur.cliques += Number(r.metrics?.clicks) || 0; cur.conversoes += Number(r.metrics?.conversions) || 0; cur.custo += (Number(r.metrics?.costMicros) || 0) / 1e6;
+    numbers.set(k, cur);
+  }
   const assets = rows.map(r => {
     const ca = r.campaignAsset || {}, as = r.asset || {}, link = ca.fieldType === 'SITELINK';
     return {
       resource: String(ca.resourceName || ''), tipo: (link ? 'sitelink' : 'destaque') as CampaignAsset['tipo'],
       texto: String(link ? as.sitelinkAsset?.linkText || '' : as.calloutAsset?.calloutText || ''), desc1: String(as.sitelinkAsset?.description1 || ''), desc2: String(as.sitelinkAsset?.description2 || ''),
-      url: String(as.finalUrls?.[0] || ''), ...(numbers.get(ca.resourceName) || { impressoes: 0, cliques: 0 }),
+      url: String(as.finalUrls?.[0] || ''), ...(numbers.get(ca.resourceName) || { impressoes: 0, cliques: 0, conversoes: 0, custo: 0 }),
     };
   }).filter(x => x.resource && x.texto).sort((x, y) => x.tipo.localeCompare(y.tipo) || y.impressoes - x.impressoes || x.texto.localeCompare(y.texto));
   return { assets, aviso: warning, calls: 2 };

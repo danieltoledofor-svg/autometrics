@@ -25,7 +25,12 @@ export interface SweepAd extends AdModel { campanhas: string[]; conversoes: numb
  * Um título ou uma descrição, com a soma dos anúncios em que apareceu. O Google
  * não conta conversão por título: o número é o dos anúncios que o usaram.
  */
-export interface SweepText { texto: string; conversoes: number; custo: number; cpa: number | null; anuncios: number; campanhas: number }
+export interface SweepText {
+  texto: string; conversoes: number; custo: number; cpa: number | null; anuncios: number; campanhas: number;
+  /** O que o Jev (ou a regra) disse dos anúncios que usaram este texto: algum para copiar, ou só para evitar. */
+  veredito?: 'copiar' | 'evitar' | null;
+  desc1?: string; desc2?: string;      // sitelink
+}
 export interface Sweep {
   trecho: string; dias: number;
   campanhas: Record<StatusKey, number>;
@@ -35,6 +40,8 @@ export interface Sweep {
   copiar: SweepAd[]; evitar: SweepAd[];
   /** Cada título e cada descrição usados, dos que mais converteram para os que nada converteram. */
   titulos: SweepText[]; descricoes: SweepText[];
+  /** Sitelinks e frases de destaque dessas campanhas, cada um com o próprio número (o Google conta por recurso). */
+  sitelinks: SweepText[]; destaques: SweepText[];
 }
 
 async function all(build: (a: number, b: number) => any): Promise<any[]> {
@@ -88,7 +95,7 @@ const QUESTIONS = {
 export async function sweepAds(userId: string, piece: string): Promise<Sweep> {
   const db = supabaseAdmin();
   const trecho = piece.trim().slice(0, 60);
-  const empty: Sweep = { trecho, dias: DAYS, campanhas: { ativo: 0, pausado: 0, suspenso: 0 }, anuncios: 0, analisados: 0, jev: 0, copiar: [], evitar: [], titulos: [], descricoes: [] };
+  const empty: Sweep = { trecho, dias: DAYS, campanhas: { ativo: 0, pausado: 0, suspenso: 0 }, anuncios: 0, analisados: 0, jev: 0, copiar: [], evitar: [], titulos: [], descricoes: [], sitelinks: [], destaques: [] };
   if (trecho.length < 2) return empty;
   const safe = trecho.replace(/[%_\\]/g, m => `\\${m}`).replace(/[,()]/g, ' ');
   const { data: products } = await db.from('products').select('id, name, google_ads_campaign_name, status, google_status, google_status_reasons').eq('user_id', userId)
@@ -108,8 +115,8 @@ export async function sweepAds(userId: string, piece: string): Promise<Sweep> {
   for (let i = 0; i < ids.length; i += 30) {
     const chunk = ids.slice(i, i + 30);
     const [m, e] = await Promise.all([
-      all((a, b) => db.from('google_ads_entity_metrics').select('product_id, entity_id, impressions, clicks, cost, conversions').in('product_id', chunk).eq('level', 'ad').gte('date', since).range(a, b)),
-      all((a, b) => db.from('google_ads_entities').select('product_id, entity_id, details').in('product_id', chunk).eq('level', 'ad').range(a, b)),
+      all((a, b) => db.from('google_ads_entity_metrics').select('product_id, level, entity_id, impressions, clicks, cost, conversions').in('product_id', chunk).in('level', ['ad', 'asset']).gte('date', since).range(a, b)),
+      all((a, b) => db.from('google_ads_entities').select('product_id, level, entity_id, name, details').in('product_id', chunk).in('level', ['ad', 'asset']).range(a, b)),
     ]);
     metrics.push(...m); entities.push(...e);
   }
@@ -117,7 +124,19 @@ export async function sweepAds(userId: string, piece: string): Promise<Sweep> {
   // Um modelo = o mesmo conjunto de títulos, em qualquer campanha.
   type Acc = { titulos: string[]; descricoes: string[]; strength: string; products: Set<string>; imp: number; clicks: number; cost: number; conv: number };
   const models = new Map<string, Acc>(), modelOf = new Map<string, string>();
+  // Sitelinks e frases de destaque: o Google conta cada um, então o número é dele mesmo.
+  type Asset = { texto: string; desc1: string; desc2: string; conv: number; cost: number; products: Set<string> };
+  const links = new Map<string, Asset>(), callouts = new Map<string, Asset>(), assetOf = new Map<string, [Map<string, Asset>, string]>();
   for (const e of entities) {
+    if (e.level !== 'asset') continue;
+    const type = e.details?.field_type, into = type === 'SITELINK' ? links : type === 'CALLOUT' ? callouts : null, text = String(e.name || '').trim();
+    if (!into || !text) continue;
+    const k = text.toLowerCase();
+    if (!into.has(k)) into.set(k, { texto: text, desc1: String(e.details?.description1 || ''), desc2: String(e.details?.description2 || ''), conv: 0, cost: 0, products: new Set() });
+    assetOf.set(`${e.product_id}|${e.entity_id}`, [into, k]);
+  }
+  for (const e of entities) {
+    if (e.level !== 'ad') continue;
     const titulos = (e.details?.headlines || []).map((h: any) => String(h.text || '').trim()).filter(Boolean);
     if (!titulos.length) continue;
     const key = [...titulos].map(t => t.toLowerCase()).sort().join('|');
@@ -125,6 +144,11 @@ export async function sweepAds(userId: string, piece: string): Promise<Sweep> {
     modelOf.set(`${e.product_id}|${e.entity_id}`, key);
   }
   for (const m of metrics) {
+    if (m.level === 'asset') {
+      const hit = assetOf.get(`${m.product_id}|${m.entity_id}`);
+      if (hit) { const y = hit[0].get(hit[1])!; y.conv += n(m.conversions); y.cost += n(m.cost); y.products.add(m.product_id); }
+      continue;
+    }
     const key = modelOf.get(`${m.product_id}|${m.entity_id}`);
     if (!key) continue;
     const x = models.get(key)!;
@@ -185,11 +209,27 @@ export async function sweepAds(userId: string, piece: string): Promise<Sweep> {
     }
   };
   await Promise.all(Array.from({ length: 8 }, worker));
+  // Texto usado em algum anúncio para copiar vale copiar; usado só em anúncios para evitar, evitar.
+  const verdictOf = new Map<string, Set<string>>();
+  for (const a of out) for (const t of [...a.titulos, ...a.descricoes]) {
+    const k = t.toLowerCase();
+    if (!verdictOf.has(k)) verdictOf.set(k, new Set());
+    verdictOf.get(k)!.add(a.verdict);
+  }
+  const judge = (t: SweepText): SweepText => {
+    const v = verdictOf.get(t.texto.toLowerCase());
+    return { ...t, veredito: v?.has('copiar') ? 'copiar' : v && v.size === 1 && v.has('evitar') ? 'evitar' : null };
+  };
+  const assets = (map: Map<string, Asset>): SweepText[] => [...map.values()].filter(y => y.products.size).sort((a, b) => b.conv - a.conv || a.cost - b.cost).map(y => ({
+    texto: y.texto, desc1: y.desc1, desc2: y.desc2, conversoes: Math.round(y.conv * 10) / 10, custo: Math.round(y.cost * 100) / 100,
+    cpa: y.conv > 0 ? Math.round((y.cost / y.conv) * 100) / 100 : null, anuncios: 0, campanhas: y.products.size,
+  }));
   const strip = ({ verdict: _v, ...ad }: SweepAd & { verdict: string }): SweepAd => ad;
   return {
     trecho, dias: DAYS, campanhas, anuncios: used.length, analisados: judged.length, jev: byJev,
     copiar: out.filter(a => a.verdict === 'copiar').sort((a, b) => b.conversoes - a.conversoes).slice(0, 8).map(strip),
     evitar: out.filter(a => a.verdict === 'evitar').sort((a, b) => b.custo - a.custo).slice(0, 6).map(strip),
-    titulos: texts(x => x.titulos).slice(0, 80), descricoes: texts(x => x.descricoes).slice(0, 30),
+    titulos: texts(x => x.titulos).slice(0, 80).map(judge), descricoes: texts(x => x.descricoes).slice(0, 30).map(judge),
+    sitelinks: assets(links).slice(0, 30), destaques: assets(callouts).slice(0, 30),
   };
 }

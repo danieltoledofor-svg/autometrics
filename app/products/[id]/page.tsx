@@ -1184,6 +1184,7 @@ export default function ProductDetailPage() {
           formatMoney={formatMoney}
           custom={customColumns}
           channelType={product?.google_channel_type}
+          campaignName={product?.google_ads_campaign_name || product?.name || ''}
           campaignBid={{
             strategy: metrics[metrics.length - 1]?.bidding_strategy || null,
             target: Number([...metrics].reverse().find((m: any) => Number(m.target_cpa))?.target_cpa || 0),

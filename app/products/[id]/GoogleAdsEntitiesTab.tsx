@@ -39,6 +39,8 @@ interface Props {
   /** Estratégia e meta atuais da campanha (em lance automático o grupo herda). */
   campaignBid?: { strategy: string | null; target: number };
   ui: Ui;
+  /** Nome da campanha: a marcação dele ([BP]…) já vem no campo das sugestões. */
+  campaignName?: string;
 }
 
 const MANUAL_BIDDING = new Set(['MANUAL_CPC', 'ENHANCED_CPC', 'MANUAL_CPM', 'MANUAL_CPV']);
@@ -382,8 +384,8 @@ export function GoogleAdsEntitiesTab(props: Props) {
   return (
     <div className="space-y-4">
     {manage.allowed && form?.type === 'grupo' && <GroupForm key={`${form.copyFrom?.id || ''}${form.rename?.id || ''}`} manage={manage} ui={ui} copyFrom={form.copyFrom} rename={form.rename} onClose={() => setForm(null)} onDone={done} />}
-    {manage.allowed && form?.type === 'anuncio' && <AdForm key={`${form.mode}${form.adKey || ''}`} manage={manage} ui={ui} productId={productId} mode={form.mode} seed={form.seed} adKey={form.adKey} onClose={() => setForm(null)} onDone={done} />}
-    {manage.allowed && form?.type === 'recursos' && <AssetsBox manage={manage} ui={ui} productId={productId} defaultUrl={blankAd()?.url || ''} onClose={() => setForm(null)} />}
+    {manage.allowed && form?.type === 'anuncio' && <AdForm key={`${form.mode}${form.adKey || ''}`} manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} mode={form.mode} seed={form.seed} adKey={form.adKey} onClose={() => setForm(null)} onDone={done} />}
+    {manage.allowed && form?.type === 'recursos' && <AssetsBox manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} defaultUrl={blankAd()?.url || ''} onClose={() => setForm(null)} />}
     {manage.allowed && form?.type === 'palavra' && <KeywordForm manage={manage} ui={ui} groupId={props.adGroupFilter || undefined} onClose={() => setForm(null)} onDone={done} />}
     <ResultLine result={rowResult} />
     <DimensionTable

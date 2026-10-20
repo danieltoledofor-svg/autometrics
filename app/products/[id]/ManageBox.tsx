@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Loader2, Plus, X } from 'lucide-react';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
+import { SweepPicker, type PickKind } from '@/app/components/SweepPicker';
 
 /**
  * Montagem da campanha pelas abas (grupos, anúncios, palavras-chave, termos e
@@ -48,6 +49,17 @@ export function useManage(supabase: SupabaseClient, productId: string, enabled =
   return { allowed, groups, currency, call, send, loadGroups };
 }
 export type Manage = ReturnType<typeof useManage>;
+
+/** Marcação do nome da campanha ([BP], [WL]…), para já vir no campo de busca das sugestões. */
+const tagOf = (name?: string) => (String(name || '').match(/\[[^\]]+\]/) || [''])[0];
+const symbolOf = (currency: string) => (currency === 'BRL' ? 'R$' : currency === 'EUR' ? '€' : 'US$');
+/** Vendeu (verde, com o CPA) ou gastou sem vender (vermelho). */
+function SaleTag({ conversoes, custo, symbol }: { conversoes: number; custo: number; symbol: string }) {
+  const money = (v: number) => `${symbol} ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return conversoes > 0
+    ? <span className="rounded px-1.5 py-0.5 text-[11px] font-medium bg-pos/10 text-pos">{(Math.round(conversoes * 10) / 10).toLocaleString('pt-BR')} {conversoes === 1 ? 'conversão' : 'conversões'}{custo > 0 ? ` · CPA ${money(custo / conversoes)}` : ''}</span>
+    : <span className="rounded px-1.5 py-0.5 text-[11px] font-medium bg-neg/10 text-neg">sem conversão{custo > 0 ? ` · gastou ${money(custo)}` : ''}</span>;
+}
 
 const count = (text: string) => [...String(text || '').replace(/\{KeyWord:([^}]*)\}/gi, '$1')].length;
 
@@ -177,7 +189,7 @@ export function KeywordForm({ manage, ui, initial, list, onList, groupId, onClos
 // ── Anúncio: novo, cópia ou edição, com a ajuda da IA ────────────────────────
 
 export interface AdSeed { titulos: string[]; descricoes: string[]; url: string; caminho1: string; caminho2: string; group_id: string }
-interface TextStat { impressoes: number; cliques: number; conversoes: number; nota: string | null; pin: string | null }
+interface TextStat { impressoes: number; cliques: number; conversoes: number; custo?: number; nota: string | null; pin: string | null }
 interface Advice {
   leitura: string; descartados: number;
   trocas: { tipo: 'titulo' | 'descricao'; atual: string; motivo: string; novo: string; pt: string }[];
@@ -190,7 +202,7 @@ const n = (v: number) => Math.round(v).toLocaleString('pt-BR');
  * anúncio `adKey`. Em cópia e edição, `adKey` é o anúncio de origem: é dele o desempenho de cada texto
  * (30 dias) e é sobre ele que a IA opina.
  */
-export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDone }: { manage: Manage; ui: Ui; productId: string; mode: 'novo' | 'copia' | 'editar'; seed?: AdSeed; adKey?: string; onClose: () => void; onDone: () => void }) {
+export function AdForm({ manage, ui, productId, campaignName, mode, seed, adKey, onClose, onDone }: { manage: Manage; ui: Ui; productId: string; campaignName?: string; mode: 'novo' | 'copia' | 'editar'; seed?: AdSeed; adKey?: string; onClose: () => void; onDone: () => void }) {
   const s = styles(ui);
   const pad = (list: string[], size: number) => [...list, ...Array(Math.max(0, size - list.length)).fill('')].slice(0, size);
   const [titles, setTitles] = useState<string[]>(pad(mode === 'novo' ? [] : seed?.titulos || [], 15));
@@ -237,8 +249,9 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
     if (!st) return adKey && stats ? <div className="text-[11px] text-brand-text">texto novo</div> : null;
     const weak = hasNumbers && maxImp >= 200 && st.impressoes < maxImp * 0.1;
     return (
-      <div className={`text-[11px] ${ui.textMuted}`}>
-        {hasNumbers ? `${n(st.impressoes)} impressões · ${n(st.cliques)} cliques${st.conversoes ? ` · ${n(st.conversoes)} conversões` : ''}` : 'sem números ainda'}
+      <div className={`text-[11px] ${ui.textMuted} flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5`}>
+        {hasNumbers && st.impressoes > 0 && <SaleTag conversoes={st.conversoes} custo={st.custo || 0} symbol={symbolOf(manage.currency)} />}
+        {hasNumbers ? `${n(st.impressoes)} impressões · ${n(st.cliques)} cliques em 30 dias` : 'sem números ainda'}
         {st.nota && <span className={`ml-1.5 font-medium ${NOTE_TONE[st.nota] || ''}`}>· Google: {st.nota}</span>}
         {!st.nota && weak && <span className="ml-1.5 font-medium text-warn">· pouco mostrado</span>}
         {st.pin && <span className="ml-1.5">· fixado</span>}
@@ -273,6 +286,13 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
     setBusy(false);
     setResult({ ok: r.ok, text: r.ok ? `${mode === 'editar' ? 'Anúncio alterado' : `Anúncio criado${paused ? ', pausado' : ''}`}: ${r.text}. O Google ainda vai analisar o texto.` : r.text });
     if (r.ok) onDone();
+  };
+  const freeSlot = (kind: PickKind) => !(kind === 'titulo' ? titles : descs).some(t => !t.trim());
+  const pickText = (kind: PickKind, text: string) => {
+    const [list, apply] = kind === 'titulo' ? [titles, setTitles] as const : [descs, setDescs] as const;
+    const at = list.findIndex(t => t.trim().toLowerCase() === text.toLowerCase());
+    if (at >= 0) apply(list.map((x, j) => (j === at ? '' : x)));     // já estava: clicar tira
+    else use(kind as 'titulo' | 'descricao', text);
   };
   const TYPE: Record<string, string> = { titulo: 'Título', descricao: 'Descrição', sitelink: 'Sitelink', destaque: 'Frase de destaque' };
   const useLink = (label: string, onClick: () => void, text: string) => (used.includes(text) ? <span className="text-xs text-pos whitespace-nowrap">feito</span> : <RowAction label={label} onClick={onClick} />);
@@ -316,6 +336,9 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
           )}
         </div>
       )}
+      <SweepPicker api={manage.call} initial={tagOf(campaignName)} kinds="textos" symbol={symbolOf(manage.currency)}
+        isOn={(kind, text) => (kind === 'titulo' ? titles : descs).some(t => t.trim().toLowerCase() === text.toLowerCase())}
+        full={freeSlot} onPick={(kind, item) => pickText(kind, item.texto)} />
       <div className="grid lg:grid-cols-2 gap-x-6 gap-y-3">
         <div className="space-y-1.5">
           <div className={`text-xs font-medium ${ui.textHead}`}>Títulos ({filledTitles.length} de 15, mínimo 3)</div>
@@ -366,9 +389,9 @@ export function AdForm({ manage, ui, productId, mode, seed, adKey, onClose, onDo
 
 // ── Sitelinks e frases de destaque da campanha ──────────────────────────────
 
-interface Asset { resource: string; tipo: 'sitelink' | 'destaque'; texto: string; desc1: string; desc2: string; url: string; impressoes: number; cliques: number }
+interface Asset { resource: string; tipo: 'sitelink' | 'destaque'; texto: string; desc1: string; desc2: string; url: string; impressoes: number; cliques: number; conversoes?: number; custo?: number }
 
-export function AssetsBox({ manage, ui, productId, defaultUrl, onClose }: { manage: Manage; ui: Ui; productId: string; defaultUrl: string; onClose: () => void }) {
+export function AssetsBox({ manage, ui, productId, campaignName, defaultUrl, onClose }: { manage: Manage; ui: Ui; productId: string; campaignName?: string; defaultUrl: string; onClose: () => void }) {
   const s = styles(ui);
   const [assets, setAssets] = useState<Asset[] | null>(null);
   const [error, setError] = useState('');
@@ -397,7 +420,10 @@ export function AssetsBox({ manage, ui, productId, defaultUrl, onClose }: { mana
     <div key={a.resource} className={`flex flex-wrap items-center justify-between gap-2 border-t ${ui.borderCol} py-1.5 text-[13px]`}>
       <div className="min-w-0">
         <span className={ui.textHead}>{a.texto}</span>{a.desc1 && <span className={`text-xs ${ui.textMuted}`}> · {a.desc1} · {a.desc2}</span>}
-        <div className={`text-[11px] ${ui.textMuted}`}>{n(a.impressoes)} impressões{a.tipo === 'sitelink' ? ` · ${n(a.cliques)} cliques` : ''} em 30 dias</div>
+        <div className={`text-[11px] ${ui.textMuted} flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5`}>
+          {a.impressoes > 0 && <SaleTag conversoes={a.conversoes || 0} custo={a.custo || 0} symbol={symbolOf(manage.currency)} />}
+          {n(a.impressoes)} impressões{a.tipo === 'sitelink' ? ` · ${n(a.cliques)} cliques` : ''} em 30 dias
+        </div>
       </div>
       <RowAction label="Tirar" busy={busy === a.resource} danger onClick={() => { if (window.confirm(`Tirar "${a.texto}" da campanha?`)) run(a.resource, 'recurso_remover', { resource: a.resource }); }} />
     </div>
@@ -426,6 +452,17 @@ export function AssetsBox({ manage, ui, productId, defaultUrl, onClose }: { mana
             </div>
           </div>
         </div>
+      )}
+      {assets && (
+        <SweepPicker api={manage.call} initial={tagOf(campaignName)} kinds="recursos" symbol={symbolOf(manage.currency)}
+          isOn={(kind, text) => (assets || []).some(a => a.tipo === kind && a.texto.toLowerCase() === text.toLowerCase())}
+          full={kind => !!busy || (kind === 'sitelink' && !/^https:\/\//i.test((link.url || defaultUrl).trim()))}
+          onPick={(kind, item) => {
+            if ((assets || []).some(a => a.tipo === kind && a.texto.toLowerCase() === item.texto.toLowerCase())) return;
+            run(`s${item.texto}`, 'recurso_novo', kind === 'sitelink'
+              ? { tipo: 'sitelink', texto: item.texto, desc1: item.desc1 || '', desc2: item.desc2 || '', url: (link.url || defaultUrl).trim() }
+              : { tipo: 'destaque', texto: item.texto });
+          }} />
       )}
       <div className={`text-[11px] ${ui.textMuted}`}>Valem para a campanha inteira, não para um anúncio só. O Google só mostra sitelinks quando há pelo menos 2. Para mudar um texto, inclua o novo e tire o antigo. Aqui aparecem só os da campanha: os que estão no nível da conta ou do grupo não entram na lista.</div>
       <ResultLine result={result} />
