@@ -14,7 +14,7 @@ const KINDS = [
   { key: 'observacao', label: 'Observação' },
   { key: 'material', label: 'Material (aula, guia)' },
 ];
-const KIND_LABEL: Record<string, string> = { decisao: 'Decisão', observacao: 'Observação', material: 'Material' };
+const KIND_LABEL: Record<string, string> = { decisao: 'Decisão', observacao: 'Observação', material: 'Material', escrita_topo: 'Escrita · topo', escrita_fundo: 'Escrita · fundo' };
 
 interface Styles { card: string; head: string; muted: string; line: string; soft: string; title: string }
 type Api = (path: string, init?: RequestInit) => Promise<{ ok: boolean; body: any }>;

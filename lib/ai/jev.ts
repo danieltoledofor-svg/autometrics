@@ -115,23 +115,33 @@ export async function jevWaitOrAct(args: {
   userId: string; productId: string; item: string; row: any;
   campaign: { cost?: any; sales?: any; cpa?: any }; refMode: string; keyword?: string | null;
 }): Promise<JevVerdict | null> {
-  if (!jevEnabled() || !ITEM_EN[args.item] || !args.row) return null;
+  if (!ITEM_EN[args.item] || !args.row) return null;
+  const a = await jevChoose(args, stateFor(args.item, args.row, args.campaign, args.refMode, args.keyword), QUESTIONS, 'agir', ['esperar', 'mudar_agora']);
+  return a ? { choice: a.choice as JevVerdict['choice'], confidence: a.confidence, model: a.model } : null;
+}
+
+/**
+ * Uma pergunta de escolha ao Jev. Devolve a opção (só entre as `options`) ou
+ * null quando ele está desligado, não respondeu em 6 s ou respondeu fora.
+ */
+export async function jevChoose(ids: { userId: string; productId: string }, state: Record<string, any>, questions: Record<string, any>, key: string, options: string[]): Promise<{ choice: string; confidence: number; model: string } | null> {
+  if (!jevEnabled()) return null;
   const started = Date.now();
   try {
     const res = await fetch('https://api.typesafe.ai/v1/systemone', {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.TYPESAFE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL, state: stateFor(args.item, args.row, args.campaign, args.refMode, args.keyword), questions: QUESTIONS }),
+      body: JSON.stringify({ model: MODEL, state, questions }),
       signal: AbortSignal.timeout(6_000),
     });
     const body = await res.json().catch(() => ({}));
-    const a = body?.answers?.agir;
-    const ok = res.ok && (a?.choice === 'esperar' || a?.choice === 'mudar_agora');
-    await log(args, body, ok, ok ? null : `Jev ${res.status}: ${JSON.stringify(body).slice(0, 200)} (${Date.now() - started} ms)`);
+    const a = body?.answers?.[key];
+    const ok = res.ok && options.includes(a?.choice);
+    await log(ids, body, ok, ok ? null : `Jev ${res.status}: ${JSON.stringify(body).slice(0, 200)} (${Date.now() - started} ms)`);
     if (!ok) return null;
     return { choice: a.choice, confidence: Number(a.confidence) || 0, model: String(body.model || MODEL) };
   } catch (e: any) {
-    await log(args, {}, false, `${e.message} (${Date.now() - started} ms)`);
+    await log(ids, {}, false, `${e.message} (${Date.now() - started} ms)`);
     return null;
   }
 }

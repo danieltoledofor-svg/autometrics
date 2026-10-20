@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Check, Loader2, Plus, Sparkles, Trash2, Undo2, X } from 'lucide-react';
+import { BookmarkPlus, Check, ChevronDown, ChevronRight, Loader2, Plus, ScanSearch, Sparkles, Trash2, Undo2, Wand2, X } from 'lucide-react';
 import { AD_MAX, adProblems, keywordProblem, type Draft } from '@/lib/campaignBuilder/draft';
-import { LIMITS, VARIATIONS, count, type Item, type Offer, type ResourceKind } from '@/lib/campaignBuilder/rules';
+import { LIMITS, TOP_ANGLES, VARIATIONS, count, type Item, type Offer, type ResourceKind } from '@/lib/campaignBuilder/rules';
 import type { Similar, SimilarRow } from '@/lib/campaignBuilder/similar';
+import type { Sweep, SweepAd } from '@/lib/campaignBuilder/sweep';
+import { VoiceButton } from '@/app/components/VoiceButton';
 import { Block, type Css } from './StepCampaign';
 
 /**
@@ -86,6 +88,12 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
   /** Código-fonte colado pelo usuário, para quando a página recusa a leitura. Não fica guardado no rascunho. */
   const [source, setSource] = useState('');
   const [pasting, setPasting] = useState(false);
+  /** Varredura dos anúncios do mecanismo (topo de funil): vai junto em cada pedido de recursos. */
+  const [sweep, setSweep] = useState<Sweep | null>(null);
+  const [sweepOpen, setSweepOpen] = useState(false);
+  /** Direção do usuário para a IA reescrever títulos e descrições (texto ou áudio). */
+  const [direction, setDirection] = useState('');
+  const [saved, setSaved] = useState('');
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }));
   const setAd = (patch: Partial<Draft['anuncio']>) => setDraft(d => ({ ...d, anuncio: { ...d.anuncio, ...patch } }));
   const setIa = (patch: Partial<Draft['ia']>) => setDraft(d => ({ ...d, ia: { ...d.ia, ...patch } }));
@@ -116,14 +124,36 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
     const read = Object.fromEntries(Object.entries(body.offer).filter(([k, v]) => k !== 'idioma_pagina' && v !== '' && v !== null && v !== false));
     setOffer(read as Partial<Offer>);
   });
-  const generate = () => run('recursos', async () => {
+  const runSweep = () => run('varredura', async () => {
+    const { ok, body } = await api(`/api/campaign-builder?varredura=${encodeURIComponent(draft.ia.parecidas.trim())}`);
+    if (!ok || !body.sweep) return body.error || 'Não foi possível varrer os anúncios.';
+    setSweep(body.sweep); setSweepOpen(true);
+  });
+  // Só os textos e o resultado vão para a IA, sem nome de campanha.
+  const asModel = (a: SweepAd) => ({ situacao: a.situacao, resultado: a.resultado, titulos: a.titulos, descricoes: a.descricoes });
+  const generate = (rewrite = false) => run(rewrite ? 'reescrita' : 'recursos', async () => {
+    const reescrita = rewrite && pack ? {
+      direcao: direction.trim(), titulos: pack.titulos.map(t => t.texto), descricoes: pack.descricoes.map(t => t.texto),
+      escolhidos: [...draft.anuncio.titulos, ...draft.anuncio.descricoes].filter(Boolean),
+    } : undefined;
     const payload = draft.funil === 'fundo'
-      ? { action: 'recursos', funil: 'fundo', oferta: { ...o, idioma: draft.ia.idioma, pais: draft.ia.pais } }
-      : { action: 'recursos', funil: 'topo', topo: { url: draft.ia.url, fonte: source, idioma: draft.ia.idioma, pais: draft.ia.pais, vsl: draft.ia.vsl, palavras: draft.palavras.map(keyword), termos: (similar?.termos || []).map(t => t.texto) } };
+      ? { action: 'recursos', funil: 'fundo', oferta: { ...o, idioma: draft.ia.idioma, pais: draft.ia.pais }, reescrita }
+      : { action: 'recursos', funil: 'topo', reescrita, topo: {
+        url: draft.ia.url, fonte: source, idioma: draft.ia.idioma, pais: draft.ia.pais, vsl: draft.ia.vsl, palavras: draft.palavras.map(keyword), termos: (similar?.termos || []).map(t => t.texto),
+        angulos: draft.ia.angulos || [0], modelos: sweep ? { copiar: sweep.copiar.map(asModel), evitar: sweep.evitar.map(asModel) } : undefined,
+      } };
     const { ok, body } = await api('/api/campaign-builder', payload);
     if (!ok || !body.pack) return body.error || 'A IA não respondeu. Tente de novo.';
     set({ sugestoes: body.pack });
+    setSaved('');
     if (draft.funil === 'topo' && body.page_read === false && draft.ia.url.trim()) { setPasting(true); return 'O código da página não pôde ser baixado; a IA escreveu só com as palavras-chave, os termos e a transcrição. Cole o código-fonte no campo abaixo e gere de novo.'; }
+  });
+
+  /** Guarda a direção e os títulos e descrições da campanha nova na memória de escrita da IA. */
+  const remember = () => run('memoria', async () => {
+    const { ok, body } = await api('/api/campaign-builder', { action: 'memoria', funil: draft.funil, direcao: direction.trim(), titulos: draft.anuncio.titulos.filter(Boolean), descricoes: draft.anuncio.descricoes.filter(Boolean) });
+    if (!ok) return body.error || 'Não foi possível guardar na memória.';
+    setSaved('Guardado. A IA vai seguir isto nos próximos recursos de todas as suas campanhas de ' + (draft.funil === 'fundo' ? 'fundo' : 'topo') + ' de funil. Você vê e apaga em Análise de IA › Memória da IA.');
   });
 
   const addKeywords = (list: { texto: string; tipo: string }[]) => setDraft(d => {
@@ -255,7 +285,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
       </Block>
 
       <Block css={css} title={`Recursos escritos pela IA · ${draft.funil === 'fundo' ? 'fundo de funil' : 'topo de funil'}`}
-        hint={draft.funil === 'fundo' ? 'A página é lida pelo código-fonte, para achar preço, garantia e frete mesmo quando não estão no texto. A IA usa só os valores abaixo: o que ficar em branco não entra no anúncio e nada é calculado. Cada pedido é uma consulta paga à IA (poucos centavos).' : 'A IA lê o código-fonte da página, a transcrição da VSL, as palavras-chave e os termos que mais converteram nas campanhas parecidas (busque acima antes). Cada pedido é uma consulta paga à IA (poucos centavos).'}>
+        hint={draft.funil === 'fundo' ? 'A página é lida pelo código-fonte, para achar preço, garantia e frete mesmo quando não estão no texto. A IA usa só os valores abaixo: o que ficar em branco não entra no anúncio e nada é calculado. Cada pedido é uma consulta paga à IA (poucos centavos).' : 'A IA lê o código-fonte da página, a transcrição da VSL, as palavras-chave, os termos que mais converteram nas campanhas parecidas (busque acima antes), os anúncios do mesmo mecanismo e o que você guardou na memória dela. Cada pedido é uma consulta paga à IA (poucos centavos).'}>
         <div className="flex gap-2">
           <input value={draft.ia.url} onChange={e => setIa({ url: e.target.value })} placeholder={draft.funil === 'fundo' ? 'Página do produto: https://…' : 'Página do anúncio: https://…'} aria-label="Página para a IA ler" className={`flex-1 ${field}`} />
           {draft.funil === 'fundo' && <button onClick={readOffer} disabled={busy !== '' || !/^https?:\/\//i.test(draft.ia.url.trim())} className={`px-3 rounded-lg border ${line} text-xs font-medium ${muted} hover:text-ink disabled:opacity-40 inline-flex items-center gap-1.5`}>{busy === 'oferta' && <Loader2 size={12} aria-hidden="true" className="animate-spin" />} Ler a página</button>}
@@ -297,10 +327,51 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
             </div>
           </>
         ) : (
-          <textarea value={draft.ia.vsl} onChange={e => setIa({ vsl: e.target.value })} rows={3} maxLength={20000} placeholder="Transcrição da VSL (opcional, mas é o que faz o anúncio falar a mesma língua do vídeo)" aria-label="Transcrição da VSL" className={`w-full resize-y ${field}`} />
+          <>
+            <textarea value={draft.ia.vsl} onChange={e => setIa({ vsl: e.target.value })} rows={3} maxLength={20000} placeholder="Transcrição da VSL (opcional, mas é o que faz o anúncio falar a mesma língua do vídeo)" aria-label="Transcrição da VSL" className={`w-full resize-y ${field}`} />
+            <div>
+              <div className={`${label} mb-1.5`}>Ângulos dos títulos</div>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(TOP_ANGLES).map(([n, v]) => {
+                  const num = Number(n), list = draft.ia.angulos?.length ? draft.ia.angulos : [0], on = list.includes(num);
+                  return <button key={n} title={v.tom} aria-pressed={on} onClick={() => setIa({ angulos: on ? list.filter(x => x !== num) : [...list, num] })}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-lg border ${on ? 'bg-brand/15 border-brand text-brand-text' : 'bg-surface-2 border-line-strong text-ink-subtle hover:text-ink'}`}>{v.nome}</button>;
+                })}
+              </div>
+              <div className={`text-[11px] ${muted} mt-1`}>Passe o mouse para ver cada um. Os títulos ligam a palavra-chave ao vídeo e à página, falam de tratamento, resultado e "como", e nunca de causa, "por quê" ou remédio pelo nome.</div>
+            </div>
+            <div className={`rounded-lg border ${line} p-3 space-y-2`}>
+              <div className={`text-xs ${head}`}><b>Anúncios do mesmo mecanismo</b> <span className={muted}>· lê os anúncios das suas campanhas com este trecho no nome (ativas, pausadas e suspensas, últimos 180 dias). O Jev separa os que vale copiar dos que é melhor evitar, e a IA usa isso ao escrever.</span></div>
+              <div className="flex gap-2">
+                <input value={draft.ia.parecidas} onChange={e => setIa({ parecidas: e.target.value })} onKeyDown={e => { if (e.key === 'Enter' && draft.ia.parecidas.trim().length >= 2) runSweep(); }} placeholder="Trecho do nome: [BP], [WL]…" aria-label="Trecho do nome das campanhas do mesmo mecanismo" className={`flex-1 ${field}`} />
+                <button onClick={runSweep} disabled={busy !== '' || draft.ia.parecidas.trim().length < 2} className={solid}>{busy === 'varredura' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <ScanSearch size={13} aria-hidden="true" />} Varrer anúncios</button>
+              </div>
+              {busy === 'varredura' && <div className={`text-xs ${muted}`}>Lendo os anúncios e perguntando ao Jev; leva alguns segundos.</div>}
+              {sweep && (
+                <div className="space-y-2">
+                  <div className={`text-xs ${muted}`}>
+                    {sweep.campanhas.ativo + sweep.campanhas.pausado + sweep.campanhas.suspenso} campanhas com "{sweep.trecho}" ({sweep.campanhas.ativo} ativas, {sweep.campanhas.pausado} pausadas, {sweep.campanhas.suspenso} suspensas ou sem veicular) · {sweep.anuncios} modelos de anúncio, {sweep.analisados} com dados para julgar
+                    {sweep.analisados > 0 && ` · ${sweep.jev ? `${sweep.jev} julgados pelo Jev${sweep.jev < sweep.analisados ? `, ${sweep.analisados - sweep.jev} pela regra (o Jev não respondeu)` : ''}` : 'julgados pela regra (o Jev não respondeu)'}`}.
+                    {' '}<b className={head}>{sweep.copiar.length} para copiar e {sweep.evitar.length} para evitar</b> vão junto no próximo pedido.
+                    {(sweep.copiar.length > 0 || sweep.evitar.length > 0) && <button onClick={() => setSweepOpen(v => !v)} className="ml-2 inline-flex items-center gap-0.5 text-brand-text hover:underline">{sweepOpen ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}{sweepOpen ? 'Esconder' : 'Ver'}</button>}
+                  </div>
+                  {sweepOpen && (['copiar', 'evitar'] as const).map(kind => sweep[kind].length > 0 && (
+                    <div key={kind}><div className={`${label} mb-1`}>{kind === 'copiar' ? 'Vale copiar' : 'Melhor evitar'}</div>
+                      {sweep[kind].map((a, i) => (
+                        <div key={i} className={`py-1.5 border-t ${line} text-xs`}>
+                          <div className={head}>{a.titulos.slice(0, 6).join(' · ')}{a.titulos.length > 6 ? ' …' : ''}</div>
+                          <div className={muted}>{a.resultado} · {a.situacao}{a.por === 'regra' ? ' · pela regra' : ''} · {a.campanhas.slice(0, 2).join(', ')}{a.campanhas.length > 2 ? ` e mais ${a.campanhas.length - 2}` : ''}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
         )}
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={generate} disabled={busy !== '' || (draft.funil === 'fundo' && !String(o.produto || '').trim())} className={solid}>{busy === 'recursos' ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Sparkles size={13} aria-hidden="true" />} {pack ? 'Gerar de novo' : 'Gerar recursos'}</button>
+          <button onClick={() => generate()} disabled={busy !== '' || (draft.funil === 'fundo' && !String(o.produto || '').trim())} className={solid}>{busy === 'recursos' ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Sparkles size={13} aria-hidden="true" />} {pack ? 'Gerar de novo' : 'Gerar recursos'}</button>
           {busy === 'recursos' && <span className={`text-xs ${muted}`}>A IA está escrevendo e as letras estão sendo conferidas; leva até um minuto.</span>}
           {pack && busy === '' && <span className={`text-xs ${muted}`}>{pack.titulos.length} títulos, {pack.descricoes.length} descrições, {pack.sitelinks.length} sitelinks e {pack.destaques.length} frases{pack.descartados ? ` · ${pack.descartados} fora da regra foram descartados` : ''}</span>}
         </div>
@@ -321,6 +392,21 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
                   ))}</div>
                 <div><div className={`${label} mb-1`}>Frases de destaque sugeridas</div>{pack.destaques.map((t, i) => suggest(t, i, used.c.has(t.texto), draft.destaques.length >= AD_MAX.destaques, () => toggleCallout(t.texto), 25))}</div>
               </div>
+            </div>
+            <div className={`rounded-lg border ${line} p-3 space-y-2`}>
+              <div className={`text-xs ${head}`}><b>Peça mudanças à IA</b> <span className={muted}>· diga o que mudar nos títulos e descrições, escrevendo ou falando. A IA reescreve o pacote seguindo isto.</span></div>
+              <div className="flex gap-2 items-start">
+                <textarea value={direction} onChange={e => setDirection(e.target.value.slice(0, 1500))} rows={2} placeholder='Ex.: "Mais títulos com como baixar a pressão sem remédio; descrições mais curtas, falando do vídeo do médico."' aria-label="Direção para a IA reescrever os títulos e descrições" className={`flex-1 resize-y ${field}`} />
+                <VoiceButton onText={t => setDirection(p => (p.trim() ? `${p.trim()} ${t}` : t).slice(0, 1500))} disabled={busy !== ''} />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={() => generate(true)} disabled={busy !== '' || !direction.trim()} className={solid}>{busy === 'reescrita' ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Wand2 size={13} aria-hidden="true" />} Reescrever com esta direção</button>
+                <button onClick={remember} disabled={busy !== '' || (!direction.trim() && !draft.anuncio.titulos.some(Boolean) && !draft.anuncio.descricoes.some(Boolean))}
+                  title="Guarda a direção e os títulos e descrições que estão na campanha nova. A IA segue isso nos próximos recursos de todas as suas campanhas deste tipo de funil."
+                  className="px-3 py-2 rounded-lg border bg-brand/15 border-brand text-brand-text hover:bg-brand/25 text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5">{busy === 'memoria' ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <BookmarkPlus size={13} aria-hidden="true" />} Guardar na memória da IA</button>
+                {busy === 'reescrita' && <span className={`text-xs ${muted}`}>A IA está reescrevendo; leva até um minuto.</span>}
+              </div>
+              {saved ? <div className="text-xs text-pos">{saved}</div> : <div className={`text-[11px] ${muted}`}>Guardar leva a direção e os {draft.anuncio.titulos.filter(Boolean).length} títulos e {draft.anuncio.descricoes.filter(Boolean).length} descrições que estão na campanha nova. Cada reescrita é uma consulta paga à IA (poucos centavos).</div>}
             </div>
           </>
         )}

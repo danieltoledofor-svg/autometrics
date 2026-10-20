@@ -6,7 +6,8 @@ import { readTemplate } from '@/lib/campaignBuilder/template';
 import { search, suggestLocations, suggestManyLocations, type AdsContext } from '@/lib/googleAds/client';
 import { countryCode, countryName, languageName } from '@/lib/campaignBuilder/names';
 import { similarCampaigns } from '@/lib/campaignBuilder/similar';
-import { extractOffer, generateResources, type Funnel, type Offer } from '@/lib/campaignBuilder/resources';
+import { sweepAds } from '@/lib/campaignBuilder/sweep';
+import { extractOffer, generateResources, TOP_ANGLES, type AdModel, type Funnel, type Offer, type Rewrite } from '@/lib/campaignBuilder/resources';
 import { readPageSource } from '@/lib/campaignBuilder/pageSource';
 import { improveProblems } from '@/lib/campaignBuilder/explain';
 import { aiEnabled } from '@/lib/ai/openrouter';
@@ -30,10 +31,13 @@ export const maxDuration = 60;
  * GET ?contas=1            contas ativas do usuário, com a MCC e as campanhas que estão rodando em cada uma
  * GET ?metas=<conta>       metas de conversão personalizadas que aquela conta enxerga
  * GET ?parecidas=<trecho>  o que mais converteu nas campanhas do usuário com esse trecho no nome
+ * GET ?varredura=<trecho>  anúncios dessas campanhas (ativas, pausadas e suspensas), separados pelo Jev em copiar e evitar
  * POST { action: 'locais', nomes }              vários países de uma vez: acha cada um no Google e diz quais não achou
  * POST { action: 'oferta', url, fonte? }         lê o código-fonte da página do produto (preço, garantia, frete…) com a IA;
  *                                                `fonte` é o código colado pelo usuário, quando a página recusa o servidor
- * POST { action: 'recursos', funil, … }          títulos, descrições, sitelinks e frases de destaque pela IA
+ * POST { action: 'recursos', funil, … }          títulos, descrições, sitelinks e frases de destaque pela IA;
+ *                                                com `reescrita`, a IA refaz o pacote com a direção do usuário
+ * POST { action: 'memoria', funil, direcao, titulos, descricoes }  guarda a direção e o que ele escolheu na memória de escrita da IA
  * POST { action: 'criar', draft, linha, ensaio }  ensaia (ou cria, já ativa) uma campanha em uma conta; o que o Google recusar volta explicado pela IA
  * POST { action: 'duplicar', modelo, ajustes, linha, ensaio }  copia uma campanha lida para uma conta, com orçamento e CPA novos (os da linha, quando ela traz) e sem ajuste de lance
  *
@@ -113,6 +117,11 @@ export async function GET(request: Request) {
 
   if (q.get('parecidas')) {
     try { return NextResponse.json({ allowed: true, similar: await similarCampaigns(user.id, q.get('parecidas')!) }); }
+    catch (e: any) { return NextResponse.json({ allowed: true, error: e.message }, { status: 500 }); }
+  }
+
+  if (q.get('varredura')) {
+    try { return NextResponse.json({ allowed: true, sweep: await sweepAds(user.id, q.get('varredura')!) }); }
     catch (e: any) { return NextResponse.json({ allowed: true, error: e.message }, { status: 500 }); }
   }
 
@@ -319,6 +328,24 @@ export async function POST(request: Request) {
     }
   }
 
+  // Memória de escrita: vale para todas as campanhas do usuário no mesmo tipo de funil e entra em toda geração de recursos.
+  if (body.action === 'memoria') {
+    const funil: Funnel = body.funil === 'fundo' ? 'fundo' : 'topo';
+    const lines = (v: any, max: number) => (Array.isArray(v) ? v : []).map(x => String(x || '').trim().slice(0, 90)).filter(Boolean).slice(0, max);
+    const direcao = String(body.direcao || '').trim().slice(0, 700), titulos = lines(body.titulos, 15), descricoes = lines(body.descricoes, 4);
+    if (!direcao && !titulos.length && !descricoes.length) return NextResponse.json({ error: 'Escreva uma direção ou escolha títulos e descrições antes de guardar.' }, { status: 400 });
+    const content = [
+      direcao ? `Direção: ${direcao}` : '',
+      titulos.length ? `Títulos que ele escolheu: ${titulos.join(' | ')}` : '',
+      descricoes.length ? `Descrições que ele escolheu: ${descricoes.join(' | ')}` : '',
+    ].filter(Boolean).join('\n');
+    const { error } = await supabaseAdmin().from('ai_memory').insert({
+      user_id: user.id, kind: `escrita_${funil}`, title: (direcao || titulos[0] || descricoes[0]).slice(0, 80), content, summary: content.slice(0, 1800),
+    });
+    if (error) return NextResponse.json({ error: /ai_memory|schema cache|does not exist/i.test(error.message) ? 'Falta rodar migration_memoria_ia.sql no Supabase.' : error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
   if (!aiEnabled()) return NextResponse.json({ error: 'A IA está desligada no servidor.' }, { status: 409 });
   // A página é lida pelo código-fonte. `fonte` = código colado pelo usuário, que vale no lugar do download.
   const pageOf = async (url: any, fonte?: any) => {
@@ -339,6 +366,10 @@ export async function POST(request: Request) {
     if (body.action === 'recursos') {
       const funil: Funnel = body.funil === 'fundo' ? 'fundo' : 'topo';
       const text = (v: any, max = 120) => String(v ?? '').trim().slice(0, max);
+      const strings = (v: any, max: number, size = 90) => (Array.isArray(v) ? v : []).map(x => text(x, size)).filter(Boolean).slice(0, max);
+      const r = body.reescrita || {};
+      const rewrite: Rewrite | null = text(r.direcao, 1500)
+        ? { direcao: text(r.direcao, 1500), titulos: strings(r.titulos, 30), descricoes: strings(r.descricoes, 10), escolhidos: strings(r.escolhidos, 20) } : null;
       if (funil === 'fundo') {
         const o = body.oferta || {};
         if (!text(o.produto)) return NextResponse.json({ error: 'Informe o nome do produto.' }, { status: 400 });
@@ -349,17 +380,21 @@ export async function POST(request: Request) {
           frete: ['gratis', 'rapido', 'imediato', 'expresso'].includes(o.frete) ? o.frete : '', garantia_dias: Number(o.garantia_dias) > 0 ? Math.round(Number(o.garantia_dias)) : null,
           oficial: o.oficial === true, variacoes: (Array.isArray(o.variacoes) ? o.variacoes : [0]).map(Number).filter((n: number) => n >= 0 && n <= 9).slice(0, 9),
         };
-        return NextResponse.json({ pack: await generateResources({ userId: user.id }, 'fundo', offer) });
+        return NextResponse.json({ pack: await generateResources({ userId: user.id }, 'fundo', offer, rewrite) });
       }
       const t = body.topo || {};
       const page = await pageOf(t.url, t.fonte).catch(() => '');
       const list = (v: any, max: number) => (Array.isArray(v) ? v : []).map(x => text(x, 80)).filter(Boolean).slice(0, max);
+      const model = (a: any): AdModel => ({ situacao: text(a?.situacao, 120), resultado: text(a?.resultado, 160), titulos: strings(a?.titulos, 15), descricoes: strings(a?.descricoes, 4) });
+      const m = t.modelos || {};
       return NextResponse.json({
         page_read: !!page,
         pack: await generateResources({ userId: user.id }, 'topo', {
           idioma: text(t.idioma, 40) || 'inglês', pais: text(t.pais, 60) || 'Estados Unidos', grupos: [],
           palavras: list(t.palavras, 30), termos: list(t.termos, 40), pagina: page, vsl: text(t.vsl, 20000),
-        }),
+          angulos: (Array.isArray(t.angulos) ? t.angulos : []).map(Number).filter((k: number) => TOP_ANGLES[k]).slice(0, 9),
+          modelos: { copiar: (Array.isArray(m.copiar) ? m.copiar : []).slice(0, 6).map(model), evitar: (Array.isArray(m.evitar) ? m.evitar : []).slice(0, 4).map(model) },
+        }, rewrite),
       });
     }
     return NextResponse.json({ error: 'Ação desconhecida.' }, { status: 400 });

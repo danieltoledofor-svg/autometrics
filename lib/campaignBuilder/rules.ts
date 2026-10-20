@@ -9,10 +9,12 @@
  *   busca já conhece a oferta. A copy gira em prova concreta (preço, garantia,
  *   frete), remoção de objeção (site oficial) e urgência. Os valores são os da
  *   página ou os informados: nada é calculado, convertido ou arredondado.
- * - TOPO de funil — segue a parte de recursos da skill "auditor-congruencia-funil":
- *   cada recurso atende a um grupo de intenção de busca (receita, causa,
- *   sintoma, prevenção, dúvida se funciona) e continua esse assunto até a
- *   página e a VSL.
+ * - TOPO de funil — segue a parte de recursos da skill "auditor-congruencia-funil"
+ *   e a regra de ouro da "master-copywriter": dor + linha de solução na mesma
+ *   frase. Cada título liga a palavra-chave à VSL e à página; nada de título
+ *   genérico, de causa ou de "por quê" (pedido do usuário em 19/10/2026): o foco
+ *   é tratamento, resultado e "como". Remédio nenhum é citado pelo nome.
+ *   Os ângulos (TOP_ANGLES) são as referências da skill, escolhidas na tela.
  *
  * Nos dois, a contagem de letras é feita por código (nunca pela IA) e o que
  * sai fora do limite é reescrito uma vez; o que continuar fora não é entregue.
@@ -62,6 +64,24 @@ export const VARIATIONS: Record<number, { nome: string; tom: string }> = {
   9: { nome: 'Aleatório', tom: 'três tons distintos entre 1 e 8, à escolha' },
 };
 
+/**
+ * Ângulos do topo de funil, tirados das skills "master-copywriter" (fórmula dor +
+ * solução e engenharia de ganchos) e "analisador-vsl" (headlines sem produto e
+ * sem oferta). Os ganchos de causa e de "por quê" ficaram de fora a pedido do
+ * usuário. 0 = mistura padrão.
+ */
+export const TOP_ANGLES: Record<number, { nome: string; tom: string }> = {
+  0: { nome: 'Mistura padrão', tom: 'dor + solução, "como", tratamento natural e resultado, distribuídos pelo pacote' },
+  1: { nome: 'Dor + solução', tom: 'o sintoma ou o medo de quem busca e a linha de solução (tratamento, natural, caseiro) na mesma frase' },
+  2: { nome: 'Como fazer', tom: '"como" + o resultado que a pessoa quer ("How to Lower Blood Pressure Fast")' },
+  3: { nome: 'Tratamento natural', tom: 'remédio natural, caseiro, receita ou rotina que a VSL ensina, sem citar remédio pelo nome' },
+  4: { nome: 'Resultado', tom: 'o que muda no corpo ou no dia a dia, como a VSL conta, sem prazo garantido nem promessa de cura' },
+  5: { nome: 'Tentou e não funcionou', tom: 'filtro de dor: quem já tentou de tudo e encontra o jeito que a VSL mostra ("Tried Everything? Try This")' },
+  6: { nome: 'O passo que falta', tom: 'quebra de padrão sem "por quê": a versão completa, o passo que falta, o jeito certo de fazer' },
+  7: { nome: 'Especialista revela', tom: 'autoridade + mecanismo: um especialista mostra o método (sem nome de pessoa famosa)' },
+  8: { nome: 'Experiência real', tom: 'prova pela experiência: o que aconteceu depois de fazer o que a VSL ensina' },
+};
+
 /** Como o preço aparece em cada mercado. País fora da tabela: o usuário informa o formato. */
 export const MONEY_FORMAT: Record<string, { moeda: string; exemplo: string }> = {
   BR: { moeda: 'BRL', exemplo: 'R$ 39,98' }, US: { moeda: 'USD', exemplo: '$39.98' }, GB: { moeda: 'GBP', exemplo: '£39.98' },
@@ -97,7 +117,17 @@ export interface TopContext {
   palavras?: string[];
   pagina?: string;               // o que o código-fonte da página diz (lib/campaignBuilder/pageSource)
   vsl?: string;                  // transcrição da VSL
+  /** Ângulos escolhidos (TOP_ANGLES). Vazio = mistura padrão. */
+  angulos?: number[];
+  /** Anúncios das campanhas do mesmo mecanismo (ativas, pausadas e suspensas), já separados pela varredura. */
+  modelos?: { copiar: AdModel[]; evitar: AdModel[] };
 }
+
+/** Um anúncio lido na varredura: os textos e o que ele fez, em palavras. */
+export interface AdModel { situacao: string; resultado: string; titulos: string[]; descricoes: string[] }
+
+/** Pedido de reescrita: a direção que o usuário deu (texto ou áudio) e o material que ele tem na tela. */
+export interface Rewrite { direcao: string; titulos: string[]; descricoes: string[]; escolhidos: string[] }
 
 export interface Item { texto: string; pt: string; bloco?: string; grupo?: string }
 export interface Sitelink { tema: string; texto: Item; desc1: Item; desc2: Item }
@@ -106,12 +136,14 @@ export interface ResourcePack { funnel: Funnel; titulos: Item[]; descricoes: Ite
 // ── Regras fixas do usuário, nos dois modelos ───────────────────────────────
 
 /** Remédios de receita que nunca entram em copy. A conferência é por código, depois da IA. */
-const PRESCRIPTION = /\b(ozempic|wegovy|mounjaro|zepbound|rybelsus|saxenda|victoza|trulicity|semaglutid[ea]|tirzepatid[ea]|liraglutid[ea]|dulaglutid[ea]|metformin[a]?|phentermine|adderall|viagra|cialis|sildenafil[a]?|tadalafil[a]?)\b/i;
+const PRESCRIPTION = /\b(ozempic|wegovy|mounjaro|zepbound|rybelsus|saxenda|victoza|trulicity|semaglutid[ea]|tirzepatid[ea]|liraglutid[ea]|dulaglutid[ea]|metformin[a]?|phentermine|adderall|viagra|cialis|sildenafil[a]?|tadalafil[a]?|losartan[a]?|valsartan[a]?|olmesartan[a]?|lisinopril|enalapril|amlodipin[ea]|anlodipino|metoprolol|atenolol|propranolol|hydrochlorothiazide|hidroclorotiazida|furosemid[ea]|atorvastatin[a]?|simvastatin[a]?|rosuvastatin[a]?|lipitor|crestor|gabapentin[a]?|pregabalin[a]?|lyrica|donepezil[a]?|aricept|memantin[ea]|namenda|levothyroxine|levotiroxina|omeprazol[e]?|ibuprofen[o]?|advil|tylenol|aspirin[a]?)\b/i;
+/** Título de topo que fala de causa ou de "por quê": o usuário quer tratamento, resultado e "como" (19/10/2026). */
+const WHY = /\b(why|cause[sd]?|causing|reasons?|causa[sm]?|causando|motivos?|por ?qu[eê])\b/i;
 /** Promessa de cura ou de resultado garantido. */
 const CURE = /\b(cure[sd]?|cura[rs]?|curou|reverse[sd]? (diabetes|disease)|revert[ea] (a |o )?(diabetes|doença)|guaranteed results?|resultado garantido|miracle|milagr[eo]s?[ao]?)\b/i;
 
 const FIXED_RULES = `Regras fixas, sem exceção:
-- Nunca use nome de remédio de receita (Ozempic, Mounjaro, semaglutida e parecidos).
+- Nunca cite remédio pelo nome, de receita ou de farmácia (Ozempic, Mounjaro, losartana, estatina, diurético e parecidos), nem mesmo quando a VSL cita. Falar de "remédio natural" ou "caseiro" pode.
 - Sem promessa de cura, de reversão garantida ou de resultado garantido. Sem comparação com marca ou celebridade pelo nome.
 - Cada item vem em par: "texto" no idioma do anúncio e "pt" com a tradução em português do Brasil. Nunca misture idiomas no "texto". Nunca traduza o nome do produto.
 - Respeite os limites de letras de cada formato, contando espaços e símbolos. Na dúvida, escreva mais curto.
@@ -142,13 +174,21 @@ Valores, inegociável:
 - Escreva o preço sempre no formato de moeda informado, o mesmo em todo o pacote.
 - Todas as descrições começam pelo nome do produto.
 - Distribua os tons pedidos pelo pacote inteiro.`
-    : `Você escreve os recursos de um anúncio de Pesquisa do Google Ads de TOPO de funil, que leva para uma página com vídeo de vendas (VSL). Quem busca ainda não conhece o produto: procura uma receita, uma causa, um sintoma, um jeito de prevenir ou quer saber se algo funciona.
+    : `Você escreve os recursos de um anúncio de Pesquisa do Google Ads de TOPO de funil, que leva para uma página com vídeo de vendas (VSL). Quem busca ainda não conhece o produto: tem uma dor ou um medo e procura um jeito de resolver.
 
-Como escrever:
-- Cada recurso atende a UM dos grupos de busca do pedido e continua o mesmo assunto que a pessoa buscou. Diga no campo "grupo" a qual ele atende. Distribua os recursos entre os grupos, com mais peso nos primeiros.
-- O que o anúncio promete tem de existir na página e no vídeo do pedido: use o assunto, o mecanismo e as palavras que aparecem ali. Não prometa o que a página não entrega.
-- Não cite o nome do produto, preço nem desconto: nesta etapa a pessoa busca informação.
-- Sem urgência inventada e sem título feito só para chamar clique.`;
+A regra de ouro: DOR + LINHA DE SOLUÇÃO juntas. Só a dor não diz ao Google para onde a pessoa vai; só a solução cai no leilão caro. Quando a dor do anúncio, a linha de solução, a página e o vídeo batem, o Google entende quem você quer alcançar.
+
+Como escrever os títulos:
+- Nada de título genérico. Cada título liga três coisas: uma palavra-chave da campanha (ou um termo que já converteu), o que a VSL conta (a descoberta, o método, o jeito de tratar, as palavras dela) e o que a página mostra. Título que serviria para qualquer produto do mesmo assunto está errado.
+- Foque em tratamento, resultado e "como": como baixar, como aliviar, o que fazer, o que muda. Não escreva sobre a causa do problema nem "por quê" (why, cause, reason, por que, causa, motivo): esses títulos estão proibidos.
+- Use as palavras de quem busca e as da VSL, não termos técnicos.
+- Cada recurso atende a UM dos grupos de busca do pedido e continua o mesmo assunto. Diga no campo "grupo" a qual ele atende. Distribua entre os grupos, com mais peso nos primeiros.
+- O que o anúncio promete tem de existir na página e no vídeo. Não prometa o que a página não entrega.
+- Não cite o nome do produto, preço, desconto nem oferta: nesta etapa a pessoa busca informação.
+- Sem urgência inventada, sem título feito só para chamar clique, sem ataque a marca.
+- Distribua os ângulos pedidos pelo pacote inteiro.
+
+Descrições: emoção primeiro, lógica depois. Comece pela dor ou pelo desejo de quem busca e termine com o que o vídeo mostra (o método, o tratamento, o resultado), convidando a assistir.`;
   return `${head}
 
 O pacote:
@@ -178,6 +218,7 @@ export function userForOffer(o: Offer): string {
 }
 
 export function userForTop(c: TopContext): string {
+  const angles = [...new Set(c.angulos?.length ? c.angulos : [0])].filter(n => TOP_ANGLES[n]).map(n => `- ${TOP_ANGLES[n].nome}: ${TOP_ANGLES[n].tom}`);
   const groups = c.grupos.slice(0, 8).map((g, i) => `${i + 1}. ${g.nome}: ${g.termos.slice(0, 8).join(' · ')}`);
   return [
     `IDIOMA DO ANÚNCIO: ${c.idioma}`, `PAÍS: ${c.pais}`,
@@ -186,7 +227,38 @@ export function userForTop(c: TopContext): string {
     `TERMOS DE PESQUISA QUE MAIS CONVERTERAM EM CAMPANHAS PARECIDAS:\n${(c.termos || []).slice(0, 40).join(' · ') || '(sem histórico)'}`,
     `PÁGINA (código-fonte, separado em blocos: cabeçalho, dados declarados, texto, botões, imagens):\n${String(c.pagina || '(não enviada)').slice(0, 16000)}`,
     `VSL (transcrição, começo):\n${String(c.vsl || '(não enviada)').slice(0, 9000)}`,
-  ].join('\n\n');
+    `ÂNGULOS PEDIDOS:\n${angles.join('\n')}`,
+    models(c.modelos),
+  ].filter(Boolean).join('\n\n');
+}
+
+/** Anúncios do mesmo mecanismo nas campanhas do afiliado, em palavras. Sem nome de campanha: só os textos e o resultado. */
+function models(m?: TopContext['modelos']): string {
+  if (!m || (!m.copiar.length && !m.evitar.length)) return '';
+  const ad = (a: AdModel) => `- (${a.situacao}; ${a.resultado})\n  Títulos: ${a.titulos.slice(0, 15).join(' | ')}\n  Descrições: ${a.descricoes.slice(0, 4).join(' | ')}`;
+  return [
+    m.copiar.length ? `ANÚNCIOS DO MESMO ASSUNTO QUE VENDERAM BEM (use como referência de assunto, de palavras e de estilo; não copie igual e siga as regras acima mesmo que eles não sigam):\n${m.copiar.slice(0, 6).map(ad).join('\n')}` : '',
+    m.evitar.length ? `ANÚNCIOS DO MESMO ASSUNTO QUE GASTARAM E NÃO VENDERAM (não repita estes títulos nem este jeito de escrever):\n${m.evitar.slice(0, 4).map(ad).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n');
+}
+
+/**
+ * O que vai no fim de qualquer pedido: as preferências de escrita que o
+ * afiliado guardou e, numa reescrita, a direção dele com o material da tela.
+ */
+export function extrasFor(memory?: string, rewrite?: Rewrite | null): string {
+  const parts: string[] = [];
+  if (memory) parts.push(`PREFERÊNCIAS DE ESCRITA DO AFILIADO (direções que ele deu e textos que ele escolheu antes; siga sempre que não contrariarem as regras):\n${memory}`);
+  if (rewrite?.direcao) {
+    parts.push([
+      `REESCRITA PEDIDA PELO AFILIADO. Siga esta direção à risca; ela vale acima dos ângulos e dos tons:\n${rewrite.direcao}`,
+      rewrite.titulos.length ? `TÍTULOS QUE ESTÃO NA TELA:\n${rewrite.titulos.slice(0, 30).map(t => `- ${t}`).join('\n')}` : '',
+      rewrite.descricoes.length ? `DESCRIÇÕES QUE ESTÃO NA TELA:\n${rewrite.descricoes.slice(0, 10).map(t => `- ${t}`).join('\n')}` : '',
+      rewrite.escolhidos.length ? `O QUE ELE JÁ ESCOLHEU PARA A CAMPANHA (mantenha o estilo destes):\n${rewrite.escolhidos.slice(0, 20).map(t => `- ${t}`).join('\n')}` : '',
+      'Devolva o pacote inteiro de novo, já reescrito com a direção.',
+    ].filter(Boolean).join('\n\n'));
+  }
+  return parts.join('\n\n');
 }
 
 // ── Conferência por código ──────────────────────────────────────────────────
@@ -200,8 +272,9 @@ export function problemOf(f: Funnel, kind: ResourceKind, text: string): string |
   if (!t) return 'vazio';
   if (n > l.max) return `${n} letras, o máximo é ${l.max}`;
   if (n < l.min) return `${n} letras, o mínimo é ${l.min}`;
-  if (PRESCRIPTION.test(t)) return 'cita remédio de receita';
+  if (PRESCRIPTION.test(t)) return 'cita remédio pelo nome';
   if (CURE.test(t)) return 'promete cura ou resultado garantido';
+  if (f === 'topo' && kind === 'titulo' && WHY.test(t)) return 'fala de causa ou de "por quê"; o topo foca em tratamento, resultado e "como"';
   return null;
 }
 

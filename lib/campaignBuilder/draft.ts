@@ -30,7 +30,7 @@ export interface Draft {
   sitelinks: { texto: string; desc1: string; desc2: string }[];
   destaques: string[];
   /** O que o usuário informou para a IA escrever os recursos, e o último pacote que ela devolveu. */
-  ia: { parecidas: string; url: string; idioma: string; pais: string; vsl: string; oferta: Partial<Offer> };
+  ia: { parecidas: string; url: string; idioma: string; pais: string; vsl: string; oferta: Partial<Offer>; angulos?: number[] };
   sugestoes: ResourcePack | null;
   /** Cada página vai para as contas escolhidas para ela: sai uma campanha por conta. `contas` guarda os números das contas. */
   paginas: { url: string; nome: string; contas: string[] }[];

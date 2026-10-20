@@ -1,5 +1,6 @@
 import { askJson } from '@/lib/ai/openrouter';
-import { review, systemFor, userForOffer, userForTop, type Funnel, type Item, type Offer, type ResourcePack, type TopContext } from './rules';
+import { writingMemoryFor } from '@/lib/analysis/userMemory';
+import { extrasFor, review, systemFor, userForOffer, userForTop, type Funnel, type Item, type Offer, type ResourcePack, type Rewrite, type TopContext } from './rules';
 
 /**
  * A parte que chama a IA para escrever os recursos (só no servidor). As regras,
@@ -11,10 +12,14 @@ export * from './rules';
 /**
  * Pede o pacote à IA, confere por código e pede uma vez a reescrita do que saiu
  * fora. O que ainda estiver fora depois disso é descartado e contado.
+ *
+ * Entram também as preferências de escrita que o usuário guardou (valem para
+ * todas as campanhas dele) e, numa reescrita, a direção que ele deu na tela.
  */
-export async function generateResources(ids: { userId: string; productId?: string | null }, f: Funnel, input: Offer | TopContext): Promise<ResourcePack> {
+export async function generateResources(ids: { userId: string; productId?: string | null }, f: Funnel, input: Offer | TopContext, rewrite?: Rewrite | null): Promise<ResourcePack> {
   const system = systemFor(f);
-  const user = f === 'fundo' ? userForOffer(input as Offer) : userForTop(input as TopContext);
+  const extras = extrasFor(await writingMemoryFor(ids.userId, f), rewrite);
+  const user = [f === 'fundo' ? userForOffer(input as Offer) : userForTop(input as TopContext), extras].filter(Boolean).join('\n\n');
   const ask = (text: string) => askJson<any>({ fn: 'recursos', userId: ids.userId, productId: ids.productId, system, user: text, maxTokens: 9000, temperature: 0.8 });
   const first = review(f, await ask(user));
   const { good } = first;
