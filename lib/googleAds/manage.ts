@@ -67,6 +67,40 @@ export async function addKeywords(ctx: AdsContext, campaignId: string, groupId: 
   return { added: fresh.map(t => keywordLabel(t, match)), items, skipped: wanted.length - fresh.length, group: group.name, calls: 4 };
 }
 
+/**
+ * Troca o tipo de correspondência (exata, frase, ampla) de uma palavra-chave. O Google não deixa mudar
+ * o tipo de uma palavra que já existe: num pedido só, cria a mesma palavra com o tipo novo (mesmo grupo,
+ * mesma situação e mesmo lance, quando ela tinha lance próprio) e retira a antiga. Se uma parte falhar,
+ * nada muda. A palavra nova começa com os números do zero.
+ */
+export async function changeKeywordMatch(ctx: AdsContext, campaignId: string, entityId: string, match: Match) {
+  if (!MATCH.has(match)) throw new Error('Tipo de correspondência não reconhecido.');
+  if (!/^\d+~\d+$/.test(entityId)) throw new Error('Palavra-chave não reconhecida.');
+  const [groupId] = entityId.split('~');
+  const resource = `customers/${ctx.customerId}/adGroupCriteria/${entityId}`;
+  const rows = await search(ctx, `
+    SELECT ad_group_criterion.status, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.cpc_bid_micros, ad_group_criterion.final_urls
+    FROM ad_group_criterion
+    WHERE campaign.id = ${Number(campaignId)} AND ad_group.id = ${Number(groupId)} AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'`);
+  const find = (r: any) => r.adGroupCriterion?.resourceName === resource;
+  const old = (rows.find(find) || {}).adGroupCriterion;
+  if (!old) throw new Error('Esta palavra-chave não existe mais na campanha.');
+  const text = String(old.keyword?.text || '');
+  if (old.keyword?.matchType === match) throw new Error('A palavra-chave já está com este tipo de correspondência.');
+  if (rows.some(r => !find(r) && String(r.adGroupCriterion?.keyword?.text || '').toLowerCase() === text.toLowerCase() && r.adGroupCriterion?.keyword?.matchType === match)) {
+    throw new Error(`O grupo já tem ${keywordLabel(text, match)}. Pause ou tire a antiga em vez de trocar o tipo.`);
+  }
+  const group = await groupOf(ctx, campaignId, groupId);
+  const create: Record<string, any> = { adGroup: group.resource, status: old.status === 'PAUSED' ? 'PAUSED' : 'ENABLED', keyword: { text, matchType: match } };
+  if (Number(old.cpcBidMicros) > 0) create.cpcBidMicros = String(old.cpcBidMicros);
+  if (old.finalUrls?.length) create.finalUrls = old.finalUrls;
+  const operations = [{ create }, { remove: resource }];
+  await mutate(ctx, 'adGroupCriteria', operations, true);
+  const done = await mutate(ctx, 'adGroupCriteria', operations, false);
+  const key = String(done?.results?.[0]?.resourceName || '').split('/').pop() || '';
+  return { before: keywordLabel(text, old.keyword?.matchType), label: keywordLabel(text, match), text, key, status: create.status as string, group: group.name, calls: 4 };
+}
+
 // ── Grupos de anúncios ──────────────────────────────────────────────────────
 
 export async function setGroupStatus(ctx: AdsContext, campaignId: string, groupId: string, status: 'PAUSED' | 'ENABLED') {

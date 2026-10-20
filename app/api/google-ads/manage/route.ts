@@ -3,7 +3,7 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { addUsage } from '@/lib/googleAds/sync';
 import { GoogleAdsError, search } from '@/lib/googleAds/client';
 import { campaignAccess, canEdit, setKeywordStatus } from '@/lib/googleAds/edit';
-import { addCampaignAsset, addKeywords, addLocation, createAd, createGroup, readAdDetail, readAds, readCampaignAssets, readLocations, Refused, removeCampaignAsset, removeLocation, renameGroup, setAdStatus, setGroupStatus, updateAd, type Match } from '@/lib/googleAds/manage';
+import { addCampaignAsset, addKeywords, changeKeywordMatch, addLocation, createAd, createGroup, readAdDetail, readAds, readCampaignAssets, readLocations, Refused, removeCampaignAsset, removeLocation, renameGroup, setAdStatus, setGroupStatus, updateAd, type Match } from '@/lib/googleAds/manage';
 import { adviseAd } from '@/lib/googleAds/adAdvice';
 import { aiEnabled } from '@/lib/ai/openrouter';
 
@@ -21,6 +21,7 @@ export const maxDuration = 60;
  * POST { product_id, action, … }
  *   palavra_nova     { group_id, texts[], match }          inclui palavras-chave num grupo (também a partir de um termo de pesquisa)
  *   palavra_status   { keyword: "grupo~palavra", status }  pausa ou reativa uma palavra-chave
+ *   palavra_tipo     { keyword: "grupo~palavra", match }   troca exata / frase / ampla (cria a nova e retira a antiga, num pedido só)
  *   grupo_novo       { name, target?, copy_from?, paused? } cria um grupo; com copy_from leva palavras-chave e anúncios
  *   grupo_status     { group_id, status }
  *   grupo_nome       { group_id, name }
@@ -99,6 +100,12 @@ export async function POST(request: Request) {
       const r = await addKeywords(ctx, campaignId, String(body.group_id || ''), list(body.texts, 60), match);
       target = `${r.added.slice(0, 6).join(', ')}${r.added.length > 6 ? ` e mais ${r.added.length - 6}` : ''} (grupo ${r.group})`; calls = r.calls; extra = { added: r.added.length, skipped: r.skipped };
       await mirror(r.items.map(k => ({ level: 'keyword', entity_id: k.key, ad_group_id: k.key.split('~')[0], name: k.text, status: 'ENABLED', details: { match_type: k.match } })));
+    } else if (action === 'palavra_tipo') {
+      const match = (['EXACT', 'PHRASE', 'BROAD'].includes(body.match) ? body.match : '') as Match;
+      const r = await changeKeywordMatch(ctx, campaignId, String(body.keyword || ''), match);
+      target = `${r.before} → ${r.label} (grupo ${r.group})`; key = String(body.keyword); calls = r.calls; extra = { key: r.key };
+      await patch('keyword', String(body.keyword), { status: 'REMOVED' });
+      if (/^\d+~\d+$/.test(r.key)) await mirror([{ level: 'keyword', entity_id: r.key, ad_group_id: r.key.split('~')[0], name: r.text, status: r.status, details: { match_type: match } }]);
     } else if (action === 'palavra_status') {
       const r = await setKeywordStatus(ctx, campaignId, String(body.keyword || ''), status);
       kind = status === 'PAUSED' ? 'pausar_palavra' : 'ativar_palavra'; target = r.label; key = r.resource; calls = r.calls;

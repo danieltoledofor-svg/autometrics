@@ -282,6 +282,18 @@ export function GoogleAdsEntitiesTab(props: Props) {
     setRowResult({ ok: r.ok, text: r.ok ? `${pause ? 'Pausado' : 'Reativado'}: ${r.text}.` : r.text });
     if (r.ok) { setEntities(list => list.map(e => (e.level === level && e.entity_id === i.entity_id ? { ...e, status: pause ? 'PAUSED' : 'ENABLED' } : e))); if (level === 'ad_group') manage.loadGroups(); cache.clear(); }
   };
+  // Exata, frase ou ampla: o Google cria a palavra com o tipo novo e retira a antiga, num pedido só.
+  const MATCH_PT: Record<string, string> = { EXACT: 'exata', PHRASE: 'frase', BROAD: 'ampla' };
+  const changeMatch = async (i: DimItem, match: string) => {
+    const from = i.details?.match_type;
+    if (!match || match === from) return;
+    if (!window.confirm(`Trocar "${keywordLabel(i.name, from)}" para ${keywordLabel(i.name, match)} (${MATCH_PT[match]})?\n\nO Google não deixa mudar o tipo de uma palavra que já existe: entra a palavra com o tipo novo (mesmo grupo, mesma situação e mesmo lance) e a antiga é retirada. Os números da nova começam do zero; os da antiga continuam no histórico.`)) return;
+    setRowBusy(i.entity_id); setRowResult(null);
+    const r = await manage.send('palavra_tipo', { keyword: i.entity_id, match });
+    setRowBusy('');
+    setRowResult({ ok: r.ok, text: r.ok ? `Tipo trocado: ${r.text}.` : r.text });
+    if (r.ok) done();
+  };
   const groupOf = (id: string): ManageGroup => manage.groups.find(g => g.id === id) || { id, nome: adGroupName.get(id) || `Grupo ${id}`, status: 'ENABLED', meta_cpa: null };
   const seedOf = (i: DimItem): AdSeed => ({
     titulos: (i.details?.headlines || []).map((h: any) => String(h.text || '')), descricoes: (i.details?.descriptions || []).map((h: any) => String(h.text || '')),
@@ -295,6 +307,14 @@ export function GoogleAdsEntitiesTab(props: Props) {
         {level === 'ad_group' && <RowAction label="Duplicar" onClick={() => setForm({ type: 'grupo', copyFrom: groupOf(i.entity_id) })} />}
         {level === 'ad' && i.details?.type === 'RESPONSIVE_SEARCH_AD' && <RowAction label="Editar" onClick={() => setForm({ type: 'anuncio', mode: 'editar', seed: seedOf(i), adKey: i.entity_id })} />}
         {level === 'ad' && i.details?.type === 'RESPONSIVE_SEARCH_AD' && <RowAction label="Duplicar" onClick={() => setForm({ type: 'anuncio', mode: 'copia', seed: seedOf(i), adKey: i.entity_id })} />}
+        {level === 'keyword' && (
+          <select value="" onChange={e => changeMatch(i, e.target.value)} disabled={rowBusy === i.entity_id} aria-label={`Trocar o tipo de correspondência de ${i.name}`}
+            title="Trocar para exata, frase ou ampla"
+            className="text-xs font-semibold text-brand-text bg-transparent border-0 p-0 cursor-pointer hover:underline disabled:opacity-40">
+            <option value="">Trocar tipo</option>
+            {(['EXACT', 'PHRASE', 'BROAD'] as const).filter(m => m !== i.details?.match_type).map(m => <option key={m} value={m}>Para {MATCH_PT[m]}: {keywordLabel(i.name, m)}</option>)}
+          </select>
+        )}
         <RowAction label={i.status === 'ENABLED' ? 'Pausar' : 'Reativar'} busy={rowBusy === i.entity_id} onClick={() => toggleStatus(i)} danger={i.status === 'ENABLED'} />
       </span>
     ),
