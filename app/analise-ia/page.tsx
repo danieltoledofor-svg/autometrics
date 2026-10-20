@@ -206,7 +206,8 @@ export default function PatternsPage() {
   const TermTable = ({ best, waste, label, first }: { best: any[]; waste: any[]; label: string; first: string }) => {
     const row = (r: any) => (
       <tr key={r.text}>
-        <td className={`${td} font-medium ${head}`}>{r.text}</td>
+        <td className={`${td} font-medium ${head}`}>{r.text}{r.jev && <span title={r.jev === 'firme' ? 'O Jev vê este resultado se repetir com dado suficiente.' : 'Pouca venda, pouco gasto ou uma campanha só: o resultado pode não se repetir.'}
+          className={`ml-2 inline-block text-[11px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap align-middle ${r.jev === 'firme' ? 'bg-brand/15 text-brand-text' : 'bg-surface-3 text-ink-subtle'}`}>Jev: {r.jev === 'firme' ? 'padrão firme' : 'pode ser acaso'}</span>}</td>
         <td className={`${td} text-right`}>{r.campaigns}</td>
         <td className={`${td} text-right whitespace-nowrap`}>{money(r.cost)}</td>
         <td className={`${td} text-right whitespace-nowrap`}>{data.approx && r.conv > 0 ? '≈ ' : ''}{qty(r.conv)}</td>
@@ -583,7 +584,8 @@ export default function PatternsPage() {
                         <td className={`${td} text-right align-top whitespace-nowrap`}>{money(v.cpa)}</td>
                         <td className={`${td} text-right align-top whitespace-nowrap font-medium`}>{signed(v.result)}</td>
                         <td className={`${td} text-right align-top whitespace-nowrap`}>{signed(v.result7)}</td>
-                        <td className={`${td} align-top`}><Pill m={VERDICT[v.verdict]} /></td>
+                        <td className={`${td} align-top`}><Pill m={VERDICT[v.verdict]} />
+                          {v.jev && <div title={v.jev === 'esperar' ? 'O Jev acha que ainda pode se recuperar sozinha.' : 'O Jev vê dado suficiente para decidir agora.'} className={`mt-1 text-[11px] font-medium whitespace-nowrap ${v.jev === 'esperar' ? 'text-ink-subtle' : 'text-brand-text'}`}>Jev: {v.jev === 'esperar' ? 'esperar' : 'mexer agora'}</div>}</td>
                       </tr>
                     ))}</tbody>
                   </table>

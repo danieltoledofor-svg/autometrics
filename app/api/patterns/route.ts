@@ -7,6 +7,7 @@ import { formatMoney } from '@/lib/analysis/labels';
 import { memoryBlock, memoryFor } from '@/lib/analysis/userMemory';
 import { adjustmentBlock, adjustmentSummary } from '@/lib/analysis/changes';
 import { addDays, todayIn } from '@/lib/analysis/compute';
+import { addJev, JEV_MOVE_PT, JEV_PATTERN_PT } from '@/lib/analysis/patternsJev';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -21,8 +22,21 @@ export const dynamic = 'force-dynamic';
  *       pergunta fala de um período ("últimos 3 dias", "outubro", "de 01/10 a 05/10"),
  *       os números são calculados para esse período, não o da tela
  *
+ * O Jev marca cada termo e palavra-chave (padrão firme × pode ser acaso) e cada
+ * campanha para ajustar ou pausar (mexer agora × esperar): a tela mostra e a IA usa
+ * (lib/analysis/patternsJev).
+ *
  * Só entram campanhas de quem está logado.
  */
+
+/** Mesmo conjunto e período = mesma resposta do Jev guardada. */
+const jevKey = (userId: string, o: { tag: string; period: string; blocks: string[]; mcc?: string; from?: string; to?: string }) => `${userId}|${o.tag}|${o.period}|${o.blocks.join(',')}|${o.mcc || ''}|${o.from || ''}|${o.to || ''}`;
+async function withJev<T extends Patterns>(userId: string, p: T, o: ReturnType<typeof options>): Promise<T & { jev?: { asked: number; answered: number } }> {
+  if (p.empty) return p;
+  const jev = await addJev(userId, p as Extract<Patterns, { empty: false }>, jevKey(userId, o)).catch(() => ({ asked: 0, answered: 0 }));
+  return { ...p, jev };
+}
+const jevTag = (r: any) => (r.jev ? ` · Jev: ${JEV_PATTERN_PT[r.jev as keyof typeof JEV_PATTERN_PT]}` : '');
 
 function options(q: { tag?: any; period?: any; blocks?: any; mcc?: any; from?: any; to?: any }) {
   return {
@@ -44,8 +58,9 @@ export async function GET(request: Request) {
       const data = await computePatterns(user.id, { ...options(Object.fromEntries(q)), optionsOnly: true });
       return NextResponse.json({ ...data, ai: aiEnabled() });
     }
+    const o = options(Object.fromEntries(q));
     const [data, adjustments] = await Promise.all([
-      computePatterns(user.id, options(Object.fromEntries(q))),
+      computePatterns(user.id, o).then(p => withJev(user.id, p, o)),
       adjustmentSummary(user.id).catch(() => []),
     ]);
     return NextResponse.json({ ...data, adjustments, ai: aiEnabled() });
@@ -63,6 +78,7 @@ Regras de linguagem, obrigatórias:
 - Fale "nas campanhas do grupo". Não escreva "outras campanhas", "outras contas" nem "outros usuários".
 - Não repita o que já está em JÁ APONTADO; traga o que ainda não foi dito ou junte dois números que se explicam.
 - Período com poucas vendas: diga que o número ainda é pequeno para concluir.
+- Linhas com "Jev: padrão firme" se repetem com dado suficiente: dê prioridade a elas ao cruzar os números. Linhas com "Jev: pode ser acaso" têm pouco dado: se citar, diga que ainda pode ser acaso.
 
 Responda só com JSON:
 {"titulo": "frase de até 100 caracteres com o principal do grupo, com número",
@@ -71,7 +87,7 @@ No máximo 5 pontos.`;
 
 function prompt(p: Extract<Patterns, { empty: false }>, tag: string) {
   const money = (v: number | null) => (v === null ? '—' : formatMoney(v, p.currency));
-  const line = (r: any) => `- ${r.text}: ${r.campaigns} campanhas · custo ${money(r.cost)} · vendas ${r.conv} · CPA ${money(r.cpa)}`;
+  const line = (r: any) => `- ${r.text}: ${r.campaigns} campanhas · custo ${money(r.cost)} · vendas ${r.conv} · CPA ${money(r.cpa)}${jevTag(r)}`;
   const label = PERIODS.find(x => x.key === p.period.key)!.label;
   return `Grupo: campanhas com "${tag || 'todas'}" no nome${p.mcc ? ` · MCC ${p.mcc}` : ''} · período: ${label}${p.period.from ? ` (${p.period.from} a ${p.period.to})` : ''}
 ${p.approx ? 'As vendas de termo e de dispositivo são as vendas reais de cada campanha divididas entre os itens (valor aproximado).' : 'As vendas são as conversões do Google.'}
@@ -113,6 +129,7 @@ Regras, obrigatórias:
 - Se pedirem opinião sobre o que fazer, descreva o que os números mostram e os caminhos possíveis; a decisão é do afiliado.
 - Fale só das campanhas deste pedido e do que o próprio afiliado fez (bloco dos ajustes e anotações dele, que valem para todas as campanhas dele). Nunca mencione campanhas, contas ou usuários de fora.
 - Ao usar o bloco dos ajustes, diga quantas vezes aconteceu; com menos de 5 repetições, avise que ainda é pouco para virar regra.
+- Ao cruzar dados, dê prioridade às linhas marcadas "Jev: padrão firme"; nas marcadas "Jev: pode ser acaso", avise que o dado é pouco. Campanha marcada "Jev: esperar" ainda pode se recuperar; "Jev: mexer agora" tem dado suficiente para decidir.
 - Os números já vêm calculados para o período que o afiliado pediu (linha PERÍODO). Diga no começo qual período usou, com as datas. Quando vierem dois ou mais períodos, compare usando o bloco de cada um.
 
 Responda só com JSON: {"resposta": "texto em parágrafos curtos; use quebra de linha para separar parágrafos e '- ' para listas", "faltou": "dado que faltou para responder melhor, ou vazio"}`;
@@ -166,8 +183,8 @@ function dataPack(p: Extract<Patterns, { empty: false }>, tag: string) {
   return [
     prompt(p, tag),
     campaignBlock(p),
-    block(d.monthly ? 'MÊS A MÊS' : 'DIA A DIA', (d.series || []).map((c: any) => (s: any) => `- ${s.when}: custo ${money(s.cost)} · vendas ${s.sales} · CPA ${money(s.cpa)}${s.result !== null ? ` · resultado ${money(s.result)}` : ''}`)),
-    block('CAMPANHAS RODANDO, VIDA INTEIRA E ÚLTIMOS 7 DIAS', p.verdicts.slice(0, 40).map(v => `- ${v.name}: ${v.days} dias com gasto desde ${v.since} · custo ${money(v.cost)} · vendas ${v.sales} · CPA ${money(v.cpa)} · resultado ${money(v.result)} · últimos 7 dias: custo ${money(v.cost7)}, vendas ${v.sales7}, resultado ${money(v.result7)} · ${v.verdict} · situação hoje: ${v.status.label}`)),
+    block(d.monthly ? 'MÊS A MÊS' : 'DIA A DIA', (d.series || []).map((s: any) => `- ${s.when}: custo ${money(s.cost)} · vendas ${s.sales} · CPA ${money(s.cpa)}${s.result !== null ? ` · resultado ${money(s.result)}` : ''}`)),
+    block('CAMPANHAS RODANDO, VIDA INTEIRA E ÚLTIMOS 7 DIAS', p.verdicts.slice(0, 40).map(v => `- ${v.name}: ${v.days} dias com gasto desde ${v.since} · custo ${money(v.cost)} · vendas ${v.sales} · CPA ${money(v.cpa)} · resultado ${money(v.result)} · últimos 7 dias: custo ${money(v.cost7)}, vendas ${v.sales7}, resultado ${money(v.result7)} · ${v.verdict}${(v as any).jev ? ` (Jev: ${JEV_MOVE_PT[(v as any).jev as keyof typeof JEV_MOVE_PT]})` : ''} · situação hoje: ${v.status.label}`)),
     block('TERMOS DE PESQUISA COM MAIS GASTO', (d.terms || []).map(row)),
     block('IDADE', (d.ages || []).map(row)),
     block('GÊNERO', (d.genders || []).map(row)),
@@ -181,7 +198,7 @@ async function answer(userId: string, opts: ReturnType<typeof options>, question
   const runs = asked.length
     ? asked.map(r => ({ ...opts, period: 'custom' as PeriodKey, from: r.from, to: r.to }))
     : [opts];
-  const packs = await Promise.all(runs.map(o => computePatterns(userId, { ...o, detail: true })));
+  const packs = await Promise.all(runs.map((o, i) => computePatterns(userId, { ...o, detail: true }).then(x => (i === 0 ? withJev(userId, x, o) : x))));
   const p = packs[0];
   if (p.empty) return NextResponse.json({ error: 'Nenhuma campanha neste conjunto para a IA olhar.' }, { status: 400 });
   const used = packs.filter((x): x is Extract<Patterns, { empty: false }> => !x.empty);
@@ -216,7 +233,7 @@ export async function POST(request: Request) {
     catch (e: any) { return NextResponse.json({ error: e.message }, { status: 500 }); }
   }
   try {
-    const p = await computePatterns(user.id, opts);
+    const p = await withJev(user.id, await computePatterns(user.id, opts), opts);
     if (p.empty || !p.totals.cost) return NextResponse.json({ error: 'Sem gasto neste período para a IA ler.' }, { status: 400 });
     const notes = memoryBlock(await memoryFor(user.id, { text: opts.tag }));
     const adjustments = adjustmentBlock(await adjustmentSummary(user.id).catch(() => []));

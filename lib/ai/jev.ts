@@ -124,7 +124,7 @@ export async function jevWaitOrAct(args: {
  * Uma pergunta de escolha ao Jev. Devolve a opção (só entre as `options`) ou
  * null quando ele está desligado, não respondeu em 6 s ou respondeu fora.
  */
-export async function jevChoose(ids: { userId: string; productId: string }, state: Record<string, any>, questions: Record<string, any>, key: string, options: string[]): Promise<{ choice: string; confidence: number; model: string } | null> {
+export async function jevChoose(ids: { userId: string; productId: string | null }, state: Record<string, any>, questions: Record<string, any>, key: string, options: string[]): Promise<{ choice: string; confidence: number; model: string } | null> {
   if (!jevEnabled()) return null;
   const started = Date.now();
   try {
@@ -147,10 +147,10 @@ export async function jevChoose(ids: { userId: string; productId: string }, stat
 }
 
 /** Entra no mesmo registro de consumo da IA (painel /ia do dono). */
-async function log(args: { userId: string; productId: string }, body: any, ok: boolean, error: string | null) {
+async function log(args: { userId: string; productId: string | null }, body: any, ok: boolean, error: string | null) {
   const input = Number(body?.usage?.input_tokens) || 0;
   const { error: dbError } = await supabaseAdmin().from('ai_usage').insert({
-    user_id: args.userId, product_id: args.productId, function: 'jev', model: String(body?.model || MODEL),
+    user_id: args.userId, product_id: args.productId || null, function: 'jev', model: String(body?.model || MODEL),
     input_tokens: input, output_tokens: 0, cost_usd: (input / 1e6) * USD_PER_M_INPUT, ok, error,
   });
   if (dbError) console.warn('[jev] consumo não registrado:', dbError.message);
