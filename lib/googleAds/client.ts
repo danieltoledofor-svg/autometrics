@@ -337,7 +337,7 @@ export interface MutateProblem {
   /** O valor que o Google apontou como causa (o texto da palavra-chave, por exemplo). */
   trigger: string;
   /** Quando é política de anúncios: o nome e a descrição que o Google dá, e se ele aceita pedido de exceção. */
-  policy: { name: string; description: string; exemptible: boolean } | null;
+  policy: { name: string; description: string; exemptible: boolean; key?: { policyName: string; violatingText: string } } | null;
 }
 
 /**
@@ -369,7 +369,8 @@ export async function mutateAll(ctx: AdsContext, mutateOperations: any[], valida
         message: e.message || 'O Google recusou.', code: String(Object.values(e.errorCode || {})[0] || ''),
         kind: String(Object.keys(e.errorCode || {})[0] || ''),
         trigger: String(trigger.stringValue ?? trigger.int64Value ?? trigger.doubleValue ?? violation?.key?.violatingText ?? ''),
-        policy: violation ? { name: String(violation.externalPolicyName || violation.key?.policyName || ''), description: String(violation.externalPolicyDescription || ''), exemptible: violation.isExemptible === true }
+        policy: violation ? { name: String(violation.externalPolicyName || violation.key?.policyName || ''), description: String(violation.externalPolicyDescription || ''), exemptible: violation.isExemptible === true,
+          ...(violation.key?.policyName ? { key: { policyName: String(violation.key.policyName), violatingText: String(violation.key.violatingText || '') } } : {}) }
           : topics.length ? { name: topics.map(t => String(t.topic || '')).filter(Boolean).join(', '), description: '', exemptible: false } : null,
         operation: op && op.index !== undefined ? Number(op.index) : null,
         field: path.filter(x => x !== op).map(x => (x.index !== undefined ? `${x.fieldName}[${x.index}]` : x.fieldName)).join('.'),

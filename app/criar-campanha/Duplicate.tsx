@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Loader2, Plus, Search, X } from 'lucide-react';
+import { Check, Loader2, Pencil, Plus, RotateCcw, Search, ShieldCheck, Trash2, X } from 'lucide-react';
 import type { Template } from '@/lib/campaignBuilder/template';
-import type { CreateResult } from '@/lib/campaignBuilder/create';
+import type { CreateResult, Problem } from '@/lib/campaignBuilder/create';
+import { applyFix, editProblem, editable, exemptible, fixNote, present, removeProblem, type Fix, type Ref } from '@/lib/campaignBuilder/fixes';
 import { droppedAdjustments, duplicateProblems, duplicateSettings, lineSettings, needsGoal, usesTargetSpend, valueProblems, type DuplicateSettings } from '@/lib/campaignBuilder/duplicate';
 import { Block, NumberField, type Css } from './StepCampaign';
 import { AccountPicker, HIDDEN, REMEMBER, dashed, running, type Account } from './StepWhere';
@@ -16,6 +17,8 @@ import { AccountPicker, HIDDEN, REMEMBER, dashed, running, type Account } from '
  * (lib/campaignBuilder/duplicate). Antes de criar, o Google ensaia cada cópia.
  * Com uma cópia, orçamento e CPA ficam num bloco só; com duas ou mais, cada
  * linha da lista de contas tem o seu, começando pelos valores da original.
+ * O que o Google recusar no ensaio ou na criação se corrige ali mesmo: tirar,
+ * trocar o texto ou pedir exceção, e ensaiar de novo (lib/campaignBuilder/fixes).
  */
 
 type Api = (path: string, body?: Record<string, any>) => Promise<{ ok: boolean; body: any }>;
@@ -51,6 +54,8 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
   const [stale, setStale] = useState(false);
   /** Campos com texto que não é número: 'geral|orcamento', '<conta>|cpa'… */
   const [notNumber, setBad] = useState<Set<string>>(new Set());
+  /** Correções feitas na cópia por causa das recusas do Google, em português, na ordem. */
+  const [fixes, setFixes] = useState<string[]>([]);
   const markBad = (k: string, on: boolean) => setBad(b => { if (b.has(k) === on) return b; const next = new Set(b); if (on) next.add(k); else next.delete(k); return next; });
 
   useEffect(() => {
@@ -65,7 +70,7 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
   }, [campaigns, filter]);
 
   const read = async () => {
-    setReading(true); setError(''); setT(null); setS(null); setTargets([]); setStates({}); setStale(false);
+    setReading(true); setError(''); setT(null); setS(null); setTargets([]); setStates({}); setStale(false); setFixes([]);
     const { ok, body } = await api(`/api/campaign-builder?product_id=${picked}`);
     if (!ok || !body.template) setError(body.error || 'Não foi possível ler a campanha.');
     else { setT(body.template); setCurrency(body.currency || 'USD'); setS(duplicateSettings(body.template)); }
@@ -200,16 +205,16 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
   const accepted = pending.filter(x => states[keyOf(x)]?.fase === 'aceita');
   const set = (k: string, st: State) => setStates(x => ({ ...x, [k]: st }));
 
-  const send = async (x: Target, ensaio: boolean): Promise<CreateResult> => {
-    const { body } = await api('/api/campaign-builder', { action: 'duplicar', ensaio, modelo: t, ajustes: s, linha: { conta_id: x.id, nome: x.campanha, meta_id: x.meta_id, ...(multi ? own(x) : {}) } });
+  const send = async (x: Target, ensaio: boolean, model: Template = t): Promise<CreateResult> => {
+    const { body } = await api('/api/campaign-builder', { action: 'duplicar', ensaio, modelo: model, ajustes: s, linha: { conta_id: x.id, nome: x.campanha, meta_id: x.meta_id, ...(multi ? own(x) : {}) } });
     return body.result || { ok: false, ensaio, campanha_id: null, situacao: null, problemas: [{ onde: 'pedido', texto: body.error || 'O servidor não respondeu.' }], avisos: [], calls: 0, itens: 0 };
   };
-  const rehearse = async () => {
+  const rehearse = async (model: Template = t) => {
     setBusy('ensaio'); setStale(false);
     for (const x of pending) {
       const k = keyOf(x);
       set(k, { fase: 'ensaiando' });
-      const result = await send(x, true);
+      const result = await send(x, true, model);
       set(k, { fase: result.ok ? 'aceita' : 'recusada', result });
     }
     setBusy('');
@@ -226,6 +231,25 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
     setBusy(''); setAgreed(false);
   };
 
+  // Corrigir na cópia o que o Google recusou. A cópia mudou: o que estava aceito precisa ser ensaiado de novo;
+  // as recusas continuam na tela, marcadas como corrigidas, até o próximo ensaio.
+  const correct = (list: { refs: Ref[]; fix: Fix }[], thenRehearse = false) => {
+    let model = t;
+    const notes: string[] = [];
+    for (const { refs, fix } of list) {
+      const live = refs.filter(r => present(model, r));
+      if (!live.length) continue;
+      model = applyFix(model, live, fix);
+      notes.push(fixNote(live[0], fix, new Set(live.map(r => ('grupo' in r ? r.grupo : null))).size));
+    }
+    if (!notes.length) return;
+    setT(model); setFixes(f => [...f, ...notes]); setAgreed(false);
+    setStates(x => Object.fromEntries(Object.entries(x).filter(([, st]) => st.fase !== 'aceita')));
+    if (thenRehearse) rehearse(model);
+  };
+  const unresolved = (p: Problem) => (p.refs || []).filter(r => present(t, r));
+  const fixed = (st?: State) => !!st && 'result' in st && st.result.problemas.some(p => p.refs?.length && !unresolved(p).length);
+
   const money = (v: number | null) => (v === null ? 'sem valor' : `${symbol} ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
   const field = `rounded-lg border ${line} ${soft} ${head} px-3 py-2 text-[13px] outline-none focus:border-brand`;
   const good = 'text-pos', bad = 'text-neg', warn = 'text-warn';
@@ -237,7 +261,7 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
       <div className={`${card} border rounded-xl p-4 space-y-2`}>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className={`text-base font-semibold ${head}`}>{t.origem.nome}</div>
-          <button onClick={() => { setT(null); setS(null); setTargets([]); }} className={`text-xs ${muted} hover:text-ink`}>Escolher outra campanha</button>
+          <button onClick={() => { setT(null); setS(null); setTargets([]); setFixes([]); }} className={`text-xs ${muted} hover:text-ink`}>Escolher outra campanha</button>
         </div>
         <div className={`text-xs ${muted}`}>conta {dashed(t.origem.conta_id)} · lida em {new Date(t.origem.lido_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
         <div className={`text-[13px] ${head}`}>
@@ -246,6 +270,13 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
           {t.campanha.ia_max.ligada && ' A IA Max vai ligada, como na original.'}
         </div>
         <div className={`text-xs ${muted}`}>Sitelinks e frases de destaque entram no nível da campanha, mesmo os que na original estavam no grupo ou na conta.{t.recursos.nome_empresa ? ' O nome da empresa não é copiado.' : ''}</div>
+        {fixes.length > 0 && (
+          <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2 text-xs space-y-0.5">
+            <div className={`font-medium ${head}`}>Correções feitas na cópia por causa do Google ({fixes.length})</div>
+            {fixes.map((f, i) => <div key={i} className={head}>{f}</div>)}
+            <div className={muted}>Valem para todas as cópias desta duplicação. A campanha original não muda. Para desfazer, leia a campanha de novo.</div>
+          </div>
+        )}
         {t.avisos.length > 0 && <div className="text-xs text-warn space-y-0.5"><div className="font-medium">O Google não devolveu tudo na leitura</div>{t.avisos.map((a, i) => <div key={i}>{a}</div>)}</div>}
       </div>
 
@@ -350,14 +381,30 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
                   )}
                   {otherCurrency && <div className={`text-xs ${warn}`}>Esta conta usa {symbolOf(x.moeda)}, não {symbol}: o orçamento e o CPA entram nela como {symbolOf(x.moeda)} com os mesmos números.</div>}
                   {st && 'result' in st && st.result.problemas.map((p, j) => (
-                    <div key={j} className="rounded-lg border border-neg/30 bg-neg/5 px-3 py-2 text-xs space-y-1">
-                      <div className={`font-medium ${bad}`}>{p.onde}</div>
-                      <div className={head}>{p.texto}</div>
-                      {p.corrigir && <div className={head}><b>Como corrigir:</b> {p.corrigir}</div>}
-                      {!p.corrigir && p.google && <div className={muted}>Resposta do Google: {p.google}</div>}
-                      {p.codigo && <div className={muted}>código do Google: {p.codigo}</div>}
-                    </div>
+                    <Refusal key={`${j}|${p.onde}`} p={p} live={unresolved(p)} t={t} busy={busy !== ''} onFix={(refs, fix) => correct([{ refs, fix }])} css={css} />
                   ))}
+                  {st && 'result' in st && (() => {
+                    // Várias recusas de uma vez: um botão tira tudo o que dá para tirar e já pede ao Google para conferir de novo.
+                    const removable = st.result.problemas.map(unresolved).filter(refs => refs.length && refs.every(r => !removeProblem(t, r)));
+                    const left = st.result.problemas.filter(p => unresolved(p).length).length;
+                    if (!removable.length && !fixed(st)) return null;
+                    return (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {removable.length > 0 && (
+                          <button onClick={() => correct(removable.map(refs => ({ refs, fix: { acao: 'tirar' } as Fix })), true)} disabled={busy !== ''}
+                            className="bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5">
+                            <Trash2 size={13} aria-hidden="true" /> Tirar {removable.length === 1 ? 'o item recusado' : `os ${removable.length} itens recusados`} e ensaiar de novo
+                          </button>
+                        )}
+                        {fixed(st) && (
+                          <button onClick={() => rehearse()} disabled={busy !== ''}
+                            className={`${removable.length ? `border border-line-strong ${head} hover:border-brand` : 'bg-brand hover:bg-brand-hover text-white'} px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-1.5`}>
+                            <RotateCcw size={13} aria-hidden="true" /> Ensaiar de novo no Google{left ? ` (${left} ainda sem correção)` : ''}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {st && 'result' in st && st.result.avisos.map((av, j) => <div key={j} className={`text-xs ${warn}`}>{av}</div>)}
                 </div>
               );
@@ -374,7 +421,7 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-3">
-              <button onClick={rehearse} disabled={busy !== '' || problems.length > 0} className="px-4 py-2 rounded-lg border text-xs font-medium inline-flex items-center gap-2 disabled:opacity-40 border-line-strong text-ink hover:border-brand">
+              <button onClick={() => rehearse()} disabled={busy !== '' || problems.length > 0} className="px-4 py-2 rounded-lg border text-xs font-medium inline-flex items-center gap-2 disabled:opacity-40 border-line-strong text-ink hover:border-brand">
                 {busy === 'ensaio' && <Loader2 size={13} aria-hidden="true" className="animate-spin" />} 1. Ensaiar no Google ({pending.length})
               </button>
               <span className={`text-xs ${stale ? warn : muted}`}>{stale ? 'Algo mudou depois do último ensaio: ensaie de novo. ' : ''}{accepted.length ? `${accepted.length} de ${pending.length} aceitas.` : 'O ensaio não cria nada.'}{items ? ` Cada cópia leva ${items} itens; o ensaio e a criação contam na cota diária do Google.` : ''}</span>
@@ -394,6 +441,70 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
         )}
         <div className={`text-xs ${muted}`}>A mesma oferta com os mesmos textos em muitas contas é um dos motivos de suspensão no Google; a escolha de quantas contas usar é sua.</div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Um item que o Google recusou, com o que dá para fazer ali mesmo: tirar da
+ * cópia, trocar o texto ou, quando o Google aceita, pedir exceção da política.
+ */
+function Refusal({ p, live, t, busy, onFix, css }: { p: Problem; live: Ref[]; t: Template; busy: boolean; onFix: (refs: Ref[], fix: Fix) => void; css: Css }) {
+  const { head, muted, line, soft } = css;
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  const first = live[0];
+  const done = !!p.refs?.length && !live.length;
+  const edit = first ? editable(first) : null;
+  const cantRemove = first ? live.map(r => removeProblem(t, r)).find(Boolean) || null : null;
+  const canExempt = !!p.excecao && !!first && exemptible(first);
+  const bad = editing && first ? editProblem(first, text) : null;
+  const button = `px-2.5 py-1 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-40`;
+  return (
+    <div className={`rounded-lg border px-3 py-2 text-xs space-y-1 ${done ? 'border-pos/30 bg-pos/5' : 'border-neg/30 bg-neg/5'}`}>
+      <div className={`font-medium ${done ? 'text-pos' : 'text-neg'}`}>{done && <Check size={12} aria-hidden="true" className="inline mr-1" />}{p.onde}{done ? ' · corrigido, falta ensaiar de novo' : ''}</div>
+      {!done && <>
+        <div className={head}>{p.texto}</div>
+        {p.corrigir && <div className={head}><b>Como corrigir:</b> {p.corrigir}</div>}
+        {!p.corrigir && p.google && <div className={muted}>Resposta do Google: {p.google}</div>}
+        {p.codigo && <div className={muted}>código do Google: {p.codigo}</div>}
+        {first && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button onClick={() => onFix(live, { acao: 'tirar' })} disabled={busy || !!cantRemove} title={cantRemove || undefined}
+              className={`${button} bg-neg/10 border border-neg/40 text-neg hover:bg-neg/20`}>
+              <Trash2 size={12} aria-hidden="true" /> Tirar da cópia{live.length > 1 ? ` (${live.length} grupos)` : ''}
+            </button>
+            {edit && !editing && (
+              <button onClick={() => { setText(first.texto); setEditing(true); }} disabled={busy} className={`${button} bg-surface-2 border border-line-strong ${head} hover:border-brand`}>
+                <Pencil size={12} aria-hidden="true" /> Trocar o texto
+              </button>
+            )}
+            {canExempt && (
+              <button onClick={() => onFix(live, { acao: 'excecao', chave: p.excecao! })} disabled={busy}
+                title="O item vai assim mesmo e o Google revisa antes de veicular. Ele pode reprovar depois."
+                className={`${button} bg-surface-2 border border-line-strong ${head} hover:border-brand`}>
+                <ShieldCheck size={12} aria-hidden="true" /> Pedir exceção ao Google
+              </button>
+            )}
+            {cantRemove && <span className={muted}>{cantRemove}</span>}
+          </div>
+        )}
+        {first && editing && edit && (
+          <div className="space-y-1 pt-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <input value={text} onChange={e => setText(e.target.value)} autoFocus aria-label={`Novo texto: ${edit.nome}`}
+                onKeyDown={e => { if (e.key === 'Enter' && !bad) { onFix(live, { acao: 'trocar', texto: text }); setEditing(false); } if (e.key === 'Escape') setEditing(false); }}
+                className={`flex-1 min-w-[220px] rounded-lg border ${line} ${soft} ${head} px-3 py-1.5 text-[13px] outline-none focus:border-brand`} />
+              {edit.max && <span className={`tabular-nums ${[...text].length > edit.max ? 'text-neg' : muted}`}>{[...text].length}/{edit.max}</span>}
+              <button onClick={() => { onFix(live, { acao: 'trocar', texto: text }); setEditing(false); }} disabled={busy || !!bad} className={`${button} bg-brand hover:bg-brand-hover text-white`}>
+                <Check size={12} aria-hidden="true" /> Trocar{live.length > 1 ? ` nos ${live.length} grupos` : ''}
+              </button>
+              <button onClick={() => setEditing(false)} className={`${muted} hover:text-ink`}>cancelar</button>
+            </div>
+            {bad && text.trim() !== first.texto.trim() && <div className="text-warn">{bad}</div>}
+          </div>
+        )}
+      </>}
     </div>
   );
 }

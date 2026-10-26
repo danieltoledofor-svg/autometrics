@@ -36,10 +36,11 @@ export interface Template {
   negativas: { texto: string; tipo: string }[];
   grupos: {
     id: string; nome: string; status: string; meta_cpa: number | null;
-    palavras: { texto: string; tipo: string; status: string }[];
+    /** `excecoes`: só na duplicação, quando o usuário pede ao Google exceção da política (lib/campaignBuilder/fixes). */
+    palavras: { texto: string; tipo: string; status: string; excecoes?: { politica: string; texto: string }[] }[];
     negativas: { texto: string; tipo: string }[];
     publicos: { tipo: string; faixa: string; ajuste: number; excluido: boolean }[];
-    anuncios: { id: string; status: string; urls: string[]; caminho1: string; caminho2: string; titulos: { texto: string; fixo: string | null }[]; descricoes: { texto: string; fixo: string | null }[] }[];
+    anuncios: { id: string; status: string; urls: string[]; caminho1: string; caminho2: string; titulos: { texto: string; fixo: string | null }[]; descricoes: { texto: string; fixo: string | null }[]; excecoes?: { politica: string; texto: string }[] }[];
   }[];
   recursos: {
     sitelinks: { texto: string; desc1: string; desc2: string; urls: string[]; nivel: string }[];

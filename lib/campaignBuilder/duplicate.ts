@@ -1,5 +1,6 @@
 import type { AdsContext } from '@/lib/googleAds/client';
 import { submitCampaign, type CreateResult, type Label } from './create';
+import type { Ref } from './fixes';
 import type { Template } from './template';
 
 /**
@@ -18,6 +19,11 @@ import type { Template } from './template';
  * aparelho, local, horário, idade, gênero e renda entram sem ajuste. Os
  * públicos (idade, gênero, renda) ficam fora por inteiro, inclusive os
  * excluídos, e os aparelhos também; locais e horários entram, sem o ajuste.
+ *
+ * Cada operação leva o endereço do item na cópia (lib/campaignBuilder/fixes):
+ * o que o Google recusar volta apontado, e a tela tira ou troca ali mesmo.
+ * Palavra-chave e anúncio com pedido de exceção da política vão com a chave
+ * do pedido, e o Google aceita o item para revisar.
  */
 
 export interface DuplicateSettings {
@@ -126,6 +132,9 @@ export function buildDuplicateOperations(t: Template, s: DuplicateSettings, line
   const bidding = spend
     ? { targetSpend: s.limite_cpc ? { cpcBidCeilingMicros: micros(s.limite_cpc) } : {} }
     : { maximizeConversions: s.meta_cpa ? { targetCpaMicros: micros(s.meta_cpa) } : {} };
+  // Erro na campanha só aponta item quando é no rastreamento ou no sufixo; nome e valores já se mudam na tela.
+  const campaignRef = (field: string): Ref | null => (/final_url_suffix/.test(field) && k.sufixo_url ? { tipo: 'sufixo', texto: k.sufixo_url }
+    : /tracking_url_template/.test(field) && k.modelo_rastreamento ? { tipo: 'rastreamento', texto: k.modelo_rastreamento } : null);
   add('campanha', line.nome, { campaignOperation: { create: {
     resourceName: campaign, name: line.nome, status, advertisingChannelType: 'SEARCH', campaignBudget: budget, ...bidding,
     networkSettings: { targetGoogleSearch: true, targetSearchNetwork: k.redes.parceiros, targetContentNetwork: k.redes.display, targetPartnerSearchNetwork: false },
@@ -140,18 +149,18 @@ export function buildDuplicateOperations(t: Template, s: DuplicateSettings, line
         { assetAutomationType: 'FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION', assetAutomationStatus: k.ia_max.expandir_url ? 'OPTED_IN' : 'OPTED_OUT' },
       ],
     } : {}),
-  } } });
+  } } }, { ref: campaignRef });
 
   // Locais e horários entram sem o ajuste de lance; aparelhos e públicos ficam de fora.
-  for (const l of t.locais) add('local', l.nome, { campaignCriterionOperation: { create: { campaign, negative: l.excluido, location: { geoTargetConstant: `geoTargetConstants/${l.id}` } } } });
-  for (const l of t.idiomas) add('idioma', l.nome, { campaignCriterionOperation: { create: { campaign, language: { languageConstant: `languageConstants/${l.id}` } } } });
+  for (const l of t.locais) add('local', l.nome, { campaignCriterionOperation: { create: { campaign, negative: l.excluido, location: { geoTargetConstant: `geoTargetConstants/${l.id}` } } } }, { ref: { tipo: 'local', id: l.id, texto: l.nome } });
+  for (const l of t.idiomas) add('idioma', l.nome, { campaignCriterionOperation: { create: { campaign, language: { languageConstant: `languageConstants/${l.id}` } } } }, { ref: { tipo: 'idioma', id: l.id, texto: l.nome } });
   for (const h of t.horarios) {
     const [sh, sm] = h.inicio.split(':'), [eh, em] = h.fim.split(':');
     add('horário', `${DAY[h.dia] || h.dia} ${h.inicio}–${h.fim}`, { campaignCriterionOperation: { create: { campaign, adSchedule: {
       dayOfWeek: h.dia, startHour: Number(sh), startMinute: MINUTE[sm] || 'ZERO', endHour: Number(eh), endMinute: MINUTE[em] || 'ZERO',
-    } } } });
+    } } } }, { ref: { tipo: 'horario', dia: h.dia, inicio: h.inicio, texto: `${DAY[h.dia] || h.dia} ${h.inicio}–${h.fim}` } });
   }
-  for (const n of t.negativas) add('palavra negativa', n.texto, { campaignCriterionOperation: { create: { campaign, negative: true, keyword: { text: n.texto, matchType: n.tipo || 'BROAD' } } } });
+  for (const n of t.negativas) add('palavra negativa', n.texto, { campaignCriterionOperation: { create: { campaign, negative: true, keyword: { text: n.texto, matchType: n.tipo || 'BROAD' } } } }, { ref: { tipo: 'negativa', grupo: null, texto: n.texto, correspondencia: n.tipo } });
 
   for (const g of t.grupos) {
     const group = `${c}/adGroups/${next()}`;
@@ -160,32 +169,69 @@ export function buildDuplicateOperations(t: Template, s: DuplicateSettings, line
       resourceName: group, campaign, name: g.nome, status: g.status === 'PAUSED' ? 'PAUSED' : 'ENABLED', type: 'SEARCH_STANDARD',
       ...(cpa && !spend ? { targetCpaMicros: micros(cpa) } : {}),
     } } });
-    for (const w of g.palavras) add('palavra-chave', w.texto, { adGroupCriterionOperation: { create: { adGroup: group, status: w.status === 'PAUSED' ? 'PAUSED' : 'ENABLED', keyword: { text: w.texto, matchType: w.tipo || 'BROAD' } } } }, { grupo: g.nome });
-    for (const n of g.negativas) add('palavra negativa do grupo', n.texto, { adGroupCriterionOperation: { create: { adGroup: group, negative: true, keyword: { text: n.texto, matchType: n.tipo || 'BROAD' } } } }, { grupo: g.nome });
+    for (const w of g.palavras) {
+      add('palavra-chave', w.texto, { adGroupCriterionOperation: {
+        create: { adGroup: group, status: w.status === 'PAUSED' ? 'PAUSED' : 'ENABLED', keyword: { text: w.texto, matchType: w.tipo || 'BROAD' } },
+        ...(w.excecoes?.length ? { exemptPolicyViolationKeys: w.excecoes.map(exemptKey) } : {}),
+      } }, { grupo: g.nome, ref: { tipo: 'palavra', grupo: g.id, texto: w.texto, correspondencia: w.tipo } });
+    }
+    for (const n of g.negativas) add('palavra negativa do grupo', n.texto, { adGroupCriterionOperation: { create: { adGroup: group, negative: true, keyword: { text: n.texto, matchType: n.tipo || 'BROAD' } } } }, { grupo: g.nome, ref: { tipo: 'negativa', grupo: g.id, texto: n.texto, correspondencia: n.tipo } });
     for (const a of g.anuncios) {
       const text = (x: { texto: string; fixo: string | null }) => ({ text: x.texto, ...(x.fixo ? { pinnedField: x.fixo } : {}) });
-      add('anúncio', '', { adGroupAdOperation: { create: { adGroup: group, status: a.status === 'PAUSED' ? 'PAUSED' : 'ENABLED', ad: {
-        finalUrls: a.urls.length ? a.urls : [firstUrl],
-        responsiveSearchAd: {
-          headlines: a.titulos.map(text), descriptions: a.descricoes.map(text),
-          ...(a.caminho1 ? { path1: a.caminho1 } : {}), ...(a.caminho1 && a.caminho2 ? { path2: a.caminho2 } : {}),
-        },
-      } } } }, { grupo: g.nome });
+      add('anúncio', '', { adGroupAdOperation: {
+        create: { adGroup: group, status: a.status === 'PAUSED' ? 'PAUSED' : 'ENABLED', ad: {
+          finalUrls: a.urls.length ? a.urls : [firstUrl],
+          responsiveSearchAd: {
+            headlines: a.titulos.map(text), descriptions: a.descricoes.map(text),
+            ...(a.caminho1 ? { path1: a.caminho1 } : {}), ...(a.caminho1 && a.caminho2 ? { path2: a.caminho2 } : {}),
+          },
+        } },
+        ...(a.excecoes?.length ? { policyValidationParameter: { exemptPolicyViolationKeys: a.excecoes.map(exemptKey) } } : {}),
+      } }, { grupo: g.nome, ref: (field, trigger) => adRef(g, a, field, trigger) });
     }
   }
 
   // Sitelinks e frases de destaque sempre no nível da campanha, mesmo os que na original estavam no grupo ou na conta.
   for (const sl of t.recursos.sitelinks) {
     const asset = `${c}/assets/${next()}`, urls = sl.urls.length ? sl.urls : [firstUrl];
-    add('sitelink', sl.texto, { assetOperation: { create: { resourceName: asset, finalUrls: urls, sitelinkAsset: { linkText: sl.texto, ...(sl.desc1 && sl.desc2 ? { description1: sl.desc1, description2: sl.desc2 } : {}) } } } });
-    add('sitelink', sl.texto, { campaignAssetOperation: { create: { campaign, asset, fieldType: 'SITELINK' } } });
+    const sitelinkRef = (field: string): Ref => {
+      const u = field.match(/final_urls\[(\d+)\]/);
+      if (u && sl.urls[Number(u[1])]) return { tipo: 'sitelink', link: sl.texto, campo: 'url', texto: sl.urls[Number(u[1])] };
+      if (/description1/.test(field) && sl.desc1) return { tipo: 'sitelink', link: sl.texto, campo: 'desc1', texto: sl.desc1 };
+      if (/description2/.test(field) && sl.desc2) return { tipo: 'sitelink', link: sl.texto, campo: 'desc2', texto: sl.desc2 };
+      return { tipo: 'sitelink', link: sl.texto, campo: 'texto', texto: sl.texto };
+    };
+    add('sitelink', sl.texto, { assetOperation: { create: { resourceName: asset, finalUrls: urls, sitelinkAsset: { linkText: sl.texto, ...(sl.desc1 && sl.desc2 ? { description1: sl.desc1, description2: sl.desc2 } : {}) } } } }, { ref: sitelinkRef });
+    add('sitelink', sl.texto, { campaignAssetOperation: { create: { campaign, asset, fieldType: 'SITELINK' } } }, { ref: sitelinkRef });
   }
   for (const d of t.recursos.destaques) {
     const asset = `${c}/assets/${next()}`;
-    add('frase de destaque', d.texto, { assetOperation: { create: { resourceName: asset, calloutAsset: { calloutText: d.texto } } } });
-    add('frase de destaque', d.texto, { campaignAssetOperation: { create: { campaign, asset, fieldType: 'CALLOUT' } } });
+    add('frase de destaque', d.texto, { assetOperation: { create: { resourceName: asset, calloutAsset: { calloutText: d.texto } } } }, { ref: { tipo: 'destaque', texto: d.texto } });
+    add('frase de destaque', d.texto, { campaignAssetOperation: { create: { campaign, asset, fieldType: 'CALLOUT' } } }, { ref: { tipo: 'destaque', texto: d.texto } });
   }
   return { operations, labels };
+}
+
+const exemptKey = (x: { politica: string; texto: string }) => ({ policyName: x.politica, violatingText: x.texto });
+
+/** Que parte do anúncio o Google recusou: pelo campo que ele apontou ou, sem campo, pelo texto. Sem nenhum dos dois, o anúncio inteiro. */
+function adRef(g: Template['grupos'][number], a: Template['grupos'][number]['anuncios'][number], field: string, trigger: string): Ref {
+  const base = { grupo: g.id, anuncio: a.id };
+  const at = (re: RegExp) => { const m = field.match(re); return m ? Number(m[1]) : -1; };
+  const h = at(/headlines\[(\d+)\]/), d = at(/descriptions\[(\d+)\]/), u = at(/final_urls\[(\d+)\]/);
+  if (a.titulos[h]) return { ...base, tipo: 'titulo', texto: a.titulos[h].texto };
+  if (a.descricoes[d]) return { ...base, tipo: 'descricao', texto: a.descricoes[d].texto };
+  if (/path1/.test(field) && a.caminho1) return { ...base, tipo: 'caminho1', texto: a.caminho1 };
+  if (/path2/.test(field) && a.caminho2) return { ...base, tipo: 'caminho2', texto: a.caminho2 };
+  if (a.urls[u]) return { ...base, tipo: 'url', texto: a.urls[u] };
+  const tr = trigger.trim().toLowerCase();
+  if (tr) {
+    const title = a.titulos.find(x => x.texto.toLowerCase().includes(tr));
+    if (title) return { ...base, tipo: 'titulo', texto: title.texto };
+    const desc = a.descricoes.find(x => x.texto.toLowerCase().includes(tr));
+    if (desc) return { ...base, tipo: 'descricao', texto: desc.texto };
+  }
+  return { ...base, tipo: 'anuncio', texto: g.nome };
 }
 
 export async function duplicateCampaign(ctx: AdsContext, t: Template, general: DuplicateSettings, line: DuplicateLine, ensaio: boolean): Promise<CreateResult> {

@@ -1,5 +1,6 @@
 import { mutate, mutateAll, search, type AdsContext, type MutateProblem } from '@/lib/googleAds/client';
 import { adProblems, campaignProblems, type Draft } from './draft';
+import { refKey, type Exemption, type Ref } from './fixes';
 import { trackedUrl } from './url';
 
 /**
@@ -28,6 +29,10 @@ export interface Problem {
   corrigir?: string;
   /** Quando o problema é uma palavra-chave do rascunho: qual, para a tela poder tirá-la. */
   palavra?: { texto: string; tipo: string };
+  /** Na duplicação: onde está o item recusado em cada grupo, para a tela tirar ou trocar (lib/campaignBuilder/fixes). */
+  refs?: Ref[];
+  /** Quando o Google aceita pedido de exceção da política: a chave do pedido. */
+  excecao?: Exemption;
   /** Código do erro no Google, para consulta. */
   codigo?: string;
   /** O que o Google respondeu, em inglês: vai para a IA explicar e não aparece cru na tela quando há explicação. */
@@ -43,7 +48,11 @@ export interface CreateResult {
   itens: number;
 }
 /** O que cada operação do pedido é, para dizer onde o Google reclamou. */
-export interface Label { onde: string; item: string; grupo?: string; palavra?: { texto: string; tipo: string } }
+export interface Label {
+  onde: string; item: string; grupo?: string; palavra?: { texto: string; tipo: string };
+  /** O item na cópia, ou como achá-lo pelo campo e pelo valor que o Google apontou (um título dentro do anúncio, por exemplo). */
+  ref?: Ref | ((field: string, trigger: string) => Ref | null);
+}
 
 const micros = (value: number) => String(Math.round(value * 100) * 10000);
 
@@ -132,22 +141,33 @@ const PLAIN: [RegExp, string, string][] = [
   [/RESOURCE_EXHAUSTED|QUOTA/, 'O limite diário de pedidos ao Google foi atingido.', 'Tente de novo mais tarde.'],
 ];
 
+const AD_PART: Record<string, string> = { titulo: 'título do anúncio', descricao: 'descrição do anúncio', caminho1: 'caminho do anúncio', caminho2: 'caminho do anúncio', url: 'endereço do anúncio' };
+
 /** Transforma os erros do Google em problemas da campanha. O mesmo erro repetido em cada grupo vira um só. */
 export function explain(problems: MutateProblem[], labels: Label[]): Problem[] {
   const out = new Map<string, Problem & { grupos: Set<string> }>();
   for (const p of problems) {
     const label = p.operation !== null ? labels[p.operation] : undefined;
-    const item = label?.item || p.trigger;
-    const key = `${label?.onde || 'pedido'}|${item}|${p.code}`;
+    const ref = (typeof label?.ref === 'function' ? label.ref(p.field, p.trigger) : label?.ref) || undefined;
+    // Num anúncio, o item é o título ou a descrição que o Google apontou, não o anúncio inteiro.
+    const item = (ref && ref.tipo !== 'anuncio' && ref.tipo !== 'palavra' && ref.tipo !== 'negativa' ? ref.texto : '') || label?.item || p.trigger;
+    const onde = (ref && AD_PART[ref.tipo]) || label?.onde || 'pedido';
+    const key = `${onde}|${item}|${p.code}`;
     const seen = out.get(key);
-    if (seen) { if (label?.grupo) seen.grupos.add(label.grupo); continue; }
+    if (seen) {
+      if (label?.grupo) seen.grupos.add(label.grupo);
+      if (ref && !seen.refs?.some(x => refKey(x) === refKey(ref))) seen.refs = [...(seen.refs || []), ref];
+      continue;
+    }
     const plain = PLAIN.find(([re]) => re.test(p.code) || re.test(p.message));
     const policy = p.policy?.name ? ` Política do Google: ${p.policy.name}.` : '';
     out.set(key, {
-      onde: `${label?.onde || 'pedido'}${item ? ` "${item}"` : ''}`,
+      onde: `${onde}${item ? ` "${item}"` : ''}`,
       texto: plain ? `${plain[1]}${policy}` : `O Google recusou este item.${policy}`,
       corrigir: plain?.[2],
       ...(label?.palavra ? { palavra: label.palavra } : {}),
+      ...(ref ? { refs: [ref] } : {}),
+      ...(p.policy?.exemptible && p.policy.key ? { excecao: { politica: p.policy.key.policyName, texto: p.policy.key.violatingText } } : {}),
       codigo: [p.kind, p.code].filter(Boolean).join(' · ') || undefined,
       google: [p.message, p.trigger && `valor apontado: ${p.trigger}`, p.field && `campo: ${p.field}`, p.policy?.name && `política: ${p.policy.name}`, p.policy?.description, p.policy?.exemptible && 'o Google aceita pedido de exceção para esta política'].filter(Boolean).join(' | ').slice(0, 900),
       grupos: new Set(label?.grupo ? [label.grupo] : []),
