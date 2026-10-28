@@ -204,9 +204,10 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     digistore: scriptOnly('Digistore'),
     gurumedia: scriptOnly('Gurumedia'),
     jvzoo: {
-      postback: pb('JVZoo', 'event=initiated&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&r={random}'),
+      postback: pb('JVZoo', 'event=initiated&orderid={session_id}&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&r={random}'),
       details: [
         { label: 'event', value: 'initiated (fixo)' },
+        { label: 'orderid', value: '{session_id} (visita)' },
         { label: 'subid1', value: '{tid} (clique)' },
         { label: 'subid3', value: '{gclid}' },
       ],

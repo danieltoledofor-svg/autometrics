@@ -91,9 +91,11 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
         const currency = (param('cy') || param('currency') || 'BRL').toUpperCase();
         // Aceita tid (Clickbank), orderid (Cartpanda/MaxWeb/Buygoods) ou transid como alias
         // O checkout não tem pedido: conta um por clique, para quem recarrega a página do checkout
-        // não virar vários (e para ele aparecer na aba Checkouts, que lê postback_events).
-        const tid = param('tid') || param('orderid') || param('order_id') || param('transid') ||
-            (event === 'checkout' && candidateIds.length ? `checkout:${candidateIds[0]}`.slice(0, 200) : '');
+        // não virar vários (e para ele aparecer na aba Checkouts, que lê postback_events). Sem
+        // clique (campanha achada só pelo nome), um por visita da plataforma (JVZoo: {session_id}).
+        const order = param('tid') || param('orderid') || param('order_id') || param('transid');
+        const tid = event !== 'checkout' ? order
+            : (candidateIds.length ? `checkout:${candidateIds[0]}` : order ? `checkout:visita:${order}` : '').slice(0, 200);
 
         // ── Validação básica ────────────────────────────────────────────
         // Nada aqui devolve erro: o teste de postback da plataforma exige 200,
