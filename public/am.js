@@ -1,5 +1,5 @@
 /**
- * AutoMetrics — Rastreamento (v5.2). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5.3). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
@@ -9,7 +9,7 @@
  * site (am_c), para a visita não se perder onde o navegador não guarda nada
  * (link de compra na página ou botão do player da VTurb, inclusive quando ele
  * leva ao site do produtor). Numa página sem a FlowTracking, leva o
- * identificador no link de compra da BuyGoods; com ela na página, só lê.
+ * identificador no link de compra da BuyGoods e da JVZoo; com ela na página, só lê.
  *
  * Mudou aqui, mudou em todas as páginas: teste antes de publicar.
  */
@@ -85,7 +85,7 @@
     } catch (e) {}
 
     // ── Saída para o checkout ──────────────────────────────────────────────
-    var HOSTS = ['buygoods', 'clickbank', 'digistore24', 'cartpanda', 'maxweb', 'hotmart', 'kiwify'];
+    var HOSTS = ['buygoods', 'clickbank', 'digistore24', 'jvzoo', 'cartpanda', 'maxweb', 'hotmart', 'kiwify'];
     var AFF = ['aff_id', 'affid', 'aff', 'affiliate', 'hop', 'a_aid'];
     var cta = {};                                                 // destinos dos botões do player
     function bare(u) { try { var d = new URL(u, location.href); return d.origin + d.pathname; } catch (e) { return ''; } }
@@ -110,10 +110,18 @@
       if (!sent[key]) { sent[key] = 1; send({ v: 3, c: cur.id, p: cur.p, e: 'out', u: key }); }
     }
     // Leva o identificador no link de compra; com a FlowTracking na página, não mexe.
+    // JVZoo: tid guarda até 26 caracteres (o gclid não cabe); sub_id1 e gclid voltam no postback.
     function stamp(u) {
-      if (platform(u) !== 'buygoods' || other()) return u;
+      var p = platform(u);
+      if ((p !== 'buygoods' && p !== 'jvzoo') || other()) return u;
       try {
         var d = new URL(u, location.href), s = d.searchParams, g = gclidOf(cur.p);
+        if (p === 'jvzoo') {
+          if (!s.get('tid') && cur.id.length <= 26) s.set('tid', cur.id);
+          if (!s.get('sub_id1')) s.set('sub_id1', cur.id);
+          if (g && !s.get('gclid')) s.set('gclid', g);
+          return d.toString();
+        }
         if (!s.get('subid') && !s.get('SUBID')) s.set('subid', cur.id);
         if (g && !s.get('subid2') && !s.get('SUBID2')) s.set('subid2', g);
         return d.toString();

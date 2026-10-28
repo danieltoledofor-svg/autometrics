@@ -90,7 +90,7 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
 
       {data.total === 0 && unmatched.length > 0 ? null : data.total === 0 ? (
         <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>
-          {sale ? 'Nenhuma venda neste período.' : 'Nenhum checkout avisado pela plataforma neste período. Confira se o postback do Autometrics na plataforma também está marcado para o evento de checkout.'}
+          {sale ? 'Nenhuma venda neste período.' : 'Nenhum checkout avisado pela plataforma neste período. Só a JVZoo e a ClickBank avisam o checkout por postback (Instalação → passo 4); nas outras, quem clicou no link de compra aparece em Visitas, no filtro "Saíram para comprar".'}
         </div>
       ) : (
         <div className={`${card} border rounded-xl overflow-hidden`}>

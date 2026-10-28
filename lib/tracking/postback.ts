@@ -18,6 +18,29 @@ export function serverDay(d = new Date()): string {
 }
 
 /**
+ * O evento que cada plataforma avisa, no nome do Autometrics: sale, checkout, click ou refund.
+ *
+ *   Clickbank: Purchase, Upsell; Order Form Impression (checkout)
+ *   Buygoods: frontend, upsell, downsell (às vezes numerados, ex.: upsell1), InitiateCheckout
+ *   Digistore: payment, refund, chargeback (vêm em {transaction_type})
+ *   JVZoo: SALE, BILL (renovação), RFND, CGBK (em {transaction_type}); initiated (checkout)
+ *
+ * Redes que avisam a situação da venda em {status} (SmartAdv, MediaScalers):
+ * recusada não entra; devolvida vira reembolso.
+ */
+export function mapEvent(raw: string, status = ''): { event: string; rejected: boolean } {
+    let event = raw.trim().toLowerCase();
+    if (event === 'purchase' || event === 'combined conversion' || event === 'sale' || event === 'frontend' || event === 'payment' ||
+        event === 'bill' || event.startsWith('upsell') || event.startsWith('downsell')) event = 'sale';
+    if (event === 'order_impression' || event === 'initiatecheckout' || event === 'initiated' ||
+        /^(initial[ _])?order[ _]?form[ _]impression$/.test(event)) event = 'checkout';
+    if (event === 'chargeback' || event === 'refund' || event === 'rfnd' || event === 'cgbk') event = 'refund';
+    const rejected = event === 'sale' && /reject|declin|cancel|invalid|fail/.test(status);
+    if (event === 'sale' && /refund|chargeback|revers/.test(status)) event = 'refund';
+    return { event, rejected };
+}
+
+/**
  * Processa um postback de venda, checkout, clique ou reembolso: acha a campanha, grava o evento e soma no dia.
  *
  * A venda entra no dia em que aconteceu no relógio da plataforma (lib/tracking/platformClock.ts).
@@ -43,23 +66,9 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
         };
 
         // Buygoods usa CONV_TYPE; outros usam event
-        let event = (param('event') || param('CONV_TYPE')).toLowerCase();
-        const rawEvent = event;
-
-        // Mapeamento automático de eventos
-        // Clickbank: Purchase, Upsell | Buygoods: Sale, InitiateCheckout | Genérico: chargeback
-        // Buygoods: frontend, upsell, downsell (às vezes numerados, ex.: upsell1)
-        // Digistore: payment, refund, chargeback (vêm em {transaction_type})
-        if (event === 'purchase' || event === 'combined conversion' || event === 'sale' || event === 'frontend' || event === 'payment' ||
-            event.startsWith('upsell') || event.startsWith('downsell')) event = 'sale';
-        if (event === 'order_impression' || event === 'initiatecheckout') event = 'checkout';
-        if (event === 'chargeback' || event === 'refund') event = 'refund';
-
-        // Redes que avisam a situação da venda em {status} (SmartAdv, MediaScalers):
-        // recusada não entra; devolvida vira reembolso.
+        const rawEvent = (param('event') || param('CONV_TYPE')).toLowerCase();
         const status = param('status').toLowerCase();
-        const rejected = event === 'sale' && /reject|declin|cancel|invalid|fail/.test(status);
-        if (event === 'sale' && /refund|chargeback|revers/.test(status)) event = 'refund';
+        const { event, rejected } = mapEvent(rawEvent, status);
 
         // Resolução do campaign_id: várias plataformas usam nomes diferentes
         //   Buygoods/MaxWeb: campaign_id={SUBID1} no postback configurado
@@ -81,7 +90,10 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
         const amount = parseFloat(param('amount') || '0') || 0;
         const currency = (param('cy') || param('currency') || 'BRL').toUpperCase();
         // Aceita tid (Clickbank), orderid (Cartpanda/MaxWeb/Buygoods) ou transid como alias
-        const tid = param('tid') || param('orderid') || param('order_id') || param('transid');
+        // O checkout não tem pedido: conta um por clique, para quem recarrega a página do checkout
+        // não virar vários (e para ele aparecer na aba Checkouts, que lê postback_events).
+        const tid = param('tid') || param('orderid') || param('order_id') || param('transid') ||
+            (event === 'checkout' && candidateIds.length ? `checkout:${candidateIds[0]}`.slice(0, 200) : '');
 
         // ── Validação básica ────────────────────────────────────────────
         // Nada aqui devolve erro: o teste de postback da plataforma exige 200,

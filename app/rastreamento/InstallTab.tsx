@@ -58,7 +58,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
   const where = (name: string) => [
     <>Na {name}, abra a área de <strong>postback</strong> (onde está o postback da FlowTracking).</>,
     <><strong>Mantenha</strong> o postback da FlowTracking como está e <strong>adicione um novo</strong> postback, para o evento de venda.</>,
-    <>Cole a URL de postback do passo 2 e salve.</>,
+    <>Cole a URL de venda do passo 2 e salve.</>,
   ];
   const saleNote = <>Esta URL recebe só a <strong>venda</strong>. O valor é a sua comissão.</>;
   const platforms = {
@@ -76,7 +76,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
       steps: [
         <>Na BuyGoods, abra <strong>Settings → Postback / Pixels</strong> (onde está o postback da FlowTracking).</>,
         <><strong>Mantenha</strong> o postback da FlowTracking como está e <strong>adicione um novo</strong> postback.</>,
-        <>Cole a URL de postback do passo 2 e salve.</>,
+        <>Cole a URL de venda do passo 2 e salve.</>,
       ],
     },
     clickbank: {
@@ -124,15 +124,21 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     },
     jvzoo: {
       name: 'JVZoo',
-      postback: pb('JVZoo', 'event=sale&cy={currency}&amount={affiliate_amount}&orderid={transaction_id}&product={product_name}&subid1={gclid}&subid2={sub_id2}&subid3={sub_id3}&subid4={sub_id4}&subid5={sub_id5}'),
-      note: saleNote,
+      postback: pb('JVZoo', 'event={transaction_type}&cy={currency}&amount={affiliate_amount}&orderid={transaction_id}&product={product_name}&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&r={random}'),
+      note: <>A JVZoo avisa o tipo em <code className="px-1 rounded bg-surface-3 text-brand-text">{'{transaction_type}'}</code>: <strong>SALE</strong> entra como venda e <strong>RFND</strong> como reembolso. O valor é a sua comissão.</>,
       details: [
-        { label: 'subid1', value: '{gclid}' },
-        { label: 'subid2', value: '{sub_id2}' },
+        { label: 'event', value: '{transaction_type} (SALE / RFND)' },
+        { label: 'subid1', value: '{tid} (clique)' },
+        { label: 'subid3', value: '{gclid}' },
         { label: 'orderid', value: '{transaction_id}' },
         { label: 'amount', value: '{affiliate_amount}' },
       ],
-      steps: where('JVZoo'),
+      steps: [
+        <>Na JVZoo, abra <strong>My Account → Account Details</strong>, desça até <strong>Affiliate Settings</strong> e clique em <strong>Manage S2S Postbacks</strong>.</>,
+        <>Clique em <strong>Add New Postback</strong>, dê o nome <strong>Autometrics - Venda</strong> e escolha o tipo <strong>Purchase</strong>.</>,
+        <>Cole a URL de venda do passo 2, deixe <strong>Active</strong> e <strong>All Products</strong>. Não marque <strong>Exclude refunded transactions</strong>: é por ele que o reembolso chega.</>,
+        <>Salve. O ícone de registro (log) ao lado do postback mostra cada aviso que a JVZoo mandou e se deu certo.</>,
+      ],
     },
     maxweb: {
       name: 'MaxWeb',
@@ -175,7 +181,47 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     },
   } as const;
   const platformKeys = Object.keys(platforms) as (keyof typeof platforms)[];
+  // Checkout de cada plataforma. Onde ela avisa a chegada ao checkout por postback, uma URL
+  // própria (event fixo); nas outras, o checkout é o clique no link de compra, que o script guarda.
+  type CheckoutSetup = { postback: string; details: { label: string; value: string }[]; steps: React.ReactNode[] } | { script: React.ReactNode };
+  const scriptOnly = (name: string) => ({ script: <>A {name} não avisa o checkout por postback. O checkout é contado pelo <strong>script das páginas</strong>: cada pessoa que clica no link de compra (ou no botão do vídeo) entra como checkout da campanha do clique.</> });
+  const checkouts: Record<keyof typeof platforms, CheckoutSetup> = {
+    buygoods: { script: <>Nenhum aviso de checkout da BuyGoods chegou até hoje: o checkout é contado pelo <strong>script das páginas</strong>, a cada pessoa que clica no link de compra (ou no botão do vídeo). Se a lista de eventos do postback da BuyGoods tiver <strong>InitiateCheckout</strong>, marque também na mesma URL de venda: ele entra como checkout sozinho.</> },
+    clickbank: {
+      postback: pb('ClickBank', 'event=checkout&subid1={aff_sub1}&subid3={extclid}&subid4={aff_sub2}&subid5={aff_sub3}'),
+      details: [
+        { label: 'event', value: 'checkout (fixo)' },
+        { label: 'subid1', value: '{aff_sub1} (gclid)' },
+        { label: 'subid3', value: '{extclid}' },
+      ],
+      steps: [
+        <>Na ClickBank, abra <strong>Integrations → Postback/Pixels</strong> e clique em <strong>Add Integration</strong>.</>,
+        <>Escolha <strong>Custom Postback/Pixel</strong>, o tipo <strong>S2S Postback</strong>, o papel <strong>Affiliate</strong> e o nível <strong>Global</strong>.</>,
+        <>Em eventos, marque só <strong>Order Form Impression</strong> (a pessoa abriu a página do pedido).</>,
+        <>Cole a URL de checkout acima e salve. A venda continua na integração do passo 3.</>,
+      ],
+    },
+    digistore: scriptOnly('Digistore'),
+    gurumedia: scriptOnly('Gurumedia'),
+    jvzoo: {
+      postback: pb('JVZoo', 'event=initiated&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&r={random}'),
+      details: [
+        { label: 'event', value: 'initiated (fixo)' },
+        { label: 'subid1', value: '{tid} (clique)' },
+        { label: 'subid3', value: '{gclid}' },
+      ],
+      steps: [
+        <>Em <strong>Manage S2S Postbacks</strong>, clique de novo em <strong>Add New Postback</strong>.</>,
+        <>Dê o nome <strong>Autometrics - Checkout</strong> e escolha o tipo <strong>Initiated</strong> (dispara quando a pessoa chega na página do checkout).</>,
+        <>Cole a URL de checkout acima, deixe <strong>Active</strong> e <strong>All Products</strong>, e salve.</>,
+      ],
+    },
+    maxweb: scriptOnly('MaxWeb'),
+    mediascalers: scriptOnly('MediaScalers'),
+    smartadv: scriptOnly('SmartAdv'),
+  };
   const plat = platforms[convPlatform];
+  const checkout = checkouts[convPlatform];
   const stepBadge = (n: number) => (
     <span className="bg-brand w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium text-white shrink-0">{n}</span>
   );
@@ -240,7 +286,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
       {/* PASSO 2: POSTBACK */}
       <div className={`rounded-xl p-6 border ${bgCard}`}>
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className={`text-sm font-semibold flex items-center gap-2 ${textHead}`}>{stepBadge(2)} Postback na {plat.name}</h3>
+          <h3 className={`text-sm font-semibold flex items-center gap-2 ${textHead}`}>{stepBadge(2)} Postback de venda na {plat.name}</h3>
           {copyBtn(plat.postback, `conv_pb_${convPlatform}`, 'Copiar URL')}
         </div>
         <p className={`text-xs mb-3 ${textMuted}`}>
@@ -262,6 +308,35 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
         <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
           {plat.steps.map((s, i) => <li key={i}>{s}</li>)}
         </ol>
+      </div>
+
+      {/* PASSO 4: CHECKOUT */}
+      <div className={`rounded-xl p-6 border ${bgCard}`}>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className={`text-sm font-semibold flex items-center gap-2 ${textHead}`}>{stepBadge(4)} Checkout na {plat.name}</h3>
+          {'postback' in checkout && copyBtn(checkout.postback, `conv_ck_${convPlatform}`, 'Copiar URL')}
+        </div>
+        {'postback' in checkout ? (
+          <>
+            <p className={`text-xs mb-3 ${textMuted}`}>
+              A {plat.name} avisa quando a pessoa chega no checkout. Cada clique conta <strong>um</strong> checkout, mesmo que a pessoa recarregue a página.
+              Ele aparece na aba Checkouts e na coluna de checkouts da campanha.
+            </p>
+            <code className={`block text-[11px] font-mono break-all p-3 rounded border bg-surface-2 border-line ${textMuted}`}>{checkout.postback}</code>
+            <div className="flex flex-wrap gap-2 mt-3 mb-4">
+              {checkout.details.map(d => (
+                <span key={d.label} className={`text-[10px] px-2 py-0.5 rounded font-mono bg-surface-3 text-ink-subtle`}>
+                  <span className="text-brand-text">{d.label}</span>=<span className="text-ink">{d.value}</span>
+                </span>
+              ))}
+            </div>
+            <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
+              {checkout.steps.map((s, i) => <li key={i}>{s}</li>)}
+            </ol>
+          </>
+        ) : (
+          <p className={`text-xs ${textMuted}`}>{checkout.script}</p>
+        )}
       </div>
 
       {/* RELÓGIO DA PLATAFORMA */}
