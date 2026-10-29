@@ -183,10 +183,20 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
   const platformKeys = Object.keys(platforms) as (keyof typeof platforms)[];
   // Checkout de cada plataforma. Onde ela avisa a chegada ao checkout por postback, uma URL
   // própria (event fixo); nas outras, o checkout é o clique no link de compra, que o script guarda.
-  type CheckoutSetup = { postback: string; details: { label: string; value: string }[]; steps: React.ReactNode[] } | { script: React.ReactNode };
+  type CheckoutSetup = { postback: string; details: { label: string; value: string }[]; steps: React.ReactNode[] }
+    | { snippet: string; steps: React.ReactNode[] } | { script: React.ReactNode };
+  // BuyGoods: o checkout tem um campo próprio para script (Funnel pixels → Checkout); o public/amc.js avisa a chegada.
+  const checkoutScript = `<script src="https://autometrics.cloud/amc.js" data-uid="${userId}" async></script>`;
   const scriptOnly = (name: string) => ({ script: <>A {name} não avisa o checkout por postback. O checkout é contado pelo <strong>script das páginas</strong>: cada pessoa que clica no link de compra (ou no botão do vídeo) entra como checkout da campanha do clique.</> });
   const checkouts: Record<keyof typeof platforms, CheckoutSetup> = {
-    buygoods: { script: <>Nenhum aviso de checkout da BuyGoods chegou até hoje: o checkout é contado pelo <strong>script das páginas</strong>, a cada pessoa que clica no link de compra (ou no botão do vídeo). Se a lista de eventos do postback da BuyGoods tiver <strong>InitiateCheckout</strong>, marque também na mesma URL de venda: ele entra como checkout sozinho.</> },
+    buygoods: {
+      snippet: checkoutScript,
+      steps: [
+        <>Na BuyGoods, abra <strong>My profile → Funnel pixels</strong>.</>,
+        <>No campo <strong>Checkout</strong>, <strong>mantenha</strong> o script da FlowTracking e cole o script acima numa linha nova, embaixo dele.</>,
+        <>Salve. Os dois funcionam juntos: cada um avisa o seu sistema.</>,
+      ],
+    },
     clickbank: {
       postback: pb('ClickBank', 'event=checkout&subid1={aff_sub1}&subid3={extclid}&subid4={aff_sub2}&subid5={aff_sub3}'),
       details: [
@@ -316,6 +326,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
         <div className="flex items-center justify-between gap-3 mb-3">
           <h3 className={`text-sm font-semibold flex items-center gap-2 ${textHead}`}>{stepBadge(4)} Checkout na {plat.name}</h3>
           {'postback' in checkout && copyBtn(checkout.postback, `conv_ck_${convPlatform}`, 'Copiar URL')}
+          {'snippet' in checkout && copyBtn(checkout.snippet, `conv_ck_${convPlatform}`, 'Copiar Script')}
         </div>
         {'postback' in checkout ? (
           <>
@@ -331,6 +342,17 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
                 </span>
               ))}
             </div>
+            <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
+              {checkout.steps.map((s, i) => <li key={i}>{s}</li>)}
+            </ol>
+          </>
+        ) : 'snippet' in checkout ? (
+          <>
+            <p className={`text-xs mb-3 ${textMuted}`}>
+              A {plat.name} roda este script na página do checkout. Ele avisa o AutoMetrics que a pessoa chegou lá, com o clique que veio no link de compra,
+              e cada clique conta <strong>um</strong> checkout, mesmo que a pessoa recarregue a página. Não guarda nada do aparelho além disso.
+            </p>
+            <pre className={`rounded-lg p-4 text-[11px] font-mono overflow-x-auto leading-relaxed bg-surface-2 text-ink-muted mb-4`}>{checkout.snippet}</pre>
             <ol className={`space-y-2 text-xs ${textMuted} list-decimal list-inside`}>
               {checkout.steps.map((s, i) => <li key={i}>{s}</li>)}
             </ol>
