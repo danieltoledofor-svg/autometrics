@@ -11,7 +11,7 @@ import {
 import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
 } from 'recharts';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import { applyTheme } from '@/lib/theme';
 import { useDayInput, isValidDay } from '@/lib/useDayInput';
 import Link from 'next/link';
@@ -40,10 +40,6 @@ import type { CampaignDay } from '@/lib/metrics/dimension';
 import { customValue } from '@/lib/metrics/formula';
 import { useLiveMetrics } from '@/lib/useLiveMetrics';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();

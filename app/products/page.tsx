@@ -38,7 +38,8 @@ import {
   Hash,
   ChevronRight, ChevronDown, ArrowLeft, Package, FileText, CheckCircle2, XCircle, ArrowDownWideNarrow, Sparkles, Route
 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
+import { fetchAllRows, fetchByProducts } from '@/lib/fetchRows';
 import Link from 'next/link';
 import { canEdit } from '@/lib/googleAds/editors';
 import { useRouter } from 'next/navigation';
@@ -56,10 +57,6 @@ import { Inter } from 'next/font/google';
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
@@ -208,26 +205,12 @@ export default function ProductsPage() {
   async function fetchProducts(currentUserId: string, dFilter: string = dateFilter, cStart: string = customStartDate, cEnd: string = customEndDate) {
     setLoading(true);
     
-    let allProducts: any[] = [];
-    let p_prod = 0;
-    let m_prod = true;
-    while (m_prod) {
-      const { data } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', currentUserId)
-        .order('created_at', { ascending: false })
-        .range(p_prod * 1000, (p_prod + 1) * 1000 - 1);
-        
-      if (data && data.length > 0) {
-        allProducts.push(...data);
-        if (data.length < 1000) m_prod = false;
-        else p_prod++;
-      } else {
-        m_prod = false;
-      }
-    }
-    const prodData = allProducts;
+    const { data: prodData } = await fetchAllRows(() => supabase
+      .from('products')
+      .select('*')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: false })
+      .order('id'));
     if (prodData && prodData.length > 0) {
        let startDateStr = '';
        let endDateStr = '';
@@ -267,32 +250,7 @@ export default function ProductsPage() {
        }
 
        const productIds = prodData.map((p: any) => p.id);
-       let metricsData: any[] = [];
-       const chunkSize = 150;
-       for (let i = 0; i < productIds.length; i += chunkSize) {
-           const idChunk = productIds.slice(i, i + chunkSize);
-           let p = 0;
-           let m = true;
-           while(m) {
-              const { data: c } = await supabase.from('daily_metrics').select('product_id, cost, conversion_value, impressions, clicks').in('product_id', idChunk).gte('date', startDateStr).lte('date', endDateStr).range(p*1000, (p+1)*1000-1);
-              if (c && c.length > 0) { metricsData.push(...c); if (c.length < 1000) m = false; else p++; } else m = false;
-           }
-       }
        
-       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, impressions: number, clicks: number, budget: number, budgetDate?: string}> = {};
-       prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, profit: 0, roi: 0, impressions: 0, clicks: 0, budget: 0 });
-       
-       if (metricsData) {
-         metricsData.forEach(m => {
-            const c = Number(m.cost || 0);
-            const r = Number(m.conversion_value || 0);
-            metricsMap[m.product_id].cost += c;
-            metricsMap[m.product_id].revenue += r;
-            metricsMap[m.product_id].impressions += Number(m.impressions || 0);
-            metricsMap[m.product_id].clicks += Number(m.clicks || 0);
-         });
-       }
-
        // Status atual de cada campanha.
        // products.google_status é preenchido pelo webhook, mas o histórico em
        // daily_metrics já traz o status por dia — e é mais fresco que o filtro
@@ -308,48 +266,67 @@ export default function ProductsPage() {
 
        // As colunas novas só existem depois da migration; até lá o PostgREST
        // recusa a query inteira, então cai para as colunas antigas.
-       const STATUS_COLS_FULL = 'product_id, date, campaign_status, effective_status, campaign_status_reasons, budget_micros';
-       const STATUS_COLS_LEGACY = 'product_id, date, campaign_status';
+       const STATUS_COLS_FULL = 'id, product_id, date, campaign_status, effective_status, campaign_status_reasons, budget_micros';
+       const STATUS_COLS_LEGACY = 'id, product_id, date, campaign_status';
        let statusCols = STATUS_COLS_FULL;
+       const fetchStatus = (cols: string) => fetchByProducts(productIds, chunk => supabase
+          .from('daily_metrics')
+          .select(cols)
+          .in('product_id', chunk)
+          .gte('date', statusFrom)
+          .order('date', { ascending: false })
+          .order('id'));
 
-       for (let i = 0; i < productIds.length; i += chunkSize) {
-          const idChunk = productIds.slice(i, i + chunkSize);
-          const fetchStatus = (cols: string) => supabase
-            .from('daily_metrics')
-            .select(cols)
-            .in('product_id', idChunk)
-            .gte('date', statusFrom)
-            .order('date', { ascending: false });
-
-          let { data: st, error: stErr } = await fetchStatus(statusCols);
-          if (stErr && statusCols === STATUS_COLS_FULL) {
-             statusCols = STATUS_COLS_LEGACY;
-             ({ data: st } = await fetchStatus(statusCols));
-          }
-
-          ((st || []) as any[]).forEach((r: any) => {
-             const cur = statusMap[r.product_id];
-             if (!cur || r.date > cur.date) statusMap[r.product_id] = r;
-             const budget = Number(r.budget_micros || 0) / 1000000;
-             if (budget > 0 && (!budgetMap[r.product_id] || r.date > budgetMap[r.product_id].date)) budgetMap[r.product_id] = { date: r.date, value: budget };
-          });
+       // Os números do período e o status recente saem juntos, cada um com os lotes em paralelo.
+       let [{ data: metricsData }, { data: st, error: stErr }] = await Promise.all([
+          fetchByProducts(productIds, chunk => supabase.from('daily_metrics')
+            .select('id, product_id, cost, conversion_value, impressions, clicks')
+            .in('product_id', chunk).gte('date', startDateStr).lte('date', endDateStr)
+            .order('id')),
+          fetchStatus(statusCols),
+       ]);
+       if (stErr) {
+          statusCols = STATUS_COLS_LEGACY;
+          ({ data: st } = await fetchStatus(statusCols));
        }
+
+       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, impressions: number, clicks: number, budget: number, budgetDate?: string}> = {};
+       prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, profit: 0, roi: 0, impressions: 0, clicks: 0, budget: 0 });
+       
+       {
+         metricsData.forEach((m: any) => {
+            const c = Number(m.cost || 0);
+            const r = Number(m.conversion_value || 0);
+            metricsMap[m.product_id].cost += c;
+            metricsMap[m.product_id].revenue += r;
+            metricsMap[m.product_id].impressions += Number(m.impressions || 0);
+            metricsMap[m.product_id].clicks += Number(m.clicks || 0);
+         });
+       }
+
+       st.forEach((r: any) => {
+          const cur = statusMap[r.product_id];
+          if (!cur || r.date > cur.date) statusMap[r.product_id] = r;
+          const budget = Number(r.budget_micros || 0) / 1000000;
+          if (budget > 0 && (!budgetMap[r.product_id] || r.date > budgetMap[r.product_id].date)) budgetMap[r.product_id] = { date: r.date, value: budget };
+       });
 
        // Campanha sem leitura nos últimos 7 dias (pausada há mais tempo): vale o orçamento da última
        // vez em que foi lida, sem limite de dias. As linhas vêm da mais nova para a mais antiga, e a
        // busca de cada lote para quando todas as campanhas dele já têm valor.
        if (statusCols === STATUS_COLS_FULL) {
           const missing = productIds.filter((id: string) => !budgetMap[id]);
-          for (let i = 0; i < missing.length; i += chunkSize) {
-             const idChunk = missing.slice(i, i + chunkSize);
+          const chunks: string[][] = [];
+          for (let i = 0; i < missing.length; i += 150) chunks.push(missing.slice(i, i + 150));
+          await Promise.all(chunks.map(async idChunk => {
              for (let page = 0; ; page++) {
                 const { data: old } = await supabase.from('daily_metrics').select('product_id, date, budget_micros')
                   .in('product_id', idChunk).gt('budget_micros', 0).lt('date', statusFrom)
-                  .order('date', { ascending: false }).range(page * 1000, (page + 1) * 1000 - 1);
+                  .order('date', { ascending: false }).order('id').range(page * 1000, (page + 1) * 1000 - 1);
                 ((old || []) as any[]).forEach((r: any) => { if (!budgetMap[r.product_id]) budgetMap[r.product_id] = { date: r.date, value: Number(r.budget_micros) / 1000000 }; });
                 if (!old || old.length < 1000 || idChunk.every((id: string) => budgetMap[id])) break;
              }
-          }
+          }));
        }
 
        const finalProducts = prodData.map((p: any) => {

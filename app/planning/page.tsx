@@ -10,7 +10,7 @@ import {
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line
 } from 'recharts';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
@@ -19,6 +19,7 @@ import { useDayInput, isValidDay, safeDay } from '@/lib/useDayInput';
 import { Logo } from '@/app/components/Logo';
 import { LootrushPanel } from './LootrushPanel';
 import { useLiveMetrics } from '@/lib/useLiveMetrics';
+import { fetchAllRows, fetchByProducts } from '@/lib/fetchRows';
 import { useTablePrefs } from '@/app/components/table/useTablePrefs';
 import { cellPad, TableControls, Th, widthStyle } from '@/app/components/table/tableUi';
 import { Inter } from 'next/font/google';
@@ -26,11 +27,6 @@ import { Inter } from 'next/font/google';
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
-// Configuração Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 const DATE_PRESET_LABELS: Record<string, string> = {
   today: 'Hoje', yesterday: 'Ontem', '7d': '7 dias',
@@ -358,9 +354,30 @@ export default function PlanningPage() {
   async function fetchData(userId: string) {
     setLoading(true);
     
+    // Cálculo do período anterior para Comparativo Progressivo
+    const hojeISO = getLocalYYYYMMDD(new Date());
+    const sDate = new Date(safeDay(startDate, hojeISO) + "T00:00:00");
+    const eDate = new Date(safeDay(endDate, hojeISO) + "T23:59:59");
+    const diffTime = Math.abs(eDate.getTime() - sDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    const pEndDate = new Date(sDate.getTime() - (1000 * 60 * 60 * 24)); // Um dia antes do start
+    const pStartDate = new Date(pEndDate.getTime() - (diffDays * 1000 * 60 * 60 * 24));
+    
+    const prevStartStr = getLocalYYYYMMDD(pStartDate);
+    const prevEndStr = getLocalYYYYMMDD(pEndDate);
+
+    // Meta, custos e campanhas não dependem um do outro: saem juntos. Os
+    // números dos dois períodos dependem só da lista de campanhas.
     // Metas: Busca pela chave do mês de INÍCIO
     const currentMonthKey = startDate.slice(0, 7);
-    const { data: goalData } = await supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonthKey).maybeSingle();
+    const [{ data: goalData }, { data: costData }, { data: prevCostData }, { data: prodData }] = await Promise.all([
+      supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonthKey).maybeSingle(),
+      supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
+      supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', prevStartStr).lte('date', prevEndStr),
+      fetchAllRows(() => supabase.from('products').select('id, currency, name, mcc_name, account_name').eq('user_id', userId).order('id')),
+    ]);
+
     if (goalData) {
       setGoal({ revenue: goalData.revenue_target, profit: goalData.profit_target, limit: goalData.ad_spend_limit });
       
@@ -382,68 +399,22 @@ export default function PlanningPage() {
       setProfitType('value');
     }
 
-    const { data: costData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate);
     setExtraCosts(costData || []);
-
-    let allProducts: any[] = [];
-    let p_prod = 0;
-    let m_prod = true;
-    while (m_prod) {
-      const { data } = await supabase
-        .from('products')
-        .select('id, currency, name, mcc_name, account_name')
-        .eq('user_id', userId)
-        .range(p_prod * 1000, (p_prod + 1) * 1000 - 1);
-        
-      if (data && data.length > 0) {
-        allProducts.push(...data);
-        if (data.length < 1000) m_prod = false;
-        else p_prod++;
-      } else {
-        m_prod = false;
-      }
-    }
-    const prodData = allProducts;
-    setProducts(prodData || []);
-    
-    // Cálculo do período anterior para Comparativo Progressivo
-    const hojeISO = getLocalYYYYMMDD(new Date());
-    const sDate = new Date(safeDay(startDate, hojeISO) + "T00:00:00");
-    const eDate = new Date(safeDay(endDate, hojeISO) + "T23:59:59");
-    const diffTime = Math.abs(eDate.getTime() - sDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    const pEndDate = new Date(sDate.getTime() - (1000 * 60 * 60 * 24)); // Um dia antes do start
-    const pStartDate = new Date(pEndDate.getTime() - (diffDays * 1000 * 60 * 60 * 24));
-    
-    const prevStartStr = getLocalYYYYMMDD(pStartDate);
-    const prevEndStr = getLocalYYYYMMDD(pEndDate);
-
-    const { data: prevCostData } = await supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', prevStartStr).lte('date', prevEndStr);
     setPrevExtraCosts(prevCostData || []);
+    setProducts(prodData);
 
-    if (prodData && prodData.length > 0) {
-      const fetchMetricsPaginated = async (s: string, e: string) => {
-          let res: any[] = [];
-          const productIds = prodData.map(pr => pr.id);
-          const chunkSize = 150;
-          for (let i = 0; i < productIds.length; i += chunkSize) {
-              const idChunk = productIds.slice(i, i + chunkSize);
-              let p = 0;
-              let m = true;
-              while(m) {
-                 const { data: c } = await supabase.from('daily_metrics').select('*').in('product_id', idChunk).gte('date', s).lte('date', e).range(p*1000, (p+1)*1000-1);
-                 if (c && c.length > 0) { res.push(...c); if (c.length < 1000) m = false; else p++; } else m = false;
-              }
-          }
-          return res;
-      };
+    if (prodData.length > 0) {
+      const productIds = prodData.map(pr => pr.id);
+      // Só as colunas que a tela usa (id é a chave da atualização ao vivo).
+      const fetchMetrics = (s: string, e: string) => fetchByProducts(productIds, chunk => supabase
+        .from('daily_metrics')
+        .select('id, product_id, date, cost, conversion_value, refunds, account_name')
+        .in('product_id', chunk).gte('date', s).lte('date', e)
+        .order('date').order('id'));
 
-      const metData = await fetchMetricsPaginated(startDate, endDate);
-      setMetrics(metData || []);
-
-      const pMetData = await fetchMetricsPaginated(prevStartStr, prevEndStr);
-      setPrevMetrics(pMetData || []);
+      const [metData, pMetData] = await Promise.all([fetchMetrics(startDate, endDate), fetchMetrics(prevStartStr, prevEndStr)]);
+      setMetrics(metData.data);
+      setPrevMetrics(pMetData.data);
     }
     setLoading(false);
   }

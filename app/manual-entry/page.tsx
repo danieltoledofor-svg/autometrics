@@ -2,16 +2,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Save, Calendar, ArrowLeft, DollarSign, Users, ShoppingCart, RefreshCw, AlertCircle } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 
-// Configuração do Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 export default function ManualEntryPage() {
   const router = useRouter();

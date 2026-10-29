@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { supabase } from '../../lib/supabaseClient';
 import { useLiveMetrics } from '@/lib/useLiveMetrics';
+import { fetchAllRows, fetchByProducts } from '@/lib/fetchRows';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
@@ -32,6 +33,12 @@ import { Inter } from 'next/font/google';
 
 // Fonte do guia visual (DESIGN.md). Por enquanto só na Dashboard, a primeira tela migrada.
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
+
+// Última cotação lida do site de câmbio.
+const RATES_KEY = 'autometrics_live_rates';
+
+// Colunas de daily_metrics que a tela lê (id é a chave da atualização ao vivo).
+const METRIC_COLUMNS = 'id, product_id, date, cost, conversion_value, conversions, refunds, account_name, reconcile_note, effective_status, campaign_status, campaign_status_reasons';
 
 function getLocalYYYYMMDD(date: Date) {
   const year = date.getFullYear();
@@ -199,9 +206,17 @@ export default function DashboardPage() {
         handlePresetChange('this_month');
       }
 
+      // Com a cotação da última visita guardada, a tela não espera o site de
+      // câmbio responder: abre com ela e troca quando a nova chegar.
+      let hasCachedRates = false;
+      try {
+        const cached = JSON.parse(localStorage.getItem(RATES_KEY) || 'null');
+        if (cached?.USD > 0 && cached?.EUR > 0) { setLiveDollar(cached.USD); setLiveEuro(cached.EUR); hasCachedRates = true; }
+      } catch { /* sem armazenamento */ }
+      const rates = fetchLiveRates();
       await Promise.all([
         fetchInitialData(session.user.id, initialFromDate),
-        fetchLiveRates()
+        hasCachedRates ? null : rates,
       ]);
 
       setLoading(false);
@@ -223,31 +238,22 @@ export default function DashboardPage() {
 
   async function fetchLiveRates() {
     try {
-      const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL');
+      const res = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL', { signal: AbortSignal.timeout(5000) });
       const data = await res.json();
-      if (data.USDBRL) setLiveDollar(parseFloat(data.USDBRL.bid));
-      if (data.EURBRL) setLiveEuro(parseFloat(data.EURBRL.bid));
+      const usd = parseFloat(data.USDBRL?.bid), eur = parseFloat(data.EURBRL?.bid);
+      if (usd > 0) setLiveDollar(usd);
+      if (eur > 0) setLiveEuro(eur);
+      if (usd > 0 && eur > 0) localStorage.setItem(RATES_KEY, JSON.stringify({ USD: usd, EUR: eur }));
     } catch (e) { console.error(e); }
   }
 
   async function fetchInitialData(userId: string, fromDate?: string) {
-    let allProducts: any[] = [];
-    let p_prod = 0;
-    let m_prod = true;
-    while (m_prod) {
-      const { data } = await supabase
-        .from('products')
-        .select('id, currency, name, google_ads_campaign_name, google_ads_campaign_id, account_name, mcc_name, google_status, google_status_reasons, status')
-        .eq('user_id', userId)
-        .range(p_prod * 1000, (p_prod + 1) * 1000 - 1);
-
-      if (data && data.length > 0) {
-        allProducts.push(...data);
-        if (data.length < 1000) m_prod = false;
-        else p_prod++;
-      } else { m_prod = false; }
-    }
-    setProducts(allProducts || []);
+    const { data: allProducts } = await fetchAllRows(() => supabase
+      .from('products')
+      .select('id, currency, name, google_ads_campaign_name, google_ads_campaign_id, account_name, mcc_name, google_status, google_status_reasons, status')
+      .eq('user_id', userId)
+      .order('id'));
+    setProducts(allProducts);
 
     const currentSavedMcc = localStorage.getItem('autometrics_selected_mcc');
     if (currentSavedMcc && currentSavedMcc !== 'all') {
@@ -262,7 +268,6 @@ export default function DashboardPage() {
 
     if (allProducts && allProducts.length > 0) {
       const productIds = allProducts.map(p => p.id);
-      let allMetrics: any[] = [];
 
       let sixtyDaysAgoStr: string;
       if (fromDate) {
@@ -274,29 +279,15 @@ export default function DashboardPage() {
       }
       setFetchedFrom(sixtyDaysAgoStr);
 
-      const chunkSize = 150;
-      for (let i = 0; i < productIds.length; i += chunkSize) {
-        const idChunk = productIds.slice(i, i + chunkSize);
-        let page = 0;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data: chunk, error } = await supabase
-            .from('daily_metrics')
-            .select('*')
-            .in('product_id', idChunk)
-            .gte('date', sixtyDaysAgoStr)
-            .range(page * 1000, (page + 1) * 1000 - 1)
-            .order('date', { ascending: false });
-
-          if (error) { hasMore = false; }
-          else if (chunk && chunk.length > 0) {
-            allMetrics.push(...chunk);
-            if (chunk.length < 1000) hasMore = false;
-            else page++;
-          } else { hasMore = false; }
-        }
-      }
+      // Só as colunas que a tela usa: a linha inteira tem ~40 colunas e pesava
+      // quase 5 vezes mais para baixar.
+      const { data: allMetrics } = await fetchByProducts(productIds, chunk => supabase
+        .from('daily_metrics')
+        .select(METRIC_COLUMNS)
+        .in('product_id', chunk)
+        .gte('date', sixtyDaysAgoStr)
+        .order('date', { ascending: false })
+        .order('id'));
       setMetrics(allMetrics);
     } else {
       setMetrics([]);
@@ -415,6 +406,9 @@ export default function DashboardPage() {
     return arr;
   }, [products]);
 
+  // Campanha por id: a conta do painel passa por milhares de linhas de números.
+  const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+
   const processedData = useMemo(() => {
     if (loading || !metrics.length) return { chart: [], table: [], totals: null, blocks: [] as any[] };
 
@@ -423,7 +417,7 @@ export default function DashboardPage() {
     metrics.forEach(row => {
       if (row.date < startDate || row.date > endDate) return;
 
-      const product = products.find(p => p.id === row.product_id);
+      const product = productById.get(row.product_id);
       const mccName = product?.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
       if (selectedMcc !== 'all' && mccName !== selectedMcc) return;
 
@@ -542,7 +536,7 @@ export default function DashboardPage() {
     }));
 
     return { chart: chartData, table: resultRows, totals, blocks };
-  }, [metrics, products, startDate, endDate, liveDollar, manualDollar, liveEuro, manualEuro, viewCurrency, loading, selectedMcc, metricSort, groups]);
+  }, [metrics, productById, startDate, endDate, liveDollar, manualDollar, liveEuro, manualEuro, viewCurrency, loading, selectedMcc, metricSort, groups]);
 
   // Com mais de um bloco na tela, cada dia abre separado por grupo.
   const showBlocks = processedData.blocks.length > 1;
@@ -584,14 +578,14 @@ export default function DashboardPage() {
     for (const [id, p] of byProduct) {
       const alert = spendAlert(p.today, p.past, p.days, dayPart);
       if (!alert) continue;
-      const product = products.find(x => x.id === id);
+      const product = productById.get(id);
       if (!product) continue;
       const mccName = product.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
       if (selectedMcc !== 'all' && mccName !== selectedMcc) continue;
       out.push({ id, name: product.name, currency: product.currency || 'BRL', today: p.today, normal: alert.normal, sales: p.sales, passed: alert.kind === 'passou', pace: alert.pace, over: alert.over });
     }
     return out.sort((a, b) => b.over - a.over);
-  }, [metrics, products, loading, selectedMcc, todayStr]);
+  }, [metrics, productById, loading, selectedMcc, todayStr]);
   const openAlerts = spendAlerts.filter(a => !seenAlerts.includes(a.id));
 
   // ── Regras de margem ──────────────────────────────────────────────────────
@@ -623,7 +617,7 @@ export default function DashboardPage() {
     }
     const out: any[] = [];
     for (const [id, p] of byProduct) {
-      const product = products.find(x => x.id === id);
+      const product = productById.get(id);
       if (!product) continue;
       const mccName = product.mcc_name?.trim() ? product.mcc_name : 'Contas Individuais';
       if (selectedMcc !== 'all' && mccName !== selectedMcc) continue;
@@ -635,7 +629,7 @@ export default function DashboardPage() {
       if (loss) out.push({ ...base, id: `prejuizo:${loss.level}:${id}`, kind: 'prejuizo', loss, weight: loss.level === 'perdendo' ? 1 : 0 });
     }
     return out.sort((a, b) => b.weight - a.weight);
-  }, [metrics, products, loading, selectedMcc, todayStr, marginPrefs]);
+  }, [metrics, productById, loading, selectedMcc, todayStr, marginPrefs]);
   const openMarginAlerts = marginAlerts.filter(a => !seenAlerts.includes(a.id));
 
   // Vendas que chegaram e ainda não foram marcadas como vistas (lib/saleAlerts.ts).
@@ -752,7 +746,7 @@ export default function DashboardPage() {
 
   // Pausar/ativar no Google Ads, antes do nome da campanha.
   const statusToggle = (cmp: any) => {
-    const product = cmp.productId && products.find(p => p.id === cmp.productId);
+    const product = cmp.productId && productById.get(cmp.productId);
     if (!product) return null;
     return (
       <CampaignStatusToggle product={product} isDark={isDark} tokens

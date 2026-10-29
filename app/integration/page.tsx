@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { TelegramCard } from './TelegramCard';
 import { LootrushCard } from './LootrushCard';
 import { Logo } from '@/app/components/Logo';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import { applyTheme } from '@/lib/theme';
@@ -21,10 +21,6 @@ import { Inter } from 'next/font/google';
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 export default function IntegrationPage() {
   const router = useRouter();

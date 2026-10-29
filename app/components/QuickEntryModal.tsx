@@ -2,13 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { FileText, X, MousePointer, ShoppingCart, Save } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import { isValidDay } from '@/lib/useDayInput';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 export interface QuickEntryTarget {
   productId: string;
