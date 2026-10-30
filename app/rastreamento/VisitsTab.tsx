@@ -137,11 +137,11 @@ export function VisitsTab({ ui, period, linking, onLinkDone }: { ui: Ui; period:
                       <button type="button" onClick={e => { e.stopPropagation(); show(v.click_id); }} aria-label={`Ver a visita de ${when(v.created_at)}`}
                         className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{when(v.created_at)}</button>
                     )}</td>
-                    <td className={`${td} ${head} max-w-[200px] truncate`} title={place(v)}>{place(v) || <span className={muted}>—</span>}</td>
-                    <td className={`${td} whitespace-nowrap`}>{[DEVICE[v.device], v.os, v.browser].filter(Boolean).join(' · ') || <span className={muted}>—</span>}{v.is_bot ? <span className="text-warn"> · robô</span> : null}</td>
+                    <td className={`${td} ${head} min-w-[6rem] break-words`}>{place(v) || <span className={muted}>—</span>}</td>
+                    <td className={td}>{[DEVICE[v.device], v.os, v.browser].filter(Boolean).join(' · ') || <span className={muted}>—</span>}{v.is_bot ? <span className="text-warn"> · robô</span> : null}</td>
                     <td className={`${td} whitespace-nowrap`}>{TRAFFIC[v.traffic] || <span className={muted}>—</span>}</td>
-                    <td className={`${td} ${head} max-w-[220px] truncate`} title={v.keyword || ''}>{v.keyword || <span className={muted}>—</span>}</td>
-                    <td className={`${td} max-w-[220px] truncate`} title={v.campaign}>{v.campaign || <span className={muted}>—</span>}</td>
+                    <td className={`${td} ${head} min-w-[6rem] break-words`}>{v.keyword || <span className={muted}>—</span>}</td>
+                    <td className={`${td} min-w-[12rem] break-words`}>{v.campaign || <span className={muted}>—</span>}</td>
                     <td className={`${td} text-right tabular-nums`}>{v.pages || <span className={muted}>—</span>}</td>
                     <td className={`${td} text-right tabular-nums whitespace-nowrap`}>{v.seconds ? lasted(v.seconds) : <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>
@@ -219,7 +219,7 @@ function CampaignSearch({ ui, period, value, onChange }: { ui: Ui; period: strin
           {shown.map((c, i) => (
             <button key={c.id} role="option" aria-selected={c.id === value} onMouseDown={e => e.preventDefault()} onClick={() => pick(c.id)} onMouseEnter={() => setActive(i)}
               className={`w-full flex items-center justify-between gap-3 text-left px-3 py-1.5 text-[13px] text-ink ${i === active ? 'bg-surface-2' : ''}`}>
-              <span className="truncate">{c.name}</span><span className={`tabular-nums shrink-0 text-xs ${muted}`}>{qty(c.visits)} {c.visits === 1 ? 'visita' : 'visitas'}</span>
+              <span className="min-w-0 break-words">{c.name}</span><span className={`tabular-nums shrink-0 text-xs ${muted}`}>{qty(c.visits)} {c.visits === 1 ? 'visita' : 'visitas'}</span>
             </button>
           ))}
           {shown.length === 0 && <div className={`px-3 py-2 text-[13px] ${muted}`}>{list.length ? 'Nenhuma campanha com esse nome teve visita no período.' : 'Nenhuma campanha teve visita no período.'}</div>}

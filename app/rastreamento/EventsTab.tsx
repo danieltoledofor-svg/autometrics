@@ -93,7 +93,7 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                     <td className={`${td} tabular-nums whitespace-nowrap`}>{u.at_text || when(u.at)}</td>
                     <td className={`${td} ${head} text-right tabular-nums font-medium whitespace-nowrap`}>{money(u.amount, u.currency)}</td>
                     <td className={`${td} whitespace-nowrap`}>{u.source || <span className={muted}>—</span>}</td>
-                    <td className={`${td} max-w-[200px] truncate`} title={u.product}>{u.product || <span className={muted}>—</span>}</td>
+                    <td className={`${td} min-w-[10rem] break-words`}>{u.product || <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap ${muted}`}>{u.order ? `pedido ${u.order}` : ''}</td>
                     <td className={`${td} text-right whitespace-nowrap`}>
                       {onLink && <button onClick={() => onLink(u)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-semibold shadow-sm transition-colors"><Link2 size={14} aria-hidden="true" /> Ligar a uma visita</button>}
@@ -130,7 +130,7 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                   <th className={`${th} text-left`}>Palavra-chave</th>
                   <th className={`${th} text-left`}>Local</th>
                   <th className={`${th} text-left`}>Aparelho</th>
-                  <th className={`${th} text-left`}>Do clique até aqui</th>
+                  <th className={`${th} text-left`}>Do clique<br />até aqui</th>
                   <th className={`${th} text-left`}>Plataforma</th>
                   {sale && <th className={`${th} text-left`}>Google</th>}
                 </tr>
@@ -143,13 +143,13 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                         className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{e.at_text || when(e.at)}</button>
                     )}</td>
                     {sale && <td className={`${td} ${head} text-right tabular-nums font-medium whitespace-nowrap`}>{money(e.amount, e.currency)}</td>}
-                    <td className={`${td} max-w-[260px] truncate`} title={e.campaign}><Link href={`/products/${e.product_id}`} onClick={ev => ev.stopPropagation()} className={`${head} hover:text-brand-text hover:underline`}>{e.campaign}</Link></td>
-                    <td className={`${td} max-w-[200px] truncate`}>{e.click?.keyword || <span className={muted}>—</span>}</td>
-                    <td className={`${td} max-w-[180px] truncate`}>{place(e.click) || <span className={muted}>—</span>}</td>
-                    <td className={`${td} whitespace-nowrap`}>{e.click ? [DEVICE[e.click.device], e.click.os].filter(Boolean).join(' · ') : <span className={muted}>sem clique ligado</span>}</td>
+                    <td className={`${td} min-w-[11rem] break-words`}><Link href={`/products/${e.product_id}`} onClick={ev => ev.stopPropagation()} className={`${head} hover:text-brand-text hover:underline`}>{e.campaign}</Link></td>
+                    <td className={`${td} min-w-[6rem] break-words`}>{e.click?.keyword || <span className={muted}>—</span>}</td>
+                    <td className={`${td} min-w-[6rem] break-words`}>{place(e.click) || <span className={muted}>—</span>}</td>
+                    <td className={td}>{e.click ? [DEVICE[e.click.device], e.click.os].filter(Boolean).join(' · ') : <span className={muted}>sem clique ligado</span>}</td>
                     <td className={`${td} tabular-nums whitespace-nowrap`}>{e.click ? gap(e.click.created_at, e.at) : <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>{e.source || <span className={muted}>—</span>}</td>
-                    {sale && <td className={`${td} whitespace-nowrap`}>{e.google ? <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${GOOGLE[e.google.status]?.cls || ''}`} title={e.google.reason || ''}>{GOOGLE[e.google.status]?.label || e.google.status}{e.google.reason && <span className="sr-only">: {e.google.reason}</span>}</span> : <span className={muted}>—</span>}</td>}
+                    {sale && <td className={td}>{e.google ? <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${GOOGLE[e.google.status]?.cls || ''}`} title={e.google.reason || ''}>{GOOGLE[e.google.status]?.label || e.google.status}{e.google.reason && <span className="sr-only">: {e.google.reason}</span>}</span> : <span className={muted}>—</span>}</td>}
                   </tr>
                 ))}
               </tbody>

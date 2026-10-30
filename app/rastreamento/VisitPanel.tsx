@@ -58,9 +58,9 @@ export function Journey({ ui, steps }: { ui: Ui; steps: JourneyStep[] }) {
                 {i < steps.length - 1 && <span aria-hidden="true" className="hidden sm:block absolute left-7 right-0 top-[13px] h-0.5 bg-brand/30" />}
                 <span className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${dot}`}><Shown size={14} aria-hidden="true" /></span>
                 <div className="min-w-0 sm:mt-1.5">
-                  <div className={`text-[13px] font-medium truncate ${text}`}>{s.label}{s.amount ? ` ${money(s.amount, s.currency)}` : ''}</div>
-                  <div className={`text-xs tabular-nums truncate ${muted}`}>{s.at ? clock(s.at) : 'Sem hora'}{since(steps, i) ? ` · ${since(steps, i)}` : ''}</div>
-                  {detail && <div className={`text-xs truncate ${muted}`}>{detail}</div>}
+                  <div className={`text-[13px] font-medium ${text}`}>{s.label}{s.amount ? ` ${money(s.amount, s.currency)}` : ''}</div>
+                  <div className={`text-xs tabular-nums ${muted}`}>{s.at ? clock(s.at) : 'Sem hora'}{since(steps, i) ? ` · ${since(steps, i)}` : ''}</div>
+                  {detail && <div className={`text-xs [overflow-wrap:anywhere] ${muted}`}>{detail}</div>}
                 </div>
               </li>
             );
@@ -129,7 +129,7 @@ export const VisitPanel = forwardRef<HTMLDivElement, Props>(function VisitPanel(
           <div className="grid md:grid-cols-2 gap-x-6 mt-1">
             {Object.entries(visit.params as Record<string, string>).map(([k, v]) => (
               <div key={k} className="flex justify-between gap-3 py-1 text-[13px]">
-                <span className={muted}>{PARAM[k] || k}</span><span className={`${head} text-right break-all max-w-[60%]`}>{String(v).length > 60 ? `${String(v).slice(0, 28)}…${String(v).slice(-12)}` : String(v)}</span>
+                <span className={muted}>{PARAM[k] || k}</span><span className={`${head} text-right break-all max-w-[60%]`}>{String(v)}</span>
               </div>
             ))}
           </div>
