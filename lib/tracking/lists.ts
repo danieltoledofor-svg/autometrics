@@ -6,8 +6,8 @@ import { buildJourney } from '@/lib/tracking/journey';
 
 /**
  * Listas da tela de Rastreamento: as visitas uma a uma, o detalhe de uma
- * visita, e as vendas e os checkouts com o clique e o caminho do lead
- * (lib/tracking/journey.ts) de cada um. Só lê do banco
+ * visita, e as vendas e os checkouts com o clique de cada um (o caminho do
+ * lead, de lib/tracking/journey.ts, vem no detalhe). Só lê do banco
  * (menos fillPendingGeo, que completa o local das visitas).
  *
  * `days` é o período em dias (AAAA-MM-DD): vendas e checkouts contam no dia do
@@ -140,7 +140,7 @@ export async function eventDetail(db: SupabaseClient, userId: string, eventId: s
   };
 }
 
-/** Vendas ou checkouts do período, cada um com o clique que o gerou e o caminho do lead. */
+/** Vendas ou checkouts do período, cada um com o clique que o gerou. */
 export async function listEvents(db: SupabaseClient, userId: string, since: string, until: string, days: Days, type: 'sale' | 'checkout') {
   const [names, clocks] = await Promise.all([productNames(db, userId), userClocks(db, userId)]);
   const wide = widen(since, until);
@@ -151,21 +151,12 @@ export async function listEvents(db: SupabaseClient, userId: string, since: stri
   const shown = events.slice(0, 300);
 
   const clicks = new Map<string, any>();
-  const viewsOf = new Map<string, any[]>();
-  const eventsOf = new Map<string, any[]>();
-  const push = (map: Map<string, any[]>, row: any) => { if (!map.has(row.click_id)) map.set(row.click_id, []); map.get(row.click_id)!.push(row); };
   const ids = [...new Set(shown.map((e: any) => e.click_id).filter(Boolean))] as string[];
   for (let i = 0; i < ids.length; i += 100) {
     const chunk = ids.slice(i, i + 100);
-    let { data, error } = await db.from('tracking_clicks').select('click_id, gclid, keyword, device, created_at, country, region, city, os, browser, traffic').eq('user_id', userId).in('click_id', chunk);
+    let { data, error } = await db.from('tracking_clicks').select('click_id, gclid, keyword, device, created_at, country, region, city, os, browser').eq('user_id', userId).in('click_id', chunk);
     if (error) ({ data } = await db.from('tracking_clicks').select('click_id, gclid, keyword, device, created_at').eq('user_id', userId).in('click_id', chunk) as any);
     for (const c of data || []) clicks.set(c.click_id, c);
-    const [pv, ev] = await Promise.all([
-      fetchAll((a, b) => db.from('tracking_pageviews').select('click_id, url, kind, created_at').eq('user_id', userId).in('click_id', chunk).order('created_at').range(a, b)),
-      db.from('postback_events').select('click_id, product_id, event_type, amount, currency, source, transaction_id, created_at').in('click_id', chunk).then(r => r.data || []),
-    ]);
-    for (const p of pv) push(viewsOf, p);
-    for (const x of ev) if (names.has(x.product_id)) push(eventsOf, x);
   }
   const uploads = new Map<string, any>();
   if (type === 'sale') {
@@ -182,7 +173,6 @@ export async function listEvents(db: SupabaseClient, userId: string, since: stri
       id: e.id, at: e.created_at, at_text: clockStamp(e, clocks), amount: Number(e.amount) || 0, currency: String(e.currency || 'USD').toUpperCase(), source: e.source || '',
       order: e.transaction_id || '', product_id: e.product_id, campaign: names.get(e.product_id) || '',
       click: e.click_id ? clicks.get(e.click_id) || null : null, google: uploads.get(e.id) || null,
-      path: buildJourney((e.click_id && clicks.get(e.click_id)) || null, viewsOf.get(e.click_id) || [], eventsOf.get(e.click_id) || [{ ...e, event_type: type }]).map(s => s.short),
     })),
   };
 }

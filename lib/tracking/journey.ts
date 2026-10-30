@@ -14,7 +14,6 @@
 export type JourneyStep = {
   kind: 'origem' | 'pagina' | 'produtor' | 'botao' | 'checkout' | 'compra' | 'reembolso';
   label: string;
-  short: string;                                                 // versão curta, para a coluna da tabela
   at: string | null;
   url?: string;
   note?: string;
@@ -46,7 +45,7 @@ function originStep(click: any): JourneyStep | null {
   if (!click) return null;
   const paid = click.traffic === 'pago' || click.gclid;
   const label = click.gclid ? 'Anúncio do Google' : paid ? 'Anúncio' : 'Entrada';
-  return { kind: 'origem', label, short: 'Anúncio', at: click.created_at, note: click.keyword ? `Palavra-chave: ${click.keyword}` : undefined };
+  return { kind: 'origem', label, at: click.created_at, note: click.keyword || undefined };
 }
 
 export function buildJourney(click: any | null, views: View[], events: Event[]): JourneyStep[] {
@@ -65,27 +64,27 @@ export function buildJourney(click: any | null, views: View[], events: Event[]):
   for (const v of web) {
     if (v.kind !== 'checkout') {
       lastPage = pageName(v.url, pages.indexOf(v), pages.length, leftToBuy);
-      steps.push({ kind: 'pagina', label: lastPage, short: lastPage, at: v.created_at, url: v.url });
+      steps.push({ kind: 'pagina', label: lastPage, at: v.created_at, url: v.url });
       continue;
     }
     const note = lastPage ? `Clicou no botão ${fromPage(lastPage)}` : undefined;
-    if (PLATFORM.test(hostOf(v.url))) steps.push({ kind: 'botao', label: 'Clicou no botão', short: 'Botão', at: v.created_at, url: v.url, note });
-    else steps.push({ kind: 'produtor', label: 'Página do produtor', short: 'Produtor', at: v.created_at, url: v.url, note });
+    if (PLATFORM.test(hostOf(v.url))) steps.push({ kind: 'botao', label: 'Clicou no botão', at: v.created_at, url: v.url, note });
+    else steps.push({ kind: 'produtor', label: 'Página do produtor', at: v.created_at, url: v.url, note });
   }
 
   const byTime = [...events].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const sales = byTime.filter(e => e.event_type === 'sale');
   const checkout = byTime.find(e => e.event_type === 'checkout');
-  if (checkout) steps.push({ kind: 'checkout', label: 'Checkout', short: 'Checkout', at: checkout.created_at, note: checkout.source ? `Na ${checkout.source}` : undefined });
-  else if (sales.length) steps.push({ kind: 'checkout', label: 'Checkout', short: 'Checkout', at: null, note: 'Sem aviso de checkout: a compra mostra que passou por ele' });
+  if (checkout) steps.push({ kind: 'checkout', label: 'Checkout', at: checkout.created_at, note: checkout.source ? `Na ${checkout.source}` : undefined });
+  else if (sales.length) steps.push({ kind: 'checkout', label: 'Checkout', at: null, note: 'Sem aviso da plataforma' });
 
   sales.forEach((e, i) => steps.push({
-    kind: 'compra', label: i ? 'Compra adicional' : 'Compra', short: i ? 'Adicional' : 'Compra', at: e.created_at,
+    kind: 'compra', label: i ? 'Compra adicional' : 'Compra', at: e.created_at,
     amount: Number(e.amount) || 0, currency: String(e.currency || 'USD').toUpperCase(), order: e.transaction_id || '', google: e.google || null,
     note: e.source ? `Na ${e.source}` : undefined,
   }));
   for (const e of byTime) {
-    if (e.event_type === 'refund') steps.push({ kind: 'reembolso', label: 'Reembolso', short: 'Reembolso', at: e.created_at, amount: Number(e.amount) || 0, currency: String(e.currency || 'USD').toUpperCase() });
+    if (e.event_type === 'refund') steps.push({ kind: 'reembolso', label: 'Reembolso', at: e.created_at, amount: Number(e.amount) || 0, currency: String(e.currency || 'USD').toUpperCase() });
   }
   return steps;
 }

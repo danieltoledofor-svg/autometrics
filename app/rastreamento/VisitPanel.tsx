@@ -1,7 +1,7 @@
 "use client";
 
 import React, { forwardRef } from 'react';
-import { ChevronRight, X } from 'lucide-react';
+import { BadgeDollarSign, FileText, Megaphone, MousePointerClick, Play, ShoppingCart, Store, Undo2, X, type LucideIcon } from 'lucide-react';
 import type { JourneyStep } from '@/lib/tracking/journey';
 import { money, when, clock, lasted, path, DEVICE, TRAFFIC, type Ui } from './shared';
 
@@ -20,7 +20,13 @@ const PARAM: Record<string, string> = {
   loc_physical_ms: 'Local (número do Google)', devicemodel: 'Modelo do aparelho', extensionid: 'Extensão clicada', placement: 'Site onde o anúncio apareceu',
 };
 
-const STEP_COLOR: Partial<Record<JourneyStep['kind'], string>> = { checkout: 'text-warn', compra: 'text-pos', reembolso: 'text-neg' };
+const BLUE = { Icon: FileText, dot: 'bg-brand/15 text-brand-text', text: 'text-ink' };
+const STEP: Record<JourneyStep['kind'], { Icon: LucideIcon; dot: string; text: string }> = {
+  origem: { ...BLUE, Icon: Megaphone }, pagina: BLUE, produtor: { ...BLUE, Icon: Store }, botao: { ...BLUE, Icon: MousePointerClick },
+  checkout: { Icon: ShoppingCart, dot: 'bg-warn/15 text-warn', text: 'text-warn' },
+  compra: { Icon: BadgeDollarSign, dot: 'bg-pos/15 text-pos', text: 'text-pos' },
+  reembolso: { Icon: Undo2, dot: 'bg-neg/15 text-neg', text: 'text-neg' },
+};
 
 /** Tempo desde o passo anterior que tem hora. */
 function since(steps: JourneyStep[], i: number) {
@@ -30,8 +36,9 @@ function since(steps: JourneyStep[], i: number) {
   return `+${lasted((Date.parse(at) - Date.parse(before)) / 1000)}`;
 }
 
+/** Uma linha só no computador: cada ponto com ícone, nome, hora e um detalhe; o resto fica no título ao parar o mouse. */
 export function Journey({ ui, steps }: { ui: Ui; steps: JourneyStep[] }) {
-  const { title, muted, head } = ui;
+  const { title, muted } = ui;
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-2">
@@ -39,20 +46,25 @@ export function Journey({ ui, steps }: { ui: Ui; steps: JourneyStep[] }) {
         <div className={`text-xs ${muted}`}>Horários de Brasília.</div>
       </div>
       {steps.length === 0 ? <div className={`text-[13px] mt-1 ${muted}`}>Nenhuma página registrada.</div> : (
-        <ol className="mt-2 flex flex-wrap gap-y-2">
-          {steps.map((s, i) => (
-            <li key={i} className="flex items-stretch w-full sm:w-auto">
-              <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 w-full sm:w-48 min-w-0">
-                <div className={`text-[13px] font-medium ${STEP_COLOR[s.kind] || head}`}>{s.label}{s.amount ? ` ${money(s.amount, s.currency)}` : ''}</div>
-                <div className={`text-xs tabular-nums ${muted}`}>{s.at ? clock(s.at) : 'Sem hora registrada'}{since(steps, i) ? ` · ${since(steps, i)}` : ''}</div>
-                {s.url && <div className={`text-xs truncate ${head}`} title={s.url}>{path(s.url)}</div>}
-                {s.note && <div className={`text-xs ${muted}`}>{s.note}</div>}
-                {s.order && <div className={`text-xs ${muted}`}>Pedido {s.order}</div>}
-                {s.google && <div className={`text-xs ${muted}`} title={s.google.reason || ''}>Google: {s.google.status}</div>}
-              </div>
-              {i < steps.length - 1 && <ChevronRight size={16} aria-hidden="true" className={`hidden sm:block self-center mx-1 shrink-0 ${muted}`} />}
-            </li>
-          ))}
+        <ol className="mt-3 flex flex-col gap-3 sm:flex-row sm:gap-0">
+          {steps.map((s, i) => {
+            const { Icon, dot, text } = STEP[s.kind];
+            const Shown = s.label === 'VSL' ? Play : Icon;
+            const order = s.order ? `Pedido ${s.order}` : '';
+            const google = s.google ? `Google: ${s.google.status}` : '';
+            const detail = [order, google].filter(Boolean).join(' · ') || (s.url ? path(s.url) : s.note);
+            return (
+              <li key={i} title={[s.url, s.note, order, google, s.google?.reason].filter(Boolean).join('\n')} className="relative flex gap-2.5 sm:block sm:flex-1 min-w-0 sm:pr-3">
+                {i < steps.length - 1 && <span aria-hidden="true" className="hidden sm:block absolute left-7 right-0 top-[13px] h-0.5 bg-brand/30" />}
+                <span className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${dot}`}><Shown size={14} aria-hidden="true" /></span>
+                <div className="min-w-0 sm:mt-1.5">
+                  <div className={`text-[13px] font-medium truncate ${text}`}>{s.label}{s.amount ? ` ${money(s.amount, s.currency)}` : ''}</div>
+                  <div className={`text-xs tabular-nums truncate ${muted}`}>{s.at ? clock(s.at) : 'Sem hora'}{since(steps, i) ? ` · ${since(steps, i)}` : ''}</div>
+                  {detail && <div className={`text-xs truncate ${muted}`}>{detail}</div>}
+                </div>
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Link2, Loader2 } from 'lucide-react';
+import { Link2, Loader2 } from 'lucide-react';
 import { api, qty, money, when, gap, place, DEVICE, type Ui } from './shared';
 import { VisitPanel } from './VisitPanel';
 import type { UnmatchedSale } from './VisitsTab';
@@ -127,7 +127,6 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                   <th className={`${th} text-left`}>Quando</th>
                   {sale && <th className={`${th} text-right`}>Valor</th>}
                   <th className={`${th} text-left`}>Campanha</th>
-                  <th className={`${th} text-left`}>Caminho do lead</th>
                   <th className={`${th} text-left`}>Palavra-chave</th>
                   <th className={`${th} text-left`}>Local</th>
                   <th className={`${th} text-left`}>Aparelho</th>
@@ -145,11 +144,6 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                     )}</td>
                     {sale && <td className={`${td} ${head} text-right tabular-nums font-medium whitespace-nowrap`}>{money(e.amount, e.currency)}</td>}
                     <td className={`${td} max-w-[260px] truncate`} title={e.campaign}><Link href={`/products/${e.product_id}`} onClick={ev => ev.stopPropagation()} className={`${head} hover:text-brand-text hover:underline`}>{e.campaign}</Link></td>
-                    <td className={`${td} whitespace-nowrap`}>
-                      <span className="inline-flex items-center gap-0.5">
-                        {e.path.map((p: string, i: number) => <React.Fragment key={i}>{i > 0 && <ChevronRight size={12} aria-hidden="true" className={muted} />}{p}</React.Fragment>)}
-                      </span>
-                    </td>
                     <td className={`${td} max-w-[200px] truncate`}>{e.click?.keyword || <span className={muted}>—</span>}</td>
                     <td className={`${td} max-w-[180px] truncate`}>{place(e.click) || <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>{e.click ? [DEVICE[e.click.device], e.click.os].filter(Boolean).join(' · ') : <span className={muted}>sem clique ligado</span>}</td>
