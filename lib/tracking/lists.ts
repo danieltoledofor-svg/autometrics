@@ -2,10 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchAll } from '@/lib/analysis/compute';
 import { geoReady, lookup } from '@/lib/tracking/geo';
 import { clockStamp, inDays, userClocks, widen } from '@/lib/tracking/eventDays';
+import { buildJourney } from '@/lib/tracking/journey';
 
 /**
  * Listas da tela de Rastreamento: as visitas uma a uma, o detalhe de uma
- * visita, e as vendas e os checkouts com o clique de cada um. Só lê do banco
+ * visita, e as vendas e os checkouts com o clique e o caminho do lead
+ * (lib/tracking/journey.ts) de cada um. Só lê do banco
  * (menos fillPendingGeo, que completa o local das visitas).
  *
  * `days` é o período em dias (AAAA-MM-DD): vendas e checkouts contam no dia do
@@ -104,7 +106,7 @@ export async function visitCampaigns(db: SupabaseClient, userId: string, since: 
     .sort((a, b) => b.visits - a.visits || a.name.localeCompare(b.name));
 }
 
-/** Uma visita inteira: tudo o que veio na URL, o visitante e a linha do tempo. */
+/** Uma visita inteira: tudo o que veio na URL, o visitante e o caminho do lead. */
 export async function visitDetail(db: SupabaseClient, userId: string, clickId: string) {
   const { data: click, error } = await db.from('tracking_clicks').select('*').eq('user_id', userId).eq('click_id', clickId).maybeSingle();
   if (error || !click) return null;
@@ -120,18 +122,25 @@ export async function visitDetail(db: SupabaseClient, userId: string, clickId: s
     const { data } = await db.from('google_conversion_uploads').select('event_id, status, reason, sent_at').in('event_id', events.map((e: any) => e.id));
     for (const u of data || []) uploads.set(u.event_id, u);
   }
-  const timeline = [
-    ...pv.map((p: any) => ({ at: p.created_at, kind: p.kind === 'checkout' ? 'saida' : 'pagina', text: p.url })),
-    ...events.map((e: any) => ({
-      at: e.created_at, kind: e.event_type, text: e.source || '', amount: Number(e.amount) || 0, currency: String(e.currency || 'USD').toUpperCase(),
-      order: e.transaction_id || '', google: uploads.get(e.id) || null,
-    })),
-  ].sort((a, b) => a.at.localeCompare(b.at));
+  const journey = buildJourney(click, pv, events.map((e: any) => ({ ...e, google: uploads.get(e.id) || null })));
   const { user_agent, ...rest } = click;
-  return { ...rest, user_agent, campaign: mine ? product.google_ads_campaign_name || product.name : '', timeline };
+  return { ...rest, user_agent, campaign: mine ? product.google_ads_campaign_name || product.name : '', journey };
 }
 
-/** Vendas ou checkouts do período, cada um com o clique que o gerou. */
+/** Uma venda ou um checkout com a visita inteira que levou até ele. Sem visita ligada, só o que a plataforma avisou. */
+export async function eventDetail(db: SupabaseClient, userId: string, eventId: string) {
+  const { data: e } = await db.from('postback_events').select('id, event_type, click_id, product_id, amount, currency, source, transaction_id, created_at').eq('id', eventId).maybeSingle();
+  if (!e) return null;
+  const [names, clocks] = await Promise.all([productNames(db, userId), userClocks(db, userId)]);
+  if (!names.has(e.product_id)) return null;
+  const visit = e.click_id ? await visitDetail(db, userId, e.click_id) : null;
+  return {
+    event: { id: e.id, type: e.event_type, at_text: clockStamp(e, clocks), amount: Number(e.amount) || 0, currency: String(e.currency || 'USD').toUpperCase(), source: e.source || '', order: e.transaction_id || '', campaign: names.get(e.product_id) || '' },
+    visit, journey: visit?.journey || buildJourney(null, [], [e]),
+  };
+}
+
+/** Vendas ou checkouts do período, cada um com o clique que o gerou e o caminho do lead. */
 export async function listEvents(db: SupabaseClient, userId: string, since: string, until: string, days: Days, type: 'sale' | 'checkout') {
   const [names, clocks] = await Promise.all([productNames(db, userId), userClocks(db, userId)]);
   const wide = widen(since, until);
@@ -142,12 +151,21 @@ export async function listEvents(db: SupabaseClient, userId: string, since: stri
   const shown = events.slice(0, 300);
 
   const clicks = new Map<string, any>();
+  const viewsOf = new Map<string, any[]>();
+  const eventsOf = new Map<string, any[]>();
+  const push = (map: Map<string, any[]>, row: any) => { if (!map.has(row.click_id)) map.set(row.click_id, []); map.get(row.click_id)!.push(row); };
   const ids = [...new Set(shown.map((e: any) => e.click_id).filter(Boolean))] as string[];
   for (let i = 0; i < ids.length; i += 100) {
     const chunk = ids.slice(i, i + 100);
-    let { data, error } = await db.from('tracking_clicks').select('click_id, gclid, keyword, device, created_at, country, region, city, os, browser').eq('user_id', userId).in('click_id', chunk);
+    let { data, error } = await db.from('tracking_clicks').select('click_id, gclid, keyword, device, created_at, country, region, city, os, browser, traffic').eq('user_id', userId).in('click_id', chunk);
     if (error) ({ data } = await db.from('tracking_clicks').select('click_id, gclid, keyword, device, created_at').eq('user_id', userId).in('click_id', chunk) as any);
     for (const c of data || []) clicks.set(c.click_id, c);
+    const [pv, ev] = await Promise.all([
+      fetchAll((a, b) => db.from('tracking_pageviews').select('click_id, url, kind, created_at').eq('user_id', userId).in('click_id', chunk).order('created_at').range(a, b)),
+      db.from('postback_events').select('click_id, product_id, event_type, amount, currency, source, transaction_id, created_at').in('click_id', chunk).then(r => r.data || []),
+    ]);
+    for (const p of pv) push(viewsOf, p);
+    for (const x of ev) if (names.has(x.product_id)) push(eventsOf, x);
   }
   const uploads = new Map<string, any>();
   if (type === 'sale') {
@@ -161,9 +179,10 @@ export async function listEvents(db: SupabaseClient, userId: string, since: stri
   return {
     ready: true, total: events.length, linked: events.filter((e: any) => e.click_id).length, value,
     events: shown.map((e: any) => ({
-      at: e.created_at, at_text: clockStamp(e, clocks), amount: Number(e.amount) || 0, currency: String(e.currency || 'USD').toUpperCase(), source: e.source || '',
+      id: e.id, at: e.created_at, at_text: clockStamp(e, clocks), amount: Number(e.amount) || 0, currency: String(e.currency || 'USD').toUpperCase(), source: e.source || '',
       order: e.transaction_id || '', product_id: e.product_id, campaign: names.get(e.product_id) || '',
       click: e.click_id ? clicks.get(e.click_id) || null : null, google: uploads.get(e.id) || null,
+      path: buildJourney((e.click_id && clicks.get(e.click_id)) || null, viewsOf.get(e.click_id) || [], eventsOf.get(e.click_id) || [{ ...e, event_type: type }]).map(s => s.short),
     })),
   };
 }

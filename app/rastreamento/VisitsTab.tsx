@@ -2,12 +2,13 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BadgeDollarSign, Loader2, Search, X } from 'lucide-react';
-import { api, post, qty, money, when, clock, lasted, place, path, DEVICE, TRAFFIC, type Ui } from './shared';
+import { api, post, qty, money, when, lasted, place, DEVICE, TRAFFIC, type Ui } from './shared';
+import { VisitPanel } from './VisitPanel';
 
 /**
  * Aba Visitas: cada visita às páginas, com de onde veio (anúncio, palavra-chave,
  * local, aparelho) e até onde chegou. Clicar numa linha abre a visita inteira:
- * tudo o que veio na URL, o visitante e a linha do tempo até a venda.
+ * o caminho do lead até a venda, tudo o que veio na URL e o visitante.
  *
  * Na visita aberta, "Esta visita gerou uma venda" liga a ela uma venda que
  * chegou sem campanha (ou uma digitada): a venda entra na campanha da visita e
@@ -23,14 +24,6 @@ const REACHED: Record<string, { label: string; cls: string }> = {
   checkout: { label: 'Checkout', cls: 'bg-warn/10 text-warn' },
   video: { label: 'Segunda página', cls: 'bg-brand/15 text-brand-text' },
   entrada: { label: 'Só a entrada', cls: '' },
-};
-/** Nome simples de cada campo que chega na URL do anúncio. */
-const PARAM: Record<string, string> = {
-  gclid: 'Clique do Google', gbraid: 'Clique do Google (iPhone)', wbraid: 'Clique do Google (app)', ftgid: 'Clique do Google (via FlowTracking)', amclid: 'Clique do Google (pelo Autometrics)',
-  utm_id: 'Campanha (número)', gad_campaignid: 'Campanha (número, do Google)', utm_campaign: 'Campanha (nome)', utm_source: 'Origem',
-  utm_medium: 'Grupo de anúncios', utm_content: 'Anúncio', utm_term: 'Palavra-chave', keyword: 'Palavra-chave', matchtype: 'Tipo de correspondência',
-  network: 'Rede', device: 'Aparelho (pelo Google)', gad_source: 'Origem (do Google)', ft_sid: 'Sessão da FlowTracking', src: 'Marcação da página',
-  loc_physical_ms: 'Local (número do Google)', devicemodel: 'Modelo do aparelho', extensionid: 'Extensão clicada', placement: 'Site onde o anúncio apareceu',
 };
 
 export function VisitsTab({ ui, period, linking, onLinkDone }: { ui: Ui; period: string; linking?: UnmatchedSale | null; onLinkDone?: () => void }) {
@@ -79,81 +72,12 @@ export function VisitsTab({ ui, period, linking, onLinkDone }: { ui: Ui; period:
   const { card, head, muted, th, td, title, field } = ui;
   // Filtros com cara de botão: fundo e borda visíveis no tema claro; ligado fica na cor da marca.
   const chip = (on: boolean) => `px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${on ? 'bg-brand/15 border-brand text-brand-text' : 'bg-surface-2 border-line-strong text-ink hover:bg-surface-3'}`;
-  const info = (label: string, value: React.ReactNode) => (
-    <div className="flex justify-between gap-3 py-1 text-[13px]"><span className={muted}>{label}</span><span className={`${head} text-right break-all`}>{value || <span className={muted}>—</span>}</span></div>
-  );
 
   const detail = open && (
-    <div ref={detailRef} tabIndex={-1} aria-label="Detalhe da visita" className={`${card} border rounded-xl p-4 space-y-4 scroll-mt-4 focus:outline-none`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className={`text-sm font-medium ${head}`}>Visita de {when(open.created_at)}{place(open) ? ` · ${place(open)}` : ''}</div>
-          <div className={`text-xs mt-0.5 ${muted}`}>{open.campaign || 'Sem campanha ligada'}</div>
-        </div>
-        <button onClick={() => setOpen(null)} aria-label="Fechar a visita" className={muted}><X size={18} aria-hidden="true" /></button>
-      </div>
-      <div className="grid md:grid-cols-3 gap-x-6 gap-y-4">
-        <div>
-          <div className={title}>Anúncio</div>
-          {info('Origem', TRAFFIC[open.traffic] || '')}
-          {info('Palavra-chave', open.keyword)}
-          {info('Correspondência', open.match_type)}
-          {info('Grupo de anúncios', open.ad_group_id)}
-          {info('Anúncio', open.ad_id)}
-          {info('Rede', open.network === 'g' ? 'Pesquisa do Google' : open.network === 's' ? 'Parceiros de pesquisa' : open.network === 'd' ? 'Display' : open.network)}
-          {info('Página de entrada', path(open.landing_url || ''))}
-          {info('Veio de', open.referrer ? path(open.referrer) : '')}
-        </div>
-        <div>
-          <div className={title}>Visitante</div>
-          {info('País', open.country)}
-          {info('Estado', open.region)}
-          {info('Cidade', open.city)}
-          {info('IP', open.ip)}
-          {info('Aparelho', DEVICE[open.device] || '')}
-          {info('Sistema', open.os)}
-          {info('Navegador', open.browser)}
-          {info('Tela', open.screen ? open.screen.replace('x', ' × ') : '')}
-          {info('Idioma', open.language)}
-          {open.is_bot && <div className="text-xs text-warn mt-1">Parece um robô, não uma pessoa.</div>}
-        </div>
-        <div>
-          <div className={title}>Na página</div>
-          {info('Tempo', open.seconds ? lasted(open.seconds) : '')}
-          {info('Rolou até', open.max_scroll ? `${open.max_scroll}%` : '')}
-          {info('Última atividade', when(open.last_seen_at))}
-          <div className={`${title} mt-3`}>Caminho</div>
-          <div className="mt-1 space-y-1">
-            {open.timeline.map((t: any, i: number) => (
-              <div key={i} className="text-[13px] flex gap-2">
-                <span className={`tabular-nums shrink-0 ${muted}`}>{clock(t.at)}</span>
-                <span className={`min-w-0 break-all ${t.kind === 'sale' ? 'text-pos font-medium' : t.kind === 'checkout' || t.kind === 'saida' ? 'text-warn' : head}`}>
-                  {t.kind === 'pagina' ? `abriu ${path(t.text)}`
-                    : t.kind === 'saida' ? `saiu para comprar em ${path(t.text)}`
-                    : t.kind === 'checkout' ? `checkout${t.text ? ` na ${t.text}` : ''}`
-                    : t.kind === 'sale' ? `venda de ${money(t.amount, t.currency)}${t.text ? ` na ${t.text}` : ''}${t.google ? ` · Google: ${t.google.status}` : ''}`
-                    : t.kind === 'refund' ? `reembolso de ${money(t.amount, t.currency)}` : t.kind}
-                </span>
-              </div>
-            ))}
-            {open.timeline.length === 0 && <div className={`text-[13px] ${muted}`}>Nenhuma página registrada.</div>}
-          </div>
-        </div>
-      </div>
+    <VisitPanel ref={detailRef} ui={ui} label="Detalhe da visita" steps={open.journey} visit={open} onClose={() => setOpen(null)}
+      heading={`Visita de ${when(open.created_at)}${place(open) ? ` · ${place(open)}` : ''}`} sub={open.campaign || 'Sem campanha ligada'}>
       <SaleLinker ui={ui} visit={open} preset={linking || null} onDone={linked} />
-      {open.params && Object.keys(open.params).length > 0 && (
-        <div>
-          <div className={title}>Tudo o que veio na URL do anúncio</div>
-          <div className="grid md:grid-cols-2 gap-x-6 mt-1">
-            {Object.entries(open.params as Record<string, string>).map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-3 py-1 text-[13px]">
-                <span className={muted}>{PARAM[k] || k}</span><span className={`${head} text-right break-all max-w-[60%]`}>{String(v).length > 60 ? `${String(v).slice(0, 28)}…${String(v).slice(-12)}` : String(v)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    </VisitPanel>
   );
 
   return (

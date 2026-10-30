@@ -41,6 +41,21 @@ export function mapEvent(raw: string, status = ''): { event: string; rejected: b
 }
 
 /**
+ * Chave do checkout: conta um por clique, para quem recarrega a página do checkout não virar
+ * vários (e para ele aparecer na aba Checkouts, que lê postback_events).
+ *
+ * Tem que ser o que identifica a pessoa, nunca o primeiro subid que vier: ele pode ser a
+ * palavra-chave ou a campanha, e aí a segunda pessoa da mesma campanha era tratada como repetição
+ * e perdia o checkout. Sem nada de clique (campanha achada só pelo nome), um por visita da
+ * plataforma (JVZoo: {session_id}).
+ */
+export function checkoutKey(clickId: string | null, subIds: string[], order: string, campaignId: string): string {
+    const longest = [...subIds].sort((a, b) => b.length - a.length)[0];
+    const ref = clickId || subIds.find(id => id.startsWith('ftsession_')) || longest;
+    return (ref ? `checkout:${ref}` : order ? `checkout:visita:${order}` : campaignId ? `checkout:${campaignId}` : '').slice(0, 200);
+}
+
+/**
  * Processa um postback de venda, checkout, clique ou reembolso: acha a campanha, grava o evento e soma no dia.
  *
  * A venda entra no dia em que aconteceu no relógio da plataforma (lib/tracking/platformClock.ts).
@@ -90,12 +105,9 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
         const amount = parseFloat(param('amount') || '0') || 0;
         const currency = (param('cy') || param('currency') || 'BRL').toUpperCase();
         // Aceita tid (Clickbank), orderid (Cartpanda/MaxWeb/Buygoods) ou transid como alias
-        // O checkout não tem pedido: conta um por clique, para quem recarrega a página do checkout
-        // não virar vários (e para ele aparecer na aba Checkouts, que lê postback_events). Sem
-        // clique (campanha achada só pelo nome), um por visita da plataforma (JVZoo: {session_id}).
+        // O checkout não tem pedido: a chave é checkoutKey, definida depois de achar o clique.
         const order = param('tid') || param('orderid') || param('order_id') || param('transid');
-        const tid = event !== 'checkout' ? order
-            : (candidateIds.length ? `checkout:${candidateIds[0]}` : order ? `checkout:visita:${order}` : '').slice(0, 200);
+        let tid = event !== 'checkout' ? order : checkoutKey(null, subIds, order, campaignId);
 
         // ── Validação básica ────────────────────────────────────────────
         // Nada aqui devolve erro: o teste de postback da plataforma exige 200,
@@ -230,6 +242,8 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
             product = data;
             trace.push(`nome ${campaignName}: ${data ? 'encontrado' : 'não'}`);
         }
+
+        if (event === 'checkout') tid = checkoutKey(clickId, subIds, order, campaignId);
 
         if (dryRun) {
             return Response.json(

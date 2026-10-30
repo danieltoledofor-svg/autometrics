@@ -2,13 +2,15 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Link2, Loader2 } from 'lucide-react';
+import { ChevronRight, Link2, Loader2 } from 'lucide-react';
 import { api, qty, money, when, gap, place, DEVICE, type Ui } from './shared';
+import { VisitPanel } from './VisitPanel';
 import type { UnmatchedSale } from './VisitsTab';
 
 /**
  * Abas Vendas e Checkouts: cada evento que a plataforma avisou, com o clique
- * que o gerou e, na venda, se ela foi enviada ao Google.
+ * que o gerou, o caminho do lead e, na venda, se ela foi enviada ao Google.
+ * Clicar numa linha abre tudo o que se sabe da visita, como na aba Visitas.
  *
  * Nas vendas, as que chegaram sem campanha (o postback não disse de qual
  * clique veio) aparecem à parte, com o botão para ligar a uma visita.
@@ -27,8 +29,26 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [open, setOpen] = useState<any>(null);
+  const [opening, setOpening] = useState('');
   const request = useRef(0);
   const sale = type === 'sale';
+  // O detalhe abre acima da tabela: ao abrir, a tela rola até ele e o foco vai para lá.
+  const detailRef = useRef<HTMLDivElement>(null);
+  const openId = open?.event.id;
+  useEffect(() => {
+    if (!openId || !detailRef.current) return;
+    detailRef.current.focus({ preventScroll: true });
+    detailRef.current.scrollIntoView({ block: 'start' });
+  }, [openId]);
+  useEffect(() => { setOpen(null); }, [type, period]);
+  const show = async (id: string) => {
+    if (openId === id) { setOpen(null); return; }
+    setOpening(id);
+    const { ok, body } = await api(`/api/tracking/events?id=${encodeURIComponent(id)}`);
+    setOpen(ok ? body : null);
+    setOpening('');
+  };
 
   const load = useCallback(async () => {
     const id = ++request.current;
@@ -86,7 +106,13 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
         </div>
       )}
 
-      <p className={`text-xs ${muted}`}>Dia e hora no relógio de cada plataforma (Instalação → Relógio), o mesmo dia em que {sale ? 'a venda' : 'o checkout'} entra no painel.</p>
+      <p className={`text-xs ${muted}`}>Dia e hora no relógio de cada plataforma (Instalação → Relógio), o mesmo dia em que {sale ? 'a venda' : 'o checkout'} entra no painel. Clique numa linha para ver o caminho do lead e a visita inteira.</p>
+
+      {open && (
+        <VisitPanel ref={detailRef} ui={ui} label={sale ? 'Detalhe da venda' : 'Detalhe do checkout'} steps={open.journey} visit={open.visit} onClose={() => setOpen(null)}
+          heading={`${sale ? `Venda de ${money(open.event.amount, open.event.currency)}` : 'Checkout'} · ${open.event.at_text}${place(open.visit) ? ` · ${place(open.visit)}` : ''}`}
+          sub={[open.event.campaign, open.event.source, sale && open.event.order ? `pedido ${open.event.order}` : ''].filter(Boolean).join(' · ')} />
+      )}
 
       {data.total === 0 && unmatched.length > 0 ? null : data.total === 0 ? (
         <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>
@@ -101,6 +127,7 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                   <th className={`${th} text-left`}>Quando</th>
                   {sale && <th className={`${th} text-right`}>Valor</th>}
                   <th className={`${th} text-left`}>Campanha</th>
+                  <th className={`${th} text-left`}>Caminho do lead</th>
                   <th className={`${th} text-left`}>Palavra-chave</th>
                   <th className={`${th} text-left`}>Local</th>
                   <th className={`${th} text-left`}>Aparelho</th>
@@ -110,11 +137,19 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                 </tr>
               </thead>
               <tbody>
-                {data.events.map((e: any, i: number) => (
-                  <tr key={i}>
-                    <td className={`${td} tabular-nums whitespace-nowrap`}>{e.at_text || when(e.at)}</td>
+                {data.events.map((e: any) => (
+                  <tr key={e.id} onClick={() => show(e.id)} className={`cursor-pointer transition-colors ${openId === e.id ? 'bg-surface-3' : 'hover:bg-surface-2'}`}>
+                    <td className={`${td} tabular-nums whitespace-nowrap`}>{opening === e.id ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : (
+                      <button type="button" onClick={ev => { ev.stopPropagation(); show(e.id); }} aria-label={`Ver o caminho de ${e.at_text || when(e.at)}`}
+                        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{e.at_text || when(e.at)}</button>
+                    )}</td>
                     {sale && <td className={`${td} ${head} text-right tabular-nums font-medium whitespace-nowrap`}>{money(e.amount, e.currency)}</td>}
-                    <td className={`${td} max-w-[260px] truncate`} title={e.campaign}><Link href={`/products/${e.product_id}`} className={`${head} hover:text-brand-text hover:underline`}>{e.campaign}</Link></td>
+                    <td className={`${td} max-w-[260px] truncate`} title={e.campaign}><Link href={`/products/${e.product_id}`} onClick={ev => ev.stopPropagation()} className={`${head} hover:text-brand-text hover:underline`}>{e.campaign}</Link></td>
+                    <td className={`${td} whitespace-nowrap`}>
+                      <span className="inline-flex items-center gap-0.5">
+                        {e.path.map((p: string, i: number) => <React.Fragment key={i}>{i > 0 && <ChevronRight size={12} aria-hidden="true" className={muted} />}{p}</React.Fragment>)}
+                      </span>
+                    </td>
                     <td className={`${td} max-w-[200px] truncate`}>{e.click?.keyword || <span className={muted}>—</span>}</td>
                     <td className={`${td} max-w-[180px] truncate`}>{place(e.click) || <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>{e.click ? [DEVICE[e.click.device], e.click.os].filter(Boolean).join(' · ') : <span className={muted}>sem clique ligado</span>}</td>

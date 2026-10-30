@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { readPeriod } from '@/lib/tracking/period';
-import { listEvents } from '@/lib/tracking/lists';
+import { eventDetail, listEvents } from '@/lib/tracking/lists';
 import { linkSaleToVisit, unmatchedSales } from '@/lib/tracking/manualSale';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Vendas e checkouts da tela de Rastreamento, com o clique de cada um.
  *
+ * GET ?id=<evento>                    uma venda ou um checkout com a visita e o caminho do lead
  * GET ?type=sale|checkout&period=…   a lista; nas vendas, também as que chegaram sem campanha
  * GET ?type=unmatched                 as vendas sem campanha ainda não ligadas (últimos 30 dias)
  * POST { click_id, unmatched_id? | amount, currency, order }   liga a venda à visita (lib/tracking/manualSale.ts)
@@ -18,6 +19,11 @@ export async function GET(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: 'Faça login novamente.' }, { status: 401 });
   const db = supabaseAdmin();
+  const id = q.get('id');
+  if (id) {
+    const detail = await eventDetail(db, user.id, id);
+    return detail ? NextResponse.json(detail) : NextResponse.json({ error: 'Não encontrado.' }, { status: 404 });
+  }
   if (q.get('type') === 'unmatched') return NextResponse.json({ sales: await unmatchedSales(db, user.id) });
   const period = readPeriod(q);
   if ('error' in period) return NextResponse.json({ error: period.error }, { status: 400 });
