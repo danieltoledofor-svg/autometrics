@@ -11,7 +11,6 @@ import { runConversionUploads } from '@/lib/googleAds/conversionUpload';
 import { fillPendingGeo, relinkVisits } from '@/lib/tracking/lists';
 import { runLootrush } from '@/lib/lootrush/sync';
 import { retryUnmatched } from '@/lib/tracking/unmatched';
-import { runBillingProbe } from '@/lib/googleAds/billingProbe';
 
 // A coleta demora mais que o padrão de uma rota comum.
 export const maxDuration = 300;
@@ -81,9 +80,6 @@ async function runCron() {
 
   // Vendas que chegaram por postback e não acharam a campanha: procura pelo gclid e repete. Até 10s e 40 consultas.
   report.unmatched = await retryUnmatched(Date.now() + 10000).catch((e: any) => ({ error: e.message }));
-
-  // Teste de uma vez: o que a API entrega de créditos e promoções.
-  report.billing_probe = await runBillingProbe().catch((e: any) => ({ error: e.message }));
 
   // Cota do dia: acima de 80% só custo e status; acima de 95% para tudo até
   // a virada (meia-noite do Pacífico). O botão "Sincronizar" continua valendo.
