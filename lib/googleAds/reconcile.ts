@@ -308,6 +308,30 @@ export async function reconcileAccountRecord(acc: any): Promise<ReconcileSummary
         run = await reconcileAccount(acc, token, usage);
       }
     }
+    // Gasto no painel num dia em que a campanha desta conta não rodou: sobra de
+    // quando duas campanhas de mesmo nome dividiam o registro. A coleta não
+    // alcança esses dias, porque o Google não devolve linha nenhuma para eles.
+    // Só o gasto zera; a venda fica onde está.
+    const stale = run.issues.filter(i => i.type === 'sobrando' && i.campaign_id);
+    if (stale.length) {
+      const ids = [...new Set(stale.map(i => i.campaign_id as string))];
+      usage.calls++;
+      const rows = await search({ refreshToken: token, customerId: acc.customer_id, loginCustomerId: acc.login_customer_id },
+        `SELECT campaign.id FROM campaign WHERE campaign.id IN (${ids.join(',')})`);
+      const owned = new Set(rows.map((r: any) => String(r.campaign.id)));
+      for (const i of stale) {
+        if (!owned.has(i.campaign_id as string)) continue;
+        const productIds = run.productsByCampaign.get(i.campaign_id as string) || [];
+        if (!productIds.length) continue;
+        await db.from('daily_metrics').update({
+          impressions: 0, clicks: 0, cost: 0, ctr: 0, avg_cpc: 0,
+          cost_previous: i.panel?.cost ?? 0, clicks_previous: i.panel?.clicks ?? 0, revised_at: new Date().toISOString(),
+          reconcile_note: { kind: 'corrigido', fields: [{ f: 'custo', de: money(i.panel?.cost ?? 0), para: 0 }], source: i.source || null, at: new Date().toISOString() },
+        }).in('product_id', productIds).eq('date', i.date);
+        corrected++;
+      }
+      run = await reconcileAccount(acc, token, usage);
+    }
     // Problemas que continuam depois da correção: o Dashboard só marca estes.
     // Primeiro limpa as marcas de problema da janela — o que se resolveu some.
     const allProducts = [...run.productsByCampaign.values()].flat();
