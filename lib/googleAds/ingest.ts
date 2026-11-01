@@ -47,6 +47,12 @@ function settingsPatch(settings: any): Record<string, any> {
   return patch;
 }
 
+const TWIN_MARK = ' · ';
+const isDuplicateKey = (e: { code?: string; message?: string }) => e.code === '23505' || /duplicate key/i.test(e.message || '');
+/** Nomes para campanha que repete o nome de outra: com a conta e, se ainda repetir, com o ID. */
+const namesForTwin = (name: string, account: string, campaignId: string | null) =>
+  [`${name}${TWIN_MARK}${account}`, `${name}${TWIN_MARK}${account}${TWIN_MARK}${campaignId || Date.now()}`];
+
 /**
  * Grava um dia de uma campanha: produto, daily_metrics, termos, públicos,
  * locais e histórico.
@@ -99,14 +105,14 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
   const safeCampaignId = (rawId && rawId !== 'undefined' && rawId !== 'null') ? rawId : null;
 
   if (safeCampaignId) {
-    const { data } = await supabase.from('products').select('id, google_status_date').eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).limit(1);
+    const { data } = await supabase.from('products').select('id, google_status_date, google_ads_campaign_name').eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).limit(1);
     if (data && data.length) product = data[0];
   }
 
   // Se n achou pelo ID, tenta buscar pelo nome da campanha E nome da conta para evitar duplicidade de nomes em contas diferentes
   if (!product) {
     const { data } = await supabase.from('products')
-      .select('id, google_ads_campaign_id, google_status_date')
+      .select('id, google_ads_campaign_id, google_status_date, google_ads_campaign_name')
       .eq('google_ads_campaign_name', campaign_name)
       .eq('account_name', account_name)
       .eq('user_id', user_id)
@@ -122,7 +128,7 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
 
   // Se ainda n achou, tenta só pelo nome (para produtos antigos criados antes de salvar account_name)
   if (!product) {
-     const { data, error: multiError } = await supabase.from('products').select('id, account_name, google_ads_campaign_id, google_status_date').eq('google_ads_campaign_name', campaign_name).eq('user_id', user_id).limit(10);
+     const { data, error: multiError } = await supabase.from('products').select('id, account_name, google_ads_campaign_id, google_status_date, google_ads_campaign_name').eq('google_ads_campaign_name', campaign_name).eq('user_id', user_id).limit(10);
      if (data && data.length > 0) {
        // Busca um produto que não tenha ID de campanha conflitante
        const validMatch = data.find(p => {
@@ -135,11 +141,11 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
 
   if (!product) {
     // Se não existe, cria um novo produto automaticamente
-    const { data: newProduct, error: createError } = await supabase
+    const insertProduct = (name: string) => supabase
       .from('products')
       .insert([{
-        name: campaign_name,
-        google_ads_campaign_name: campaign_name,
+        name,
+        google_ads_campaign_name: name,
         google_ads_campaign_id: safeCampaignId,
         user_id: user_id,
         platform: 'Google Ads (Auto)',
@@ -155,48 +161,42 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
       .select('id')
       .single();
 
-    if (createError) {
-      const isDuplicate = createError.code === '23505' || /duplicate key/i.test(createError.message || '');
-      if (isDuplicate) {
-        // Alguma linha já ocupa a chave. Tenta todas as formas de achá-la
-        // antes de descartar o dia desta campanha.
-        const porId = safeCampaignId
-          ? await supabase.from('products').select('id, google_status_date')
-              .eq('google_ads_campaign_id', safeCampaignId).eq('user_id', user_id).limit(1)
-          : { data: null };
-        if (porId.data && porId.data.length) product = porId.data[0];
+    let { data: newProduct, error: createError } = await insertProduct(campaign_name);
 
-        if (!product) {
-          const { data: porNome } = await supabase.from('products')
-            .select('id, google_status_date')
-            .eq('google_ads_campaign_name', campaign_name)
-            .eq('user_id', user_id)
-            .limit(1);
-          if (porNome && porNome.length) product = porNome[0];
-        }
+    // O banco aceita um nome por usuário, mas no Google a mesma campanha pode
+    // existir em várias contas. Com ID diferente é outra campanha: ganha nome
+    // próprio. Gravar no produto da outra faria uma apagar o custo da outra.
+    for (const name of namesForTwin(campaign_name, account_name, safeCampaignId)) {
+      if (!createError || !isDuplicateKey(createError)) break;
+      const { data: taken } = await supabase.from('products')
+        .select('id, google_ads_campaign_id, google_status_date')
+        .or(`google_ads_campaign_id.eq.${safeCampaignId || '0'},google_ads_campaign_name.eq."${campaign_name.replace(/"/g, '\\"')}",name.eq."${campaign_name.replace(/"/g, '\\"')}"`)
+        .eq('user_id', user_id)
+        .limit(10);
+      const same = (taken || []).find(p => {
+        const pid = (p.google_ads_campaign_id && p.google_ads_campaign_id !== 'undefined') ? String(p.google_ads_campaign_id) : null;
+        return !safeCampaignId || !pid || pid === safeCampaignId;
+      });
+      if (same) { product = same; createError = null; newProduct = null; break; }
+      ({ data: newProduct, error: createError } = await insertProduct(name));
+    }
 
-        if (!product) {
-          const { data: porTitulo } = await supabase.from('products')
-            .select('id, google_status_date')
-            .eq('name', campaign_name)
-            .eq('user_id', user_id)
-            .limit(1);
-          if (porTitulo && porTitulo.length) product = porTitulo[0];
-        }
-      }
-      if (!product) {
+    if (!product) {
+      if (createError || !newProduct) {
         return { status: 500, body: {
-          error: `Erro ao criar produto "${campaign_name}" (id ${safeCampaignId ?? 'sem id'}, conta ${account_name}): ${createError.message}`
+          error: `Erro ao criar produto "${campaign_name}" (id ${safeCampaignId ?? 'sem id'}, conta ${account_name}): ${createError?.message}`
         } };
       }
-    } else {
       product = newProduct;
     }
   } else {
     // Se já existe, atualiza nomes de conta/mcc, campaign_id e o NOME da campanha (para refletir mudanças feitas no Google Ads)
+    // Campanha de mesmo nome em outra conta: o nome próprio fica como está.
+    const ownName = String(product.google_ads_campaign_name || '').startsWith(`${campaign_name}${TWIN_MARK}`)
+      ? product.google_ads_campaign_name : campaign_name;
     const update: any = {
-      name: campaign_name,
-      google_ads_campaign_name: campaign_name,
+      name: ownName,
+      google_ads_campaign_name: ownName,
       account_name: account_name,
       mcc_name: mcc_name || 'Sem MCC',
       google_ads_campaign_id: safeCampaignId
@@ -219,6 +219,13 @@ export async function ingestCampaignDay(body: any, opts: IngestOptions = {}): Pr
     // update inteiro falha e o status da campanha para de ser atualizado.
     if (updateError && /google_channel_type|google_channel_sub_type|google_start_date|google_end_date|google_optimization_score/.test(updateError.message || '')) {
       for (const k of Object.keys(settingsPatch(campaign_settings))) delete update[k];
+      ({ error: updateError } = await supabase.from('products').update(update).eq('id', product.id));
+    }
+    // Renomeada no Google para um nome que já existe em outra conta.
+    for (const name of namesForTwin(campaign_name, account_name, safeCampaignId)) {
+      if (!updateError || !isDuplicateKey(updateError)) break;
+      update.name = name;
+      update.google_ads_campaign_name = name;
       ({ error: updateError } = await supabase.from('products').update(update).eq('id', product.id));
     }
   }

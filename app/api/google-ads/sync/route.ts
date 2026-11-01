@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { syncAccountRecord, isDue, usageToday, addUsage, DAILY_QUOTA } from '@/lib/googleAds/sync';
 import { refreshConnectionAccounts, hasNewAccounts } from '@/lib/googleAds/accounts';
-import { isReconcileDue, reconcileAccountRecord, reconcileReady } from '@/lib/googleAds/reconcile';
+import { isReconcileDue, isStopped, reconcileAccountRecord, reconcileReady } from '@/lib/googleAds/reconcile';
 import { runDueAnalyses } from '@/lib/analysis/run';
 import { runDueVturb } from '@/lib/vturb/sync';
 import { runAlerts } from '@/lib/alerts/run';
@@ -121,9 +121,25 @@ async function runCron() {
   const canReconcile = await reconcileReady();
   for (const acc of canReconcile ? accounts || [] : []) {
     if (!okConnections.has(acc.connection_id)) continue;
-    const status = String(acc.status || '').toUpperCase();
-    if (status && status !== 'ENABLED' && status !== 'UNKNOWN') continue;
+    if (isStopped(acc)) continue;
     if (!isReconcileDue(acc)) continue;
+    if (Date.now() - started > TIME_BUDGET_MS) break;
+    if (used >= DAILY_QUOTA * 0.8) break;
+    const result = await reconcileAccountRecord(acc);
+    report.reconciled.push({ account: acc.name, ...result });
+    used += 'api_calls' in result ? result.api_calls : 2;
+  }
+
+  // Contas que pararam: saem da coleta, mas o gasto delas ainda pode mudar no
+  // Google. Conferidas até não restar gasto na janela ou o Google recusar.
+  const { data: stopped } = canReconcile
+    ? await db.from('google_ads_accounts').select('*')
+        .eq('sync_enabled', false).not('status', 'in', '(ENABLED,UNKNOWN)').not('last_reconciled_at', 'is', null)
+        .not('last_reconcile_status', 'in', '(sem_acesso,encerrada)')
+        .order('last_reconciled_at', { ascending: true })
+    : { data: [] };
+  for (const acc of stopped || []) {
+    if (!okConnections.has(acc.connection_id) || !isReconcileDue(acc)) continue;
     if (Date.now() - started > TIME_BUDGET_MS) break;
     if (used >= DAILY_QUOTA * 0.8) break;
     const result = await reconcileAccountRecord(acc);

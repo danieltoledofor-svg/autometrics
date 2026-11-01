@@ -59,7 +59,11 @@ Depois, na ordem:
 
 ## Conferência diária (Etapa 0)
 
-Uma vez por dia, no tempo que sobra de cada chamada do agendador, cada conta é comparada com o Google nos últimos 7 dias fechados: impressões, cliques, custo e conversões, no total da conta e campanha por campanha (2 consultas). O resultado fica em `google_ads_reconciliations`. `POST /api/google-ads/reconcile { account_id }` (ou `{ all: true }`) confere na hora.
+Uma vez por dia, no tempo que sobra de cada chamada do agendador, cada conta é comparada com o Google nos últimos 35 dias fechados, para o mês que acabou ficar inteiro na janela: impressões, cliques, custo e conversões, no total da conta e campanha por campanha (2 consultas). O resultado fica em `google_ads_reconciliations`. `POST /api/google-ads/reconcile { account_id }` (ou `{ all: true }`) confere na hora.
+
+Conta suspensa ou cancelada sai da coleta de hora em hora, mas continua na conferência diária, porque o Google ainda pode revisar o gasto dela. Para quando não resta gasto na janela (`encerrada`) ou quando o Google recusa a leitura (`sem_acesso`): aí vale o último valor coletado.
+
+Campanhas com o mesmo nome em contas diferentes são produtos separados. O banco aceita um nome por usuário (`unique_campaign_per_user`), então a segunda ganha o nome da conta depois de ` · `.
 
 Como a coleta de hora em hora já regrava o que mudou, divergência aqui aponta para outra coisa: o script da MCC sobrescrevendo o dia, gravação que falhou, ou campanha do Google que não chegou ao painel.
 

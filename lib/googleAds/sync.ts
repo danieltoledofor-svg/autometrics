@@ -262,6 +262,8 @@ export async function syncAccount(
     /** Botão "Sincronizar agora": diagnóstico completo mesmo sem novidade. */
     force?: boolean;
     usage?: { calls: number };
+    /** Relê mais dias que o padrão (conferência do mês com o Google). */
+    lookbackDays?: number;
     /** O que o último diagnóstico viu (last_sync_summary da conta). */
     prev?: { mark?: string; changeMark?: string; lastDeepAt?: string | null };
   } = {},
@@ -269,6 +271,7 @@ export async function syncAccount(
   const ctx: AdsContext = { refreshToken, customerId: account.customer_id, loginCustomerId: account.login_customer_id };
   const today = todayIn(account.time_zone);
   const start = addDays(today, -(LOOKBACK_DAYS - 1));
+  const metricsStart = addDays(today, -(Math.max(LOOKBACK_DAYS, opts.lookbackDays || 0) - 1));
   const deepStart = addDays(today, -DEEP_DAYS_BACK);
   const wantDeep = !!opts.deep;
   let deep = false; // decidido depois das duas consultas de custo e status
@@ -314,7 +317,7 @@ export async function syncAccount(
   const metricRows = await q(`
     SELECT campaign.id, segments.date, ${metricFields.join(', ')}
     FROM campaign
-    WHERE segments.date BETWEEN '${start}' AND '${today}'`);
+    WHERE segments.date BETWEEN '${metricsStart}' AND '${today}'`);
 
   // O diagnóstico (cerca de 20 consultas) só roda quando há algo novo para ler:
   // mudou o estado de alguma campanha ou os números dos dias que ele cobre.
@@ -552,13 +555,13 @@ export async function syncAccount(
   for (let i = 0; i < productIds.length; i += 100) {
     for (let page = 0; ; page++) {
       let { data, error } = await db.from('daily_metrics').select(storedCols)
-        .in('product_id', productIds.slice(i, i + 100)).gte('date', start).lte('date', today)
+        .in('product_id', productIds.slice(i, i + 100)).gte('date', metricsStart).lte('date', today)
         .range(page * 1000, page * 1000 + 999);
       if (error && storedCols.includes('google_conversion_actions')) {
         // Antes de migration_termos_conversoes.sql.
         storedCols = 'product_id, date, impressions, clicks, cost, budget_micros, target_cpa, google_conversions';
         ({ data, error } = await db.from('daily_metrics').select(storedCols)
-          .in('product_id', productIds.slice(i, i + 100)).gte('date', start).lte('date', today)
+          .in('product_id', productIds.slice(i, i + 100)).gte('date', metricsStart).lte('date', today)
           .range(page * 1000, page * 1000 + 999));
       }
       for (const d of (data || []) as any[]) stored.set(`${d.product_id}|${d.date}`, {
@@ -860,7 +863,7 @@ export function isDue(acc: any) {
  */
 export async function syncAccountRecord(
   acc: any,
-  opts: { forceDeep?: boolean; allowDeep?: boolean } = {},
+  opts: { forceDeep?: boolean; allowDeep?: boolean; lookbackDays?: number; stoppedToo?: boolean } = {},
 ): Promise<SyncSummary | { account: string; error: string }> {
   const db = supabaseAdmin();
   const now = new Date().toISOString();
@@ -868,8 +871,8 @@ export async function syncAccountRecord(
   if (!conn) return { account: acc.name, error: 'Conexão não encontrada' };
 
   const status = String(acc.status || '').toUpperCase();
-  if (status && status !== 'ENABLED' && status !== 'UNKNOWN') {
-    // Conta suspensa/cancelada não responde; o status dela vem da descoberta.
+  if (status && status !== 'ENABLED' && status !== 'UNKNOWN' && !opts.stoppedToo) {
+    // Fora da coleta de hora em hora; quem ainda lê a conta é a conferência.
     await db.from('google_ads_accounts').update({ last_sync_at: now, last_sync_status: 'ignorada', last_sync_error: `Conta ${status}` }).eq('id', acc.id);
     return { account: acc.name, error: `Conta ${status} — ignorada` };
   }
@@ -879,7 +882,7 @@ export async function syncAccountRecord(
   try {
     const last = acc.last_sync_summary || {};
     const summary = await syncAccount(acc, decryptSecret(conn.refresh_token_enc), {
-      deep, force: !!opts.forceDeep, usage,
+      deep, force: !!opts.forceDeep, usage, lookbackDays: opts.lookbackDays,
       prev: { mark: last.deep_mark, changeMark: last.change_mark, lastDeepAt: acc.last_deep_sync_at },
     });
     await db.from('google_ads_accounts').update({

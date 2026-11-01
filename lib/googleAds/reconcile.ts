@@ -5,8 +5,8 @@ import { addUsage, syncAccountRecord } from './sync';
 /**
  * Etapa 0 — conferência diária com o Google.
  *
- * Pergunta ao Google o que ele registrou nos últimos 7 dias fechados e compara
- * com daily_metrics, no total da conta e campanha por campanha. Hoje fica de
+ * Pergunta ao Google o que ele registrou nos últimos 35 dias fechados — o mês
+ * que acabou fica inteiro dentro da janela — e compara com daily_metrics, no total da conta e campanha por campanha. Hoje fica de
  * fora: ainda está acumulando.
  *
  * A coleta de hora em hora já regrava o que mudou, então divergência aqui quer
@@ -15,7 +15,7 @@ import { addUsage, syncAccountRecord } from './sync';
  * consultas por conta, uma vez por dia.
  */
 
-const DAYS = 7;
+const DAYS = 35;
 const RECONCILE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 interface Totals { impressions: number; clicks: number; cost: number; conversions: number }
@@ -79,8 +79,8 @@ function addDays(date: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Um centavo, ou 0,2% em dias de gasto alto — o arredondamento do Google. */
-const costDiffers = (a: number, b: number) => Math.abs(a - b) > Math.max(0.01, Math.abs(a) * 0.002);
+/** Mais de um centavo já é diferença: API e painel guardam o mesmo valor. */
+const costDiffers = (a: number, b: number) => Math.abs(a - b) > 0.01;
 
 export async function reconcileAccount(acc: any, refreshToken: string, usage: { calls: number }): Promise<ReconcileRun> {
   const ctx: AdsContext = { refreshToken, customerId: acc.customer_id, loginCustomerId: acc.login_customer_id };
@@ -256,6 +256,12 @@ export async function reconcileReady(): Promise<boolean> {
   return tablesChecked.ok;
 }
 
+/** Suspensa ou cancelada: saiu da coleta, mas o Google ainda pode revisar o gasto dela. */
+export function isStopped(acc: any): boolean {
+  const status = String(acc.status || '').toUpperCase();
+  return !!status && status !== 'ENABLED' && status !== 'UNKNOWN';
+}
+
 export function isReconcileDue(acc: any): boolean {
   return !acc.last_reconciled_at || Date.now() - new Date(acc.last_reconciled_at).getTime() >= RECONCILE_INTERVAL_MS;
 }
@@ -278,7 +284,7 @@ export async function reconcileAccountRecord(acc: any): Promise<ReconcileSummary
     let corrected = 0;
     const created: string[] = [];
     if (fixable.length) {
-      const sync = await syncAccountRecord(acc, { allowDeep: false });
+      const sync = await syncAccountRecord(acc, { allowDeep: false, lookbackDays: DAYS, stoppedToo: true });
       if (!('error' in sync)) {
         for (const i of fixable) {
           if (!i.campaign_id) continue;
@@ -323,15 +329,19 @@ export async function reconcileAccountRecord(acc: any): Promise<ReconcileSummary
       }
     }
     const summary: ReconcileSummary = { ...run.summary, corrected, created, extra, api_calls: usage.calls };
+    // Conta parada sem gasto na janela: não há mais o que o Google revisar.
+    const finished = isStopped(acc) && !summary.google_cost && !summary.panel_cost;
     await db.from('google_ads_accounts').update({
       last_reconciled_at: now,
-      last_reconcile_status: summary.divergent_days ? 'divergente' : 'ok',
+      last_reconcile_status: finished ? 'encerrada' : summary.divergent_days ? 'divergente' : 'ok',
       last_reconcile_summary: summary,
     }).eq('id', acc.id);
     return summary;
   } catch (e: any) {
+    // Conta cancelada: o Google não entrega mais os números dela.
+    const refused = /NOT_ENABLED|not yet enabled or has been deactivated/i.test(`${e.code} ${e.message}`);
     await db.from('google_ads_accounts').update({
-      last_reconciled_at: now, last_reconcile_status: 'erro', last_reconcile_summary: { error: String(e.message).slice(0, 500) },
+      last_reconciled_at: now, last_reconcile_status: refused ? 'sem_acesso' : 'erro', last_reconcile_summary: { error: String(e.message).slice(0, 500) },
     }).eq('id', acc.id);
     return { account: acc.name, error: e.message };
   } finally {

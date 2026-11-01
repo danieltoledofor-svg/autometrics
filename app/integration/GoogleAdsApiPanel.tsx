@@ -39,6 +39,7 @@ function reconcileLine(a: Account): { text: string; tone: string } | null {
   const s = a.last_reconcile_summary || {};
   const when = `Conferido com o Google ${timeAgo(a.last_reconciled_at)}`;
   if (a.last_reconcile_status === 'erro') return { text: `${when} · falhou: ${s.error || 'erro'}`, tone: 'text-neg' };
+  if (a.last_reconcile_status === 'sem_acesso') return { text: 'O Google não entrega mais os números desta conta · vale o último valor coletado', tone: 'text-warn' };
   const parts = [when];
   if (a.last_reconcile_status === 'divergente') {
     parts.push(`${s.divergent_days} dia(s) ainda não conferem`);
