@@ -200,14 +200,6 @@ export async function search<T = any>(ctx: AdsContext, query: string): Promise<T
   return rows;
 }
 
-/** Faturas de um mês. Conta sem fatura mensal responde NOT_INVOICED_CUSTOMER. */
-export async function listInvoices(ctx: AdsContext, billingSetup: string, year: string, month: string): Promise<any> {
-  const params = new URLSearchParams({ billingSetup, issueYear: year, issueMonth: month, includeGranularLevelInvoiceDetails: 'true' });
-  const res = await fetch(`${API_BASE}/customers/${ctx.customerId}/invoices?${params}`, { headers: await headers(ctx) });
-  if (!res.ok) throw await readError(res);
-  return res.json();
-}
-
 /**
  * Metadados da API: quais campos cada recurso aceita nesta versão.
  *
