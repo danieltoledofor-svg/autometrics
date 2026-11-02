@@ -17,6 +17,9 @@ export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 const TIME_BUDGET_MS = (Number(process.env.GOOGLE_ADS_SYNC_BUDGET_SEC) || 50) * 1000;
+// Conferência das contas paradas: até 5 por rodada mesmo sem tempo sobrando, em no máximo 20s a mais.
+const STOPPED_PER_RUN = 5;
+const STOPPED_RESERVE_MS = 20 * 1000;
 const DISCOVERY_INTERVAL_MIN = 6 * 60;
 // Entre uma busca completa e outra, a cada hora pergunta às MCCs se entrou
 // conta nova (uma consulta por MCC). Guardado na memória do servidor: se ele
@@ -140,9 +143,14 @@ async function runCron() {
         .or('last_reconcile_status.is.null,last_reconcile_status.not.in.(sem_acesso,encerrada)')
         .order('last_reconciled_at', { ascending: true, nullsFirst: true })
     : { data: [] };
+  // A coleta costuma gastar o tempo todo da rodada; sem uma reserva, estas
+  // contas ficavam horas sem vez. Até STOPPED_PER_RUN além do tempo normal.
+  let stoppedRead = 0;
   for (const acc of stopped || []) {
     if (!okConnections.has(acc.connection_id) || !isReconcileDue(acc)) continue;
-    if (Date.now() - started > TIME_BUDGET_MS) break;
+    const overBudget = Date.now() - started > TIME_BUDGET_MS;
+    if (overBudget && (stoppedRead >= STOPPED_PER_RUN || Date.now() - started > TIME_BUDGET_MS + STOPPED_RESERVE_MS)) break;
+    stoppedRead++;
     if (used >= DAILY_QUOTA * 0.8) break;
     const result = await reconcileAccountRecord(acc);
     report.reconciled.push({ account: acc.name, ...result });
