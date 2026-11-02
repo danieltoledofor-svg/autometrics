@@ -284,7 +284,8 @@ export async function reconcileAccountRecord(acc: any): Promise<ReconcileSummary
     let corrected = 0;
     const created: string[] = [];
     if (fixable.length) {
-      const sync = await syncAccountRecord(acc, { allowDeep: false, lookbackDays: DAYS, stoppedToo: true });
+      // A coleta conta o dia de hoje na janela; +1 para alcançar o dia mais antigo da conferência.
+      const sync = await syncAccountRecord(acc, { allowDeep: false, lookbackDays: DAYS + 1, stoppedToo: true });
       if (!('error' in sync)) {
         for (const i of fixable) {
           if (!i.campaign_id) continue;
