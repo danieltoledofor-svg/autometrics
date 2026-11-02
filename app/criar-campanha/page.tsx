@@ -13,6 +13,7 @@ import { StepWhere } from './StepWhere';
 import { StepAd } from './StepAd';
 import { StepReview } from './StepReview';
 import { Duplicate } from './Duplicate';
+import { History } from './History';
 import { Inter } from 'next/font/google';
 
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
@@ -26,6 +27,8 @@ const inter = Inter({ subsets: ['latin'], display: 'swap' });
  * usuário, cria as campanhas, que já nascem ativas.
  * Ao lado, separado do criador, o "Duplicar campanha" (./Duplicate): copia uma
  * campanha que já roda para outras contas, sem os ajustes de lance.
+ * Na terceira aba, o "Histórico" (./History): as campanhas criadas e duplicadas
+ * por aqui, com a situação de cada uma, só para consultar.
  * Só para os logins liberados.
  */
 
@@ -64,13 +67,13 @@ export default function CampaignBuilderPage() {
   const [step, setStep] = useState(0);
   const [draft, setDraftState] = useState<Draft | null>(null);
   const [currency, setCurrency] = useState('USD');
-  // Criar e Duplicar ficam na mesma tela, em abas separadas; ?modo=duplicar abre direto na duplicação.
-  const [mode, setModeState] = useState<'criar' | 'duplicar'>('criar');
-  useEffect(() => { if (new URLSearchParams(window.location.search).get('modo') === 'duplicar') setModeState('duplicar'); }, []);
-  const setMode = (m: 'criar' | 'duplicar') => {
+  // Criar, Duplicar e Histórico ficam na mesma tela, em abas separadas; ?modo=duplicar ou ?modo=historico abre direto na aba.
+  const [mode, setModeState] = useState<'criar' | 'duplicar' | 'historico'>('criar');
+  useEffect(() => { const m = new URLSearchParams(window.location.search).get('modo'); if (m === 'duplicar' || m === 'historico') setModeState(m); }, []);
+  const setMode = (m: 'criar' | 'duplicar' | 'historico') => {
     setModeState(m);
     const url = new URL(window.location.href);
-    if (m === 'duplicar') url.searchParams.set('modo', 'duplicar'); else url.searchParams.delete('modo');
+    if (m !== 'criar') url.searchParams.set('modo', m); else url.searchParams.delete('modo');
     window.history.replaceState(null, '', url.toString());
   };
   const creating = mode === 'criar';
@@ -153,23 +156,25 @@ export default function CampaignBuilderPage() {
         <div className="flex items-center gap-3">
           <Link href="/products" aria-label="Voltar para Campanhas" className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-line bg-surface-1 text-ink-subtle hover:text-ink hover:bg-surface-2 transition-colors"><ArrowLeft size={16} aria-hidden="true" /></Link>
           <div>
-            <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">{creating ? 'Criar campanha' : 'Duplicar campanha'}</h1>
+            <h1 className="text-[22px] font-semibold tracking-[-0.4px] text-ink">{creating ? 'Criar campanha' : mode === 'duplicar' ? 'Duplicar campanha' : 'Histórico'}</h1>
             <div className={`text-xs ${muted}`}>{creating
               ? 'Rede de Pesquisa · o ensaio não cria nada; a criação só acontece no passo 5, com a sua confirmação, e a campanha já nasce ativa'
+              : mode === 'historico' ? 'Campanhas criadas e duplicadas por aqui, com a situação de cada uma · só para consultar'
               : 'Rede de Pesquisa · copia uma campanha que já roda para a mesma conta, outras contas ou outras MCCs, sem os ajustes de lance; a cópia já nasce ativa'}</div>
           </div>
         </div>
 
         {list?.allowed && (
           <div role="tablist" aria-label="O que fazer" className="inline-flex rounded-lg border border-line bg-surface-1 p-0.5">
-            {([['criar', 'Criar campanha', 'do zero ou a partir de um modelo'], ['duplicar', 'Duplicar campanha', 'copiar uma que já roda para outras contas']] as const).map(([id, name, hint]) => (
+            {([['criar', 'Criar campanha', 'do zero ou a partir de um modelo'], ['duplicar', 'Duplicar campanha', 'copiar uma que já roda para outras contas'], ['historico', 'Histórico', 'o que já foi criado e duplicado, e a situação de cada campanha']] as const).map(([id, name, hint]) => (
               <button key={id} role="tab" aria-selected={mode === id} onClick={() => setMode(id)} title={hint}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === id ? 'bg-surface-3 text-ink' : 'text-ink-subtle hover:text-ink'}`}>{name}</button>
             ))}
           </div>
         )}
 
-        {list?.allowed && !creating && <Duplicate campaigns={list.campaigns || []} css={css} api={api} />}
+        {list?.allowed && mode === 'historico' && <History css={css} api={api} />}
+        {list?.allowed && mode === 'duplicar' && <Duplicate campaigns={list.campaigns || []} css={css} api={api} />}
 
         {/* No celular, só número e nome numa linha que rola para o lado; a descrição de cada passo aparece a partir do tablet. */}
         {creating && <div className="flex gap-1.5 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-visible">

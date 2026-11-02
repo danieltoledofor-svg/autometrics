@@ -14,6 +14,7 @@ import { aiEnabled } from '@/lib/ai/openrouter';
 import { createCampaign } from '@/lib/campaignBuilder/create';
 import type { Draft } from '@/lib/campaignBuilder/draft';
 import { duplicateCampaign, type DuplicateSettings } from '@/lib/campaignBuilder/duplicate';
+import { campaignHistory } from '@/lib/campaignBuilder/history';
 import type { Template } from '@/lib/campaignBuilder/template';
 import { decryptSecret } from '@/lib/googleAds/server';
 
@@ -31,6 +32,7 @@ export const maxDuration = 60;
  * GET ?contas=1            contas ativas do usuário, com a MCC e as campanhas que estão rodando em cada uma
  * GET ?metas=<conta>       metas de conversão personalizadas que aquela conta enxerga
  * GET ?parecidas=<trecho>  o que mais converteu nas campanhas do usuário com esse trecho no nome
+ * GET ?historico=1        campanhas que o Autometrics criou ou duplicou, com a situação de cada uma (só leitura, sem consultar o Google)
  * GET ?varredura=<trecho>  anúncios dessas campanhas (ativas, pausadas e suspensas), separados pelo Jev em copiar e evitar
  * POST { action: 'locais', nomes }              vários países de uma vez: acha cada um no Google e diz quais não achou
  * POST { action: 'oferta', url, fonte? }         lê o código-fonte da página do produto (preço, garantia, frete…) com a IA;
@@ -117,6 +119,11 @@ export async function GET(request: Request) {
 
   if (q.get('parecidas')) {
     try { return NextResponse.json({ allowed: true, similar: await similarCampaigns(user.id, q.get('parecidas')!) }); }
+    catch (e: any) { return NextResponse.json({ allowed: true, error: e.message }, { status: 500 }); }
+  }
+
+  if (q.get('historico')) {
+    try { return NextResponse.json({ allowed: true, history: await campaignHistory(user.id) }); }
     catch (e: any) { return NextResponse.json({ allowed: true, error: e.message }, { status: 500 }); }
   }
 
