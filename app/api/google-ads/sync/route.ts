@@ -132,11 +132,13 @@ async function runCron() {
 
   // Contas que pararam: saem da coleta, mas o gasto delas ainda pode mudar no
   // Google. Conferidas até não restar gasto na janela ou o Google recusar.
+  // Entram também as que nunca tiveram coleta: a conferência cria a campanha
+  // que tiver gasto no Google; sem gasto na janela, a conta fica encerrada.
   const { data: stopped } = canReconcile
     ? await db.from('google_ads_accounts').select('*')
-        .eq('sync_enabled', false).not('status', 'in', '(ENABLED,UNKNOWN)').not('last_reconciled_at', 'is', null)
-        .not('last_reconcile_status', 'in', '(sem_acesso,encerrada)')
-        .order('last_reconciled_at', { ascending: true })
+        .eq('sync_enabled', false).not('status', 'in', '(ENABLED,UNKNOWN)')
+        .or('last_reconcile_status.is.null,last_reconcile_status.not.in.(sem_acesso,encerrada)')
+        .order('last_reconciled_at', { ascending: true, nullsFirst: true })
     : { data: [] };
   for (const acc of stopped || []) {
     if (!okConnections.has(acc.connection_id) || !isReconcileDue(acc)) continue;
