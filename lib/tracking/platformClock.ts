@@ -15,8 +15,12 @@ const fixed = (offset: number) => (offset === 0 ? 'Etc/GMT' : `Etc/GMT${offset <
 /** Horário de Brasília, que não muda no verão. */
 export const BRASILIA_CLOCK = fixed(-3);
 
-/** Padrão de cada plataforma. A BuyGoods trabalha em GMT−4; as outras ficam em Brasília até serem ajustadas. */
-const DEFAULT_CLOCKS: Record<string, string> = { buygoods: fixed(-4) };
+/**
+ * Padrão de cada plataforma. A BuyGoods segue Nova York: GMT−4 no horário de
+ * verão e GMT−5 no resto do ano (desde 01/11/2026 a venda das 23h de Nova York
+ * caía no dia seguinte com o GMT−4 fixo). As outras ficam em Brasília até serem ajustadas.
+ */
+const DEFAULT_CLOCKS: Record<string, string> = { buygoods: 'America/New_York' };
 
 export const CLOCK_OPTIONS: { value: string; label: string }[] = [
   ...Array.from({ length: 27 }, (_, i) => i - 12).map(o => ({
