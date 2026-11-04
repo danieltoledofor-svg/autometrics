@@ -124,7 +124,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     },
     jvzoo: {
       name: 'JVZoo',
-      postback: pb('JVZoo', 'event={transaction_type}&cy={currency}&amount={affiliate_amount}&orderid={transaction_id}&product={product_name}&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&r={random}'),
+      postback: pb('JVZoo', 'event={transaction_type}&cy={currency}&amount={affiliate_amount}&orderid={transaction_id}&product={product_name}&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&utm_source={utm_source}&utm_medium={utm_medium}&product_id={product_id}&transaction_amount={transaction_amount}&commission_type={commission_type}&payment_method={payment_method}&customer_country={customer_country}&customer_email={customer_email}&customer_name={customer_name}&vendor_id={vendor_id}&affiliate_id={affiliate_id}&r={random}'),
       note: <>A JVZoo avisa o tipo em <code className="px-1 rounded bg-surface-3 text-brand-text">{'{transaction_type}'}</code>: <strong>SALE</strong> entra como venda e <strong>RFND</strong> como reembolso. O valor é a sua comissão.</>,
       details: [
         { label: 'event', value: '{transaction_type} (SALE / RFND)' },
@@ -132,6 +132,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
         { label: 'subid3', value: '{gclid}' },
         { label: 'orderid', value: '{transaction_id}' },
         { label: 'amount', value: '{affiliate_amount}' },
+        { label: 'extras', value: 'produto, valor da transação, comissão, pagamento, país, cliente, vendedor' },
       ],
       steps: [
         <>Na JVZoo, abra <strong>My Account → Account Details</strong>, desça até <strong>Affiliate Settings</strong> e clique em <strong>Manage S2S Postbacks</strong>.</>,
@@ -214,7 +215,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     digistore: scriptOnly('Digistore'),
     gurumedia: scriptOnly('Gurumedia'),
     jvzoo: {
-      postback: pb('JVZoo', 'event=initiated&orderid={session_id}&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&r={random}'),
+      postback: pb('JVZoo', 'event=initiated&orderid={session_id}&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&utm_source={utm_source}&utm_medium={utm_medium}&product_id={product_id}&product={product_name}&r={random}'),
       details: [
         { label: 'event', value: 'initiated (fixo)' },
         { label: 'orderid', value: '{session_id} (visita)' },
@@ -224,7 +225,7 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
       steps: [
         <>Em <strong>Manage S2S Postbacks</strong>, clique de novo em <strong>Add New Postback</strong>.</>,
         <>Dê o nome <strong>Autometrics - Checkout</strong> e escolha o tipo <strong>Initiated</strong> (dispara quando a pessoa chega na página do checkout).</>,
-        <>Cole a URL de checkout acima, deixe <strong>Active</strong> e <strong>All Products</strong>, e salve.</>,
+        <>Cole a URL de checkout acima, deixe <strong>Active</strong> e <strong>All Products</strong> (cada pacote do produtor é um produto diferente na JVZoo), e salve.</>,
       ],
     },
     maxweb: scriptOnly('MaxWeb'),

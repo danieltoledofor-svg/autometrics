@@ -56,6 +56,23 @@ export function checkoutKey(clickId: string | null, subIds: string[], order: str
     return (ref ? `checkout:${ref}` : order ? `checkout:visita:${order}` : campaignId ? `checkout:${campaignId}` : '').slice(0, 200);
 }
 
+/** Campos que o postback já usa: o resto vai para `details`. */
+const CORE_PARAMS = new Set(['source', 'event', 'CONV_TYPE', 'status', 'campaign_id', 'utm_id', 'gad_campaignid', 'subid1', 'subid2', 'subid3', 'subid4', 'subid5', 'cid',
+    'utm_campaign', 'amount', 'cy', 'currency', 'tid', 'orderid', 'order_id', 'transid', 'r', 'random', 'dry_run']);
+
+/** O que a plataforma mandou além do básico (ex.: JVZoo: produto, país, forma de pagamento, cliente). */
+export function extraDetails(searchParams: URLSearchParams): Record<string, string> | null {
+    const out: Record<string, string> = {};
+    let n = 0;
+    for (const [k, raw] of searchParams) {
+        const v = raw.trim();
+        if (CORE_PARAMS.has(k) || !v || /^\{.*\}$/.test(v) || n >= 40) continue;
+        out[k.slice(0, 60)] = v.slice(0, 500);
+        n++;
+    }
+    return n ? out : null;
+}
+
 /**
  * Processa um postback de venda, checkout, clique ou reembolso: acha a campanha, grava o evento e soma no dia.
  *
@@ -302,7 +319,13 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
             // click_id e ref_ids ligam a venda ao clique; antes de
             // migration_rastreamento_vendas.sql as colunas não existem.
             // Na repetição a venda fica com a hora em que chegou, não a de agora (o Google recebe essa hora).
-            let { error: dupError } = await supabase.from('postback_events').insert({ ...row, click_id: clickId, ref_ids: candidateIds, ...(replay ? { created_at: replay.at } : {}) });
+            // details: o resto do que a plataforma mandou (migration_postback_detalhes.sql).
+            const at = replay ? { created_at: replay.at } : {};
+            const details = extraDetails(searchParams);
+            let { error: dupError } = await supabase.from('postback_events').insert({ ...row, click_id: clickId, ref_ids: candidateIds, ...(details ? { details } : {}), ...at });
+            if (dupError && dupError.code !== '23505' && /details/.test(dupError.message || '')) {
+                ({ error: dupError } = await supabase.from('postback_events').insert({ ...row, click_id: clickId, ref_ids: candidateIds, ...at }));
+            }
             if (dupError && dupError.code !== '23505' && /click_id|ref_ids/.test(dupError.message || '')) {
                 ({ error: dupError } = await supabase.from('postback_events').insert({ ...row, ...(replay ? { created_at: replay.at } : {}) }));
             }
