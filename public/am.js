@@ -1,5 +1,5 @@
 /**
- * AutoMetrics — Rastreamento (v5.3). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5.4). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
@@ -95,6 +95,7 @@
       try {
         var d = new URL(u, location.href), h = d.hostname.toLowerCase(), i;
         if (d.protocol.indexOf('http') !== 0 || h === location.hostname) return '';
+        if (/(^|\.)jvz\d*\.com$/.test(h)) return 'jvzoo';             // link de afiliado: jvz1…jvz9.com
         for (i = 0; i < HOSTS.length; i++) if (h.indexOf(HOSTS[i]) >= 0) return HOSTS[i];
         if (d.searchParams.get('aff_id')) return 'buygoods';
         for (i = 0; i < AFF.length; i++) if (d.searchParams.get(AFF[i])) return 'link';
