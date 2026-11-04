@@ -1,5 +1,5 @@
 /**
- * AutoMetrics — Rastreamento (v5.4). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5.5). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
@@ -9,7 +9,7 @@
  * site (am_c), para a visita não se perder onde o navegador não guarda nada
  * (link de compra na página ou botão do player da VTurb, inclusive quando ele
  * leva ao site do produtor). Numa página sem a FlowTracking, leva o
- * identificador no link de compra da BuyGoods e da JVZoo; com ela na página, só lê.
+ * identificador no link de compra da BuyGoods e da JVZoo; com ela na página, só o tid da JVZoo.
  *
  * Mudou aqui, mudou em todas as páginas: teste antes de publicar.
  */
@@ -103,6 +103,13 @@
       } catch (e) {}
       return '';
     }
+    // Código curto do clique (16 caracteres) para o tid da JVZoo; igual a lib/tracking/shortId.ts.
+    function short(id) {
+      var a = 0x811c9dc5, b = 0x9747b28c;
+      for (var i = 0; i < id.length; i++) { var c = id.charCodeAt(i); a = Math.imul(a ^ c, 16777619); b = Math.imul(b ^ c, 0x5bd1e995); }
+      function part(n) { return ('000000' + (n >>> 0).toString(36)).slice(-7); }
+      return 'am' + part(a) + part(b);
+    }
     function other() { return !!document.querySelector('script[src*="flow-tracking"],script[src*="flowtracking"]'); }
     var sent = {};
     function note(u) {
@@ -110,19 +117,21 @@
       var key = bare(u);
       if (!sent[key]) { sent[key] = 1; send({ v: 3, c: cur.id, p: cur.p, e: 'out', u: key }); }
     }
-    // Leva o identificador no link de compra; com a FlowTracking na página, não mexe.
-    // JVZoo: tid guarda até 26 caracteres (o gclid não cabe); sub_id1 e gclid voltam no postback.
+    // Leva o identificador no link de compra; com a FlowTracking na página, só na JVZoo
+    // (ela põe no link os subid da BuyGoods, que a JVZoo ignora, e mantém o tid).
+    // JVZoo: tid guarda até 26 caracteres, então vai o código curto do clique.
     function stamp(u) {
       var p = platform(u);
-      if ((p !== 'buygoods' && p !== 'jvzoo') || other()) return u;
+      if (p !== 'buygoods' && p !== 'jvzoo') return u;
       try {
         var d = new URL(u, location.href), s = d.searchParams, g = gclidOf(cur.p);
         if (p === 'jvzoo') {
-          if (!s.get('tid') && cur.id.length <= 26) s.set('tid', cur.id);
+          if (!s.get('tid')) s.set('tid', short(cur.id));
           if (!s.get('sub_id1')) s.set('sub_id1', cur.id);
           if (g && !s.get('gclid')) s.set('gclid', g);
           return d.toString();
         }
+        if (other()) return u;
         if (!s.get('subid') && !s.get('SUBID')) s.set('subid', cur.id);
         if (g && !s.get('subid2') && !s.get('SUBID2')) s.set('subid2', g);
         return d.toString();
@@ -141,6 +150,16 @@
       } catch (e) {}
       return u;
     }
+    // JVZoo com a FlowTracking: ela lê o link antes do nosso clique e navega sozinha,
+    // então o tid vai no link antes — ao carregar a página e ao tocar no botão.
+    function prime(a) {
+      try { if (a && a.href && platform(a.href) === 'jvzoo') { var n = stamp(a.href); if (n !== a.href) a.href = n; } } catch (e) {}
+    }
+    function primeAll() { try { var l = document.querySelectorAll('a[href]'); for (var i = 0; i < l.length; i++) prime(l[i]); } catch (e) {} }
+    function press(ev) {
+      try { var path = ev.composedPath ? ev.composedPath() : [ev.target]; for (var i = 0; i < path.length; i++) if (path[i] && path[i].tagName === 'A') return prime(path[i]); } catch (e) {}
+    }
+    try { window.addEventListener('pointerdown', press, true); window.addEventListener('touchstart', press, { capture: true, passive: true }); } catch (e) {}
     var last = '', playerClick = 0;
     document.addEventListener('click', function (ev) {
       try {
@@ -187,6 +206,7 @@
       } catch (e) {}
     }
     function bind() {
+      primeAll();
       var list = document.querySelectorAll('vturb-smartplayer');
       for (var i = 0; i < list.length; i++) (function (el) {
         hook(el);

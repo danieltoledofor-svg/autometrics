@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { notifySaleNow, notifyUnmatchedSale } from '@/lib/alerts/saleNow';
 import { clockOf, dayInClock } from './platformClock';
+import { isShortClickId } from './shortId';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -200,7 +201,7 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
         // sessão da FlowTracking. Também resolve a campanha quando nada acima achou.
         let clickId: string | null = replay?.clickId || null;
         if (!clickId && candidateIds.length) {
-            const pickClick = async (column: 'click_id' | 'gclid' | 'ft_sid', values: string[]) => {
+            const pickClick = async (column: 'click_id' | 'gclid' | 'ft_sid' | 'params->>am_t', values: string[]) => {
                 if (!values.length) return null;
                 const { data } = await supabase.from('tracking_clicks').select('click_id, product_id')
                     .eq('user_id', userId).in(column, values).order('created_at', { ascending: false }).limit(1);
@@ -208,7 +209,9 @@ export async function processPostback(searchParams: URLSearchParams, userId: str
             };
             const click = await pickClick('click_id', candidateIds)
                 || await pickClick('gclid', candidateIds)
-                || await pickClick('ft_sid', candidateIds.filter(i => i.startsWith('ftsession_')).map(i => i.slice('ftsession_'.length)));
+                || await pickClick('ft_sid', candidateIds.filter(i => i.startsWith('ftsession_')).map(i => i.slice('ftsession_'.length)))
+                // tid da JVZoo: código curto do clique (lib/tracking/shortId.ts)
+                || await pickClick('params->>am_t', candidateIds.filter(isShortClickId));
             if (click) {
                 clickId = click.click_id;
                 trace.push(`clique rastreado: ${clickId}`);

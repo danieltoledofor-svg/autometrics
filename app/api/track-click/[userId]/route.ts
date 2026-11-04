@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { geoReady, lookup } from '@/lib/tracking/geo';
+import { shortClickId } from '@/lib/tracking/shortId';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -150,12 +151,20 @@ async function handleV2(userId: string, body: any, request: Request) {
         landing_url: (body.e ? '' : page) || null, referrer: cut(body.r, 500) || null,
         user_agent: userAgent || null, params: p,
     };
+    // Código curto que o am.js põe no tid da JVZoo: o postback de checkout acha o clique por ele.
+    base.params = { ...p, am_t: shortClickId(clickId) };
     const options = { onConflict: 'user_id, click_id', ignoreDuplicates: true };
     let { error } = await supabase.from('tracking_clicks').upsert({ ...base, ...visitor }, options);
     // Antes de migration_rastreamento_visitas.sql as colunas novas não existem.
     if (error && /column|schema cache/i.test(error.message || '')) ({ error } = await supabase.from('tracking_clicks').upsert(base, options));
     // Antes de migration_rastreamento.sql as tabelas não existem: o postback segue pelo click_sessions.
     if (error) { console.error('[TrackClick] Erro ao gravar clique:', error.message); return ok(); }
+
+    // Clique gravado antes do código curto existir: ganha o código na saída para o checkout.
+    if (body.e === 'out') {
+        await supabase.from('tracking_clicks').update({ params: base.params }).eq('user_id', userId).eq('click_id', clickId)
+            .is('params->>am_t', null).then(() => null, () => null);
+    }
 
     // A sessão da FlowTracking costuma aparecer só na página seguinte.
     if (p.ft_sid) {
