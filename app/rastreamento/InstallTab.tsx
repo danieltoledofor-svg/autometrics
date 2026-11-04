@@ -215,12 +215,13 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     digistore: scriptOnly('Digistore'),
     gurumedia: scriptOnly('Gurumedia'),
     jvzoo: {
-      postback: pb('JVZoo', 'event=initiated&currency={currency}&transaction_id={transaction_id}&transaction_amount={transaction_amount}&transaction_type={transaction_type}&product_id={product_id}&product_name={product_name}&customer_email={customer_email}&customer_name={customer_name}&customer_country={customer_country}&vendor_id={vendor_id}&payment_method={payment_method}&affiliate_id={affiliate_id}&affiliate_amount={affiliate_amount}&commission_type={commission_type}&tid={tid}&utm_source={utm_source}&utm_medium={utm_medium}&utm_campaign={utm_campaign}&gclid={gclid}&sub_id1={sub_id1}&sub_id2={sub_id2}&random={random}'),
+      postback: pb('JVZoo', 'event=initiated&tid={tid}&click_id={click_id}&session_id={session_id}&product_id={product_id}&affiliate_id={affiliate_id}&funnel_id={funnel_id}&country={country}&ip={ip}&utm_source={utm_source}&utm_medium={utm_medium}&utm_campaign={utm_campaign}&gclid={gclid}&fbclid={fbclid}&msclkid={msclkid}&ttclid={ttclid}&li_fat_id={li_fat_id}&twclid={twclid}&yclid={yclid}&sub_id1={sub_id1}&sub_id2={sub_id2}&random={random}'),
       details: [
         { label: 'event', value: 'initiated (fixo: diz que é checkout)' },
         { label: 'tid', value: 'código do clique (o script põe no link)' },
         { label: 'sub_id1 / gclid', value: 'clique do Google' },
-        { label: 'demais', value: 'mesmo padrão avançado da JVZoo da venda' },
+        { label: 'session_id', value: 'visita na JVZoo (um checkout por visita quando falta o clique)' },
+        { label: 'demais', value: 'padrão do Initiated da própria JVZoo (produto, funil, país, IP, utm, fbclid…), guardados' },
       ],
       steps: [
         <>Em <strong>Manage S2S Postbacks</strong>, clique de novo em <strong>Add New Postback</strong>.</>,

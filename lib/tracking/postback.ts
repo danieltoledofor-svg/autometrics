@@ -90,7 +90,8 @@ export function extraDetails(searchParams: URLSearchParams): Record<string, stri
  * e vão para `details`.
  */
 export function fromJvzoo(input: URLSearchParams): URLSearchParams {
-    const isJvz = (input.get('source') || '').toLowerCase() === 'jvzoo' && (input.has('transaction_type') || input.has('transaction_id') || input.has('sub_id1') || input.has('affiliate_amount'));
+    const isJvz = (input.get('source') || '').toLowerCase() === 'jvzoo' &&
+        ['transaction_type', 'transaction_id', 'affiliate_amount', 'sub_id1', 'session_id', 'tid'].some(k => input.has(k));
     if (!isJvz) return input;
     const out = new URLSearchParams();
     const map: Record<string, string> = {
@@ -102,6 +103,8 @@ export function fromJvzoo(input: URLSearchParams): URLSearchParams {
         if (to === 'event' && input.get('event')) continue;           // checkout: event=initiated fixo
         out.set(to || k, v);
     }
+    // Checkout (Initiated): não tem pedido; a visita da JVZoo serve de chave quando falta o clique.
+    if (!out.get('orderid') && input.get('session_id')) out.set('orderid', input.get('session_id')!);
     return out;
 }
 
