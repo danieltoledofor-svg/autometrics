@@ -173,6 +173,9 @@ export async function processPostback(rawParams: URLSearchParams, userId: string
         const validEvents = ['sale', 'checkout', 'click', 'refund'];
         if (!validEvents.includes(event)) return ignore(`evento desconhecido: ${rawEvent}`);
         if (rejected) return ignore(`venda recusada: ${status}`);
+        // Venda com comissão zero (ex.: upsell grátis "VIP Upgrade" da JVZoo) não é venda: a plataforma
+        // também não conta. Só quando o valor veio de fato; sem o campo, a venda segue.
+        if (event === 'sale' && /^\s*0+(\.0+)?\s*$/.test(param('amount'))) return ignore('venda sem comissão');
 
         // Sem nenhum identificador a campanha não tem como ser achada; a venda e o
         // reembolso seguem assim mesmo, para ficarem guardados entre as vendas sem campanha.
