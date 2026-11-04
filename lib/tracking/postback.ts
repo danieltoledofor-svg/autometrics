@@ -83,7 +83,30 @@ export function extraDetails(searchParams: URLSearchParams): Record<string, stri
  * continuar sem ser achada nada é guardado de novo. Na venda ligada à mão a uma visita
  * (lib/tracking/manualSale.ts), `productId` e `clickId` dizem a campanha e o clique.
  */
-export async function processPostback(searchParams: URLSearchParams, userId: string, replay?: { at: string; productId?: string; clickId?: string }): Promise<Response> {
+/**
+ * JVZoo no padrão dela (transaction_type, transaction_id, affiliate_amount, tid, sub_id1, gclid…)
+ * vira os nomes que o postback usa. O `tid` da JVZoo é o código do clique, não o pedido
+ * (na ClickBank o `tid` é o pedido), então sai do lugar. Os outros campos ficam como vieram
+ * e vão para `details`.
+ */
+export function fromJvzoo(input: URLSearchParams): URLSearchParams {
+    const isJvz = (input.get('source') || '').toLowerCase() === 'jvzoo' && (input.has('transaction_type') || input.has('transaction_id') || input.has('sub_id1') || input.has('affiliate_amount'));
+    if (!isJvz) return input;
+    const out = new URLSearchParams();
+    const map: Record<string, string> = {
+        transaction_type: 'event', transaction_id: 'orderid', affiliate_amount: 'amount', product_name: 'product',
+        tid: 'subid1', sub_id1: 'subid2', gclid: 'subid3', sub_id2: 'subid4', sub_id3: 'subid5', random: 'r',
+    };
+    for (const [k, v] of input) {
+        const to = map[k];
+        if (to === 'event' && input.get('event')) continue;           // checkout: event=initiated fixo
+        out.set(to || k, v);
+    }
+    return out;
+}
+
+export async function processPostback(rawParams: URLSearchParams, userId: string, replay?: { at: string; productId?: string; clickId?: string }): Promise<Response> {
+    const searchParams = fromJvzoo(rawParams);
     try {
 
         // Modo teste: resolve a campanha e responde em JSON o que seria gravado,

@@ -124,15 +124,15 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     },
     jvzoo: {
       name: 'JVZoo',
-      postback: pb('JVZoo', 'event={transaction_type}&cy={currency}&amount={affiliate_amount}&orderid={transaction_id}&product={product_name}&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&utm_source={utm_source}&utm_medium={utm_medium}&product_id={product_id}&transaction_amount={transaction_amount}&commission_type={commission_type}&payment_method={payment_method}&customer_country={customer_country}&customer_email={customer_email}&customer_name={customer_name}&vendor_id={vendor_id}&affiliate_id={affiliate_id}&r={random}'),
-      note: <>A JVZoo avisa o tipo em <code className="px-1 rounded bg-surface-3 text-brand-text">{'{transaction_type}'}</code>: <strong>SALE</strong> entra como venda e <strong>RFND</strong> como reembolso. O valor é a sua comissão.</>,
+      postback: pb('JVZoo', 'currency={currency}&transaction_id={transaction_id}&transaction_amount={transaction_amount}&transaction_type={transaction_type}&product_id={product_id}&product_name={product_name}&customer_email={customer_email}&customer_name={customer_name}&customer_country={customer_country}&vendor_id={vendor_id}&payment_method={payment_method}&affiliate_id={affiliate_id}&affiliate_amount={affiliate_amount}&commission_type={commission_type}&tid={tid}&utm_source={utm_source}&utm_medium={utm_medium}&utm_campaign={utm_campaign}&gclid={gclid}&sub_id1={sub_id1}&sub_id2={sub_id2}&random={random}'),
+      note: <>URL no padrão avançado da própria JVZoo. O tipo vem em <code className="px-1 rounded bg-surface-3 text-brand-text">{'{transaction_type}'}</code>: <strong>SALE</strong> entra como venda e <strong>RFND</strong> como reembolso. O valor é a sua comissão (<code className="px-1 rounded bg-surface-3 text-brand-text">{'{affiliate_amount}'}</code>).</>,
       details: [
-        { label: 'event', value: '{transaction_type} (SALE / RFND)' },
-        { label: 'subid1', value: '{tid} (clique)' },
-        { label: 'subid3', value: '{gclid}' },
-        { label: 'orderid', value: '{transaction_id}' },
-        { label: 'amount', value: '{affiliate_amount}' },
-        { label: 'extras', value: 'produto, valor da transação, comissão, pagamento, país, cliente, vendedor' },
+        { label: 'transaction_type', value: 'SALE / BILL = venda, RFND / CGBK = reembolso' },
+        { label: 'tid', value: 'código do clique (o script põe no link)' },
+        { label: 'sub_id1 / gclid', value: 'clique do Google' },
+        { label: 'transaction_id', value: 'pedido' },
+        { label: 'affiliate_amount', value: 'sua comissão' },
+        { label: 'demais', value: 'padrão avançado da própria JVZoo, guardados com a venda' },
       ],
       steps: [
         <>Na JVZoo, abra <strong>My Account → Account Details</strong>, desça até <strong>Affiliate Settings</strong> e clique em <strong>Manage S2S Postbacks</strong>.</>,
@@ -215,12 +215,12 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
     digistore: scriptOnly('Digistore'),
     gurumedia: scriptOnly('Gurumedia'),
     jvzoo: {
-      postback: pb('JVZoo', 'event=initiated&orderid={session_id}&subid1={tid}&subid2={sub_id1}&subid3={gclid}&subid4={sub_id2}&subid5={sub_id3}&utm_campaign={utm_campaign}&utm_source={utm_source}&utm_medium={utm_medium}&product_id={product_id}&product={product_name}&r={random}'),
+      postback: pb('JVZoo', 'event=initiated&currency={currency}&transaction_id={transaction_id}&transaction_amount={transaction_amount}&transaction_type={transaction_type}&product_id={product_id}&product_name={product_name}&customer_email={customer_email}&customer_name={customer_name}&customer_country={customer_country}&vendor_id={vendor_id}&payment_method={payment_method}&affiliate_id={affiliate_id}&affiliate_amount={affiliate_amount}&commission_type={commission_type}&tid={tid}&utm_source={utm_source}&utm_medium={utm_medium}&utm_campaign={utm_campaign}&gclid={gclid}&sub_id1={sub_id1}&sub_id2={sub_id2}&random={random}'),
       details: [
-        { label: 'event', value: 'initiated (fixo)' },
-        { label: 'orderid', value: '{session_id} (visita)' },
-        { label: 'subid1', value: '{tid} (clique)' },
-        { label: 'subid3', value: '{gclid}' },
+        { label: 'event', value: 'initiated (fixo: diz que é checkout)' },
+        { label: 'tid', value: 'código do clique (o script põe no link)' },
+        { label: 'sub_id1 / gclid', value: 'clique do Google' },
+        { label: 'demais', value: 'mesmo padrão avançado da JVZoo da venda' },
       ],
       steps: [
         <>Em <strong>Manage S2S Postbacks</strong>, clique de novo em <strong>Add New Postback</strong>.</>,
