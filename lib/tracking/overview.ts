@@ -14,7 +14,7 @@ import { clockStamp, inDays, userClocks, widen } from './eventDays';
 
 const DEVICE: Record<string, string> = { MOBILE: 'Celular', DESKTOP: 'Computador', TABLET: 'Tablet' };
 
-type Row = { key: string; id?: string; clicks: number; video: number; checkout: number; sales: number; value: number };
+type Row = { key: string; id?: string; clicks: number; video: number; produtor: number; checkout: number; sales: number; value: number };
 
 export async function trackingOverview(db: SupabaseClient, userId: string, since: string, until: string, days: { from: string; to: string }) {
   let clicks: any[], pages: any[], events: any[], products: any[], clocks: Awaited<ReturnType<typeof userClocks>>;
@@ -56,18 +56,19 @@ export async function trackingOverview(db: SupabaseClient, userId: string, since
     olderPages.push(...(p.data || []));
   }
 
-  const path = new Map<string, { urls: Set<string>; checkout: boolean }>();
+  // produtor: saiu da página pelo link de compra; checkout: a plataforma avisou que abriu o pagamento.
+  const path = new Map<string, { urls: Set<string>; produtor: boolean; checkout: boolean }>();
   for (const p of [...olderPages, ...pages]) {
     if (!byId.has(p.click_id)) continue;
-    if (!path.has(p.click_id)) path.set(p.click_id, { urls: new Set(), checkout: false });
+    if (!path.has(p.click_id)) path.set(p.click_id, { urls: new Set(), produtor: false, checkout: false });
     const entry = path.get(p.click_id)!;
-    if (p.kind === 'checkout') entry.checkout = true; else entry.urls.add(p.url);
+    if (p.kind === 'checkout') entry.produtor = true; else entry.urls.add(p.url);
   }
   for (const e of events) if (e.event_type === 'checkout' && e.click_id && path.has(e.click_id)) path.get(e.click_id)!.checkout = true;
 
   const groups = { campaign: new Map<string, Row>(), keyword: new Map<string, Row>(), device: new Map<string, Row>() };
   const row = (map: Map<string, Row>, key: string, id?: string) => {
-    if (!map.has(key)) map.set(key, { key, id, clicks: 0, video: 0, checkout: 0, sales: 0, value: 0 });
+    if (!map.has(key)) map.set(key, { key, id, clicks: 0, video: 0, produtor: 0, checkout: 0, sales: 0, value: 0 });
     return map.get(key)!;
   };
   const keysOf = (productId: string | null, click: any | null) => [
@@ -76,14 +77,15 @@ export async function trackingOverview(db: SupabaseClient, userId: string, since
     row(groups.device, click ? DEVICE[click.device] || 'Não identificado' : 'Venda sem clique ligado'),
   ];
 
-  const totals = { clicks: clicks.length, with_gclid: 0, video: 0, checkout: 0, sales: sales.length, unlinked: 0 };
+  const totals = { clicks: clicks.length, with_gclid: 0, video: 0, produtor: 0, checkout: 0, sales: sales.length, unlinked: 0 };
   for (const c of clicks) {
     const p = path.get(c.click_id);
-    const video = !!p && p.urls.size > 1, checkout = !!p && p.checkout;
+    const video = !!p && p.urls.size > 1, produtor = !!p && (p.produtor || p.checkout), checkout = !!p && p.checkout;
     if (c.gclid) totals.with_gclid++;
     if (video) totals.video++;
+    if (produtor) totals.produtor++;
     if (checkout) totals.checkout++;
-    for (const r of keysOf(c.product_id, c)) { r.clicks++; if (video) r.video++; if (checkout) r.checkout++; }
+    for (const r of keysOf(c.product_id, c)) { r.clicks++; if (video) r.video++; if (produtor) r.produtor++; if (checkout) r.checkout++; }
   }
 
   const value: Record<string, number> = {};
@@ -106,7 +108,7 @@ export async function trackingOverview(db: SupabaseClient, userId: string, since
       at: s.created_at, at_text: clockStamp(s, clocks), amount: Number(s.amount) || 0, currency: String(s.currency || 'USD').toUpperCase(), source: s.source || '',
       product_id: s.product_id, campaign: productName.get(s.product_id) || '',
       linked: !!click, keyword: click?.keyword || '', device: click ? DEVICE[click.device] || '' : '',
-      click_at: click?.created_at || null, pages: p ? p.urls.size : 0, checkout: !!p?.checkout,
+      click_at: click?.created_at || null, pages: p ? p.urls.size : 0, produtor: !!(p?.produtor || p?.checkout), checkout: !!p?.checkout,
     };
   });
 

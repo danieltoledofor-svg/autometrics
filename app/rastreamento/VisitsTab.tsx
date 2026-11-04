@@ -22,6 +22,7 @@ export type UnmatchedSale = { id: string; at: string; at_text?: string; amount: 
 const REACHED: Record<string, { label: string; cls: string }> = {
   venda: { label: 'Venda', cls: 'bg-pos/10 text-pos' },
   checkout: { label: 'Checkout', cls: 'bg-warn/10 text-warn' },
+  produtor: { label: 'Página do produtor', cls: 'bg-brand/15 text-brand-text' },
   video: { label: 'Segunda página', cls: 'bg-brand/15 text-brand-text' },
   entrada: { label: 'Só a entrada', cls: '' },
 };
@@ -97,7 +98,7 @@ export function VisitsTab({ ui, period, linking, onLinkDone }: { ui: Ui; period:
           onBlur={e => { const v = e.target.value.trim(); if (v !== filters.q) change({ q: v }); }}
           className={`${field} w-56`} />
         <button onClick={() => change({ bought: !filters.bought })} aria-pressed={filters.bought} className={chip(filters.bought)}>Só quem comprou</button>
-        <button onClick={() => change({ checkout: !filters.checkout })} aria-pressed={filters.checkout} className={chip(filters.checkout)}>Saíram para comprar</button>
+        <button onClick={() => change({ checkout: !filters.checkout })} aria-pressed={filters.checkout} className={chip(filters.checkout)}>Foram ao produtor</button>
         <button onClick={() => change({ bots: !filters.bots })} aria-pressed={filters.bots} className={chip(filters.bots)}>Mostrar robôs</button>
         {loading && <Loader2 size={14} aria-hidden="true" className={`animate-spin ${muted}`} />}
       </div>

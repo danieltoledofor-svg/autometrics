@@ -1,5 +1,5 @@
 /**
- * AutoMetrics — Rastreamento (v5.5). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5.6). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
@@ -152,8 +152,14 @@
     }
     // JVZoo com a FlowTracking: ela lê o link antes do nosso clique e navega sozinha,
     // então o tid vai no link antes — ao carregar a página e ao tocar no botão.
+    // A FlowTracking reescreve o link depois de carregar e tira o tid: ele volta na hora.
+    var watch = window.MutationObserver ? new MutationObserver(function (list) { for (var i = 0; i < list.length; i++) prime(list[i].target); }) : null;
     function prime(a) {
-      try { if (a && a.href && platform(a.href) === 'jvzoo') { var n = stamp(a.href); if (n !== a.href) a.href = n; } } catch (e) {}
+      try {
+        if (!a || !a.href || platform(a.href) !== 'jvzoo') return;
+        var n = stamp(a.href); if (n !== a.href) a.href = n;
+        if (watch && !a.__amw) { a.__amw = 1; watch.observe(a, { attributes: true, attributeFilter: ['href'] }); }
+      } catch (e) {}
     }
     function primeAll() { try { var l = document.querySelectorAll('a[href]'); for (var i = 0; i < l.length; i++) prime(l[i]); } catch (e) {} }
     function press(ev) {

@@ -61,7 +61,8 @@ export async function listVisits(db: SupabaseClient, userId: string, since: stri
   if (error) return { ready: false };                             // antes de migration_rastreamento_visitas.sql
 
   const ids = (data || []).map((c: any) => c.click_id);
-  const pagesOf = new Map<string, { urls: Set<string>; checkout: boolean }>();
+  // produtor: saiu pelo link de compra; checkout: a plataforma avisou que abriu o pagamento.
+  const pagesOf = new Map<string, { urls: Set<string>; produtor: boolean; checkout: boolean }>();
   const saleOf = new Map<string, { amount: number; currency: string }>();
   if (ids.length) {
     const [pv, ev] = await Promise.all([
@@ -69,12 +70,12 @@ export async function listVisits(db: SupabaseClient, userId: string, since: stri
       db.from('postback_events').select('click_id, event_type, amount, currency').in('click_id', ids).in('event_type', ['sale', 'checkout']).then(r => r.data || []),
     ]);
     for (const p of pv) {
-      if (!pagesOf.has(p.click_id)) pagesOf.set(p.click_id, { urls: new Set(), checkout: false });
+      if (!pagesOf.has(p.click_id)) pagesOf.set(p.click_id, { urls: new Set(), produtor: false, checkout: false });
       const entry = pagesOf.get(p.click_id)!;
-      if (p.kind === 'checkout') entry.checkout = true; else entry.urls.add(p.url);
+      if (p.kind === 'checkout') entry.produtor = true; else entry.urls.add(p.url);
     }
     for (const e of ev) {
-      if (e.event_type === 'checkout') { if (!pagesOf.has(e.click_id)) pagesOf.set(e.click_id, { urls: new Set(), checkout: true }); else pagesOf.get(e.click_id)!.checkout = true; continue; }
+      if (e.event_type === 'checkout') { if (!pagesOf.has(e.click_id)) pagesOf.set(e.click_id, { urls: new Set(), produtor: false, checkout: true }); else pagesOf.get(e.click_id)!.checkout = true; continue; }
       const cur = saleOf.get(e.click_id) || { amount: 0, currency: String(e.currency || 'USD').toUpperCase() };
       cur.amount += Number(e.amount) || 0;
       saleOf.set(e.click_id, cur);
@@ -87,7 +88,7 @@ export async function listVisits(db: SupabaseClient, userId: string, since: stri
     const pages = p ? p.urls.size : 0;
     return {
       ...c, campaign: (c.product_id && names.get(c.product_id)) || '', pages, sale,
-      reached: sale ? 'venda' : p?.checkout ? 'checkout' : pages > 1 ? 'video' : 'entrada',
+      reached: sale ? 'venda' : p?.checkout ? 'checkout' : p?.produtor ? 'produtor' : pages > 1 ? 'video' : 'entrada',
     };
   });
   return { ready: true, total: count || 0, page, pages: Math.ceil((count || 0) / PAGE), visits };

@@ -236,11 +236,13 @@ export default function TrackingPage() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                   {stat('Visitas', qty(t.clicks), t.clicks ? `${pct(t.with_gclid, t.clicks)} com gclid` : '')}
                   {stat('Foram para o vídeo', qty(t.video), t.clicks ? `${pct(t.video, t.clicks)} das visitas` : '')}
-                  {stat('Foram para o checkout', t.checkout ? qty(t.checkout) : <span className={muted}>—</span>,
-                    t.checkout ? `${pct(t.checkout, t.clicks)} das visitas` : 'conta após trocar o script nas páginas')}
+                  {stat('Foram ao produtor', t.produtor ? qty(t.produtor) : <span className={muted}>—</span>,
+                    t.produtor ? `${pct(t.produtor, t.clicks)} das visitas` : 'clicaram no botão de compra')}
+                  {stat('Checkout', t.checkout ? qty(t.checkout) : <span className={muted}>—</span>,
+                    t.checkout ? `${pct(t.checkout, t.produtor || t.clicks)} de quem foi ao produtor` : 'aviso da plataforma: abriu o pagamento')}
                   {stat('Vendas', qty(t.sales), t.sales && t.clicks ? `1 a cada ${qty(Math.round(t.clicks / t.sales))} visitas` : '')}
                   {stat('Valor vendido', values.length ? values.map(([c, v]) => money(v, c)).join(' + ') : money(0),
                     t.unlinked ? `${t.unlinked} ${t.unlinked === 1 ? 'venda' : 'vendas'} sem clique ligado` : t.sales ? 'todas ligadas ao clique' : '')}
@@ -262,6 +264,7 @@ export default function TrackingPage() {
                           <th className={`${th} text-left`}>{column}</th>
                           <th className={`${th} text-right`}>Visitas</th>
                           <th className={`${th} text-right`}>Vídeo</th>
+                          <th className={`${th} text-right`}>Produtor</th>
                           <th className={`${th} text-right`}>Checkout</th>
                           <th className={`${th} text-right`}>Vendas</th>
                           <th className={`${th} text-right`}>Valor</th>
@@ -275,6 +278,7 @@ export default function TrackingPage() {
                             </td>
                             <td className={`${td} text-right tabular-nums`}>{qty(r.clicks)}</td>
                             <td className={`${td} text-right tabular-nums whitespace-nowrap`}>{qty(r.video)} <span className={`text-[11px] ${muted}`}>{pct(r.video, r.clicks)}</span></td>
+                            <td className={`${td} text-right tabular-nums`}>{r.produtor ? qty(r.produtor) : <span className={muted}>—</span>}</td>
                             <td className={`${td} text-right tabular-nums`}>{r.checkout ? qty(r.checkout) : <span className={muted}>—</span>}</td>
                             <td className={`${td} text-right tabular-nums font-medium ${r.sales ? head : muted}`}>{r.sales || '—'}</td>
                             <td className={`${td} text-right tabular-nums whitespace-nowrap`}>{r.value ? money(r.value) : <span className={muted}>—</span>}</td>
@@ -301,7 +305,7 @@ export default function TrackingPage() {
                       <div className={`text-xs mt-1 ${muted}`}>
                         {s.linked
                           ? [s.keyword || 'sem palavra-chave', s.device, `clique em ${when(s.click_at)}`,
-                            `${s.pages} ${s.pages === 1 ? 'página' : 'páginas'}${s.checkout ? ' e checkout' : ''}`, `comprou ${gap(s.click_at, s.at)} depois`].filter(Boolean).join(' · ')
+                            `${s.pages} ${s.pages === 1 ? 'página' : 'páginas'}${s.checkout ? ' e checkout' : s.produtor ? ' e produtor' : ''}`, `comprou ${gap(s.click_at, s.at)} depois`].filter(Boolean).join(' · ')
                           : 'Sem clique ligado: a plataforma não devolveu um identificador que o script tenha guardado.'}
                       </div>
                     </div>

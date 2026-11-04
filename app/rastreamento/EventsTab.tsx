@@ -116,7 +116,7 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
 
       {data.total === 0 && unmatched.length > 0 ? null : data.total === 0 ? (
         <div className={`${card} border rounded-xl p-6 text-sm ${muted}`}>
-          {sale ? 'Nenhuma venda neste período.' : 'Nenhum checkout avisado pela plataforma neste período. Na BuyGoods o checkout vem do script do checkout; na JVZoo e na ClickBank, do postback (Instalação → passo 4). Nas outras, quem clicou no link de compra aparece em Visitas, no filtro "Saíram para comprar".'}
+          {sale ? 'Nenhuma venda neste período.' : 'Nenhum checkout avisado pela plataforma neste período. Na BuyGoods o checkout vem do script do checkout; na JVZoo e na ClickBank, do postback (Instalação → passo 4). Nas outras, quem clicou no link de compra aparece em Visitas, no filtro "Foram ao produtor".'}
         </div>
       ) : (
         <div className={`${card} border rounded-xl overflow-hidden`}>

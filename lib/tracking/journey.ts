@@ -26,7 +26,8 @@ export type JourneyStep = {
 type View = { url: string; kind?: string; created_at: string };
 type Event = { event_type: string; amount?: number | string | null; currency?: string | null; source?: string | null; transaction_id?: string | null; created_at: string; google?: JourneyStep['google'] };
 
-const PLATFORM = /buygoods|clickbank|digistore24|jvzoo|jvz\d*\.com|cartpanda|maxweb|hotmart|kiwify/i;
+// O link de afiliado da JVZoo (jvz1…jvz9.com) não é o checkout: ele leva à página do produtor (DTC).
+const PLATFORM = /buygoods|clickbank|digistore24|jvzoo|cartpanda|maxweb|hotmart|kiwify/i;
 const hostOf = (url: string) => { try { return new URL(url).hostname; } catch { return ''; } };
 const pathOf = (url: string) => { try { return new URL(url).pathname; } catch { return url; } };
 
