@@ -39,6 +39,14 @@ function stepsOf(raw: Steps) {
 export function Funnel({ screen, ui }: { screen: any; ui: Ui }) {
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
   const now = stepsOf(screen.steps), d3 = stepsOf(screen.steps3), d7 = stepsOf(screen.steps7);
+  // Hoje e todo o período só existem depois desta versão do servidor.
+  const day = screen.stepsToday ? stepsOf(screen.stepsToday) : null, all = screen.stepsAll ? stepsOf(screen.stepsAll) : null;
+  const extra: { id: string; head: string; title: string; rows: ReturnType<typeof stepsOf> }[] = [
+    ...(day ? [{ id: 'day', head: 'Hoje', title: `hoje, ${ddmm(screen.today)} (dia em andamento)`, rows: day }] : []),
+    { id: 'd3', head: '3 dias', title: `${ddmm(screen.d3[0])} a ${ddmm(screen.d3[1])}`, rows: d3 },
+    { id: 'd7', head: '7 dias', title: `${ddmm(screen.d7[0])} a ${ddmm(screen.d7[1])}`, rows: d7 },
+    ...(all ? [{ id: 'all', head: 'Todo o período', title: `${ddmm(screen.all[0])} a ${ddmm(screen.all[1])}, desde o começo da campanha`, rows: all }] : []),
+  ];
   const max = Math.max(1, ...now.map(s => s.n || 0));
   const bad = 'text-neg';
   // Maior perda: a etapa em que menos gente seguiu (só entre as que têm número).
@@ -52,14 +60,14 @@ export function Funnel({ screen, ui }: { screen: any; ui: Ui }) {
     <div className={`${bgCard} border rounded-xl px-5 py-4`}>
       <div className="flex justify-between items-baseline gap-3 flex-wrap mb-3">
         <div className={`text-sm font-semibold ${textHead}`}>Do clique à venda</div>
-        <div className={`text-xs ${textMuted}`}>período da tela: {ddmm(screen.period[0])} a {ddmm(screen.period[1])} · ao lado, 3 dias ({ddmm(screen.d3[0])}–{ddmm(screen.d3[1])}) e 7 dias ({ddmm(screen.d7[0])}–{ddmm(screen.d7[1])})</div>
+        <div className={`text-xs ${textMuted}`}>período da tela: {ddmm(screen.period[0])} a {ddmm(screen.period[1])} · ao lado{day ? `, hoje (${ddmm(screen.today)})` : ''}, 3 dias ({ddmm(screen.d3[0])}–{ddmm(screen.d3[1])}), 7 dias ({ddmm(screen.d7[0])}–{ddmm(screen.d7[1])}){all ? ` e todo o período (${ddmm(screen.all[0])}–${ddmm(screen.all[1])})` : ''}</div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse tabular-nums min-w-[640px]">
+        <table className="w-full border-collapse tabular-nums min-w-[760px]">
           <thead><tr>
             <th className={`${th} text-left`}>Etapa</th><th className={`${th} text-left w-[34%]`}></th>
             <th className={`${th} text-right`}>No período</th><th className={`${th} text-right`}>Seguiram</th>
-            <th className={`${th} text-right`}>3 dias</th><th className={`${th} text-right`}>7 dias</th>
+            {extra.map(c => <th key={c.id} className={`${th} text-right pl-3`} title={c.title}>{c.head}</th>)}
           </tr></thead>
           <tbody>
             {now.map((s, i) => (
@@ -70,8 +78,7 @@ export function Funnel({ screen, ui }: { screen: any; ui: Ui }) {
                 </td>
                 <td className={`py-2 text-right text-[13px] font-semibold ${textHead}`}>{int(s.n)}</td>
                 <td className={`py-2 pl-3 text-right text-xs whitespace-nowrap ${s.key === worst || s.key === second ? bad : textMuted}`} title={s.of}>{rateText(s)}</td>
-                <td className={`py-2 pl-3 text-right text-xs whitespace-nowrap ${textMuted}`}>{rateText(d3[i])}</td>
-                <td className={`py-2 pl-3 text-right text-xs whitespace-nowrap ${textMuted}`}>{rateText(d7[i])}</td>
+                {extra.map(c => <td key={c.id} className={`py-2 pl-3 text-right text-xs whitespace-nowrap ${textMuted}`} title={`${int(c.rows[i].n)} · ${c.title}`}>{rateText(c.rows[i])}</td>)}
               </tr>
             ))}
           </tbody>
@@ -79,6 +86,7 @@ export function Funnel({ screen, ui }: { screen: any; ui: Ui }) {
       </div>
       <div className={`text-xs ${textMuted} mt-3 space-y-1`}>
         {worst && <div>Maior perda no período: <b className={textHead}>{now.find(s => s.key === worst)!.label.toLowerCase()}</b>{second ? <>. Segunda: <b className={textHead}>{now.find(s => s.key === second)!.label.toLowerCase()}</b></> : null}.</div>}
+        <div>3 e 7 dias terminam na data final do calendário. Hoje é o dia em andamento; todo o período vai do primeiro dia com clique até hoje. Passe o mouse para ver a quantidade.</div>
         <div>Cada etapa mostra quantos seguiram da etapa anterior. O clique no botão é contado pela VTurb; o checkout, pelo postback e pelo script do Autometrics; as vendas, pelo postback.</div>
         {noButton && <div className={'text-warn'}>A VTurb não registrou clique no botão deste player neste período, então essa etapa fica sem número.</div>}
         {noCheckout && <div className={'text-warn'}>Nenhum checkout chegou neste período. Ele aparece quando o evento de checkout está marcado no postback da plataforma, ou quando a página usa o script do Autometrics.</div>}

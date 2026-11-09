@@ -8,7 +8,7 @@ import { mmss } from './funnel';
  * Perguntas à IA na aba VTurb.
  *
  * A IA recebe o que a aba mostra desta campanha, no período da tela: o caminho
- * do clique à venda (com os últimos 3 e 7 dias ao lado), aparelho, grupo de
+ * do clique à venda (com hoje, 3 e 7 dias até a data final e todo o período ao lado), aparelho, grupo de
  * anúncios e palavra-chave, a retenção do vídeo com o trecho da VSL onde mais
  * gente sai, a leitura da página e as alterações feitas nesses dias. Mais as
  * anotações do próprio afiliado. Nada de outras campanhas.
@@ -60,8 +60,10 @@ export function vturbDataPack(view: any, campaign: string): string {
   if (s) {
     out.push(block('DO CLIQUE À VENDA', [
       `- Período da tela (${ddmm(s.period[0])} a ${ddmm(s.period[1])}): ${path(s.steps)}`,
-      `- Últimos 3 dias (${ddmm(s.d3[0])} a ${ddmm(s.d3[1])}): ${path(s.steps3)}`,
-      `- Últimos 7 dias (${ddmm(s.d7[0])} a ${ddmm(s.d7[1])}): ${path(s.steps7)}`,
+      ...(s.stepsToday ? [`- Hoje (${ddmm(s.today)}, dia ainda em andamento): ${path(s.stepsToday)}`] : []),
+      `- 3 dias até a data final (${ddmm(s.d3[0])} a ${ddmm(s.d3[1])}): ${path(s.steps3)}`,
+      `- 7 dias até a data final (${ddmm(s.d7[0])} a ${ddmm(s.d7[1])}): ${path(s.steps7)}`,
+      ...(s.stepsAll ? [`- Todo o período da campanha (${ddmm(s.all[0])} a ${ddmm(s.all[1])}): ${path(s.stepsAll)}`] : []),
     ]));
     const v = s.segments.visits;
     out.push(`LIGAÇÃO VISITA → CLIQUE DO GOOGLE: ${int(v.matched)} de ${int(v.gclid)} visitas com identificador do clique foram ligadas. As vendas por linha são as que a VTurb contou.`);

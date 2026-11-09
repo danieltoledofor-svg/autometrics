@@ -9,8 +9,9 @@ import { MIN_VIEWS } from './funnel';
  * Aba VTurb no período da tela.
  *
  * - Do clique à venda em sete etapas (clique, vídeo carregado, play, pitch,
- *   botão de compra, checkout, venda), no período escolhido e ao lado dos
- *   últimos 3 e 7 dias fechados, como a Análise.
+ *   botão de compra, checkout, venda), no período escolhido e ao lado de:
+ *   hoje, os 3 e 7 dias que terminam na data final do calendário e todo o
+ *   período da campanha (do primeiro dia com clique ou vídeo até hoje).
  * - Quem assiste e quem compra por aparelho, por grupo de anúncios e por
  *   palavra-chave: cada visita da VTurb é ligada ao clique do Google pelo gclid.
  * - As alterações feitas na campanha nesses dias.
@@ -56,36 +57,41 @@ export async function computeScreen(productId: string, startRaw: string | null, 
   const tz = timeZone || 'America/Sao_Paulo';
   const today = todayIn(tz);
   const yesterday = addDays(today, -1);
-  const d3start = addDays(today, -3), d7start = addDays(today, -7);
   // Sem período válido na tela, vale a semana fechada.
-  let start = DAY.test(String(startRaw)) ? String(startRaw) : d7start;
+  let start = DAY.test(String(startRaw)) ? String(startRaw) : addDays(today, -7);
   let end = DAY.test(String(endRaw)) ? String(endRaw) : yesterday;
   if (end > today) end = today;
   if (start > end) start = end;
-  const from = start < d7start ? start : d7start, to = end > yesterday ? end : yesterday;
+  // 3 e 7 dias terminam na data final do calendário (o próprio dia entra).
+  const d3start = addDays(end, -2), d7start = addDays(end, -6);
+  const from = start < d7start ? start : d7start, to = today;
   const localDay = (iso: string) => new Date(iso).toLocaleDateString('sv-SE', { timeZone: tz });
   const soft = <T,>(p: PromiseLike<T>, fallback: T) => Promise.resolve(p).then(v => v, () => fallback);
 
   const [days, vdays, gclids, deviceRows, entityMetrics, entities, events, retention, previous] = await Promise.all([
-    fetchAll((a, b) => db.from('daily_metrics').select('date, clicks, cost, conversions, notes').eq('product_id', productId).gte('date', from).lte('date', to).range(a, b)),
-    fetchAll((a, b) => db.from('vturb_daily').select('date, viewed, started, over_pitch, under_pitch, clicked, conversions').eq('product_id', productId).eq('player_id', playerId).gte('date', from).lte('date', to).range(a, b)),
+    fetchAll((a, b) => db.from('daily_metrics').select('date, clicks, cost, conversions, notes').eq('product_id', productId).lte('date', to).range(a, b)),
+    fetchAll((a, b) => db.from('vturb_daily').select('date, viewed, started, over_pitch, under_pitch, clicked, conversions').eq('product_id', productId).eq('player_id', playerId).lte('date', to).range(a, b)),
     fetchAll((a, b) => db.from('vturb_gclid').select('gclid, viewed, started, over_pitch, under_pitch, conversions').eq('product_id', productId).eq('player_id', playerId).gte('date', start).lte('date', end).range(a, b)),
     soft(fetchAll((a, b) => db.from('audiences').select('audience_name, clicks, cost').eq('product_id', productId).eq('audience_type', 'Device').gte('date', start).lte('date', end).range(a, b)), [] as any[]),
     soft(fetchAll((a, b) => db.from('google_ads_entity_metrics').select('level, entity_id, clicks, cost').eq('product_id', productId).in('level', ['ad_group', 'keyword']).gte('date', start).lte('date', end).range(a, b)), [] as any[]),
     soft(fetchAll((a, b) => db.from('google_ads_entities').select('level, entity_id, ad_group_id, name, status, details').eq('product_id', productId).in('level', ['ad_group', 'keyword']).range(a, b)), [] as any[]),
     soft(fetchAll((a, b) => db.from('postback_events').select('click_id, event_type, created_at').eq('product_id', productId).eq('event_type', 'checkout')
-      .gte('created_at', `${addDays(from, -1)}T00:00:00Z`).lte('created_at', `${addDays(to, 1)}T23:59:59Z`).range(a, b)), null as any[] | null),
+      .lte('created_at', `${addDays(to, 1)}T23:59:59Z`).range(a, b)), null as any[] | null),
     soft(db.from('vturb_retention').select('start_date, end_date').eq('product_id', productId).eq('player_id', playerId).maybeSingle().then(r => r.data), null as any),
     // Antes de migration_vturb_historico.sql a tabela não existe: a comparação só fica sem a curva anterior.
     soft(db.from('vturb_retention_history').select('start_date, end_date, curve, pitch_time, duration').eq('product_id', productId).eq('player_id', playerId)
       .order('end_date', { ascending: false }).limit(40).then(r => (r.error ? null : r.data)), null as any[] | null),
   ]);
 
+  // Começo da campanha: o primeiro dia com clique no anúncio ou vídeo carregado.
+  const firstDay = [...days.filter(d => n(d.clicks) > 0), ...vdays.filter(v => n(v.viewed) > 0)].map(d => String(d.date)).sort()[0] || from;
+  const since = firstDay < from ? firstDay : from;
+
   // Saída para o checkout vista pelo script da página (rastreamento próprio), além do postback.
   const checkoutDays: { day: string; id: string }[] | null = events ? events.map((e, i) => ({ day: localDay(e.created_at), id: e.click_id || `sem-clique-${i}` })) : null;
   if (checkoutDays) {
     const pages = await soft(fetchAll((a, b) => db.from('tracking_pageviews').select('click_id, created_at').eq('user_id', product.user_id).eq('kind', 'checkout')
-      .gte('created_at', `${addDays(from, -1)}T00:00:00Z`).lte('created_at', `${addDays(to, 1)}T23:59:59Z`).range(a, b)), [] as any[]);
+      .gte('created_at', `${addDays(since, -1)}T00:00:00Z`).lte('created_at', `${addDays(to, 1)}T23:59:59Z`).range(a, b)), [] as any[]);
     const ids = [...new Set(pages.map(p => p.click_id).filter(Boolean))];
     const mine = new Set<string>();
     for (let i = 0; i < ids.length; i += 200) {
@@ -188,8 +194,8 @@ export async function computeScreen(productId: string, startRaw: string | null, 
   }
 
   return {
-    period: [start, end], d3: [d3start, yesterday], d7: [d7start, yesterday],
-    steps, steps3: windowOf(d3start, yesterday), steps7: windowOf(d7start, yesterday),
+    period: [start, end], today, d3: [d3start, end], d7: [d7start, end], all: [firstDay, today],
+    steps, stepsToday: windowOf(today, today), steps3: windowOf(d3start, end), steps7: windowOf(d7start, end), stepsAll: windowOf(firstDay, today),
     segments, changes,
     retention_before: before, retention_history: previous !== null,
   };
