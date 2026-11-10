@@ -273,7 +273,7 @@ export default function TrackingPage() {
                       <tbody>
                         {rows.map(r => (
                           <tr key={r.key}>
-                            <td className={`${td} ${head} min-w-[13rem] break-words`}>
+                            <td className={`${td} ${head} min-w-[16rem] break-words`}>
                               {r.id ? <Link href={`/products/${r.id}`} className="hover:text-brand-text hover:underline">{r.key}</Link> : r.key}
                             </td>
                             <td className={`${td} text-right tabular-nums`}>{qty(r.clicks)}</td>

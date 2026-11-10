@@ -669,7 +669,7 @@ export default function ProductDetailPage() {
             <ArrowLeft size={18} aria-hidden="true" />
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className={`text-sm font-semibold truncate ${textHead}`}>{product.name}</h1>
+            <h1 className={`text-sm font-semibold leading-snug break-words ${textHead}`}>{product.name}</h1>
             <span className={`text-[11px] ${textMuted}`}>{product.platform}</span>
           </div>
           <CampaignStatusToggle product={product} isDark={isDark} tokens onChanged={patch => setProduct((p: any) => ({ ...p, ...patch }))}

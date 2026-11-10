@@ -167,7 +167,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
       </div>
       <div className="border border-line bg-surface-1 rounded-xl overflow-x-auto">
         {level === 'campaigns' ? (
-          <table className="w-full table-fixed border-collapse text-[13px] min-w-[1200px]">
+          <table className="w-full table-fixed border-collapse text-[13px] min-w-[1320px]">
             <colgroup><col className="w-10" /><col className="w-6" /><col /><col className="w-[140px]" /><col className="w-[112px]" />{numberCols}<col className="w-[124px]" /></colgroup>
             <thead>
               <tr className={`text-xs border-b ${line} bg-surface-2`}>
@@ -188,7 +188,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
                     <td className="text-center" onClick={e => e.stopPropagation()}><button onClick={e => onToggleSelect(p.id, e)} aria-label={`Selecionar ${p.name}`} className={`align-middle ${isSelected ? 'text-brand-text' : 'text-ink-subtle hover:text-ink'}`}>{isSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></td>
                     <td className="text-center">{dot(tone, title)}</td>
                     {/* O nome é um link de verdade: abre pelo teclado e aceita Cmd/Ctrl+clique para nova aba. A linha inteira continua abrindo com o mouse. */}
-                    <td className="px-3"><div className="flex items-center gap-1.5 min-w-0"><Link href={hrefOf(p)} onClick={e => e.stopPropagation()} className={`line-clamp-2 leading-tight break-words font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`} title={`${p.name}${p.campaign_id ? ` · nº ${p.campaign_id}` : ''}`}>{p.name}</Link>{p.is_hidden && <><EyeOff size={12} aria-hidden="true" className="text-warn shrink-0" /><span className="sr-only">(oculta)</span></>}</div></td>
+                    <td className="px-3 py-2"><div className="flex items-center gap-1.5 min-w-0"><Link href={hrefOf(p)} onClick={e => e.stopPropagation()} className={`min-w-0 leading-snug break-words font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`} title={`${p.name}${p.campaign_id ? ` · nº ${p.campaign_id}` : ''}`}>{p.name}</Link>{p.is_hidden && <><EyeOff size={12} aria-hidden="true" className="text-warn shrink-0" /><span className="sr-only">(oculta)</span></>}</div></td>
                     <td className="px-3" onClick={e => e.stopPropagation()}>
                       <button onClick={() => onPickAccount(p.mcc_name || 'Outras', p.account_name || 'Sem Conta')} title="Ver só esta conta" className={`block w-full text-left truncate ${text} hover:text-ink hover:underline`}>{p.account_name || 'Sem Conta'}</button>
                       <div className={`text-[11px] truncate ${muted}`}>{p.mcc_name || 'Outras'}</div>

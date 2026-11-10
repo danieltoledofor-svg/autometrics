@@ -143,7 +143,7 @@ export function EventsTab({ ui, period, type, onLink }: { ui: Ui; period: string
                         className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{e.at_text || when(e.at)}</button>
                     )}</td>
                     {sale && <td className={`${td} ${head} text-right tabular-nums font-medium whitespace-nowrap`}>{money(e.amount, e.currency)}</td>}
-                    <td className={`${td} min-w-[11rem] break-words`}><Link href={`/products/${e.product_id}`} onClick={ev => ev.stopPropagation()} className={`${head} hover:text-brand-text hover:underline`}>{e.campaign}</Link></td>
+                    <td className={`${td} min-w-[16rem] break-words`}><Link href={`/products/${e.product_id}`} onClick={ev => ev.stopPropagation()} className={`${head} hover:text-brand-text hover:underline`}>{e.campaign}</Link></td>
                     <td className={`${td} min-w-[6rem] break-words`}>{e.click?.keyword || <span className={muted}>—</span>}</td>
                     <td className={`${td} min-w-[6rem] break-words`}>{place(e.click) || <span className={muted}>—</span>}</td>
                     <td className={td}>{e.click ? [DEVICE[e.click.device], e.click.os].filter(Boolean).join(' · ') : <span className={muted}>sem clique ligado</span>}</td>

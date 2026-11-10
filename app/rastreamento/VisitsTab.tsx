@@ -142,7 +142,7 @@ export function VisitsTab({ ui, period, linking, onLinkDone }: { ui: Ui; period:
                     <td className={td}>{[DEVICE[v.device], v.os, v.browser].filter(Boolean).join(' · ') || <span className={muted}>—</span>}{v.is_bot ? <span className="text-warn"> · robô</span> : null}</td>
                     <td className={`${td} whitespace-nowrap`}>{TRAFFIC[v.traffic] || <span className={muted}>—</span>}</td>
                     <td className={`${td} ${head} min-w-[6rem] break-words`}>{v.keyword || <span className={muted}>—</span>}</td>
-                    <td className={`${td} min-w-[12rem] break-words`}>{v.campaign || <span className={muted}>—</span>}</td>
+                    <td className={`${td} min-w-[16rem] break-words`}>{v.campaign || <span className={muted}>—</span>}</td>
                     <td className={`${td} text-right tabular-nums`}>{v.pages || <span className={muted}>—</span>}</td>
                     <td className={`${td} text-right tabular-nums whitespace-nowrap`}>{v.seconds ? lasted(v.seconds) : <span className={muted}>—</span>}</td>
                     <td className={`${td} whitespace-nowrap`}>
