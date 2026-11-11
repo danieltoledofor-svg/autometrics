@@ -1,14 +1,14 @@
 import { GOOGLE_METRICS_CATALOG, GOOGLE_COLUMN_KEY, shareWeightSource } from './catalog';
+import type { RealSales } from './itemSales';
 
 /**
  * Soma do período para as tabelas por item (grupos, anúncios, palavras-chave,
- * termos, públicos, locais) e rateio das vendas reais.
+ * termos, públicos, locais).
  *
- * Vendas reais: o postback e o lançamento manual só existem por campanha e
- * por dia. Cada dia é distribuído entre os itens na proporção das conversões
- * do Google daquele item; quando o Google ainda não contou nenhuma conversão
- * no dia (ele atrasa), a proporção é a dos cliques. É estimativa — as telas
- * marcam essas colunas com ≈. A atribuição exata por gclid vem depois.
+ * Vendas reais: só a venda ligada a um clique rastreado, inteira, no item que
+ * o clique informou (lib/metrics/itemSales.ts). Nada de rateio: venda sem esse
+ * dado fica só no total da campanha, e a tabela que nunca tem o dado (termo,
+ * idade, gênero, renda) mostra "—".
  */
 
 export type ColumnFormat = 'int' | 'dec' | 'money' | 'pct' | 'ratio';
@@ -19,12 +19,10 @@ export interface MetricColumn {
   category: string;
   format: ColumnFormat;
   defaultOn?: boolean;
-  /** Valor rateado das vendas reais. */
-  estimate?: boolean;
   desc?: string;
 }
 
-export const REAL_CATEGORY = 'Vendas reais (rateio)';
+export const REAL_CATEGORY = 'Vendas reais (rastreadas)';
 
 export const METRIC_COLUMNS: MetricColumn[] = [
   { key: 'impressions', label: 'Impressões', category: 'Desempenho', format: 'int', defaultOn: true },
@@ -33,15 +31,15 @@ export const METRIC_COLUMNS: MetricColumn[] = [
   { key: 'avg_cpc', label: 'CPC médio', category: 'Desempenho', format: 'money', defaultOn: true },
   { key: 'cost', label: 'Custo', category: 'Desempenho', format: 'money', defaultOn: true },
 
-  { key: 'conversions', label: 'Vendas', category: REAL_CATEGORY, format: 'dec', defaultOn: true, estimate: true,
-    desc: 'Vendas do postback e do lançamento manual, distribuídas pelas conversões do Google (ou pelos cliques)' },
-  { key: 'revenue', label: 'Receita', category: REAL_CATEGORY, format: 'money', defaultOn: true, estimate: true },
-  { key: 'refunds', label: 'Reembolso', category: REAL_CATEGORY, format: 'money', estimate: true },
-  { key: 'profit', label: 'Lucro', category: REAL_CATEGORY, format: 'money', defaultOn: true, estimate: true },
-  { key: 'roi', label: 'ROI', category: REAL_CATEGORY, format: 'pct', defaultOn: true, estimate: true },
-  { key: 'cpa', label: 'CPA real', category: REAL_CATEGORY, format: 'money', defaultOn: true, estimate: true },
-  { key: 'roas', label: 'ROAS', category: REAL_CATEGORY, format: 'ratio', estimate: true },
-  { key: 'conv_rate', label: 'Taxa de venda', category: REAL_CATEGORY, format: 'pct', estimate: true },
+  { key: 'conversions', label: 'Vendas', category: REAL_CATEGORY, format: 'int', defaultOn: true,
+    desc: 'Vendas ligadas a um clique rastreado que trouxe este item. Venda sem esse dado conta só na campanha' },
+  { key: 'revenue', label: 'Receita', category: REAL_CATEGORY, format: 'money', defaultOn: true },
+  { key: 'refunds', label: 'Reembolso', category: REAL_CATEGORY, format: 'money' },
+  { key: 'profit', label: 'Lucro', category: REAL_CATEGORY, format: 'money', defaultOn: true },
+  { key: 'roi', label: 'ROI', category: REAL_CATEGORY, format: 'pct', defaultOn: true },
+  { key: 'cpa', label: 'CPA real', category: REAL_CATEGORY, format: 'money', defaultOn: true },
+  { key: 'roas', label: 'ROAS', category: REAL_CATEGORY, format: 'ratio' },
+  { key: 'conv_rate', label: 'Taxa de venda', category: REAL_CATEGORY, format: 'pct' },
 
   ...GOOGLE_METRICS_CATALOG.map(c => ({
     key: GOOGLE_COLUMN_KEY(c.m),
@@ -102,14 +100,6 @@ export interface DayRow {
   conversion_actions?: ActionCounts | null;
 }
 
-/** O dia da campanha: vendas reais (já na moeda da tela) e o total do Google. */
-export interface CampaignDay {
-  conversions: number;
-  revenue: number;
-  refunds: number;
-  g_conversions: number;
-  clicks: number;
-}
 
 const SUMS = GOOGLE_METRICS_CATALOG.filter(c => c.dim === 'sum').map(c => c.m);
 const MONEY_SUMS = new Set(GOOGLE_METRICS_CATALOG.filter(c => c.dim === 'sum' && c.money).map(c => c.m));
@@ -123,14 +113,13 @@ interface Acc {
   sums: Record<string, number>;
   wnum: Record<string, number>;
   wden: Record<string, number>;
-  real: { conversions: number; revenue: number; refunds: number };
   actions: Record<string, { a: number; c: number; v: number }>;
 }
 
-const newAcc = (): Acc => ({ impressions: 0, clicks: 0, cost: 0, sums: {}, wnum: {}, wden: {}, real: { conversions: 0, revenue: 0, refunds: 0 }, actions: {} });
+const newAcc = (): Acc => ({ impressions: 0, clicks: 0, cost: 0, sums: {}, wnum: {}, wden: {}, actions: {} });
 const num = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
 
-function add(acc: Acc, r: DayRow, fx: number, campaign?: CampaignDay) {
+function add(acc: Acc, r: DayRow, fx: number) {
   const g = r.google_metrics || {};
   const impr = num(r.impressions);
   const clicks = num(r.clicks);
@@ -171,17 +160,6 @@ function add(acc: Acc, r: DayRow, fx: number, campaign?: CampaignDay) {
     cur.c += num(ca?.c);
     cur.v += num(ca?.v) * fx;
   }
-
-  if (campaign) {
-    const gconv = num(g.conversions ?? r.conversions);
-    const w = campaign.g_conversions > 0
-      ? gconv / campaign.g_conversions
-      : campaign.clicks > 0 ? clicks / campaign.clicks : 0;
-    const share = Math.min(1, Math.max(0, w));
-    acc.real.conversions += campaign.conversions * share;
-    acc.real.revenue += campaign.revenue * share;
-    acc.real.refunds += campaign.refunds * share;
-  }
 }
 
 const div = (a: number, b: number) => (b ? a / b : null);
@@ -196,16 +174,7 @@ function finish(acc: Acc, names: string[] = []): Record<string, number | null> {
     avg_cpc: div(acc.cost, acc.clicks),
   };
 
-  const r = acc.real;
-  const profit = r.revenue - r.refunds - acc.cost;
-  out.conversions = r.conversions;
-  out.revenue = r.revenue;
-  out.refunds = r.refunds;
-  out.profit = profit;
-  out.roi = acc.cost ? (profit / acc.cost) * 100 : null;
-  out.cpa = div(acc.cost, r.conversions);
-  out.roas = div(r.revenue, acc.cost);
-  out.conv_rate = acc.clicks ? (r.conversions / acc.clicks) * 100 : null;
+  applySales(out, null);
 
   const conv = s.conversions || 0;
   const allConv = s.all_conversions || 0;
@@ -252,18 +221,42 @@ function finish(acc: Acc, names: string[] = []): Record<string, number | null> {
  */
 export function aggregate(
   rows: DayRow[],
-  opts: { fx: number; campaignDays?: Map<string, CampaignDay>; keyOf?: (r: DayRow) => string; actionNames?: string[] },
+  opts: { fx: number; keyOf?: (r: DayRow) => string; actionNames?: string[] },
 ): Map<string, Record<string, number | null>> {
   const accs = new Map<string, Acc>();
   for (const r of rows) {
     const k = opts.keyOf ? opts.keyOf(r) : r.key;
     let acc = accs.get(k);
     if (!acc) { acc = newAcc(); accs.set(k, acc); }
-    add(acc, r, opts.fx, opts.campaignDays?.get(r.date));
+    add(acc, r, opts.fx);
   }
   const out = new Map<string, Record<string, number | null>>();
   for (const [k, acc] of accs) out.set(k, finish(acc, opts.actionNames));
   return out;
+}
+
+/**
+ * Colunas de vendas reais de um item. null = a tabela não tem como ligar venda
+ * a item (fica "—"); zero = tem como, e nenhuma venda rastreada caiu nele.
+ * Custo e cliques já vêm em `v`.
+ */
+export function applySales(v: Record<string, number | null>, real: RealSales | null): Record<string, number | null> {
+  const cost = Number(v.cost) || 0;
+  const clicks = Number(v.clicks) || 0;
+  if (!real) {
+    for (const k of ['conversions', 'revenue', 'refunds', 'profit', 'roi', 'cpa', 'roas', 'conv_rate']) v[k] = null;
+    return v;
+  }
+  const profit = real.revenue - real.refunds - cost;
+  v.conversions = real.conversions;
+  v.revenue = real.revenue;
+  v.refunds = real.refunds;
+  v.profit = profit;
+  v.roi = cost ? (profit / cost) * 100 : null;
+  v.cpa = div(cost, real.conversions);
+  v.roas = div(real.revenue, cost);
+  v.conv_rate = clicks ? (real.conversions / clicks) * 100 : null;
+  return v;
 }
 
 /** Valores de um item sem nenhum dia no período. */

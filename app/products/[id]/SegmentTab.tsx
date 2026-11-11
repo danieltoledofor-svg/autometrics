@@ -5,7 +5,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { DimensionTable, DimColumn, DimItem } from '@/app/components/metrics/DimensionTable';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import type { CustomColumnsApi } from '@/app/components/metrics/useCustomColumns';
-import type { CampaignDay, DayRow } from '@/lib/metrics/dimension';
+import type { DayRow } from '@/lib/metrics/dimension';
+import { countryKey, deviceKey, groupSales, searchKeywordKey, type TrackedSales } from '@/lib/metrics/itemSales';
 import { useGoogleControls, type GoogleControl } from './useGoogleControls';
 import { BidCell } from './BidCell';
 import { countryId, normalizeLocations } from '@/lib/geoNames';
@@ -28,7 +29,8 @@ interface Props {
   startDate: string;
   endDate: string;
   fx: number;
-  campaignDays: Map<string, CampaignDay>;
+  /** Vendas ligadas a um clique rastreado; null enquanto não chegam. */
+  tracked: TrackedSales | null;
   formatMoney: (v: number) => string;
   custom: CustomColumnsApi;
   ui: Ui;
@@ -221,6 +223,15 @@ export function SegmentTab(props: Props) {
   }, [scoped, termView]);
 
   const hasKeywords = kind === 'search_terms' && rows.some(r => r.keyword);
+  // Venda inteira na linha do clique. O termo, a idade, o gênero e a renda
+  // nunca vêm no clique: essas tabelas ficam sem venda ("—"), sem estimar.
+  const sales = useMemo(() => {
+    if (!props.tracked) return null;
+    const keyOf = kind === 'locations' ? countryKey
+      : kind === 'audiences' ? (audienceType === 'Device' ? deviceKey : null)
+      : termView === 'keyword' ? searchKeywordKey(scoped) : null;
+    return keyOf ? groupSales(props.tracked.events, keyOf, props.tracked.untracked) : null;
+  }, [props.tracked, kind, audienceType, termView, scoped]);
   const muted = (text: string) => <span className={`text-xs ${textMuted}`}>{text || '—'}</span>;
   const dims: DimColumn[] = [];
   if (hasKeywords && termView === 'term_keyword') {
@@ -297,7 +308,7 @@ export function SegmentTab(props: Props) {
       items={items}
       dayRows={dayRows}
       fx={props.fx}
-      campaignDays={props.campaignDays}
+      sales={sales}
       formatMoney={props.formatMoney}
       custom={props.custom}
       ui={ui}
@@ -320,9 +331,9 @@ export function SegmentTab(props: Props) {
           ))}
         </div>
       ) : undefined}
-      footnote={kind === 'search_terms'
-        ? 'Até 200 termos por campanha e por dia, os de mais impressões. As colunas com ≈ distribuem as vendas reais do dia pelas conversões do Google de cada termo (ou pelos cliques).'
-        : 'As colunas com ≈ distribuem as vendas reais do dia pelas conversões do Google de cada linha (ou pelos cliques quando o Google ainda não contou nenhuma).'}
+      footnote={(kind === 'search_terms' ? termView !== 'keyword' : kind === 'audiences' && audienceType !== 'Device')
+        ? `${kind === 'search_terms' ? 'Até 200 termos por campanha e por dia, os de mais impressões. ' : ''}O clique não informa ${kind === 'search_terms' ? 'o termo de pesquisa' : 'este público'}, então vendas, receita, lucro e CPA real ficam em branco aqui: só as conversões do Google mostram o resultado por linha.${kind === 'search_terms' && hasKeywords ? ' Em "Por palavra-chave" as vendas aparecem exatas.' : ''}`
+        : `${kind === 'search_terms' ? 'Até 200 termos por campanha e por dia, os de mais impressões. ' : ''}Vendas, receita, lucro e CPA real são exatos: só a venda ligada a um clique rastreado, inteira, ${kind === 'locations' ? 'no país' : kind === 'audiences' ? 'no aparelho' : 'na palavra-chave'} que o clique informou.`}
     />
     </div>
   );

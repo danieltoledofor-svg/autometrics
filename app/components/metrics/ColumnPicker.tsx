@@ -10,7 +10,6 @@ export interface PickerColumn {
   key: string;
   label: string;
   category: string;
-  estimate?: boolean;
 }
 
 export interface Ui {
@@ -150,7 +149,7 @@ export function ColumnPicker({ columns, visible, onChange, onReset, onClose, cus
                         <button key={col.key} onClick={() => toggle(col.key)}
                           className={`flex items-center gap-3 w-full p-2 rounded-lg text-left text-sm hover:bg-surface-2`}>
                           {checkbox(on)}
-                          <span className={on ? `${textHead} font-medium` : 'text-ink-subtle'}>{col.estimate ? '≈ ' : ''}{col.label}</span>
+                          <span className={on ? `${textHead} font-medium` : 'text-ink-subtle'}>{col.label}</span>
                         </button>
                       );
                     })}

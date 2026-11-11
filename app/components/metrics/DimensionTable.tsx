@@ -3,9 +3,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Columns, Search } from 'lucide-react';
 import {
-  aggregate, CampaignDay, DayRow, emptyValues, formatMetric, METRIC_COLUMNS, MetricColumn, ColumnFormat,
+  aggregate, applySales, REAL_CATEGORY, DayRow, emptyValues, formatMetric, METRIC_COLUMNS, MetricColumn, ColumnFormat,
   actionColumns, actionNames,
 } from '@/lib/metrics/dimension';
+import type { ItemSales, RealSales } from '@/lib/metrics/itemSales';
 import { customValue } from '@/lib/metrics/formula';
 import { ColumnPicker, Ui } from './ColumnPicker';
 import { ActiveFilter, FilterBar, FilterField, matchesFilters } from './FilterBar';
@@ -14,7 +15,7 @@ import { useTablePrefs } from '@/app/components/table/useTablePrefs';
 import { cellPad, TableControls, tableTone, Th, valueClass, widthStyle } from '@/app/components/table/tableUi';
 
 /**
- * Tabela por item com as colunas do Google, vendas reais rateadas, colunas
+ * Tabela por item com as colunas do Google, vendas reais rastreadas, colunas
  * personalizadas, filtros, ordenação e total — a mesma para grupos, anúncios,
  * palavras-chave, termos, públicos e locais.
  */
@@ -42,7 +43,8 @@ interface Props {
   items: DimItem[];
   dayRows: DayRow[];
   fx: number;
-  campaignDays: Map<string, CampaignDay>;
+  /** Vendas rastreadas por item; null quando a tabela não tem como ligar venda a item. */
+  sales: ItemSales | null;
   formatMoney: (v: number) => string;
   custom: CustomColumnsApi;
   ui: Ui;
@@ -71,7 +73,7 @@ function writeStore(key: string, value: unknown) {
 const DEFAULT_VISIBLE = METRIC_COLUMNS.filter(c => c.defaultOn).map(c => c.key);
 
 export function DimensionTable(props: Props) {
-  const { tableId, items, dayRows, fx, campaignDays, formatMoney, custom, ui } = props;
+  const { tableId, items, dayRows, fx, sales, formatMoney, custom, ui } = props;
   const { isDark, bgCard, borderCol, textHead, textMuted } = ui;
   const dims = props.dimensionColumns || [];
 
@@ -116,13 +118,23 @@ export function DimensionTable(props: Props) {
     return out;
   };
 
-  const values = useMemo(() => aggregate(dayRows, { fx, campaignDays, actionNames: actions }), [dayRows, fx, campaignDays, actions]);
+  const values = useMemo(() => aggregate(dayRows, { fx, actionNames: actions }), [dayRows, fx, actions]);
+  const salesOf = (key: string): RealSales | null => (sales ? sales.byKey.get(key) || { conversions: 0, revenue: 0, refunds: 0 } : null);
+
+  // Vendas que caíram em alguma linha da tabela (sem filtro de busca).
+  const shownSales = useMemo(() => {
+    if (!sales) return 0;
+    const keys = new Set(items.map(i => i.key));
+    let n = 0;
+    for (const [k, v] of sales.byKey) if (keys.has(k)) n += v.conversions;
+    return n;
+  }, [sales, items]);
 
   const allRows = useMemo(() => items.map(item => ({
     item,
-    v: withCustom(values.get(item.key) || empty),
+    v: withCustom(applySales({ ...(values.get(item.key) || empty) }, salesOf(item.key))),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  })), [items, values, custom.compiled, empty]);
+  })), [items, values, sales, custom.compiled, empty]);
 
   const valueOf = (row: { item: DimItem; v: Record<string, number | null> }, key: string): number | string | null => {
     if (key === 'name') return row.item.name;
@@ -151,10 +163,18 @@ export function DimensionTable(props: Props) {
 
   const total = useMemo(() => {
     const keys = new Set(rows.map(r => r.item.key));
-    const agg = aggregate(dayRows.filter(d => keys.has(d.key)), { fx, campaignDays, keyOf: () => '__total', actionNames: actions });
-    return withCustom(agg.get('__total') || empty);
+    const agg = aggregate(dayRows.filter(d => keys.has(d.key)), { fx, keyOf: () => '__total', actionNames: actions });
+    let real: RealSales | null = null;
+    if (sales) {
+      real = { conversions: 0, revenue: 0, refunds: 0 };
+      for (const k of keys) {
+        const s = sales.byKey.get(k);
+        if (s) { real.conversions += s.conversions; real.revenue += s.revenue; real.refunds += s.refunds; }
+      }
+    }
+    return withCustom(applySales({ ...(agg.get('__total') || empty) }, real));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, dayRows, fx, campaignDays, custom.compiled, actions, empty]);
+  }, [rows, dayRows, fx, sales, custom.compiled, actions, empty]);
 
   const filterFields: FilterField[] = useMemo(() => [
     { key: 'name', label: props.nameLabel, type: 'text' },
@@ -162,7 +182,7 @@ export function DimensionTable(props: Props) {
       const sample = items.map(i => d.value!(i)).find(v => v !== null && v !== undefined);
       return { key: d.key, label: d.label, type: typeof sample === 'number' ? 'number' as const : 'text' as const };
     }),
-    ...allColumns.map(c => ({ key: c.key, label: `${c.estimate ? '≈ ' : ''}${c.label}`, type: 'number' as const, unit: c.format === 'pct' ? '%' : undefined })),
+    ...allColumns.map(c => ({ key: c.key, label: c.label, type: 'number' as const, unit: c.format === 'pct' ? '%' : undefined })),
     ...custom.compiled.map(c => ({ key: c.key, label: c.name, type: 'number' as const, unit: c.format === 'percent' ? '%' : undefined })),
   ], [dims, items, custom.compiled, props.nameLabel, allColumns]);
 
@@ -222,7 +242,7 @@ export function DimensionTable(props: Props) {
                 <tr>
                   {th('name', props.nameLabel, 'left')}
                   {dims.map(d => th(d.key, d.label, d.align || 'left', undefined, !!d.value))}
-                  {metricCols.map(c => th(c.key, `${c.estimate ? '≈ ' : ''}${c.label}`, 'right', c.estimate ? 'Estimativa: vendas reais do dia distribuídas pelas conversões do Google (ou pelos cliques quando o Google ainda não contou)' : undefined))}
+                  {metricCols.map(c => th(c.key, c.label, 'right', c.category === REAL_CATEGORY ? (sales ? 'Só vendas ligadas a um clique rastreado que trouxe este item. Venda sem esse dado conta só no total da campanha.' : 'O clique não informa este dado, então a venda não tem como ser ligada a esta linha. Use as conversões do Google.') : undefined))}
                 </tr>
               </thead>
               <tbody>
@@ -279,6 +299,12 @@ export function DimensionTable(props: Props) {
         )}
       </div>
       {props.footnote && <p className={`text-xs ${textMuted}`}>{props.footnote}</p>}
+      {sales && sales.tracked + sales.untracked > 0 && (
+        <p className={`text-xs ${textMuted}`}>
+          {shownSales} de {sales.tracked + sales.untracked} vendas do período trouxeram este dado no clique e aparecem nas linhas.
+          {sales.tracked + sales.untracked - shownSales > 0 && ' As outras contam só no total da campanha, na Visão Geral.'}
+        </p>
+      )}
 
       {pickerOpen && (
         <ColumnPicker

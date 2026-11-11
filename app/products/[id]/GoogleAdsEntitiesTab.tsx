@@ -6,7 +6,8 @@ import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { DimensionTable, DimColumn, DimItem } from '@/app/components/metrics/DimensionTable';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import type { CustomColumnsApi } from '@/app/components/metrics/useCustomColumns';
-import type { CampaignDay, DayRow } from '@/lib/metrics/dimension';
+import type { DayRow } from '@/lib/metrics/dimension';
+import { adGroupKey, adKey, groupSales, keywordKey, type TrackedSales } from '@/lib/metrics/itemSales';
 import { useGoogleControls } from './useGoogleControls';
 import { CpaCell } from './BidCell';
 import { AdForm, AddButton, AssetsBox, GroupForm, KeywordForm, ResultLine, RowAction, useManage, type AdSeed, type ManageGroup, type Result } from './ManageBox';
@@ -29,7 +30,8 @@ interface Props {
   endDate: string;
   /** Converte o dinheiro da moeda da conta para a moeda da tela. */
   fx: number;
-  campaignDays: Map<string, CampaignDay>;
+  /** Vendas ligadas a um clique rastreado; null enquanto não chegam. */
+  tracked: TrackedSales | null;
   formatMoney: (v: number) => string;
   custom: CustomColumnsApi;
   channelType?: string | null;
@@ -189,6 +191,14 @@ export function GoogleAdsEntitiesTab(props: Props) {
       key: e.entity_id,
       searchText: (e.details?.headlines || []).map((h: any) => h.text).join(' '),
     })), [entities, level, props.adGroupFilter, statusFilter, withData]);
+
+  // Venda inteira no item do clique; sem o dado, fica só no total da campanha.
+  const sales = useMemo(() => {
+    if (!props.tracked) return null;
+    const own = entities.filter(e => e.level === level);
+    const keyOf = level === 'ad_group' ? adGroupKey : level === 'ad' ? adKey(own) : keywordKey(own);
+    return groupSales(props.tracked.events, keyOf, props.tracked.untracked);
+  }, [props.tracked, entities, level]);
 
   const statusBadge = (status: string) => (
     <span className={`inline-flex items-center gap-1.5 text-xs ${status === 'ENABLED' ? 'text-pos' : status === 'PAUSED' ? 'text-warn' : textMuted}`}>
@@ -415,7 +425,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
       items={items}
       dayRows={dayRows}
       fx={fx}
-      campaignDays={props.campaignDays}
+      sales={sales}
       formatMoney={formatMoney}
       custom={props.custom}
       ui={ui}
@@ -425,7 +435,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
       rowClassName={i => (i.status === 'REMOVED' ? 'opacity-60' : '')}
       loading={loading}
       empty={empty}
-      footnote="Conversões (Google) são as que o Google mede. As colunas com ≈ distribuem as vendas reais do dia (postback e lançamento manual) pelas conversões do Google de cada item, ou pelos cliques quando o Google ainda não contou nenhuma."
+      footnote="Conversões (Google) são as que o Google mede. Vendas, receita, lucro e CPA real são exatos: só a venda ligada a um clique rastreado, inteira, no item que o clique informou."
       toolbar={<>
         {manage.allowed && !isPmax && level === 'ad_group' && <AddButton label="Novo grupo" ui={ui} onClick={() => setForm({ type: 'grupo' })} />}
         {manage.allowed && !isPmax && level === 'ad' && <AddButton label="Novo anúncio" ui={ui} onClick={() => setForm({ type: 'anuncio', mode: 'novo', seed: blankAd() })} />}

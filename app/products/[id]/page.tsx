@@ -36,7 +36,7 @@ import { useTablePrefs } from '@/app/components/table/useTablePrefs';
 import { cellPad, TableControls, tableTone, Th, widthStyle } from '@/app/components/table/tableUi';
 import { GOOGLE_METRICS_CATALOG, GOOGLE_COLUMN_KEY } from '@/lib/metrics/catalog';
 import { actionColumns, actionNames, actionSlug } from '@/lib/metrics/dimension';
-import type { CampaignDay } from '@/lib/metrics/dimension';
+import { toView, type ItemSalesPayload, type TrackedSales } from '@/lib/metrics/itemSales';
 import { customValue } from '@/lib/metrics/formula';
 import { useLiveMetrics } from '@/lib/useLiveMetrics';
 
@@ -454,28 +454,26 @@ export default function ProductDetailPage() {
     return { rows: rows.reverse(), chart: chartData, stats };
   }, [metrics, viewCurrency, startDate, endDate, liveDollar, manualDollar]);
 
-  // Vendas reais do dia (postback e lançamento manual) e o total do Google,
-  // para ratear entre grupos, anúncios, palavras-chave, termos, públicos e
-  // locais. Mesma conversão de moeda da Visão Geral: receita pelo dólar manual.
-  const campaignDays = useMemo(() => {
-    const out = new Map<string, CampaignDay>();
-    for (const row of metrics) {
-      if (row.date < startDate || row.date > endDate) continue;
-      let revenue = Number(row.conversion_value || 0);
-      let refunds = Number(row.refunds || 0);
-      const rowCurrency = row.currency || 'BRL';
-      if (viewCurrency === 'BRL' && rowCurrency === 'USD') { revenue *= manualDollar; refunds *= manualDollar; }
-      else if (viewCurrency !== 'BRL' && rowCurrency === 'BRL') { revenue /= manualDollar; refunds /= manualDollar; }
-      out.set(row.date, {
-        conversions: Number(row.conversions || 0),
-        revenue,
-        refunds,
-        g_conversions: Number(row.google_conversions ?? row.google_metrics?.conversions ?? 0),
-        clicks: Number(row.clicks || 0),
-      });
-    }
-    return out;
-  }, [metrics, viewCurrency, startDate, endDate, manualDollar]);
+  // Vendas ligadas a um clique rastreado, com grupo, anúncio, palavra-chave,
+  // aparelho e país do clique: cada aba conta a venda inteira no item certo.
+  // Receita pelo dólar manual, a mesma conversão da Visão Geral.
+  const [trackedPayload, setTrackedPayload] = useState<ItemSalesPayload | null>(null);
+  // Venda ou reembolso novo na Visão Geral (ao vivo) busca de novo.
+  const salesSignal = metrics.reduce((sum: number, m: any) => sum + Number(m.conversions || 0) + Number(m.refunds || 0), 0);
+  useEffect(() => {
+    if (!productId || !startDate || !endDate) return;
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/tracking/item-sales?product_id=${productId}&from=${startDate}&to=${endDate}`, { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      const body = res.ok ? await res.json().catch(() => null) : null;
+      if (!cancelled) setTrackedPayload(body && Array.isArray(body.events) ? body : null);
+    })().catch(() => { if (!cancelled) setTrackedPayload(null); });
+    return () => { cancelled = true; };
+  }, [productId, startDate, endDate, salesSignal]);
+  const trackedSales: TrackedSales | null = useMemo(() => trackedPayload
+    ? { events: toView(trackedPayload, viewCurrency, manualDollar), untracked: trackedPayload.untracked }
+    : null, [trackedPayload, viewCurrency, manualDollar]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat(viewCurrency === 'BRL' ? 'pt-BR' : 'en-US', { style: 'currency', currency: viewCurrency === 'BRL' ? 'BRL' : 'USD' }).format(val);
   const formatPercent = (val: number) => `${(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
@@ -1176,7 +1174,7 @@ export default function ProductDetailPage() {
           startDate={startDate}
           endDate={endDate}
           fx={entityFx}
-          campaignDays={campaignDays}
+          tracked={trackedSales}
           formatMoney={formatMoney}
           custom={customColumns}
           channelType={product?.google_channel_type}
@@ -1201,7 +1199,7 @@ export default function ProductDetailPage() {
           startDate={startDate}
           endDate={endDate}
           fx={entityFx}
-          campaignDays={campaignDays}
+          tracked={trackedSales}
           formatMoney={formatMoney}
           custom={customColumns}
           ui={{ isDark, bgCard, borderCol, textHead, textMuted }}
