@@ -213,7 +213,22 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
       ],
     },
     digistore: scriptOnly('Digistore'),
-    gurumedia: scriptOnly('Gurumedia'),
+    // Mesmo modelo do checkout da FlowTracking na Gurumedia (…/checkout/<id>?cy=…&subid1={sub1}…&orderid={transaction_id}),
+    // com event=checkout fixo. Sem valor: checkout não é dinheiro.
+    gurumedia: {
+      postback: pb('Gurumedia', 'event=checkout&cy={offer_currency}&orderid={transaction_id}&product={offer_name}&subid1={sub1}&subid2={sub2}&subid3={sub3}&subid4={sub4}&subid5={sub5}'),
+      details: [
+        { label: 'event', value: 'checkout (fixo: diz que é checkout)' },
+        { label: 'subid1 a subid5', value: '{sub1} a {sub5} (os mesmos da venda: ftsession, gclid…)' },
+        { label: 'orderid', value: '{transaction_id} (o clique na Gurumedia: um checkout por clique)' },
+        { label: 'product', value: '{offer_name}' },
+      ],
+      steps: [
+        <>Na Gurumedia, abra a área de <strong>postback</strong> e ache o postback de <strong>checkout</strong> da FlowTracking (o endereço com <code className="px-1 rounded bg-surface-3 text-brand-text">/checkout/</code>).</>,
+        <><strong>Mantenha</strong> o da FlowTracking como está e <strong>adicione um novo</strong> postback no <strong>mesmo evento de checkout</strong> e para as mesmas ofertas.</>,
+        <>Cole a URL de checkout acima e salve. A venda continua no postback do passo 2.</>,
+      ],
+    },
     jvzoo: {
       postback: pb('JVZoo', 'event=initiated&tid={tid}&click_id={click_id}&session_id={session_id}&product_id={product_id}&affiliate_id={affiliate_id}&funnel_id={funnel_id}&country={country}&ip={ip}&utm_source={utm_source}&utm_medium={utm_medium}&utm_campaign={utm_campaign}&gclid={gclid}&fbclid={fbclid}&msclkid={msclkid}&ttclid={ttclid}&li_fat_id={li_fat_id}&twclid={twclid}&yclid={yclid}&sub_id1={sub_id1}&sub_id2={sub_id2}&random={random}'),
       details: [

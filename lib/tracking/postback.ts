@@ -25,6 +25,7 @@ export function serverDay(d = new Date()): string {
  *   Buygoods: frontend, upsell, downsell (às vezes numerados, ex.: upsell1), InitiateCheckout
  *   Digistore: payment, refund, chargeback (vêm em {transaction_type})
  *   JVZoo: SALE, BILL (renovação), RFND, CGBK (em {transaction_type}); initiated (checkout)
+ *   Gurumedia: sale e checkout (event fixo em cada URL)
  *
  * Redes que avisam a situação da venda em {status} (SmartAdv, MediaScalers):
  * recusada não entra; devolvida vira reembolso.
