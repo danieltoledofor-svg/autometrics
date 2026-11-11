@@ -19,3 +19,6 @@ CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user ON public.mcp_tokens (user_id, cr
 
 -- Gravação e leitura só pelo servidor (service role). Nada aberto para o navegador.
 ALTER TABLE public.mcp_tokens ENABLE ROW LEVEL SECURITY;
+
+-- Avisa a API do Supabase da tabela nova na hora (sem isso ela pode demorar a aparecer).
+NOTIFY pgrst, 'reload schema';
