@@ -24,6 +24,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // MCP: quem chama é o Claude (servidores da Anthropic), não o navegador; a chave na URL protege.
+  if (pathname.startsWith('/api/mcp/')) {
+    return NextResponse.next();
+  }
+
   const origin = request.headers.get('origin') ?? '';
 
   if (origin && !allowedOrigins.includes(origin)) {

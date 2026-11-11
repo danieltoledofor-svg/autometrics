@@ -9,6 +9,7 @@ import {
 import Link from 'next/link';
 import { TelegramCard } from './TelegramCard';
 import { LootrushCard } from './LootrushCard';
+import { ClaudeCard } from './ClaudeCard';
 import { Logo } from '@/app/components/Logo';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
@@ -53,7 +54,7 @@ export default function IntegrationPage() {
   const [vturbTokenVisible, setVturbTokenVisible] = useState(false);
 
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<'google' | 'vturb' | 'telegram' | 'cartoes'>('google');
+  const [activeTab, setActiveTab] = useState<'google' | 'vturb' | 'telegram' | 'cartoes' | 'claude'>('google');
 
 
 
@@ -784,6 +785,7 @@ ${commonFunctions}`;
             { key: 'vturb', icon: <Tv2 size={15} aria-hidden="true" />, label: 'VTurb' },
             { key: 'telegram', icon: <Send size={15} aria-hidden="true" />, label: 'Telegram' },
             { key: 'cartoes', icon: <CreditCard size={15} aria-hidden="true" />, label: 'Cartões' },
+            { key: 'claude', icon: <Sparkles size={15} aria-hidden="true" />, label: 'Claude' },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -811,6 +813,9 @@ ${commonFunctions}`;
 
         {/* ── ABA CARTÕES: LootRush ─────────────────────────────── */}
         {activeTab === 'cartoes' && <LootrushCard isDark={isDark} />}
+
+        {/* ── ABA CLAUDE: link do MCP para o Claude no celular ──── */}
+        {activeTab === 'claude' && <ClaudeCard isDark={isDark} />}
 
         {/* ── ABA 1: GOOGLE ADS ────────────────────────────────── */}
         {activeTab === 'google' && (
