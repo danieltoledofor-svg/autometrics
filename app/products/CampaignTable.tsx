@@ -9,7 +9,8 @@ import { resolveProductStatus } from '@/lib/campaignStatus';
  * Tabela do Gerenciador de Campanhas, no jeito do Google Ads: uma linha por
  * campanha, todas as contas na mesma lista, a conta e a MCC em coluna. Os
  * números (impressões, cliques, CPC médio, custo, receita e lucro) são do
- * período escolhido na tela. Não há coluna de status: a bolinha antes do nome
+ * período escolhido na tela; orçamento e CPA alvo são a última leitura do
+ * Google. Não há coluna de status: a bolinha antes do nome
  * diz a situação, com o motivo ao passar o mouse.
  *
  * A mesma tabela serve para ver por conta ou por MCC: cada linha passa a ser
@@ -17,12 +18,12 @@ import { resolveProductStatus } from '@/lib/campaignStatus';
  */
 
 export type Level = 'campaigns' | 'accounts' | 'mccs';
-export type SortKey = 'name' | 'budget' | 'impressions' | 'clicks' | 'cpc' | 'cost' | 'revenue' | 'profit';
+export type SortKey = 'name' | 'budget' | 'target' | 'impressions' | 'clicks' | 'cpc' | 'cost' | 'revenue' | 'profit';
 export interface Sort { key: SortKey; desc: boolean }
 export const LEVELS: { key: Level; label: string }[] = [{ key: 'campaigns', label: 'Campanhas' }, { key: 'accounts', label: 'Contas' }, { key: 'mccs', label: 'MCCs' }];
 
 const SORT_KEY = 'autometrics_products_sort', LEVEL_KEY = 'autometrics_products_level';
-const SORTS: SortKey[] = ['name', 'budget', 'impressions', 'clicks', 'cpc', 'cost', 'revenue', 'profit'];
+const SORTS: SortKey[] = ['name', 'budget', 'target', 'impressions', 'clicks', 'cpc', 'cost', 'revenue', 'profit'];
 export function loadSort(): Sort {
   try { const s = JSON.parse(localStorage.getItem(SORT_KEY) || 'null'); if (s && SORTS.includes(s.key)) return { key: s.key, desc: s.desc !== false }; } catch { /* sem lembrança */ }
   return { key: 'cost', desc: true };
@@ -46,13 +47,13 @@ export function toneOf(product: any): { tone: Tone; title: string } {
   return { tone, title: `${st.label}: ${st.hint}` };
 }
 
-interface Nums { impressions: number; clicks: number; cost: number; revenue: number; profit: number; budget: number }
+interface Nums { impressions: number; clicks: number; cost: number; revenue: number; profit: number; budget: number; target: number }
 const numsOf = (p: any): Nums => {
   const m = p.metrics7d || {};
   const cost = Number(m.cost) || 0, revenue = Number(m.revenue) || 0;
-  return { impressions: Number(m.impressions) || 0, clicks: Number(m.clicks) || 0, cost, revenue, profit: revenue - cost, budget: Number(m.budget) || 0 };
+  return { impressions: Number(m.impressions) || 0, clicks: Number(m.clicks) || 0, cost, revenue, profit: revenue - cost, budget: Number(m.budget) || 0, target: Number(m.targetCpa) || 0 };
 };
-const MONEY: (keyof Nums)[] = ['cost', 'revenue', 'profit', 'budget'];
+const MONEY: (keyof Nums)[] = ['cost', 'revenue', 'profit', 'budget', 'target'];
 
 export function CampaignTable({ products, level, sort, onSort, rates, isDark, selected, onToggleSelect, onSelectAll, onOpen, hrefOf, onPickAccount, onPickMcc, actions }: {
   /** Campanhas já filtradas pela busca, pela conta escolhida e por ocultas. */
@@ -80,10 +81,11 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
   const sum = (list: any[]): Nums & { currency: string } => {
     const currencies = new Set(list.map(p => p.currency || 'BRL'));
     const currency = currencies.size === 1 ? [...currencies][0] : 'BRL';
-    const out = { impressions: 0, clicks: 0, cost: 0, revenue: 0, profit: 0, budget: 0, currency };
+    const out = { impressions: 0, clicks: 0, cost: 0, revenue: 0, profit: 0, budget: 0, target: 0, currency };
     for (const p of list) {
       const n = numsOf(p), active = toneOf(p).tone === 'ativo';
       for (const k of Object.keys(n) as (keyof Nums)[]) {
+        if (k === 'target') continue;                               // meta de CPA não se soma
         if (k === 'budget' && !active) continue;                    // orçamento somado: só o das campanhas que estão rodando
         out[k] += MONEY.includes(k) && currencies.size > 1 ? toBRL(n[k], p.currency) : n[k];
       }
@@ -134,15 +136,15 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
   const mixed = new Set(products.map(p => p.currency || 'BRL')).size > 1;
 
   const th = (key: SortKey, label: string, align: 'left' | 'right' = 'right', sep = false) => (
-    <th className={`px-3 py-2.5 font-medium ${align === 'right' ? 'text-right' : 'text-left'} ${sep ? `border-l ${line}` : ''}`} aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
+    <th className={`px-2 py-2.5 font-medium whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'} ${sep ? `border-l ${line}` : ''}`} aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
       <button onClick={() => onSort({ key, desc: sort.key === key ? !sort.desc : key !== 'name' })} title={`Ordenar por ${label.toLowerCase()}`}
         className={`inline-flex items-center gap-1 ${sort.key === key ? head : `${muted} hover:text-ink`}`}>
         {align === 'right' && sort.key === key && (sort.desc ? <ArrowDown size={11} aria-hidden="true" /> : <ArrowUp size={11} aria-hidden="true" />)}{label}{align === 'left' && sort.key === key && (sort.desc ? <ArrowDown size={11} aria-hidden="true" /> : <ArrowUp size={11} aria-hidden="true" />)}
       </button>
     </th>
   );
-  const num = (value: number, shown: string, sep = false, extra = '') => <td className={`px-3 text-right tabular-nums ${sep ? `border-l ${line}` : ''} ${value ? text : zero} ${extra}`}>{shown}</td>;
-  const profit = (n: Nums, currency: string) => <td className={`px-3 text-right tabular-nums font-medium ${n.profit > 0 ? 'text-pos' : n.profit < 0 ? 'text-neg' : zero}`}>{money(n.profit, currency)}</td>;
+  const num = (value: number, shown: string, sep = false, extra = '') => <td className={`px-2 text-right whitespace-nowrap tabular-nums ${sep ? `border-l ${line}` : ''} ${value ? text : zero} ${extra}`}>{shown}</td>;
+  const profit = (n: Nums, currency: string) => <td className={`px-2 text-right whitespace-nowrap tabular-nums font-medium ${n.profit > 0 ? 'text-pos' : n.profit < 0 ? 'text-neg' : zero}`}>{money(n.profit, currency)}</td>;
   /** As seis colunas de número, iguais nas três visões: tráfego e, depois da divisória, dinheiro. */
   const numbers = (n: Nums, currency: string) => (
     <>
@@ -155,7 +157,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
     </>
   );
   const numberHeads = <>{th('impressions', 'Impr.', 'right', true)}{th('clicks', 'Cliques')}{th('cpc', 'CPC méd.')}{th('cost', 'Custo', 'right', true)}{th('revenue', 'Receita')}{th('profit', 'Lucro')}</>;
-  const numberCols = <><col className="w-[76px]" /><col className="w-[72px]" /><col className="w-[88px]" /><col className="w-[110px]" /><col className="w-[110px]" /><col className="w-[110px]" /></>;
+  const numberCols = <><col className="w-[60px]" /><col className="w-[60px]" /><col className="w-[80px]" /><col className="w-[96px]" /><col className="w-[96px]" /><col className="w-[100px]" /></>;
   const dot = (tone: Tone, title: string) => <span className={`inline-block w-2 h-2 rounded-full ${DOT[tone]}`} title={title} role="img" aria-label={title} />;
   const ids = rows.map(r => r.p.id), allSelected = ids.length > 0 && ids.every(id => selected.includes(id));
   const totalLabel = `Total${mixed ? ' em R$' : ''}`;
@@ -167,15 +169,16 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
       </div>
       <div className="border border-line bg-surface-1 rounded-xl overflow-x-auto">
         {level === 'campaigns' ? (
-          <table className="w-full table-fixed border-collapse text-[13px] min-w-[1320px]">
-            <colgroup><col className="w-10" /><col className="w-6" /><col /><col className="w-[140px]" /><col className="w-[112px]" />{numberCols}<col className="w-[124px]" /></colgroup>
+          <table className="w-full table-fixed border-collapse text-xs min-w-[1040px]">
+            <colgroup><col className="w-8" /><col className="w-4" /><col /><col className="w-[108px]" /><col className="w-[96px]" /><col className="w-[84px]" />{numberCols}<col className="w-[112px]" /></colgroup>
             <thead>
               <tr className={`text-xs border-b ${line} bg-surface-2`}>
                 <th className="py-2.5 text-center"><button onClick={() => onSelectAll(ids)} aria-label="Selecionar todas" className="text-ink-subtle hover:text-ink align-middle">{allSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></th>
                 <th />
                 {th('name', 'Campanha', 'left')}
-                <th className={`px-3 py-2.5 text-left font-medium ${muted}`}>Conta</th>
+                <th className={`px-2 py-2.5 text-left font-medium ${muted}`}>Conta</th>
                 {th('budget', 'Orçam./dia')}
+                {th('target', 'CPA alvo')}
                 {numberHeads}
                 <th />
               </tr>
@@ -188,29 +191,31 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
                     <td className="text-center" onClick={e => e.stopPropagation()}><button onClick={e => onToggleSelect(p.id, e)} aria-label={`Selecionar ${p.name}`} className={`align-middle ${isSelected ? 'text-brand-text' : 'text-ink-subtle hover:text-ink'}`}>{isSelected ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}</button></td>
                     <td className="text-center">{dot(tone, title)}</td>
                     {/* O nome é um link de verdade: abre pelo teclado e aceita Cmd/Ctrl+clique para nova aba. A linha inteira continua abrindo com o mouse. */}
-                    <td className="px-3 py-2"><div className="flex items-center gap-1.5 min-w-0"><Link href={hrefOf(p)} onClick={e => e.stopPropagation()} className={`min-w-0 leading-snug break-words font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`} title={`${p.name}${p.campaign_id ? ` · nº ${p.campaign_id}` : ''}`}>{p.name}</Link>{p.is_hidden && <><EyeOff size={12} aria-hidden="true" className="text-warn shrink-0" /><span className="sr-only">(oculta)</span></>}</div></td>
-                    <td className="px-3" onClick={e => e.stopPropagation()}>
+                    <td className="px-2 py-2"><div className="flex items-center gap-1.5 min-w-0"><Link href={hrefOf(p)} onClick={e => e.stopPropagation()} className={`min-w-0 leading-snug break-words font-medium rounded ${link} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`} title={`${p.name}${p.campaign_id ? ` · nº ${p.campaign_id}` : ''}`}>{p.name}</Link>{p.is_hidden && <><EyeOff size={12} aria-hidden="true" className="text-warn shrink-0" /><span className="sr-only">(oculta)</span></>}</div></td>
+                    <td className="px-2" onClick={e => e.stopPropagation()}>
                       <button onClick={() => onPickAccount(p.mcc_name || 'Outras', p.account_name || 'Sem Conta')} title="Ver só esta conta" className={`block w-full text-left truncate ${text} hover:text-ink hover:underline`}>{p.account_name || 'Sem Conta'}</button>
                       <div className={`text-[11px] truncate ${muted}`}>{p.mcc_name || 'Outras'}</div>
                     </td>
-                    <td className={`px-3 text-right tabular-nums ${n.budget ? text : zero}`} title={p.metrics7d?.budgetDate ? `Lido do Google em ${String(p.metrics7d.budgetDate).split('-').reverse().join('/')}` : undefined}>{n.budget ? money(n.budget, p.currency) : '—'}</td>
+                    <td className={`px-2 text-right tabular-nums whitespace-nowrap ${n.budget ? text : zero}`} title={p.metrics7d?.budgetDate ? `Lido do Google em ${String(p.metrics7d.budgetDate).split('-').reverse().join('/')}` : undefined}>{n.budget ? money(n.budget, p.currency) : '—'}</td>
+                    {num(n.target, n.target ? money(n.target, p.currency) : '—')}
                     {numbers(n, p.currency)}
-                    <td className="px-2" onClick={e => e.stopPropagation()}><div className="flex justify-end gap-1">{actions(p)}</div></td>
+                    <td className="px-1" onClick={e => e.stopPropagation()}><div className="flex justify-end">{actions(p)}</div></td>
                   </tr>
                 );
               })}
             </tbody>
             <tfoot>
               <tr className="h-11 font-medium bg-surface-2">
-                <td /><td /><td className={`px-3 ${head}`}>{totalLabel}</td><td />
+                <td /><td /><td className={`px-2 ${head}`}>{totalLabel}</td><td />
                 {num(total.budget, total.budget ? money(total.budget, total.currency) : '—')}
+                <td />
                 {numbers(total, total.currency)}
                 <td />
               </tr>
             </tfoot>
           </table>
         ) : (
-          <table className="w-full table-fixed border-collapse text-[13px] min-w-[900px]">
+          <table className="w-full table-fixed border-collapse text-xs min-w-[860px]">
             <colgroup><col className="w-9" /><col /><col className="w-[140px]" /><col className="w-[120px]" />{numberCols}</colgroup>
             <thead>
               <tr className={`text-xs border-b ${line} bg-surface-2`}>

@@ -263,10 +263,17 @@ export default function ProductsPage() {
        // Orçamento diário: o Google só informa o de hoje, e a coleta grava no dia em que leu.
        // Vale a leitura mais recente.
        const budgetMap: Record<string, { date: string; value: number }> = {};
+       // Meta de CPA: mesma regra, a leitura mais recente com valor. Campanha de ROAS não tem CPA.
+       const targetMap: Record<string, { date: string; value: number }> = {};
+       const isRoas = (s?: string) => /ROAS|CONVERSION_VALUE/i.test(s || '');
+       const keepTarget = (r: any) => {
+          const t = Number(r.target_cpa || 0);
+          if (t > 0 && !isRoas(r.bidding_strategy) && (!targetMap[r.product_id] || r.date > targetMap[r.product_id].date)) targetMap[r.product_id] = { date: r.date, value: t };
+       };
 
        // As colunas novas só existem depois da migration; até lá o PostgREST
        // recusa a query inteira, então cai para as colunas antigas.
-       const STATUS_COLS_FULL = 'id, product_id, date, campaign_status, effective_status, campaign_status_reasons, budget_micros';
+       const STATUS_COLS_FULL = 'id, product_id, date, campaign_status, effective_status, campaign_status_reasons, budget_micros, target_cpa, bidding_strategy';
        const STATUS_COLS_LEGACY = 'id, product_id, date, campaign_status';
        let statusCols = STATUS_COLS_FULL;
        const fetchStatus = (cols: string) => fetchByProducts(productIds, chunk => supabase
@@ -290,7 +297,7 @@ export default function ProductsPage() {
           ({ data: st } = await fetchStatus(statusCols));
        }
 
-       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, impressions: number, clicks: number, budget: number, budgetDate?: string}> = {};
+       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, impressions: number, clicks: number, budget: number, budgetDate?: string, targetCpa?: number}> = {};
        prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, profit: 0, roi: 0, impressions: 0, clicks: 0, budget: 0 });
        
        {
@@ -309,6 +316,7 @@ export default function ProductsPage() {
           if (!cur || r.date > cur.date) statusMap[r.product_id] = r;
           const budget = Number(r.budget_micros || 0) / 1000000;
           if (budget > 0 && (!budgetMap[r.product_id] || r.date > budgetMap[r.product_id].date)) budgetMap[r.product_id] = { date: r.date, value: budget };
+          keepTarget(r);
        });
 
        // Campanha sem leitura nos últimos 7 dias (pausada há mais tempo): vale o orçamento da última
@@ -320,10 +328,10 @@ export default function ProductsPage() {
           for (let i = 0; i < missing.length; i += 150) chunks.push(missing.slice(i, i + 150));
           await Promise.all(chunks.map(async idChunk => {
              for (let page = 0; ; page++) {
-                const { data: old } = await supabase.from('daily_metrics').select('product_id, date, budget_micros')
+                const { data: old } = await supabase.from('daily_metrics').select('product_id, date, budget_micros, target_cpa, bidding_strategy')
                   .in('product_id', idChunk).gt('budget_micros', 0).lt('date', statusFrom)
                   .order('date', { ascending: false }).order('id').range(page * 1000, (page + 1) * 1000 - 1);
-                ((old || []) as any[]).forEach((r: any) => { if (!budgetMap[r.product_id]) budgetMap[r.product_id] = { date: r.date, value: Number(r.budget_micros) / 1000000 }; });
+                ((old || []) as any[]).forEach((r: any) => { if (!budgetMap[r.product_id]) budgetMap[r.product_id] = { date: r.date, value: Number(r.budget_micros) / 1000000 }; if (!targetMap[r.product_id]) keepTarget(r); });
                 if (!old || old.length < 1000 || idChunk.every((id: string) => budgetMap[id])) break;
              }
           }));
@@ -335,6 +343,7 @@ export default function ProductsPage() {
           if (m.cost > 0) m.roi = (m.profit / m.cost) * 100;
           m.budget = budgetMap[p.id]?.value || 0;
           m.budgetDate = budgetMap[p.id]?.date || '';
+          m.targetCpa = targetMap[p.id]?.value || 0;
           const latest = statusMap[p.id];
           return {
             ...p,
