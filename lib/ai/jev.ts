@@ -90,7 +90,7 @@ function stateFor(item: string, row: any, camp: { cost?: any; sales?: any; cpa?:
     last_7_days: { sales: salesBucket(row.conv7) },
     trend: trend(row),
     campaign_last_3_days: { sales: salesBucket(campSales), status: campSales > 0 ? 'campaign is selling' : 'campaign has no sales' },
-    sales_are_estimated: !!row.approx,
+    sales_source: row.source === 'rastreada' ? 'tracked sales, exact' : 'google conversions',
   };
   if (item === 'termos' && keyword) st.triggered_by_keyword = keyword;
   if (item === 'termos' && row.tag) st.match_type = row.tag;

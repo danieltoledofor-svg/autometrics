@@ -336,7 +336,11 @@ async function writeTexts(c: Computed, items: Item[], candidates: Candidate[], u
 
   const pontos = candidates.map(cd => {
     const r = cd.row;
-    const rateio = r.approx ? ' (vendas reais rateadas pelo item)' : '';
+    const it = c.items.find(i => i.key === cd.item);
+    const unc = it?.uncovered?.d3 || 0;
+    const rateio = r.source === 'rastreada'
+      ? ` (vendas reais ligadas ao clique${unc > 0 ? `; ${unc} ${unc === 1 ? 'venda' : 'vendas'} da campanha em 3 dias sem esse dado no clique podem ser deste item` : ''})`
+      : c.numbers.salesSource === 'real' ? ' (conversões do Google do item: o clique não informa este dado)' : '';
     const nums = r.conv3 > 0
       ? `CPA 3d ${money(r.cpa3!)} (${Math.round((r.pct || 0) * 100)}% ${c.reference.of}), CPA 7d ${n(r.cpa7, money)}, gasto 3d ${money(r.cost3)}, vendas 3d ${r.conv3}`
       : `gasto 3d ${money(r.cost3)} sem venda (${Math.round((r.pct || 0) * 100)}% ${c.reference.of}), gasto 7d ${money(r.cost7)}, vendas 7d ${r.conv7}`;
@@ -358,7 +362,7 @@ NÚMEROS (3 dias × média de 7 dias):
 CPA ${n(d3.cpa, money)} × ${n(d7.cpa, money)} · gasto/dia ${n(d3.cost_day, money)} × ${n(d7.cost_day, money)} · vendas/dia ${d3.sales_day} × ${d7.sales_day} · CTR ${n(d3.ctr, pctf)} × ${n(d7.ctr, pctf)} · CPC ${n(d3.cpc, money)} × ${n(d7.cpc, money)} · visibilidade ${n(d3.visibility, pctf)} × ${n(d7.visibility, pctf)}
 
 CHECKLIST:
-${items.map(i => `- ${i.title}: ${i.status} · ${i.headline}`).join('\n')}
+${items.map(i => `- ${i.title}: ${i.status} · ${i.headline}${i.uncovered && i.uncovered.d3 > 0 ? ` (${i.uncovered.d3} ${i.uncovered.d3 === 1 ? 'venda' : 'vendas'} em 3 dias sem esse dado no clique)` : ''}`).join('\n')}
 
 PONTOS (escreva um para cada):
 ${pontos || '(nenhum novo)'}

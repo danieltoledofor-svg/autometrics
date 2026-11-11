@@ -1,6 +1,8 @@
 import { supabaseAdmin } from '@/lib/googleAds/server';
 import { audienceLabel, deviceLabel, keywordLabel, TERM_MATCH_TAG, ASSET_TAG, formatMoney } from './labels';
 import { normalizeLocations } from '@/lib/geoNames';
+import { loadTrackedSales, type DbTrackedEvent } from '@/lib/tracking/trackedSales';
+import { adKey, countryKey, deviceKey, keywordKey, type KeyOf } from '@/lib/metrics/itemSales';
 
 /**
  * Leitura da campanha pelos números — sem IA.
@@ -16,10 +18,16 @@ import { normalizeLocations } from '@/lib/geoNames';
  *   tanto no CPA quanto no gasto sem venda.
  *
  * Vendas: com venda real (postback ou lançamento) nos últimos 30 dias, a
- * campanha usa as vendas reais e os itens recebem essas vendas rateadas — pelas
- * conversões do Google do item ou, quando a janela não tem conversão, pelos
- * cliques. É o mesmo rateio das colunas "≈" do painel. Sem venda real, tudo
- * usa as conversões do Google.
+ * campanha usa as vendas reais. Palavra-chave, anúncio, dispositivo e local
+ * recebem só a venda ligada a um clique rastreado, inteira, no item do clique
+ * (lib/tracking/trackedSales.ts) — nada de rateio. Termo, idade, gênero e
+ * sitelink nunca vêm no clique: usam as conversões do Google do item, que são
+ * medidas por item. Sem venda real, tudo usa as conversões do Google.
+ *
+ * Venda sem o dado do item (sem clique, ou clique sem palavra-chave) não cai em
+ * linha nenhuma. Para não acusar um item de "gasto sem venda" que pode ter
+ * vendido sem rastreio, o semáforo considera o melhor caso: o item só fica em
+ * alerta se continuar ruim mesmo com essas vendas a favor dele.
  */
 
 export type ItemKey = 'termos' | 'palavras_chave' | 'dispositivos' | 'publicos' | 'locais' | 'anuncios' | 'sitelinks' | 'pagina';
@@ -59,8 +67,8 @@ export interface Row {
   /** CPA (ou gasto sem venda) sobre a referência: 1.12 = 112%. */
   pct: number | null;
   status: Status;
-  /** Vendas rateadas das vendas reais (mostradas com ≈). */
-  approx?: boolean;
+  /** De onde vêm as vendas da linha: venda real ligada ao clique, ou conversões do Google. */
+  source?: 'rastreada' | 'google';
   extra?: Record<string, any>;
 }
 
@@ -72,6 +80,8 @@ export interface Item {
   headline: string;
   rows: Row[];
   others?: { count: number; cost3: number; conv3: number } | null;
+  /** Vendas reais da campanha que não trouxeram o dado deste item (só nos itens rastreados). */
+  uncovered?: { d3: number; d7: number } | null;
   /** Item 8: do clique à venda pela VTurb (lib/vturb/funnel.ts). */
   vturb?: any;
 }
@@ -164,31 +174,30 @@ function addTo(acc: Acc, date: string, d3start: string, r: { cost?: any; convers
 }
 
 /**
- * Troca as conversões do Google de um grupo de itens pelas vendas reais da
- * campanha, rateadas. Cada janela (3 e 7 dias) é rateada à parte.
+ * Vendas exatas de um grupo de itens: zera as conversões do Google e conta só
+ * as vendas reais ligadas ao clique, inteiras, no item do clique. Devolve
+ * quantas vendas reais da campanha ficaram sem item em cada janela.
  */
-/** Devolve se os 3 dias foram rateados pelos cliques (sem conversão do Google). */
-function attribute(accs: Acc[], real: { d3: number; d7: number }) {
-  let byClicks3 = false;
-  for (const w of ['3', '7'] as const) {
-    const convKey = `conv${w}` as 'conv3' | 'conv7';
-    const clickKey = `clicks${w}` as 'clicks3' | 'clicks7';
-    const sales = w === '3' ? real.d3 : real.d7;
-    const g = accs.reduce((s, a) => s + a[convKey], 0);
-    const c = accs.reduce((s, a) => s + a[clickKey], 0);
-    if (w === '3') byClicks3 = g <= 0 && c > 0;
-    for (const a of accs) {
-      const weight = g > 0 ? a[convKey] / g : c > 0 ? a[clickKey] / c : 0;
-      a[convKey] = Math.round(sales * weight * 100) / 100;
-    }
+function exactSales(accs: Map<string, Acc>, events: DbTrackedEvent[], keyOf: KeyOf, d3start: string, real: { d3: number; d7: number }) {
+  for (const a of accs.values()) { a.conv3 = 0; a.conv7 = 0; }
+  let hit3 = 0, hit7 = 0;
+  for (const e of events) {
+    if (e.kind !== 'sale' || !e.linked) continue;
+    const k = keyOf(e);
+    const a = k ? accs.get(k) : undefined;
+    if (!a) continue;
+    a.conv7++; hit7++;
+    if (e.day >= d3start) { a.conv3++; hit3++; }
   }
-  return { byClicks3 };
+  return { d3: Math.max(0, real.d3 - hit3), d7: Math.max(0, real.d7 - hit7) };
 }
 
-function toRow(ref: Reference, key: string, label: string, a: Acc, tag?: string | null, extra?: Record<string, any>, approx = false): Row {
-  const { status, pct } = classify(ref, a.cost3, a.conv3);
+function toRow(ref: Reference, key: string, label: string, a: Acc, tag?: string | null, extra?: Record<string, any>, source: Row['source'] = 'google', uncovered3 = 0): Row {
+  // Melhor caso: as vendas sem o dado do item contam a favor dele no semáforo.
+  const { status } = classify(ref, a.cost3, a.conv3 + uncovered3);
+  const { pct } = classify(ref, a.cost3, a.conv3);
   return {
-    key, label, tag: tag || null, approx,
+    key, label, tag: tag || null, source,
     cost3: round(a.cost3), conv3: round(a.conv3), cpa3: a.conv3 > 0 ? round(a.cost3 / a.conv3) : null,
     cost7: round(a.cost7), conv7: round(a.conv7), cpa7: a.conv7 > 0 ? round(a.cost7 / a.conv7) : null,
     pct: pct === null ? null : Math.round(pct * 1000) / 1000,
@@ -242,7 +251,7 @@ function headline(meta: typeof ITEMS[number], rows: Row[], ref: Reference): stri
 
 const API_ONLY: ItemKey[] = ['palavras_chave', 'anuncios', 'sitelinks'];
 
-function buildItem(key: ItemKey, rows: Row[], ref: Reference, others?: Item['others'], viaApi = true): Item {
+function buildItem(key: ItemKey, rows: Row[], ref: Reference, others?: Item['others'], viaApi = true, uncovered: Item['uncovered'] = null): Item {
   const meta = ITEMS.find(i => i.key === key)!;
   const counts = { urgente: 0, alerta: 0, ok: 0 };
   for (const r of rows) {
@@ -254,7 +263,7 @@ function buildItem(key: ItemKey, rows: Row[], ref: Reference, others?: Item['oth
   const text = !rows.length && !viaApi && API_ONLY.includes(key)
     ? 'Só com a conta conectada pela API do Google (Integração)'
     : headline(meta, rows, ref);
-  return { key, title: meta.title, status, counts, headline: text, rows, others: others || null };
+  return { key, title: meta.title, status, counts, headline: text, rows, others: others || null, uncovered };
 }
 
 /** Linhas para a tela: as de maior gasto e sempre as sinalizadas. */
@@ -312,7 +321,7 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
       .eq('product_id', productId).in('level', ['keyword', 'ad', 'asset']).gte('date', d7start).lte('date', end).range(a, b))
       .catch(() => []),
     fetchAll((a, b) => db.from('google_ads_entities')
-      .select('level, entity_id, name, status, details')
+      .select('level, entity_id, ad_group_id, name, status, details')
       .eq('product_id', productId).in('level', ['keyword', 'ad', 'asset']).range(a, b))
       .catch(() => []),
   ]);
@@ -372,11 +381,14 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
       num(numbers.d7.sales) === 0 ? classify(reference, num(numbers.d7.cost), 0).status : 'ok',
     ]);
 
-  const approx = salesSource === 'real';
+  // Vendas reais ligadas ao clique, para os itens que o clique informa.
+  const exact = salesSource === 'real';
   const real = { d3: num(numbers.d3.sales), d7: num(numbers.d7.sales) };
-  const share = (accs: Acc[]) => (approx ? attribute(accs, real) : { byClicks3: false });
-  const row = (key: string, label: string, a: Acc, tag?: string | null, extra?: Record<string, any>) =>
-    toRow(reference, key, label, a, tag, extra, approx);
+  const tracked = exact ? await loadTrackedSales(db, product.user_id, [productId], d7start, end).catch(() => []) : [];
+  const NONE = { d3: 0, d7: 0 };
+  const exactFor = (accs: Map<string, Acc>, keyOf: KeyOf) => (exact ? exactSales(accs, tracked, keyOf, d3start, real) : null);
+  const row = (key: string, label: string, a: Acc, tag?: string | null, extra?: Record<string, any>, uncovered: { d3: number; d7: number } | null = null) =>
+    toRow(reference, key, label, a, tag, extra, uncovered ? 'rastreada' : 'google', (uncovered || NONE).d3);
 
   // ── 1. Termos ───────────────────────────────────────────────────────────
   const termAcc = new Map<string, Acc>();
@@ -396,7 +408,7 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
     bump(termKeyword, t.keyword ? `${t.keyword}|${t.keyword_match_type || ''}` : '');
   }
   const top = (m?: Map<string, number>) => (m ? [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] : undefined);
-  share([...termAcc.values()]);
+  // Termo nunca vem no clique: conversões do Google do termo.
   const keywordByTerm = new Map<string, { text: string; match: string }>();
   const termRows: Row[] = [];
   for (const [term, acc] of termAcc) {
@@ -420,7 +432,14 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
     if (!byEntity.has(k)) byEntity.set(k, newAcc());
     addTo(byEntity.get(k)!, m.date, d3start, m);
   }
-  for (const level of ['keyword', 'ad', 'asset']) share([...byEntity].filter(([k]) => k.startsWith(`${level}|`)).map(([, a]) => a));
+  // Palavra-chave e anúncio: venda exata pelo clique. Sitelink: conversões do Google.
+  const levelAccs = (level: string) => new Map([...byEntity].filter(([k]) => k.startsWith(`${level}|`)).map(([k, a]) => [k.slice(level.length + 1), a]));
+  const levelEntities = (level: string) => entities.filter(e => e.level === level);
+  const uncoveredBy: Record<string, { d3: number; d7: number } | null> = {
+    keyword: exactFor(levelAccs('keyword'), keywordKey(levelEntities('keyword'))),
+    ad: exactFor(levelAccs('ad'), adKey(levelEntities('ad'))),
+    asset: null,
+  };
   const entityRows = (level: string) => {
     const rows: Row[] = [];
     for (const [k, acc] of byEntity) {
@@ -434,12 +453,12 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
           cpc3: acc.clicks3 > 0 ? round(acc.cost3 / acc.clicks3) : null,
           cpc7: acc.clicks7 > 0 ? round(acc.cost7 / acc.clicks7) : null,
           status: e.status || null,
-        }));
+        }, uncoveredBy.keyword));
       } else if (level === 'ad') {
         rows.push(row(id, e.name || `Anúncio ${id}`, acc, null, {
           ctr3: acc.impr3 > 0 ? acc.clicks3 / acc.impr3 : null,
           strength: d.ad_strength || null, status: e.status || null,
-        }));
+        }, uncoveredBy.ad));
       } else {
         rows.push(row(id, e.name || id, acc, ASSET_TAG[d.field_type] || null, {
           clicks3: acc.clicks3, status: e.status || null,
@@ -459,11 +478,8 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
     if (!audAcc.has(k)) audAcc.set(k, newAcc());
     addTo(audAcc.get(k)!, a.date, d3start, a);
   }
-  let devicesByClicks = false;
-  for (const type of ['Device', 'Age', 'Gender']) {
-    const r = share([...audAcc].filter(([k]) => k.startsWith(`${type}|`)).map(([, a]) => a));
-    if (type === 'Device') devicesByClicks = r.byClicks3;
-  }
+  // Dispositivo: venda exata pelo clique. Idade e gênero nunca vêm no clique: conversões do Google.
+  const deviceUncovered = exactFor(new Map([...audAcc].filter(([k]) => k.startsWith('Device|'))), deviceKey);
   const deviceClicks = { d3: 0, d7: 0 };
   for (const [k, acc] of audAcc) if (k.startsWith('Device|')) { deviceClicks.d3 += acc.clicks3; deviceClicks.d7 += acc.clicks7; }
   const deviceRows: Row[] = [];
@@ -474,9 +490,8 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
       deviceRows.push(row(code, deviceLabel(code), acc, null, {
         share7: deviceClicks.d7 > 0 ? acc.clicks7 / deviceClicks.d7 : null,
         share3: deviceClicks.d3 > 0 ? acc.clicks3 / deviceClicks.d3 : null,
-        // Rateio pelos cliques dá a mesma taxa para todos: não diz nada.
-        convRate3: acc.clicks3 > 0 && !devicesByClicks ? acc.conv3 / acc.clicks3 : null,
-      }));
+        convRate3: acc.clicks3 > 0 ? acc.conv3 / acc.clicks3 : null,
+      }, deviceUncovered));
     } else {
       audienceRows.push(row(k, audienceLabel(type, code), acc, null, { type, code }));
     }
@@ -489,18 +504,18 @@ export async function computeAnalysis(productId: string): Promise<Computed | nul
     if (!locAcc.has(k)) locAcc.set(k, newAcc());
     addTo(locAcc.get(k)!, l.date, d3start, l);
   }
-  share([...locAcc.values()]);
-  const locationRows = [...locAcc].map(([k, acc]) => row(k, k, acc));
+  const locationUncovered = exactFor(locAcc, countryKey);
+  const locationRows = [...locAcc].map(([k, acc]) => row(k, k, acc, null, undefined, locationUncovered));
 
   const viaApi = entities.length > 0 || !!product.google_ads_customer_id;
   const sortCost = (rows: Row[]) => rows.filter(r => r.cost7 > 0).sort((a, b) => b.cost3 - a.cost3 || b.cost7 - a.cost7);
   const items: Item[] = [
     buildItem('termos', termsView.rows, reference, termsView.others),
-    buildItem('palavras_chave', kwView.rows, reference, kwView.others, viaApi),
-    buildItem('dispositivos', markMirrors(sortCost(deviceRows)), reference),
+    buildItem('palavras_chave', kwView.rows, reference, kwView.others, viaApi, uncoveredBy.keyword),
+    buildItem('dispositivos', markMirrors(sortCost(deviceRows)), reference, null, true, deviceUncovered),
     buildItem('publicos', markMirrors(sortCost(audienceRows), r => r.extra?.type || ''), reference),
-    buildItem('locais', markMirrors(sortCost(locationRows)), reference),
-    buildItem('anuncios', adView.rows, reference, adView.others, viaApi),
+    buildItem('locais', markMirrors(sortCost(locationRows)), reference, null, true, locationUncovered),
+    buildItem('anuncios', adView.rows, reference, adView.others, viaApi, uncoveredBy.ad),
     buildItem('sitelinks', assetView.rows, reference, assetView.others, viaApi),
   ];
 

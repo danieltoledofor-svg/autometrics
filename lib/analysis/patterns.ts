@@ -3,7 +3,9 @@ import { MAIN_BLOCK, MAIN_BLOCK_NAME, blockOf, normalizeGroups, type CampaignGro
 import { addDays, todayIn, fetchAll } from './compute';
 import { audienceLabel, deviceLabel, formatMoney, keywordLabel } from './labels';
 import { resolveProductStatus } from '@/lib/campaignStatus';
-import { normalizeLocations } from '@/lib/geoNames';
+import { countryLabel, normalizeLocations } from '@/lib/geoNames';
+import { loadTrackedSales } from '@/lib/tracking/trackedSales';
+import { keywordKey, matchTypeOf } from '@/lib/metrics/itemSales';
 
 /**
  * Análise de IA entre campanhas parecidas — a parte dos números, sem IA.
@@ -18,9 +20,10 @@ import { normalizeLocations } from '@/lib/geoNames';
  * entra, para aquecimento e testes não misturarem com o resto.
  *
  * Vendas: da campanha são as vendas reais (postback ou lançamento), quando o
- * usuário tem alguma. Termo e dispositivo recebem essas vendas rateadas, campanha
- * por campanha — pelas conversões do Google do item ou, sem conversão, pelos
- * cliques. É o mesmo rateio "≈" da análise da campanha (compute.ts).
+ * usuário tem alguma. Palavra-chave, dispositivo e local recebem só a venda
+ * ligada a um clique rastreado, inteira, no item do clique — sem rateio, como
+ * na análise da campanha (compute.ts). Termo, idade e gênero nunca vêm no
+ * clique: usam as conversões do Google de cada linha.
  */
 
 export type PeriodKey = 'today' | 'd2' | 'd3' | 'd7' | 'all' | 'custom';
@@ -229,36 +232,35 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     byChunks(ids, (chunk, a, b) => ranged(db.from('vturb_daily').select('product_id, over_pitch, under_pitch').in('product_id', chunk)).range(a, b)).catch(() => []),
     // Lista de palavras-chave de cada campanha (contas ligadas pela API).
     byChunks(ids, (chunk, a, b) => ranged(db.from('google_ads_entity_metrics').select('product_id, entity_id, date, cost, clicks, conversions').in('product_id', chunk).eq('level', 'keyword')).range(a, b)).catch(() => []),
-    byChunks(ids, (chunk, a, b) => db.from('google_ads_entities').select('product_id, entity_id, name, details').in('product_id', chunk).eq('level', 'keyword').range(a, b)).catch(() => []),
+    byChunks(ids, (chunk, a, b) => db.from('google_ads_entities').select('product_id, entity_id, ad_group_id, name, details').in('product_id', chunk).eq('level', 'keyword').range(a, b)).catch(() => []),
   ]);
+  // Vendas reais ligadas ao clique no período (com o dia do relógio da plataforma).
+  const firstDay = days.reduce((m: string, d: any) => (d.date < m ? d.date : m), to);
+  const tracked = hasReal ? (await loadTrackedSales(db, userId, ids, from || firstDay, to).catch(() => [])).filter(e => e.kind === 'sale' && e.linked) : [];
+  const realSales = round(days.filter(d => inPeriod(d.date)).reduce((sum, d) => sum + num(d.conversions), 0));
 
   // Linha com custo impossível para um dia (há registros antigos gravados em
   // outra unidade): fica de fora para não distorcer a soma.
   const sane = (r: any) => num(r.cost) <= 20000;
-  // Vendas reais de cada campanha, dia a dia, rateadas entre as linhas daquele
-  // dia. Dia sem linha (termo não informado pelo Google) não entra na conta.
-  const salesByDay = new Map<string, number>();
-  for (const d of days) if (inPeriod(d.date)) salesByDay.set(`${d.product_id}|${d.date}`, salesOf(d));
-  const shareSales = (rows: any[]) => {
-    if (!hasReal) return;
-    const sum = new Map<string, { conv: number; clicks: number }>();
-    const key = (r: any) => `${r.product_id}|${r.date}`;
-    for (const r of rows) {
-      if (!sum.has(key(r))) sum.set(key(r), { conv: 0, clicks: 0 });
-      const t = sum.get(key(r))!;
-      t.conv += num(r.conversions); t.clicks += num(r.clicks);
+  // Vendas exatas: zera as conversões do Google das linhas e põe cada venda
+  // rastreada, inteira, na linha do clique. Sem o dado, a venda fica de fora.
+  const exactRows = (rows: any[], keyOfSale: (e: any) => string | null, keyOfRow: (r: any) => string) => {
+    if (!hasReal) return 0;
+    const at = new Map<string, any>();
+    for (const r of rows) { r.conversions = 0; at.set(keyOfRow(r), r); }
+    let hit = 0;
+    for (const e of tracked) {
+      const k = keyOfSale(e);
+      const r = k ? at.get(k) : undefined;
+      if (!r) continue;
+      r.conversions = num(r.conversions) + 1; hit++;
     }
-    for (const r of rows) {
-      const t = sum.get(key(r))!, sales = salesByDay.get(key(r)) || 0;
-      const part = sales * (t.conv > 0 ? num(r.conversions) / t.conv : t.clicks > 0 ? num(r.clicks) / t.clicks : 0);
-      // Uma linha não pode ter mais venda do que clique: o que passar disso fica sem dono.
-      r.conversions = Math.min(part, num(r.clicks));
-    }
+    return hit;
   };
   const termRowsIn = terms.filter(sane), deviceRowsIn = devices.filter(sane);
   // Palavras-chave: da lista da campanha quando ela existe (traz todas, com o
   // gasto inteiro); senão, da palavra-chave anotada em cada termo de pesquisa.
-  // Copiadas antes do rateio dos termos, que mexe nas vendas da linha.
+  // Copiadas antes de as vendas exatas trocarem as conversões das linhas.
   const keywordText = new Map(keywordNames.map(e => [`${e.product_id}|${e.entity_id}`, keywordLabel(String(e.name || '').trim().toLowerCase(), e.details?.match_type)]));
   const fromList = keywordMetrics.filter(sane).map(m => ({ ...m, label: keywordText.get(`${m.product_id}|${m.entity_id}`) || '' })).filter(m => m.label);
   const listed = new Set(fromList.map(m => m.product_id));
@@ -267,9 +269,40 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     ...termRowsIn.filter(t => t.keyword && !listed.has(t.product_id))
       .map(t => ({ ...t, label: keywordLabel(String(t.keyword).trim().toLowerCase(), t.keyword_match_type) })),
   ];
-  shareSales(termRowsIn);
-  shareSales(deviceRowsIn);
-  shareSales(keywordRowsIn);
+  // Termo: conversões do Google (o clique não informa o termo).
+  // Dispositivo: uma linha por campanha e aparelho no período, com a venda exata.
+  const deviceTotals = new Map<string, any>();
+  for (const d of deviceRowsIn) {
+    const k = `${d.product_id}|${d.audience_name}`;
+    const cur = deviceTotals.get(k) || { product_id: d.product_id, audience_name: d.audience_name, cost: 0, clicks: 0, conversions: 0 };
+    cur.cost += num(d.cost); cur.clicks += num(d.clicks); cur.conversions += num(d.conversions);
+    deviceTotals.set(k, cur);
+  }
+  const deviceRowsOut = [...deviceTotals.values()];
+  const deviceHit = exactRows(deviceRowsOut, e => (e.device ? `${e.product_id}|${e.device}` : null), r => `${r.product_id}|${r.audience_name}`);
+  // Palavra-chave: uma linha por campanha e palavra-chave, com a venda exata.
+  const keywordTotals = new Map<string, any>();
+  for (const k of keywordRowsIn) {
+    const key = `${k.product_id}|${k.entity_id || k.label}`;
+    const cur = keywordTotals.get(key) || { product_id: k.product_id, entity_id: k.entity_id || null, label: k.label, text: String(k.keyword || '').trim().toLowerCase(), match: k.keyword_match_type || '', cost: 0, clicks: 0, conversions: 0 };
+    cur.cost += num(k.cost); cur.clicks += num(k.clicks); cur.conversions += num(k.conversions);
+    keywordTotals.set(key, cur);
+  }
+  const keywordRowsOut = [...keywordTotals.values()];
+  const keyOfKeywordSale = (() => {
+    const listedKey = new Map<string, ReturnType<typeof keywordKey>>();
+    for (const pid of listed) listedKey.set(pid, keywordKey(keywordNames.filter(e => e.product_id === pid)));
+    return (e: any): string | null => {
+      const fromList = listedKey.get(e.product_id);
+      if (fromList) { const id = fromList(e); return id ? `${e.product_id}|${id}` : null; }
+      if (!e.keyword) return null;
+      // Sem a lista: pelo texto (e correspondência, quando veio) entre as palavras dos termos da campanha.
+      const text = String(e.keyword).trim().toLowerCase(), match = matchTypeOf(e.match_type);
+      const same = keywordRowsOut.filter(r => r.product_id === e.product_id && !r.entity_id && r.text === text && (!match || r.match === match));
+      return same.length === 1 ? `${e.product_id}|${same[0].label}` : null;
+    };
+  })();
+  const keywordHit = exactRows(keywordRowsOut, keyOfKeywordSale, r => `${r.product_id}|${r.entity_id || r.label}`);
 
   // ── Dados a mais, só para as perguntas à IA ──────────────────────────────
   let detail: any = null;
@@ -281,7 +314,16 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
       byChunks(ids, (chunk, a, b) => ranged(db.from('locations').select('product_id, date, location_name, cost, clicks, conversions').in('product_id', chunk)).range(a, b)),
     ]);
     const ages = people.filter(r => r.audience_type === 'Age' && sane(r)), genders = people.filter(r => r.audience_type === 'Gender' && sane(r)), locs = normalizeLocations(places).filter(sane);
-    [ages, genders, locs].forEach(shareSales);
+    // Idade e gênero: conversões do Google. Local: venda exata pelo país do clique.
+    const locTotals = new Map<string, any>();
+    for (const l of locs) {
+      const k = `${l.product_id}|${l.location_name}`;
+      const cur = locTotals.get(k) || { product_id: l.product_id, location_name: l.location_name, cost: 0, clicks: 0, conversions: 0 };
+      cur.cost += num(l.cost); cur.clicks += num(l.clicks); cur.conversions += num(l.conversions);
+      locTotals.set(k, cur);
+    }
+    const locRows = [...locTotals.values()];
+    exactRows(locRows, e => (e.country ? `${e.product_id}|${countryLabel(e.country)}` : null), r => `${r.product_id}|${r.location_name}`);
     const group = (rows: any[], nameOfRow: (r: any) => string, limit: number) => {
       const m = new Map<string, { cost: number; conv: number; campaigns: Set<string> }>();
       for (const r of rows) {
@@ -311,7 +353,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
       terms: group(termRowsIn, r => String(r.search_term || ''), 40),
       ages: group(ages, r => audienceLabel('Age', String(r.audience_name || '')), 10),
       genders: group(genders, r => audienceLabel('Gender', String(r.audience_name || '')), 5),
-      locations: group(locs, r => String(r.location_name || ''), 15),
+      locations: group(locRows, r => String(r.location_name || ''), 15),
     };
   }
 
@@ -334,12 +376,12 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   // A lista de palavras-chave traz o gasto inteiro da campanha e os termos só
   // uma parte dele: cada tabela é comparada com a própria média.
   let keywordCost = 0, keywordConv = 0;
-  for (const k of keywordRowsIn) { keywordCost += num(k.cost); keywordConv += num(k.conversions); bump(byKeyword, k.label, k); }
+  for (const k of keywordRowsOut) { keywordCost += num(k.cost); keywordConv += num(k.conversions); bump(byKeyword, k.label, k); }
   const keywordCpa = cpaOf(keywordCost, keywordConv);
   const termCpa = cpaOf(termCost, termConv);
   const mark = (cost: number, conv: number, ref: number | null): Mark => {
     if (!ref) return null;
-    // Venda quase de graça é sobra do rateio, não padrão: precisa ter gasto de verdade.
+    // Venda quase de graça é sorte, não padrão: precisa ter gasto de verdade.
     if (conv >= 2 && cost >= ref * 0.5 && cost / conv <= ref * 0.8) return 'funciona';
     if (conv <= 0 && cost >= ref) return 'desperdicio';
     if (conv > 0 && cost / conv >= ref * 1.25) return 'atencao';
@@ -356,7 +398,7 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   const keywords_best = best(byKeyword, 15, keywordCpa), keywords_waste = waste(byKeyword, 8, keywordCpa);
 
   const dev = new Map<string, Agg>();
-  for (const d of deviceRowsIn) bump(dev, String(d.audience_name || ''), d);
+  for (const d of deviceRowsOut) bump(dev, String(d.audience_name || ''), d);
   const devCost = [...dev.values()].reduce((s, a) => s + a.cost, 0), devConv = [...dev.values()].reduce((s, a) => s + a.conv, 0);
   const devCpa = cpaOf(devCost, devConv);
   const deviceRows = [...dev].filter(([, a]) => a.cost > 0).sort((a, b) => b[1].cost - a[1].cost).map(([code, a]) => ({
@@ -390,15 +432,17 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   // ── O que se repete: frases montadas pelo código (a IA não mexe em número) ─
   const highlights: { mark: Exclude<Mark, null>; text: string }[] = [];
   const inCampaigns = (n: number) => (n === 1 ? 'em 1 campanha' : `em ${n} campanhas`);
-  const sales = (v: number) => `${hasReal ? '≈ ' : ''}${(Math.round(v * 10) / 10).toLocaleString('pt-BR')} ${v === 1 ? 'venda' : 'vendas'}`;
+  const sales = (v: number) => `${(Math.round(v * 10) / 10).toLocaleString('pt-BR')} ${v === 1 ? 'venda' : 'vendas'}`;
+  // Termo nunca vem no clique: o número dele é a conversão do Google.
+  const termConvText = (v: number) => `${(Math.round(v * 10) / 10).toLocaleString('pt-BR')} ${v === 1 ? 'conversão' : 'conversões'} do Google`;
   for (const r of terms_best.filter(r => r.mark === 'funciona').slice(0, 2)) {
-    highlights.push({ mark: 'funciona', text: `Termo "${r.text}": ${sales(r.conv)} com CPA de ${money(r.cpa!)}, ${Math.round((1 - r.cpa! / termCpa!) * 100)}% abaixo da média dos termos, ${inCampaigns(r.campaigns)}.` });
+    highlights.push({ mark: 'funciona', text: `Termo "${r.text}": ${hasReal ? termConvText(r.conv) : sales(r.conv)} com CPA de ${money(r.cpa!)}, ${Math.round((1 - r.cpa! / termCpa!) * 100)}% abaixo da média dos termos, ${inCampaigns(r.campaigns)}.` });
   }
   for (const r of keywords_best.filter(r => r.mark === 'funciona').slice(0, 1)) {
     highlights.push({ mark: 'funciona', text: `Palavra-chave ${r.text}: ${sales(r.conv)} com CPA de ${money(r.cpa!)}, ${Math.round((1 - r.cpa! / keywordCpa!) * 100)}% abaixo da média das palavras-chave, ${inCampaigns(r.campaigns)}.` });
   }
   for (const r of terms_waste.filter(r => r.mark === 'desperdicio').slice(0, 2)) {
-    highlights.push({ mark: 'desperdicio', text: `Termo "${r.text}": ${money(r.cost)} gastos sem venda, ${inCampaigns(r.campaigns)}.` });
+    highlights.push({ mark: 'desperdicio', text: `Termo "${r.text}": ${money(r.cost)} gastos sem ${hasReal ? 'conversão no Google' : 'venda'}, ${inCampaigns(r.campaigns)}.` });
   }
   const strong = deviceRows.filter(r => r.conv >= 2 && r.cpa !== null).sort((a, b) => a.cpa! - b.cpa!);
   if (strong.length >= 2 && strong[strong.length - 1].cpa! >= strong[0].cpa! * 1.25) {
@@ -412,8 +456,10 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     ...base, empty: false as const,
     sales_source: hasReal ? 'real' as const : 'google' as const,
     totals, highlights,
-    // Com vendas reais, as vendas de termo e dispositivo são rateadas (≈).
-    approx: hasReal,
+    // Com vendas reais: palavra-chave e dispositivo só com a venda ligada ao
+    // clique (quantas das vendas do período caíram numa linha); termo pelas
+    // conversões do Google.
+    tracked: hasReal ? { sales: realSales, keywords: keywordHit, devices: deviceHit } : null,
     terms_best, terms_waste, keywords_best, keywords_waste, term_cpa: termCpa, keyword_cpa: keywordCpa, term_campaigns: termCampaigns,
     // Campanhas do conjunto com a lista de palavras-chave lida do Google.
     keyword_listed: listed.size,

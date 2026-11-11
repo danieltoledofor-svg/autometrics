@@ -162,7 +162,7 @@ export function ColumnPicker({ columns, visible, onChange, onReset, onClose, cus
 
         {!editing && (
           <div className={`p-4 border-t ${borderCol} flex justify-between items-center`}>
-            <span className={`text-xs ${textMuted}`}>{visible.length} coluna(s) visíveis · ≈ = vendas reais distribuídas por estimativa</span>
+            <span className={`text-xs ${textMuted}`}>{visible.length} coluna(s) visíveis</span>
             <div className="flex gap-2">
               {onReset && <button onClick={onReset} className={`px-4 py-2 rounded-lg text-sm font-semibold border ${borderCol} ${textMuted} hover:text-brand-text`}>Restaurar padrão</button>}
               <button onClick={onClose} className="px-5 py-2 rounded-lg text-sm font-semibold bg-brand text-white hover:bg-brand-hover">Concluir</button>

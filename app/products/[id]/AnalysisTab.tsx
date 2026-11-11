@@ -281,8 +281,8 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
   // ── tabelas de cada item ─────────────────────────────────────────────────
   const th = `px-3 py-2 text-[10.5px] font-medium ${textMuted} ${soft} whitespace-nowrap border-b ${borderCol}`;
   const td = `px-3 py-2 text-[13px] whitespace-nowrap border-b ${borderCol}`;
-  const conv = (v: number, approx = false) => <span className={v > 0 ? `${tone.ok} font-medium` : textMuted}>{approx && v > 0 ? '≈ ' : ''}{String(v).replace('.', ',')}</span>;
-  const cpa = (r: any) => (r.cpa3 === null ? <span className={textMuted}>—</span> : <span className={tone[r.status as Status] || ''}>{r.approx ? '≈ ' : ''}{money(r.cpa3)}</span>);
+  const conv = (v: number) => <span className={v > 0 ? `${tone.ok} font-medium` : textMuted}>{String(v).replace('.', ',')}</span>;
+  const cpa = (r: any) => (r.cpa3 === null ? <span className={textMuted}>—</span> : <span className={tone[r.status as Status] || ''}>{money(r.cpa3)}</span>);
   const pctRef = (r: any) => r.pct === null ? <span className={textMuted}>—</span>
     : <span className={tone[r.status as Status] || ''}>{Math.round(r.pct * 100)}%{r.conv3 === 0 ? ' sem venda' : ''}</span>;
 
@@ -292,9 +292,9 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
   });
   const base: Col[] = [
     { h: 'Custo 3d', n: true, r: row => money(row.cost3) },
-    { h: 'Vendas 3d', n: true, r: row => conv(row.conv3, row.approx) },
+    { h: 'Vendas 3d', n: true, r: row => conv(row.conv3) },
     { h: 'CPA 3d', n: true, r: cpa },
-    { h: 'CPA 7d', n: true, r: row => <span className={textMuted}>{row.approx && row.cpa7 !== null ? '≈ ' : ''}{money(row.cpa7)}</span> },
+    { h: 'CPA 7d', n: true, r: row => <span className={textMuted}>{money(row.cpa7)}</span> },
     { h: `% ${ref?.of || ''}`, n: true, r: pctRef },
   ];
   const statusCol: Col = { h: 'Status', r: row => <Pill s={row.status}>{row.extra?.mirror ? 'igual à campanha' : statusLabel(row.status, row)}</Pill> };
@@ -338,9 +338,14 @@ export function AnalysisTab({ productId, ui, onOpenVturb }: { productId: string;
             )}
           </tbody>
         </table>
-        {item.rows.some((r: any) => r.approx) && (
-          <div className={`px-3 py-1.5 text-[11px] ${textMuted} ${soft}`}>≈ vendas reais da campanha divididas entre os itens pelas conversões do Google, ou pelos cliques quando não há conversão.</div>
-        )}
+        {item.rows.some((r: any) => r.source === 'rastreada') ? (
+          <div className={`px-3 py-1.5 text-[11px] ${textMuted} ${soft}`}>
+            Vendas reais ligadas ao clique, inteiras, no item que o clique informou.
+            {item.uncovered?.d3 > 0 && ` ${item.uncovered.d3} ${item.uncovered.d3 === 1 ? 'venda' : 'vendas'} da campanha em 3 dias não trouxe${item.uncovered.d3 === 1 ? '' : 'ram'} esse dado e não ${item.uncovered.d3 === 1 ? 'aparece' : 'aparecem'} aqui; o status só acusa o que continua ruim mesmo contando essas vendas a favor.`}
+          </div>
+        ) : a.numbers?.salesSource === 'real' && item.rows.some((r: any) => r.source === 'google') ? (
+          <div className={`px-3 py-1.5 text-[11px] ${textMuted} ${soft}`}>Vendas = conversões do Google de cada linha: o clique não informa este dado, então a venda real não tem como ser ligada a ele.</div>
+        ) : null}
       </div>
     );
   };

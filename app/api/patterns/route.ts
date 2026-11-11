@@ -90,7 +90,7 @@ function prompt(p: Extract<Patterns, { empty: false }>, tag: string) {
   const line = (r: any) => `- ${r.text}: ${r.campaigns} campanhas · custo ${money(r.cost)} · vendas ${r.conv} · CPA ${money(r.cpa)}${jevTag(r)}`;
   const label = PERIODS.find(x => x.key === p.period.key)!.label;
   return `Grupo: campanhas com "${tag || 'todas'}" no nome${p.mcc ? ` · MCC ${p.mcc}` : ''} · período: ${label}${p.period.from ? ` (${p.period.from} a ${p.period.to})` : ''}
-${p.approx ? 'As vendas de termo e de dispositivo são as vendas reais de cada campanha divididas entre os itens (valor aproximado).' : 'As vendas são as conversões do Google.'}
+${p.tracked ? `Vendas de palavra-chave e de dispositivo: só as vendas reais ligadas ao clique, inteiras (${p.tracked.keywords} de ${p.tracked.sales} vendas do período têm a palavra-chave; ${p.tracked.devices} têm o dispositivo). Uma palavra-chave "sem venda" pode ter vendido sem esse dado no clique. Vendas de termo são as conversões do Google (o clique não informa o termo).` : 'As vendas são as conversões do Google.'}
 
 TOTAL DO GRUPO: ${p.totals.campaigns} campanhas com gasto · custo ${money(p.totals.cost)} · vendas ${p.totals.sales} · CPA ${money(p.totals.cpa)}${p.totals.result !== null ? ` · resultado ${money(p.totals.result)}` : ''}
 CPA médio dos termos informados pelo Google: ${money(p.term_cpa)} · CPA médio das palavras-chave: ${money(p.keyword_cpa)}

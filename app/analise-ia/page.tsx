@@ -210,7 +210,7 @@ export default function PatternsPage() {
           className={`ml-2 inline-block text-[11px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap align-middle ${r.jev === 'firme' ? 'bg-brand/15 text-brand-text' : 'bg-surface-3 text-ink-subtle'}`}>Jev: {r.jev === 'firme' ? 'padrão firme' : 'pode ser acaso'}</span>}</td>
         <td className={`${td} text-right`}>{r.campaigns}</td>
         <td className={`${td} text-right whitespace-nowrap`}>{money(r.cost)}</td>
-        <td className={`${td} text-right whitespace-nowrap`}>{data.approx && r.conv > 0 ? '≈ ' : ''}{qty(r.conv)}</td>
+        <td className={`${td} text-right whitespace-nowrap`}>{qty(r.conv)}</td>
         <td className={`${td} text-right whitespace-nowrap font-medium ${cpaTone(r.mark)}`}>{r.cpa === null ? 'sem venda' : money(r.cpa)}</td>
       </tr>
     );
@@ -465,7 +465,7 @@ export default function PatternsPage() {
             </div>
             <div className={`text-[11px] ${muted} -mt-2`}>
               Camp. é em quantas campanhas do conjunto o termo ou a palavra-chave apareceu. CPA em verde está pelo menos 20% abaixo da média da própria tabela: {money(d.term_cpa)} nos termos e {money(d.keyword_cpa)} nas palavras-chave. A média dos termos é menor porque o Google não informa todos os termos; as palavras-chave vêm da lista de cada campanha, com o gasto inteiro{d.keyword_listed < d.totals.campaigns ? ` (${d.keyword_listed} de ${d.totals.campaigns} campanhas têm a lista; nas outras, vale a palavra-chave anotada no termo)` : ''}.
-              {d.approx ? ' ≈ vendas reais de cada campanha divididas entre os termos pelas conversões do Google, ou pelos cliques quando não há conversão.' : ''}
+              {d.tracked ? ` Vendas das palavras-chave e dos dispositivos: só as vendas reais ligadas ao clique, inteiras (${d.tracked.keywords} de ${d.tracked.sales} vendas do período trouxeram a palavra-chave; ${d.tracked.devices}, o dispositivo); as outras contam só no total. Vendas dos termos são as conversões do Google, porque o clique não informa o termo.` : ''}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -482,7 +482,7 @@ export default function PatternsPage() {
                         <td className={`${td} font-medium ${head}`}>{r.text}</td>
                         <td className={`${td} text-right`}>{Math.round(r.share * 100)}%</td>
                         <td className={`${td} text-right`}>{money(r.cost)}</td>
-                        <td className={`${td} text-right`}>{d.approx && r.conv > 0 ? '≈ ' : ''}{qty(r.conv)}</td>
+                        <td className={`${td} text-right`}>{qty(r.conv)}</td>
                         <td className={`${td} text-right font-medium ${cpaTone(r.mark)}`}>{r.cpa === null ? 'sem venda' : money(r.cpa)}</td>
                       </tr>
                     ))}</tbody>

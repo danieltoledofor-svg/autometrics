@@ -83,7 +83,7 @@ export async function addJev(userId: string, p: Full, key: string): Promise<{ as
     ...terms.map(([r, kind, ref]) => async () => {
       const a = await jevChoose({ userId, productId: null }, {
         item_type: kind, sales: salesBucket(r.conv), spend: costBucket(r.cost, ref), versus_average: cpaBucket(r.cpa, ref),
-        found_in: campaignsBucket(r.campaigns), sales_are_estimated: p.approx,
+        found_in: campaignsBucket(r.campaigns), sales_source: kind === 'search term' || !p.tracked ? 'google conversions' : 'tracked sales, exact',
       }, PATTERN, 'padrao', ['firme', 'acaso']);
       r.jev = (a?.choice as JevPattern) || null;
       if (r.jev) termOut.set(`${kind}|${r.text}`, r.jev);
