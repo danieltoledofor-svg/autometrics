@@ -110,6 +110,19 @@ async function handleV2(userId: string, body: any, request: Request) {
     const page = cut(body.u, 500);
     const userAgent = cut(request.headers.get('user-agent'), 300);
 
+    // e: 'vt' = player da VTurb achado na página (a VSL). Liga o player à campanha
+    // do clique quando ela ainda não tem um; o vinculado à mão nunca é trocado.
+    if (body.e === 'vt') {
+        const playerId = (Array.isArray(body.vt) ? body.vt : []).map((v: any) => cut(v, 24).toLowerCase()).find((v: string) => /^[0-9a-f]{24}$/.test(v));
+        if (productId && playerId && !BOT.test(userAgent)) {
+            const { error: vtError } = await supabase.from('products')
+                .update({ vturb_player_id: playerId, vturb_synced_at: null, vturb_sync_error: null })
+                .eq('id', productId).is('vturb_player_id', null);
+            if (vtError) console.error('[TrackClick] Erro ao ligar o player da VTurb:', vtError.message);
+        }
+        return ok();
+    }
+
     // e: 't' = só o tempo na página e a rolagem, sem página nova.
     if (body.e === 't') {
         const { error: touchError } = await supabase.rpc('tracking_touch', {

@@ -1,5 +1,5 @@
 /**
- * AutoMetrics — Rastreamento (v5.6). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5.7). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
@@ -10,6 +10,8 @@
  * (link de compra na página ou botão do player da VTurb, inclusive quando ele
  * leva ao site do produtor). Numa página sem a FlowTracking, leva o
  * identificador no link de compra da BuyGoods e da JVZoo; com ela na página, só o tid da JVZoo.
+ * Na página com o vídeo da VTurb (a VSL), avisa o ID do player: a campanha do
+ * clique fica ligada a ele sem precisar colar nada em Campanha → VTurb.
  *
  * Mudou aqui, mudou em todas as páginas: teste antes de publicar.
  */
@@ -211,8 +213,24 @@
         });
       } catch (e) {}
     }
+    // Vídeo da VTurb na página (a VSL): avisa o ID do player uma vez por página,
+    // e o servidor liga esse player à campanha do clique.
+    var seen = {};
+    function players() {
+      try {
+        var l = document.querySelectorAll('vturb-smartplayer[id],[id^="vid-"],[id^="vid_"],script[src*="converteai"],script[src*="vturb"],link[href*="converteai"]');
+        var found = [];
+        for (var i = 0; i < l.length; i++) {
+          var el = l[i], addr = el.getAttribute('src') || el.getAttribute('href') || '';
+          var m = addr ? /\/players\/([0-9a-f]{24})(?![0-9a-f])/i.exec(addr) : /(?:^|[^0-9a-f])([0-9a-f]{24})(?![0-9a-f])/i.exec(el.id || '');
+          if (m && !seen[m[1].toLowerCase()]) { seen[m[1].toLowerCase()] = 1; found.push(m[1].toLowerCase()); }
+        }
+        if (found.length) send({ v: 3, c: cur.id, p: cur.p, e: 'vt', u: here, vt: found });
+      } catch (e) {}
+    }
     function bind() {
       primeAll();
+      players();
       var list = document.querySelectorAll('vturb-smartplayer');
       for (var i = 0; i < list.length; i++) (function (el) {
         hook(el);
