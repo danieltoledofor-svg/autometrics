@@ -185,6 +185,17 @@ async function handleV2(userId: string, body: any, request: Request) {
     }
 
     // A sessão da FlowTracking costuma aparecer só na página seguinte.
+    // A visita começou sem campanha (URL sem parâmetros) e o anúncio apareceu depois (parâmetros
+    // postos na URL por outro script, ou guardados por ele): completa o que faltava, sem trocar nada.
+    if ((campaignId || gclid) && clickId.startsWith('am_')) {
+        const fill: Record<string, any> = {};
+        for (const k of ['product_id', 'campaign_id', 'gclid', 'gbraid', 'wbraid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'keyword', 'ad_group_id', 'ad_id', 'network'] as const) {
+            if ((base as any)[k]) fill[k] = (base as any)[k];
+        }
+        await supabase.from('tracking_clicks').update(fill).eq('user_id', userId).eq('click_id', clickId)
+            .is('campaign_id', null).is('gclid', null).then(() => null, () => null);
+    }
+
     if (p.ft_sid) {
         await supabase.from('tracking_clicks').update({ ft_sid: p.ft_sid }).eq('user_id', userId).eq('click_id', clickId).is('ft_sid', null);
     }

@@ -78,6 +78,19 @@ export async function retryUnmatched(deadline: number) {
           if (p?.google_ads_campaign_id) { productId = p.id; campaignId = String(p.google_ads_campaign_id); }
         }
       }
+      // 1b. O postback de novo, como chegou: a visita pode ter ganhado campanha depois (sessão da
+      //     FlowTracking, player da VTurb, clique informado pelo Google). Achou: ele já grava a venda.
+      if (!campaignId && (row.event_type === 'sale' || row.event_type === 'refund')) {
+        const res = await processPostback(new URLSearchParams(row.query || ''), row.user_id, { at: row.created_at });
+        if (res.status === 200) {
+          const { data: ev } = row.transaction_id
+            ? await db.from('postback_events').select('product_id').eq('transaction_id', row.transaction_id).eq('event_type', row.event_type).order('created_at', { ascending: false }).limit(1)
+            : { data: null };
+          await save(row.id, { resolved_at: new Date().toISOString(), product_id: ev?.[0]?.product_id || null, tries: (Number(row.tries) || 0) + 1, note: 'Campanha achada pela visita, pela sessão ou pelo player da VTurb.' });
+          report.resolved++;
+          continue;
+        }
+      }
       // 2. Perguntando ao Google: uma consulta por conta e por dia. `tries` guarda quantos lotes já foram vistos.
       const saleDay = serverDay(new Date(row.created_at));
       let note = '';

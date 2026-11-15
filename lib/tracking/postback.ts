@@ -57,6 +57,16 @@ export function checkoutKey(clickId: string | null, subIds: string[], order: str
     return (ref ? `checkout:${ref}` : order ? `checkout:visita:${order}` : campaignId ? `checkout:${campaignId}` : '').slice(0, 200);
 }
 
+/** IDs de player da VTurb (24 letras hexadecimais) dentro da sessão que a FlowTracking manda no subid: v3_{sessão}_{player}_... */
+export function playersIn(ids: string[]): string[] {
+    const out = new Set<string>();
+    for (const id of ids) {
+        if (!/^v\d+_/i.test(id)) continue;
+        for (const part of id.split('_')) if (/^[0-9a-f]{24}$/i.test(part)) out.add(part.toLowerCase());
+    }
+    return [...out];
+}
+
 /** Campos que o postback já usa: o resto vai para `details`. */
 const CORE_PARAMS = new Set(['source', 'event', 'CONV_TYPE', 'status', 'campaign_id', 'utm_id', 'gad_campaignid', 'subid1', 'subid2', 'subid3', 'subid4', 'subid5', 'cid',
     'utm_campaign', 'amount', 'cy', 'currency', 'tid', 'orderid', 'order_id', 'transid', 'r', 'random', 'dry_run']);
@@ -281,6 +291,17 @@ export async function processPostback(rawParams: URLSearchParams, userId: string
             } else trace.push('gclid no Google (click_view): não');
         }
 
+        // Player da VTurb no subid (FlowTracking: v3_{sessão}_{player}_..._t-10_s-1): a VSL assistida diz a
+        // campanha quando o clique se perdeu. Só vale se o player for de uma campanha só deste login.
+        if (!product && candidateIds.length) {
+            const players = playersIn(candidateIds);
+            if (players.length) {
+                const { data } = await supabase.from('products').select('id, currency').eq('user_id', userId).in('vturb_player_id', players).limit(5);
+                if (data?.length === 1) product = data[0];
+                trace.push(`player da VTurb ${players.join(',')}: ${data?.length === 1 ? 'campanha encontrada' : data?.length ? `${data.length} campanhas usam, não dá para escolher` : 'não'}`);
+            }
+        }
+
         // 1c. Fallback: busca pelo nome da campanha (utm_campaign)
         if (!product && campaignName) {
             const { data } = await supabase
@@ -291,6 +312,13 @@ export async function processPostback(rawParams: URLSearchParams, userId: string
                 .single();
             product = data;
             trace.push(`nome ${campaignName}: ${data ? 'encontrado' : 'não'}`);
+        }
+
+        // Visita que chegou sem campanha (URL sem parâmetros) e agora tem uma: fica ligada a ela também.
+        if (!dryRun && product && clickId) {
+            const { data: owner } = await supabase.from('products').select('google_ads_campaign_id').eq('id', product.id).maybeSingle();
+            await supabase.from('tracking_clicks').update({ product_id: product.id, campaign_id: owner?.google_ads_campaign_id || null })
+                .eq('user_id', userId).eq('click_id', clickId).is('product_id', null).then(() => null, () => null);
         }
 
         if (event === 'checkout') tid = checkoutKey(clickId, subIds, order, campaignId);

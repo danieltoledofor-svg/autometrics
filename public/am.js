@@ -1,5 +1,5 @@
 /**
- * AutoMetrics — Rastreamento (v5.7). O mesmo arquivo para todas as páginas:
+ * AutoMetrics — Rastreamento (v5.8). O mesmo arquivo para todas as páginas:
  *   <script src="https://autometrics.cloud/am.js" data-uid="SEU_CODIGO" async></script>
  *
  * Guarda toda visita (com ou sem anúncio) e tudo o que vier na URL de entrada,
@@ -10,6 +10,7 @@
  * (link de compra na página ou botão do player da VTurb, inclusive quando ele
  * leva ao site do produtor). Numa página sem a FlowTracking, leva o
  * identificador no link de compra da BuyGoods e da JVZoo; com ela na página, só o tid da JVZoo.
+ * Quando a URL chega sem nada, usa o anúncio que a FlowTracking guardou no navegador.
  * Na página com o vídeo da VTurb (a VSL), avisa o ID do player: a campanha do
  * clique fica ligada a ele sem precisar colar nada em Campanha → VTurb.
  *
@@ -52,6 +53,24 @@
     try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
     if (saved && now - saved.t > 30 * 864e5) saved = null;       // clique vale 30 dias
     if (saved && !saved.k && now - saved.s > 30 * 6e4) saved = null; // visita sem anúncio: 30 minutos parada e vira outra
+    if (!clickId && !carried && !hasCampaign && !(saved && saved.k)) {
+      // URL sem nada e nenhum clique guardado aqui: a FlowTracking pode ter guardado o anúncio desta pessoa.
+      try {
+        var ft = JSON.parse(localStorage.getItem('flow_click_data') || sessionStorage.getItem('flow_click_data') || 'null'), got = 0;
+        if (ft && !(ft.first_seen_at && now - Date.parse(ft.first_seen_at) > 30 * 864e5)) {
+          ['gclid', 'gbraid', 'wbraid', 'ftgid', 'utm_id', 'gad_campaignid', 'gad_source', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'network', 'device'].forEach(function (k) {
+            var v = ft[k] == null ? '' : String(ft[k]);
+            if (v && v.indexOf('{') < 0 && !(k in params)) { params[k] = v.slice(0, 300); got++; }
+          });
+          if (got) {
+            params.am_origem = 'flowtracking';
+            clickId = gclidOf(params) || params.gbraid || params.wbraid || '';
+            hasCampaign = params.utm_id || params.gad_campaignid || params.utm_campaign || params.utm_source;
+            if (clickId && saved && saved.id !== clickId) saved = null;
+          }
+        }
+      } catch (e) {}
+    }
     var cur = null;
     if (clickId) cur = saved && saved.id === clickId ? saved : null;
     else if (carried) cur = saved && saved.id === carried ? saved : { id: carried, p: {}, t: now, k: 1 };
