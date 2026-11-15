@@ -58,6 +58,8 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [playerInput, setPlayerInput] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [finding, setFinding] = useState(false);
 
   const load = useCallback(async () => {
     const { ok, body } = await api(`/api/vturb?product_id=${productId}&start=${startDate}&end=${endDate}`);
@@ -76,6 +78,24 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
     else if (body.sync?.error) setError(body.sync.error);
     else setEditing(false);
     setRunning(false);
+    return body;
+  };
+
+  // O Autometrics procura o player nas páginas da campanha e passa a cuidar dele.
+  const findPlayer = async () => {
+    setFinding(true);
+    setNotice(null);
+    const body = await post({ action: 'find' });
+    const f = body?.find;
+    if (f) {
+      const later = 'Na próxima visita do anúncio que chegar na VSL, o nosso script liga o player sozinho.';
+      if (f.player) setNotice(`Achei o player ${f.player} em ${f.page}.${f.auto ? ' Se a VSL trocar de vídeo, o Autometrics troca junto.' : ''}`);
+      else if (!f.pages) setNotice(`A campanha ainda não tem visitas nem anúncio com página para eu abrir. ${later}`);
+      else setNotice(`Abri ${f.checked} ${f.checked === 1 ? 'página' : 'páginas'} da campanha e não achei o vídeo no código (a página pode montar o player depois de abrir). ${later}${f.auto && data?.player ? ' Até lá, o player de agora continua.' : ''}`);
+      if (!f.auto) setNotice(n => `${n} Para o Autometrics trocar o player sozinho depois, rode migration_vturb_origem.sql no Supabase.`);
+      setEditing(false);
+    }
+    setFinding(false);
   };
 
   // Transcrição: salva e já pede a análise (a leitura da página usa a VSL).
@@ -120,11 +140,16 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
         className={`flex-1 min-w-[260px] text-sm px-3 py-2 rounded-lg border ${borderCol} ${soft} ${textHead}`} />
       <button onClick={() => post({ action: 'link', player: playerInput })} disabled={running || !playerInput.trim()}
         className="text-sm font-semibold px-4 py-2 rounded-lg bg-brand hover:bg-brand-hover text-white disabled:opacity-50">
-        {running ? 'Lendo…' : 'Vincular'}
+        {running && !finding ? 'Lendo…' : 'Vincular'}
+      </button>
+      <button onClick={findPlayer} disabled={running}
+        className="text-sm font-semibold px-4 py-2 rounded-lg border border-brand text-brand-text hover:bg-brand/10 disabled:opacity-50">
+        {finding ? <><Loader2 size={13} className="inline animate-spin" /> Procurando…</> : 'Encontrar para mim'}
       </button>
       {player && <button onClick={() => setEditing(false)} className={`text-sm px-3 py-2 ${textMuted}`}>cancelar</button>}
     </div>
   );
+  const noticeLine = notice && <p className={`text-xs mt-2 ${textHead}`}>{notice}</p>;
 
   if (!player) {
     return (
@@ -133,7 +158,9 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
       <div className={`${bgCard} border rounded-xl p-5`}>
         <p className={`text-sm font-semibold ${textHead}`}>Player da VTurb</p>
         <p className={`text-xs ${textMuted} mt-1`}>Vincule o player do vídeo desta campanha. Os números passam a ser guardados a cada hora e cruzados com os cliques do Google.</p>
+        <p className={`text-xs ${textMuted} mt-1`}>Não precisa colar: com o nosso script na VSL, a primeira visita do anúncio liga o player sozinha. Ou toque em Encontrar para mim e o Autometrics procura agora.</p>
         {linkForm}
+        {noticeLine}
         {error && <p className={`text-xs mt-2 ${tone.urgente}`}>{error}</p>}
       </div>
       </div>
@@ -174,7 +201,16 @@ export function VturbTab({ productId, startDate, endDate, ui }: { productId: str
             </button>{' '}
             · <button onClick={() => { setPlayerInput(player.id); setEditing(true); }} className="underline hover:text-brand-text">trocar player</button>
           </div>
+          <div className={`text-xs ${textMuted} mt-0.5`}>
+            {player.source === 'auto'
+              ? 'Achado pelo Autometrics na VSL: se a página trocar de vídeo, ele troca junto.'
+              : 'Colado por você: o Autometrics não troca sozinho.'}
+            {player.source !== 'auto' && <>{' '}· <button onClick={findPlayer} disabled={running} className="underline hover:text-brand-text disabled:opacity-50">
+              {finding ? 'procurando…' : 'deixar o Autometrics encontrar'}
+            </button></>}
+          </div>
           {editing && linkForm}
+          {noticeLine}
         </div>
         {P && <div className={`text-xs ${textMuted}`}>3 dias ({ddmm(P.d3[0])}–{ddmm(P.d3[1])}) × 7 dias ({ddmm(P.d7[0])}–{ddmm(P.d7[1])})</div>}
       </div>

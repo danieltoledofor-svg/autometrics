@@ -34,7 +34,7 @@ export function landingUrl(c: Computed): string | null {
 }
 
 /** O código-fonte da página, como o "exibir código-fonte" do navegador: um pedido só, sem rodar nada dela. */
-export async function fetchPageHtml(url: string): Promise<string> {
+export async function fetchPageHtml(url: string, timeoutMs = 20_000): Promise<string> {
   const res = await fetch(url, {
     // Página de afiliado costuma recusar o que não parece navegador.
     headers: {
@@ -43,7 +43,7 @@ export async function fetchPageHtml(url: string): Promise<string> {
       'Accept-Language': 'en-US,en;q=0.9,pt-BR;q=0.8',
     },
     redirect: 'follow',
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`a página respondeu ${res.status}`);
   return (await res.text()).slice(0, 3_000_000);

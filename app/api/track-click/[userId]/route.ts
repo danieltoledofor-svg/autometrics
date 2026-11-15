@@ -111,13 +111,18 @@ async function handleV2(userId: string, body: any, request: Request) {
     const userAgent = cut(request.headers.get('user-agent'), 300);
 
     // e: 'vt' = player da VTurb achado na página (a VSL). Liga o player à campanha
-    // do clique quando ela ainda não tem um; o vinculado à mão nunca é trocado.
+    // do clique quando ela não tem um, ou troca o que o Autometrics achou antes
+    // (vturb_player_source = 'auto'). O colado à mão (manual) nunca é trocado.
     if (body.e === 'vt') {
         const playerId = (Array.isArray(body.vt) ? body.vt : []).map((v: any) => cut(v, 24).toLowerCase()).find((v: string) => /^[0-9a-f]{24}$/.test(v));
         if (productId && playerId && !BOT.test(userAgent)) {
-            const { error: vtError } = await supabase.from('products')
-                .update({ vturb_player_id: playerId, vturb_synced_at: null, vturb_sync_error: null })
-                .eq('id', productId).is('vturb_player_id', null);
+            const fresh = { vturb_player_id: playerId, vturb_synced_at: null, vturb_sync_error: null };
+            let { error: vtError } = await supabase.from('products').update({ ...fresh, vturb_player_source: 'auto' })
+                .eq('id', productId).or(`vturb_player_id.is.null,and(vturb_player_source.eq.auto,vturb_player_id.neq.${playerId})`);
+            // Antes de migration_vturb_origem.sql não há a coluna: só preenche a campanha sem player.
+            if (vtError && /vturb_player_source/.test(vtError.message || '')) {
+                ({ error: vtError } = await supabase.from('products').update(fresh).eq('id', productId).is('vturb_player_id', null));
+            }
             if (vtError) console.error('[TrackClick] Erro ao ligar o player da VTurb:', vtError.message);
         }
         return ok();

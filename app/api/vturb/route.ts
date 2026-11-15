@@ -8,6 +8,7 @@ import { buildTopo, type Funnel } from '@/lib/vturb/topo';
 import { runAnalysis, analysisTablesReady } from '@/lib/analysis/run';
 import { aiEnabled } from '@/lib/ai/openrouter';
 import { askVturb } from '@/lib/vturb/ask';
+import { findPlayer, type FindResult } from '@/lib/vturb/find';
 
 /** Item do checklist do topo de funil a que cada sugestão pertence. */
 const topoKeyOf = (targetKey: string) =>
@@ -61,7 +62,8 @@ export const dynamic = 'force-dynamic';
  *
  * GET  ?product_id=…&start=…&end=…          do clique à venda no período da tela, cruzamentos, retenção
  * POST { product_id, action: 'sync' }       lê a VTurb agora
- * POST { product_id, action: 'link', player } vincula o player (ID ou URL) e lê
+ * POST { product_id, action: 'link', player } vincula o player (ID ou URL) e lê — fica como manual
+ * POST { product_id, action: 'find' }       o Autometrics procura o player nas páginas da campanha — fica como auto
  * POST { product_id, action: 'ask', question, history, start, end }  pergunta à IA sobre os dados da aba
  */
 
@@ -113,14 +115,30 @@ export async function POST(request: Request) {
     if (await analysisTablesReady()) await runAnalysis(body.product_id, { force: true });
     return NextResponse.json(await vturbView(body.product_id, body));
   }
+  let find: (FindResult & { auto: boolean }) | null = null;
   if (body.action === 'link') {
     const pid = playerIdFrom(body.player);
     if (!pid) return NextResponse.json({ error: 'Não achei o ID do player. Cole a URL do player ou o ID de 24 caracteres.' }, { status: 400 });
-    await supabaseAdmin().from('products').update({ vturb_player_id: pid, vturb_synced_at: null, vturb_sync_error: null }).eq('id', body.product_id);
+    await setPlayer(body.product_id, { vturb_player_id: pid, vturb_synced_at: null, vturb_sync_error: null }, 'manual');
+  } else if (body.action === 'find') {
+    // Procura agora; achando ou não, o player passa a ser do Autometrics e a próxima visita à VSL confirma ou troca.
+    const r = await findPlayer(body.product_id);
+    const auto = await setPlayer(body.product_id, r.player ? { vturb_player_id: r.player, vturb_synced_at: null, vturb_sync_error: null } : {}, 'auto');
+    find = { ...r, auto };
+    if (!r.player) return NextResponse.json({ ...(await vturbView(body.product_id, body)), find });
   } else if (body.action !== 'sync') {
     return NextResponse.json({ error: 'Ação desconhecida.' }, { status: 400 });
   }
   const result = await syncProductVturb(body.product_id, { force: true });
   const funnel = await vturbView(body.product_id, body);
-  return NextResponse.json({ ...funnel, sync: result }, { status: 'error' in result && body.action === 'link' ? 400 : 200 });
+  return NextResponse.json({ ...funnel, sync: result, find }, { status: 'error' in result && body.action === 'link' ? 400 : 200 });
+}
+
+/** Grava o player com a origem; antes de migration_vturb_origem.sql, sem ela. Diz se a origem foi gravada. */
+async function setPlayer(productId: string, fields: Record<string, any>, source: 'manual' | 'auto'): Promise<boolean> {
+  const db = supabaseAdmin();
+  const { error } = await db.from('products').update({ ...fields, vturb_player_source: source }).eq('id', productId);
+  if (!error) return true;
+  if (Object.keys(fields).length) await db.from('products').update(fields).eq('id', productId);
+  return false;
 }

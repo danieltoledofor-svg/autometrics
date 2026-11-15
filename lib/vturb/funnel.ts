@@ -64,7 +64,8 @@ export async function computeFunnel(productId: string) {
   const today = todayIn(timeZone || 'America/Sao_Paulo');
   const d7start = addDays(today, -7), d3start = addDays(today, -3), end = addDays(today, -1);
   const base = {
-    player: playerId ? { id: playerId, name: product.vturb_player_name || null, duration: product.vturb_duration || null, pitch_time: product.vturb_pitch_time || null } : null,
+    player: playerId ? { id: playerId, name: product.vturb_player_name || null, duration: product.vturb_duration || null, pitch_time: product.vturb_pitch_time || null, source: product.vturb_player_source === 'auto' ? 'auto' : 'manual' } : null,
+    player_source: product.vturb_player_source || null,
     synced_at: product.vturb_synced_at || null, sync_error: product.vturb_sync_error || null,
     transcript_chars: product.vsl_transcript ? String(product.vsl_transcript).length : null,
     period: { d3: [d3start, end], d7: [d7start, end] },
