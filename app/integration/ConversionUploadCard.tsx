@@ -40,13 +40,14 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
   const load = useCallback(async () => { setState((await api()).body); }, []);
   useEffect(() => { load(); }, [load]);
 
-  const toggle = async () => {
+  const toggle = async (body: any = { enabled: !state.enabled }) => {
     setBusy(true);
     setError('');
-    const { ok, body } = await api({ enabled: !state.enabled });
-    if (ok) setState(body); else setError(body.error || 'Não foi possível salvar.');
+    const { ok, body: res } = await api(body);
+    if (ok) setState(res); else setError(res.error || 'Não foi possível salvar.');
     setBusy(false);
   };
+  const toggleSteps = () => toggle({ steps: !state.steps?.enabled });
 
   // Leva ao Google para autorizar o envio de vendas (permissão nova), com o mesmo e-mail da conta.
   const authorize = async () => {
@@ -71,6 +72,9 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
   if (!state) return null;
   const on = !!state.enabled;
   const t = state.totals || {};
+  const steps = state.steps || { ready: false };
+  const stepsOn = !!steps.enabled;
+  const money = (v: number) => `US$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className={`rounded-xl p-6 border ${card}`}>
@@ -85,7 +89,7 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
           </p>
         </div>
         {state.ready !== false && (
-          <button type="button" role="switch" aria-checked={on} aria-label="Enviar as vendas ao Google" onClick={toggle} disabled={busy}
+          <button type="button" role="switch" aria-checked={on} aria-label="Enviar as vendas ao Google" onClick={() => toggle()} disabled={busy}
             className={`relative w-10 h-[22px] rounded-full shrink-0 transition-colors disabled:opacity-60 ${on ? 'bg-brand' : 'bg-surface-3'}`}>
             <span className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-all ${on ? 'left-[21px]' : 'left-[3px]'}`} />
           </button>
@@ -96,7 +100,7 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
       {error && <p className="text-xs mt-3 text-neg">{error}</p>}
       {busy && <p className={`text-xs mt-3 flex items-center gap-1.5 ${muted}`}><Loader2 size={12} aria-hidden="true" className="animate-spin" /> Salvando…</p>}
 
-      {state.ready !== false && on && (
+      {state.ready !== false && (on || stepsOn) && (
         <div className={`mt-4 p-3 rounded-lg border ${state.needs_auth ? 'border-warn/40 bg-warn/5' : line}`}>
           <p className={`text-xs ${state.needs_auth ? 'text-warn' : muted}`}>
             {state.needs_auth ? 'Há vendas esperando: o Google pede uma autorização própria para receber vendas.' : 'O Google pede uma autorização própria para receber vendas.'}{' '}
@@ -155,6 +159,51 @@ export function ConversionUploadCard({ isDark }: { isDark: boolean }) {
           </div>
         </>
       ) : null}
+
+      {state.ready !== false && (
+        <div className={`mt-5 pt-4 border-t ${line}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h4 className={`text-sm font-semibold ${head}`}>Enviar também as etapas do funil</h4>
+              <p className={`text-xs mt-1 ${muted}`}>
+                Dois passos que mostram quem tem chance de comprar, enviados pelo clique como na venda.
+                Vão <strong>só como observação</strong>: aparecem em “Todas as conversões” e não mudam os lances.
+                O valor de cada etapa é o que ela rendeu em vendas, em média, nos últimos 30 dias.
+              </p>
+            </div>
+            {steps.ready && (
+              <button type="button" role="switch" aria-checked={stepsOn} aria-label="Enviar as etapas do funil ao Google" onClick={toggleSteps} disabled={busy}
+                className={`relative w-10 h-[22px] rounded-full shrink-0 transition-colors disabled:opacity-60 ${stepsOn ? 'bg-brand' : 'bg-surface-3'}`}>
+                <span className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-all ${stepsOn ? 'left-[21px]' : 'left-[3px]'}`} />
+              </button>
+            )}
+          </div>
+          {!steps.ready && <p className="text-xs mt-3 text-warn">Falta rodar migration_envio_etapas.sql no Supabase.</p>}
+          {steps.ready && (
+            <div className={`mt-3 border-t ${line}`}>
+              {(steps.list || []).map((s: any) => {
+                const tt = s.totals || {};
+                return (
+                  <div key={s.key} className={`py-2 text-xs border-b ${line}`}>
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                      <span className={head}><span className="font-medium">{s.label}</span><span className={muted}> · ação “{s.action}”</span></span>
+                      <span className={`font-medium tabular-nums ${head}`}>{money(s.value)} cada</span>
+                    </div>
+                    <div className={`mt-0.5 ${muted}`}>
+                      {s.clicks ? `${s.clicks.toLocaleString('pt-BR')} visitas nos últimos 30 dias, ${s.sales} com venda (${(100 * s.sales / s.clicks).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%).` : 'Ainda sem visitas nos últimos 30 dias.'}
+                      {Object.keys(STATUS).filter(k => tt[k]).map(k => ` ${STATUS[k].label}: ${tt[k]}.`).join('')}
+                    </div>
+                  </div>
+                );
+              })}
+              <p className={`text-xs mt-2 ${muted}`}>
+                Valem as etapas feitas depois de ligar{stepsOn && steps.start_at ? ` (ligado em ${when(steps.start_at)})` : ''}.
+                Para usar nos lances, escolha a ação como meta só nas campanhas com poucas vendas, com lance por valor.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

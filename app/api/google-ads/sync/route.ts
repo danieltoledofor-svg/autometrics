@@ -8,6 +8,7 @@ import { runDueAnalyses } from '@/lib/analysis/run';
 import { runDueVturb } from '@/lib/vturb/sync';
 import { runAlerts } from '@/lib/alerts/run';
 import { runConversionUploads } from '@/lib/googleAds/conversionUpload';
+import { runStepUploads } from '@/lib/googleAds/stepUpload';
 import { fillPendingGeo, relinkVisits } from '@/lib/tracking/lists';
 import { runLootrush } from '@/lib/lootrush/sync';
 import { retryUnmatched } from '@/lib/tracking/unmatched';
@@ -103,6 +104,8 @@ async function runCron() {
   // Vendas para o Google (Etapa 3 do rastreamento): antes da coleta, para a
   // venda não esperar a fila das contas. Poucas chamadas, com 15s de teto.
   report.conversions = await runConversionUploads(Date.now() + 15000).catch((e: any) => ({ error: e.message }));
+  // Etapas do funil (checkout, 10 min no site), só como observação no Google. Até 10s.
+  report.steps = await runStepUploads(Date.now() + 10000).catch((e: any) => ({ error: e.message }));
 
   const okConnections = new Set((conns || []).map(c => c.id));
   const { data: accounts } = await db.from('google_ads_accounts')

@@ -22,14 +22,14 @@ import { fetchAll } from '@/lib/analysis/compute';
  */
 
 export const DEFAULT_ACTION = 'Venda Autometrics';
-const RETRY_HOURS = 2;
-const GIVE_UP_DAYS = 5;
+export const RETRY_HOURS = 2;
+export const GIVE_UP_DAYS = 5;
 
 /** O Google ainda não enxerga o clique ou a ação recém-criada: tenta de novo depois. */
-const RETRY = new Set(['SEM_PERMISSAO', 'SERVICE_DISABLED', 'UNAVAILABLE', 'DEADLINE_EXCEEDED', 'RESOURCE_EXHAUSTED', 'INTERNAL', 'CLICK_NOT_FOUND', 'TOO_RECENT_CONVERSION_ACTION', 'TOO_RECENT_EVENT', 'CONVERSION_ACTION_NOT_FOUND', 'INTERNAL_ERROR', 'TRANSIENT_ERROR']);
+export const RETRY = new Set(['SEM_PERMISSAO', 'SERVICE_DISABLED', 'UNAVAILABLE', 'DEADLINE_EXCEEDED', 'RESOURCE_EXHAUSTED', 'INTERNAL', 'CLICK_NOT_FOUND', 'TOO_RECENT_CONVERSION_ACTION', 'TOO_RECENT_EVENT', 'CONVERSION_ACTION_NOT_FOUND', 'INTERNAL_ERROR', 'TRANSIENT_ERROR']);
 /** A venda já está lá. */
-const ALREADY = new Set(['ORDER_ID_ALREADY_IN_USE', 'CLICK_CONVERSION_ALREADY_EXISTS', 'DUPLICATE_ORDER_ID']);
-const REASON: Record<string, string> = {
+export const ALREADY = new Set(['ORDER_ID_ALREADY_IN_USE', 'CLICK_CONVERSION_ALREADY_EXISTS', 'DUPLICATE_ORDER_ID']);
+export const REASON: Record<string, string> = {
   SEM_PERMISSAO: 'Falta autorizar o envio de vendas nesta conta do Google. Use o botão "Autorizar o envio" logo acima.',
   SERVICE_DISABLED: 'O serviço de envio de vendas do Google ainda não está ligado no projeto do Autometrics.',
   PERMISSION_DENIED: 'O Google negou o envio para esta conta. Confira se o e-mail autorizado tem acesso a ela.',
@@ -48,14 +48,16 @@ const REASON: Record<string, string> = {
 const googleTime = (iso: string) => `${new Date(iso).toISOString().slice(0, 19).replace('T', ' ')}+00:00`;
 const hoursFromNow = (h: number) => new Date(Date.now() + h * 3600000).toISOString();
 
-type Target = { conversionCustomerId: string; actionResource: string; ctx: AdsContext };
+export type Target = { conversionCustomerId: string; actionResource: string; ctx: AdsContext };
+/** A ação de conversão a usar: nome, se vale para os lances e, quando é criada, a categoria e a contagem. */
+export type ActionSpec = { name: string; primary: boolean; category?: string; countingType?: 'ONE_PER_CLICK' | 'MANY_PER_CLICK' };
 
 /**
  * Onde a venda de uma conta deve ser enviada: descobre a conta dona das
  * conversões, acha a ação pelo nome e cria quando não existe.
  */
-async function resolveTarget(db: any, userId: string, account: any, refreshToken: string, settings: any, usage: { calls: number }): Promise<Target> {
-  const name = settings.action_name || DEFAULT_ACTION;
+export async function resolveTarget(db: any, userId: string, account: any, refreshToken: string, action: ActionSpec, usage: { calls: number }): Promise<Target> {
+  const name = action.name;
   const { data: saved } = await db.from('google_conversion_targets').select('conversion_customer_id, action_resource')
     .eq('user_id', userId).eq('customer_id', account.customer_id).eq('action_name', name).maybeSingle();
   const base = { refreshToken, loginCustomerId: account.login_customer_id };
@@ -77,7 +79,7 @@ async function resolveTarget(db: any, userId: string, account: any, refreshToken
   const created = !resource;
   if (created) {
     usage.calls++;
-    resource = await createUploadConversionAction(ctx, name, !!settings.counts_for_bidding);
+    resource = await createUploadConversionAction(ctx, name, action.primary, { category: action.category, countingType: action.countingType });
     if (!resource) throw new Error('O Google não devolveu a ação de conversão criada.');
   }
   await db.from('google_conversion_targets').upsert({
@@ -186,7 +188,7 @@ export async function runConversionUploads(deadline: number) {
         try {
           const token = await tokenFor(account.connection_id);
           if (!token) throw new Error('A ligação com o Google expirou. Reconecte a conta em Integração.');
-          target = await resolveTarget(db, userId, account, token, settings, usage);
+          target = await resolveTarget(db, userId, account, token, { name: settings.action_name || DEFAULT_ACTION, primary: !!settings.counts_for_bidding }, usage);
         } catch (e: any) {
           for (const s of list) await later(s, 'ALVO', e.message || 'Não foi possível preparar a ação de conversão.');
           report.errors.push(`${customerId}: ${e.message}`);

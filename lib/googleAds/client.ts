@@ -262,15 +262,16 @@ export async function mutate(ctx: AdsContext, service: string, operations: any[]
  * resourceName dela. primaryForGoal = false deixa a ação só como observação:
  * aparece em "Todas as conversões" e não entra nos lances.
  */
-export async function createUploadConversionAction(ctx: AdsContext, name: string, primaryForGoal: boolean): Promise<string> {
+export async function createUploadConversionAction(ctx: AdsContext, name: string, primaryForGoal: boolean,
+  kind: { category?: string; countingType?: 'ONE_PER_CLICK' | 'MANY_PER_CLICK' } = {}): Promise<string> {
   const res = await fetch(`${API_BASE}/customers/${ctx.customerId}/conversionActions:mutate`, {
     method: 'POST',
     headers: await headers(ctx),
     body: JSON.stringify({
       operations: [{
         create: {
-          name, type: 'UPLOAD_CLICKS', category: 'PURCHASE', status: 'ENABLED', primaryForGoal,
-          countingType: 'MANY_PER_CLICK',
+          name, type: 'UPLOAD_CLICKS', category: kind.category || 'PURCHASE', status: 'ENABLED', primaryForGoal,
+          countingType: kind.countingType || 'MANY_PER_CLICK',
           valueSettings: { defaultValue: 0, alwaysUseDefaultValue: false },
         },
       }],
