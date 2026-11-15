@@ -25,13 +25,21 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
       .then(({ data }) => { if (data?.platform_clocks && typeof data.platform_clocks === 'object') setClocks(data.platform_clocks); });
   }, [userId]);
   const saveClock = async (platform: string, zone: string) => {
-    const next = { ...clocks, [platform]: zone };
-    setClocks(next);
-    setClockNote(null);
-    const { error } = await supabase.from('user_settings').upsert({ user_id: userId, platform_clocks: next }, { onConflict: 'user_id' });
-    setClockNote(error
-      ? { ok: false, text: 'Não foi possível salvar. Falta rodar o arquivo migration_relogio_plataformas.sql no Supabase.' }
-      : { ok: true, text: 'Salvo. Vale para as próximas vendas.' });
+    const before = clocks;
+    setClocks({ ...clocks, [platform]: zone });
+    setClockNote({ ok: true, text: 'Salvando e mudando de dia as vendas que já chegaram…' });
+    // O servidor salva e leva as vendas que já chegaram para o dia certo também na Dashboard (lib/tracking/refileClock.ts).
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/tracking/clock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+      body: JSON.stringify({ platform, zone }),
+    }).catch(() => null);
+    const out = res ? await res.json().catch(() => ({})) : {};
+    if (!res?.ok) { setClocks(before); setClockNote({ ok: false, text: out.error || 'Não foi possível salvar. Tente de novo.' }); return; }
+    setClockNote(out.warning
+      ? { ok: false, text: out.warning }
+      : { ok: true, text: out.moved ? `Salvo. ${out.moved === 1 ? '1 venda ou evento mudou' : `${out.moved} vendas ou eventos mudaram`} de dia, na Dashboard e em Vendas.` : 'Salvo. Vale para as vendas que já chegaram e para as próximas.' });
   };
   const copyPostback = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
