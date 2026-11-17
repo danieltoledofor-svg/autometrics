@@ -181,6 +181,15 @@ export default function ProductDetailPage() {
   // Colunas, larguras e densidade da tabela ficam salvas no usuário.
   const overviewPrefs = useTablePrefs('overview', { legacyColumnsKey: 'autometrics_visible_columns' });
   const visibleColumns = overviewPrefs.columns || ALL_COLUMNS.filter(c => c.default).map(c => c.key);
+  // Coluna nova do imposto do Google: quem já tinha escolhido as colunas ganha ela uma vez, antes do Lucro.
+  // Se depois tirar, ela não volta (a marca fica no navegador).
+  useEffect(() => {
+    const cols = overviewPrefs.columns;
+    if (!cols || cols.includes('google_tax')) return;
+    try { if (localStorage.getItem('autometrics_col_google_tax')) return; localStorage.setItem('autometrics_col_google_tax', '1'); } catch { return; }
+    const at = cols.indexOf('profit');
+    overviewPrefs.setColumns(at >= 0 ? [...cols.slice(0, at), 'google_tax', ...cols.slice(at)] : [...cols, 'google_tax']);
+  }, [overviewPrefs.columns]); // eslint-disable-line react-hooks/exhaustive-deps
   const setVisibleColumns = overviewPrefs.setColumns;
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');

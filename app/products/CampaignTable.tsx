@@ -18,12 +18,12 @@ import { resolveProductStatus } from '@/lib/campaignStatus';
  */
 
 export type Level = 'campaigns' | 'accounts' | 'mccs';
-export type SortKey = 'name' | 'budget' | 'target' | 'impressions' | 'clicks' | 'cpc' | 'cost' | 'revenue' | 'profit';
+export type SortKey = 'name' | 'budget' | 'target' | 'impressions' | 'clicks' | 'cpc' | 'cost' | 'tax' | 'revenue' | 'profit';
 export interface Sort { key: SortKey; desc: boolean }
 export const LEVELS: { key: Level; label: string }[] = [{ key: 'campaigns', label: 'Campanhas' }, { key: 'accounts', label: 'Contas' }, { key: 'mccs', label: 'MCCs' }];
 
 const SORT_KEY = 'autometrics_products_sort', LEVEL_KEY = 'autometrics_products_level';
-const SORTS: SortKey[] = ['name', 'budget', 'target', 'impressions', 'clicks', 'cpc', 'cost', 'revenue', 'profit'];
+const SORTS: SortKey[] = ['name', 'budget', 'target', 'impressions', 'clicks', 'cpc', 'cost', 'tax', 'revenue', 'profit'];
 export function loadSort(): Sort {
   try { const s = JSON.parse(localStorage.getItem(SORT_KEY) || 'null'); if (s && SORTS.includes(s.key)) return { key: s.key, desc: s.desc !== false }; } catch { /* sem lembrança */ }
   return { key: 'cost', desc: true };
@@ -47,13 +47,13 @@ export function toneOf(product: any): { tone: Tone; title: string } {
   return { tone, title: `${st.label}: ${st.hint}` };
 }
 
-interface Nums { impressions: number; clicks: number; cost: number; revenue: number; profit: number; budget: number; target: number }
+interface Nums { impressions: number; clicks: number; cost: number; tax: number; revenue: number; profit: number; budget: number; target: number }
 const numsOf = (p: any): Nums => {
   const m = p.metrics7d || {};
-  const cost = Number(m.cost) || 0, revenue = Number(m.revenue) || 0;
-  return { impressions: Number(m.impressions) || 0, clicks: Number(m.clicks) || 0, cost, revenue, profit: revenue - cost - (Number(m.tax) || 0), budget: Number(m.budget) || 0, target: Number(m.targetCpa) || 0 };
+  const cost = Number(m.cost) || 0, revenue = Number(m.revenue) || 0, tax = Number(m.tax) || 0;
+  return { impressions: Number(m.impressions) || 0, clicks: Number(m.clicks) || 0, cost, tax, revenue, profit: revenue - cost - tax, budget: Number(m.budget) || 0, target: Number(m.targetCpa) || 0 };
 };
-const MONEY: (keyof Nums)[] = ['cost', 'revenue', 'profit', 'budget', 'target'];
+const MONEY: (keyof Nums)[] = ['cost', 'tax', 'revenue', 'profit', 'budget', 'target'];
 
 export function CampaignTable({ products, level, sort, onSort, rates, isDark, selected, onToggleSelect, onSelectAll, onOpen, hrefOf, onPickAccount, onPickMcc, actions }: {
   /** Campanhas já filtradas pela busca, pela conta escolhida e por ocultas. */
@@ -81,7 +81,7 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
   const sum = (list: any[]): Nums & { currency: string } => {
     const currencies = new Set(list.map(p => p.currency || 'BRL'));
     const currency = currencies.size === 1 ? [...currencies][0] : 'BRL';
-    const out = { impressions: 0, clicks: 0, cost: 0, revenue: 0, profit: 0, budget: 0, target: 0, currency };
+    const out = { impressions: 0, clicks: 0, cost: 0, tax: 0, revenue: 0, profit: 0, budget: 0, target: 0, currency };
     for (const p of list) {
       const n = numsOf(p), active = toneOf(p).tone === 'ativo';
       for (const k of Object.keys(n) as (keyof Nums)[]) {
@@ -145,19 +145,20 @@ export function CampaignTable({ products, level, sort, onSort, rates, isDark, se
   );
   const num = (value: number, shown: string, sep = false, extra = '') => <td className={`px-2 text-right whitespace-nowrap tabular-nums ${sep ? `border-l ${line}` : ''} ${value ? text : zero} ${extra}`}>{shown}</td>;
   const profit = (n: Nums, currency: string) => <td className={`px-2 text-right whitespace-nowrap tabular-nums font-medium ${n.profit > 0 ? 'text-pos' : n.profit < 0 ? 'text-neg' : zero}`}>{money(n.profit, currency)}</td>;
-  /** As seis colunas de número, iguais nas três visões: tráfego e, depois da divisória, dinheiro. */
+  /** As sete colunas de número, iguais nas três visões: tráfego e, depois da divisória, dinheiro. */
   const numbers = (n: Nums, currency: string) => (
     <>
       {num(n.impressions, int(n.impressions), true)}
       {num(n.clicks, int(n.clicks))}
       {num(n.clicks, n.clicks ? money(cpc(n), currency) : '—')}
       {num(n.cost, money(n.cost, currency), true)}
+      {num(n.tax, n.tax ? money(n.tax, currency) : '—', false, n.tax ? 'text-warn' : '')}
       {num(n.revenue, money(n.revenue, currency))}
       {profit(n, currency)}
     </>
   );
-  const numberHeads = <>{th('impressions', 'Impr.', 'right', true)}{th('clicks', 'Cliques')}{th('cpc', 'CPC méd.')}{th('cost', 'Custo', 'right', true)}{th('revenue', 'Receita')}{th('profit', 'Lucro')}</>;
-  const numberCols = <><col className="w-[60px]" /><col className="w-[60px]" /><col className="w-[80px]" /><col className="w-[96px]" /><col className="w-[96px]" /><col className="w-[100px]" /></>;
+  const numberHeads = <>{th('impressions', 'Impr.', 'right', true)}{th('clicks', 'Cliques')}{th('cpc', 'CPC méd.')}{th('cost', 'Custo', 'right', true)}{th('tax', 'Imposto')}{th('revenue', 'Receita')}{th('profit', 'Lucro')}</>;
+  const numberCols = <><col className="w-[60px]" /><col className="w-[60px]" /><col className="w-[80px]" /><col className="w-[96px]" /><col className="w-[84px]" /><col className="w-[96px]" /><col className="w-[100px]" /></>;
   const dot = (tone: Tone, title: string) => <span className={`inline-block w-2 h-2 rounded-full ${DOT[tone]}`} title={title} role="img" aria-label={title} />;
   const ids = rows.map(r => r.p.id), allSelected = ids.length > 0 && ids.every(id => selected.includes(id));
   const totalLabel = `Total${mixed ? ' em R$' : ''}`;
