@@ -29,6 +29,7 @@ import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
 import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
 import { spendAlert } from '@/lib/alerts/spendRule';
 import { lossAlert, turnAlert, type DaySum } from '@/lib/alerts/marginRules';
+import { googleTaxOn, googleTaxNote } from '@/lib/googleAdsTax';
 import { Inter } from 'next/font/google';
 
 // Fonte do guia visual (DESIGN.md). Por enquanto só na Dashboard, a primeira tela migrada.
@@ -432,6 +433,8 @@ export default function DashboardPage() {
       const accountName = row.account_name || product?.account_name || product?.mcc_name || 'Desconhecida';
 
       let cost = Number(row.cost || 0);
+      // Imposto do Google Brasil (2027 em diante, contas em reais), na mesma proporção do custo.
+      const taxShare = cost > 0 ? googleTaxOn(cost, row.date, product) / cost : 0;
       let revenue = Number(row.conversion_value || 0);
       let refunds = Number(row.refunds || 0);
 
@@ -446,19 +449,20 @@ export default function DashboardPage() {
       else if (viewCurrency === 'USD') { cost = costInBRL / liveDollar; revenue = revenueInBRL / manualDollar; refunds = refundsInBRL / manualDollar; }
       else if (viewCurrency === 'EUR') { cost = costInBRL / liveEuro; revenue = revenueInBRL / manualEuro; refunds = refundsInBRL / manualEuro; }
 
-      const profit = revenue - cost - refunds;
+      const tax = cost * taxShare;
+      const profit = revenue - cost - refunds - tax;
 
       if (!dailyMap.has(row.date)) {
-        dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0, accounts: {}, blocks: {} });
+        dailyMap.set(row.date, { date: row.date, cost: 0, revenue: 0, profit: 0, refunds: 0, tax: 0, accounts: {}, blocks: {} });
       }
       const day = dailyMap.get(row.date);
-      day.cost += cost; day.revenue += revenue; day.refunds += refunds; day.profit += profit;
+      day.cost += cost; day.revenue += revenue; day.refunds += refunds; day.tax += tax; day.profit += profit;
 
       if (!day.blocks[blockId]) {
-        day.blocks[blockId] = { id: blockId, cost: 0, revenue: 0, profit: 0, refunds: 0, accounts: {} };
+        day.blocks[blockId] = { id: blockId, cost: 0, revenue: 0, profit: 0, refunds: 0, tax: 0, accounts: {} };
       }
       const block = day.blocks[blockId];
-      block.cost += cost; block.revenue += revenue; block.refunds += refunds; block.profit += profit;
+      block.cost += cost; block.revenue += revenue; block.refunds += refunds; block.tax += tax; block.profit += profit;
 
       // O badge mostra o estado ATUAL da campanha, não o daquele dia: quando uma
       // conta é suspensa hoje, o que importa é ver isso ao lado de qualquer data,
@@ -472,16 +476,16 @@ export default function DashboardPage() {
       // A mesma linha entra no dia inteiro e no bloco do grupo dela.
       [day, block].forEach((holder: any) => {
         if (!holder.accounts[accountName]) {
-          holder.accounts[accountName] = { name: accountName, cost: 0, revenue: 0, profit: 0, refunds: 0, campaigns: {} };
+          holder.accounts[accountName] = { name: accountName, cost: 0, revenue: 0, profit: 0, refunds: 0, tax: 0, campaigns: {} };
         }
         const acc = holder.accounts[accountName];
-        acc.cost += cost; acc.revenue += revenue; acc.profit += profit; acc.refunds += refunds;
+        acc.cost += cost; acc.revenue += revenue; acc.profit += profit; acc.refunds += refunds; acc.tax += tax;
 
         if (!acc.campaigns[campaignName]) {
-          acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0, productId: product?.id, currency: product?.currency || 'BRL', status: null as CampaignStatus | null };
+          acc.campaigns[campaignName] = { name: campaignName, cost: 0, revenue: 0, profit: 0, refunds: 0, tax: 0, productId: product?.id, currency: product?.currency || 'BRL', status: null as CampaignStatus | null };
         }
         const cmp = acc.campaigns[campaignName];
-        cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds;
+        cmp.cost += cost; cmp.revenue += revenue; cmp.profit += profit; cmp.refunds += refunds; cmp.tax += tax;
 
         if (hasProblem && !cmp.problem) {
           cmp.problem = { text: reconcileProblemText(note, product?.currency || 'BRL') };
@@ -512,8 +516,8 @@ export default function DashboardPage() {
         sortAccounts(blk);
         blk.name = blockName(blk.id, groups.list);
         blk.roi = blk.cost > 0 ? (blk.profit / blk.cost) * 100 : 0;
-        const t = blockTotals.get(blk.id) || { id: blk.id, name: blk.name, cost: 0, revenue: 0, profit: 0, refunds: 0, roi: 0 };
-        t.cost += blk.cost; t.revenue += blk.revenue; t.profit += blk.profit; t.refunds += blk.refunds;
+        const t = blockTotals.get(blk.id) || { id: blk.id, name: blk.name, cost: 0, revenue: 0, profit: 0, refunds: 0, tax: 0, roi: 0 };
+        t.cost += blk.cost; t.revenue += blk.revenue; t.profit += blk.profit; t.refunds += blk.refunds; t.tax += blk.tax;
         blockTotals.set(blk.id, t);
       });
     });
@@ -524,9 +528,9 @@ export default function DashboardPage() {
 
     const resultRows = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
 
-    const totals = { cost: 0, revenue: 0, profit: 0, refunds: 0, roi: 0 };
+    const totals = { cost: 0, revenue: 0, profit: 0, refunds: 0, tax: 0, roi: 0 };
     resultRows.forEach(r => {
-      totals.cost += r.cost; totals.revenue += r.revenue; totals.profit += r.profit; totals.refunds += r.refunds;
+      totals.cost += r.cost; totals.revenue += r.revenue; totals.profit += r.profit; totals.refunds += r.refunds; totals.tax += r.tax;
       r.roi = r.cost > 0 ? (r.profit / r.cost) * 100 : 0;
     });
     totals.roi = totals.cost > 0 ? (totals.profit / totals.cost) * 100 : 0;
@@ -655,7 +659,7 @@ export default function DashboardPage() {
       cost: last7.map((d: any) => d.cost),
       profit: last7.map((d: any) => d.profit),
       roi: last7.map((d: any) => d.roi || 0),
-      refunds: last7.map((d: any) => d.refunds),
+      tax: last7.map((d: any) => d.tax),
     };
   }, [processedData.chart]);
 
@@ -689,7 +693,7 @@ export default function DashboardPage() {
     { label: 'Lucro', value: processedData.totals.profit, color: chartColor.profit, data: sparklineData.profit, isPositiveGood: true, isRoi: false, isResult: true },
     { label: 'Custo', value: processedData.totals.cost, color: chartColor.cost, data: sparklineData.cost, isPositiveGood: false, isRoi: false, isResult: false },
     { label: 'ROI', value: processedData.totals.roi, color: chartColor.roi, data: sparklineData.roi, isPositiveGood: true, isRoi: true, isResult: true },
-    { label: 'Reembolsos', value: processedData.totals.refunds, color: chartColor.cost, data: sparklineData.refunds, isPositiveGood: false, isRoi: false, isResult: false },
+    { label: 'Imposto Google', value: processedData.totals.tax, color: chartColor.cost, data: sparklineData.tax, isPositiveGood: false, isRoi: false, isResult: false, note: googleTaxNote() },
   ] : [];
 
   const NAV_ITEMS = [
@@ -706,7 +710,7 @@ export default function DashboardPage() {
     { label: 'Custo', value: formatMoney(processedData.totals.cost), cls: textHead },
     { label: 'Lucro líquido', value: formatMoney(processedData.totals.profit), cls: tone(processedData.totals.profit) },
     { label: 'ROI', value: formatPct(processedData.totals.roi, 1), cls: tone(processedData.totals.roi) },
-    { label: 'Reembolsos', value: formatMoney(processedData.totals.refunds), cls: textHead },
+    { label: 'Imposto Google', value: formatMoney(processedData.totals.tax), cls: textHead, note: googleTaxNote(), sub: '2,9% · contas em reais · desde 01/01/2027' },
   ] : [];
 
   const rateBox = (kind: 'USD' | 'EUR') => (
@@ -1005,16 +1009,25 @@ export default function DashboardPage() {
                 </div>
               );
             })}
+            {/* Imposto do Google à parte: já sai do lucro, o custo fica igual ao do Google. */}
+            <div className="col-span-2 rounded-xl border border-line bg-surface-1 px-3 py-2.5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-ink-subtle">Imposto Google</div>
+                <div className="text-[11px] text-ink-subtle">2,9% · contas em reais · desde 01/01/2027</div>
+              </div>
+              <div className="text-base font-semibold tabular-nums text-ink shrink-0">{formatMoney(processedData.totals.tax)}</div>
+            </div>
           </div>
         )}
 
         {/* ── DESKTOP KPI GRID (hidden on mobile) ── */}
         {processedData.totals ? (
           <div className="hidden md:grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3 mb-6">
-            {kpis.map(k => (
-              <div key={k.label} className="rounded-xl border border-line bg-surface-1 p-4">
+            {kpis.map((k: any) => (
+              <div key={k.label} className="rounded-xl border border-line bg-surface-1 p-4" title={k.note}>
                 <p className="text-xs font-medium text-ink-subtle mb-1.5">{k.label}</p>
                 <p className={`text-2xl font-semibold tabular-nums tracking-[-0.3px] ${k.cls}`}>{k.value}</p>
+                {k.sub && <p className="text-[11px] text-ink-subtle mt-1">{k.sub}</p>}
               </div>
             ))}
           </div>
