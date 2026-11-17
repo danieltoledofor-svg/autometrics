@@ -51,7 +51,7 @@ interface Nums { impressions: number; clicks: number; cost: number; revenue: num
 const numsOf = (p: any): Nums => {
   const m = p.metrics7d || {};
   const cost = Number(m.cost) || 0, revenue = Number(m.revenue) || 0;
-  return { impressions: Number(m.impressions) || 0, clicks: Number(m.clicks) || 0, cost, revenue, profit: revenue - cost, budget: Number(m.budget) || 0, target: Number(m.targetCpa) || 0 };
+  return { impressions: Number(m.impressions) || 0, clicks: Number(m.clicks) || 0, cost, revenue, profit: revenue - cost - (Number(m.tax) || 0), budget: Number(m.budget) || 0, target: Number(m.targetCpa) || 0 };
 };
 const MONEY: (keyof Nums)[] = ['cost', 'revenue', 'profit', 'budget', 'target'];
 

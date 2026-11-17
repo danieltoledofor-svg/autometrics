@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchAll, addDays, todayIn, computeAnalysis } from '@/lib/analysis/compute';
 import { computePatterns, type PeriodKey } from '@/lib/analysis/patterns';
 import { resolveProductStatus } from '@/lib/campaignStatus';
+import { googleTaxOn } from '@/lib/googleAdsTax';
 import { normalizeLocations } from '@/lib/geoNames';
 import { loadTrackedSales } from '@/lib/tracking/trackedSales';
 import { listEvents } from '@/lib/tracking/lists';
@@ -11,7 +12,8 @@ import { adGroupKey, adKey, countryKey, deviceKey, keywordKey, type KeyOf } from
  * Ferramentas do MCP do Autometrics — só leitura. Cada uma recebe o usuário
  * dono da chave e só enxerga as campanhas dele.
  *
- * Números com as regras do painel: lucro = receita − reembolso − custo, na
+ * Números com as regras do painel: lucro = receita − reembolso − custo − imposto do
+ * Google (2,9% nas contas pagas em reais, de 01/01/2027 em diante), na
  * moeda da campanha; vendas são as reais (postback e lançamento manual); por
  * item, só a venda ligada ao clique, inteira, sem rateio.
  */
@@ -58,7 +60,7 @@ function period(args: Args): { from: string; to: string } {
 }
 
 // ── Campanhas ────────────────────────────────────────────────────────────
-const PRODUCT_COLS = 'id, name, google_ads_campaign_name, currency, status, google_status, google_status_reasons, mcc_name, account_name';
+const PRODUCT_COLS = 'id, name, google_ads_campaign_name, google_ads_campaign_id, currency, status, google_status, google_status_reasons, mcc_name, account_name';
 const nameOf = (p: any) => String(p.google_ads_campaign_name || p.name || '');
 
 async function products(ctx: Ctx) {
@@ -81,15 +83,16 @@ async function oneCampaign(ctx: Ctx, query: any) {
   throw new UserError(`${found.length} campanhas com "${q}" no nome. Escolha uma pelo id:\n${found.slice(0, 15).map(p => `- ${p.id} · ${nameOf(p)}`).join('\n')}`);
 }
 
-function totalsOf(rows: any[]) {
-  const t = { custo: 0, vendas: 0, receita: 0, reembolso: 0, cliques: 0, impressoes: 0, conversoes_google: 0, checkouts: 0 };
+function totalsOf(rows: any[], product?: any) {
+  const t = { custo: 0, imposto: 0, vendas: 0, receita: 0, reembolso: 0, cliques: 0, impressoes: 0, conversoes_google: 0, checkouts: 0 };
   for (const d of rows) {
+    t.imposto += d.google_tax != null ? num(d.google_tax) : product ? googleTaxOn(num(d.cost), String(d.date || ''), product) : 0;
     t.custo += num(d.cost); t.vendas += num(d.conversions); t.receita += num(d.conversion_value); t.reembolso += num(d.refunds);
     t.cliques += num(d.clicks); t.impressoes += num(d.impressions); t.conversoes_google += num(d.google_conversions); t.checkouts += num(d.checkouts);
   }
-  const lucro = t.receita - t.reembolso - t.custo;
+  const lucro = t.receita - t.reembolso - t.custo - t.imposto;
   return {
-    custo: r2(t.custo), vendas: t.vendas, receita: r2(t.receita), reembolso: r2(t.reembolso), lucro: r2(lucro),
+    custo: r2(t.custo), imposto_google: r2(t.imposto), vendas: t.vendas, receita: r2(t.receita), reembolso: r2(t.reembolso), lucro: r2(lucro),
     roi_pct: t.custo ? r2((lucro / t.custo) * 100) : null, cpa: div(t.custo, t.vendas),
     cliques: t.cliques, impressoes: t.impressoes, ctr_pct: t.impressoes ? r2((t.cliques / t.impressoes) * 100) : null,
     cpc: div(t.custo, t.cliques), conversoes_google: r2(t.conversoes_google), checkouts: t.checkouts,
@@ -110,7 +113,7 @@ async function dailyRows(ctx: Ctx, ids: string[], from: string, to: string) {
 
 const campanhas: Tool = {
   name: 'campanhas',
-  description: 'Lista as campanhas do Autometrics com o resultado no período: custo, vendas reais, receita, reembolso, lucro, ROI, CPA, cliques e conversões do Google, e o status (ativa, pausada, suspensa). Valores na moeda de cada campanha; o total sai separado por moeda. Use primeiro para achar o id de uma campanha.',
+  description: 'Lista as campanhas do Autometrics com o resultado no período: custo, vendas reais, receita, reembolso, imposto do Google (2,9% nas contas em reais desde 01/01/2027, já descontado do lucro), lucro, ROI, CPA, cliques e conversões do Google, e o status (ativa, pausada, suspensa). Valores na moeda de cada campanha; o total sai separado por moeda. Use primeiro para achar o id de uma campanha.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -135,7 +138,7 @@ const campanhas: Tool = {
       const days = byProduct.get(p.id) || [];
       const latest = days[days.length - 1];
       const st = resolveProductStatus({ ...p, latest_campaign_status: latest?.campaign_status });
-      return { id: p.id, nome: nameOf(p), mcc: p.mcc_name || null, conta: p.account_name || null, status: st.label, moeda: (latest?.currency || p.currency || 'BRL').toUpperCase(), ...totalsOf(days) };
+      return { id: p.id, nome: nameOf(p), mcc: p.mcc_name || null, conta: p.account_name || null, status: st.label, moeda: (latest?.currency || p.currency || 'BRL').toUpperCase(), ...totalsOf(days, p) };
     });
     if (!args.incluir_sem_gasto) out = out.filter(c => c.custo > 0 || c.vendas > 0);
     const key = String(args.ordenar_por || 'custo');
@@ -143,7 +146,7 @@ const campanhas: Tool = {
       : key === 'cpa' ? (a.cpa ?? Infinity) - (b.cpa ?? Infinity) : num(b[key === 'vendas' ? 'vendas' : key]) - num(a[key === 'vendas' ? 'vendas' : key]));
     const totals: Record<string, any> = {};
     for (const cur of new Set(out.map(c => c.moeda))) {
-      totals[cur] = totalsOf(out.filter(c => c.moeda === cur).map(c => ({ cost: c.custo, conversions: c.vendas, conversion_value: c.receita, refunds: c.reembolso, clicks: c.cliques, impressions: c.impressoes, google_conversions: c.conversoes_google, checkouts: c.checkouts })));
+      totals[cur] = totalsOf(out.filter(c => c.moeda === cur).map(c => ({ cost: c.custo, conversions: c.vendas, conversion_value: c.receita, refunds: c.reembolso, google_tax: c.imposto_google, clicks: c.cliques, impressions: c.impressoes, google_conversions: c.conversoes_google, checkouts: c.checkouts })));
     }
     return { periodo: { de: from, ate: to }, campanhas: out.length, total_por_moeda: totals, lista: out.slice(0, 150) };
   },
@@ -163,8 +166,8 @@ const campanhaDiaADia: Tool = {
     const rows = await dailyRows(ctx, [p.id], from, to);
     return {
       campanha: nameOf(p), id: p.id, moeda: (rows[rows.length - 1]?.currency || p.currency || 'BRL').toUpperCase(),
-      periodo: { de: from, ate: to }, total: totalsOf(rows),
-      dias: rows.map(d => ({ dia: d.date, ...totalsOf([d]), meta_cpa: num(d.target_cpa) || null, orcamento_dia: num(d.budget_micros) ? r2(num(d.budget_micros) / 1e6) : null })),
+      periodo: { de: from, ate: to }, total: totalsOf(rows, p),
+      dias: rows.map(d => ({ dia: d.date, ...totalsOf([d], p), meta_cpa: num(d.target_cpa) || null, orcamento_dia: num(d.budget_micros) ? r2(num(d.budget_micros) / 1e6) : null })),
     };
   },
 };

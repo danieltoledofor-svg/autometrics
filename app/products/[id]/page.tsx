@@ -39,6 +39,7 @@ import { actionColumns, actionNames, actionSlug } from '@/lib/metrics/dimension'
 import { toView, type ItemSalesPayload, type TrackedSales } from '@/lib/metrics/itemSales';
 import { customValue } from '@/lib/metrics/formula';
 import { useLiveMetrics } from '@/lib/useLiveMetrics';
+import { googleTaxOn, googleTaxNote } from '@/lib/googleAdsTax';
 
 
 function getLocalYYYYMMDD(date: Date) {
@@ -90,6 +91,7 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: 'conversions', label: 'Conversões', category: 'Financeiro', default: true },
   { key: 'revenue', label: 'Receita Total', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'refunds', label: 'Reembolso', category: 'Financeiro', default: true, format: 'currency' },
+  { key: 'google_tax', label: 'Imposto Google', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'cpa', label: 'CPA (Custo/Conv)', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'profit', label: 'Lucro (R$)', category: 'Financeiro', default: true, format: 'currency' },
   { key: 'roi', label: 'ROI (%)', category: 'Financeiro', default: true, format: 'percentage' },
@@ -362,11 +364,14 @@ export default function ProductDetailPage() {
 
   const processedData = useMemo(() => {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
-    const stats = { revenue: 0, cost: 0, profit: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
+    const stats = { revenue: 0, cost: 0, profit: 0, tax: 0, roi: 0, conversions: 0, clicks: 0, visits: 0 };
     if (!filteredMetrics.length) return { rows: [], stats, chart: [] };
 
     const rows = filteredMetrics.map(row => {
-      let cost = Number(row.cost || 0); let revenue = Number(row.conversion_value || 0); let refunds = Number(row.refunds || 0); let cpc = Number(row.avg_cpc || 0);
+      let cost = Number(row.cost || 0);
+      // Imposto do Google Brasil (2027 em diante, contas em reais), na mesma proporção do custo.
+      const taxShare = cost > 0 ? googleTaxOn(cost, row.date, product) / cost : 0;
+      let revenue = Number(row.conversion_value || 0); let refunds = Number(row.refunds || 0); let cpc = Number(row.avg_cpc || 0);
       let budget = Number(row.budget_micros || 0) / 1000000; let targetValue = Number(row.target_cpa || 0);
 
       const rowCurrency = row.currency || 'BRL';
@@ -381,7 +386,8 @@ export default function ProductDetailPage() {
         cost /= liveDollar; revenue /= manualDollar; refunds /= manualDollar; // Note: uses dollar for simplicity right now
       }
 
-      const profit = revenue - refunds - cost;
+      const googleTax = cost * taxShare;
+      const profit = revenue - refunds - cost - googleTax;
       const roi = cost > 0 ? (profit / cost) * 100 : 0;
       const conversions = Number(row.conversions || 0);
       const cpa = conversions > 0 ? cost / conversions : 0;
@@ -397,7 +403,7 @@ export default function ProductDetailPage() {
       const fugaBridge = clicks > 0 ? (1 - (vslClicks / clicks)) * 100 : 0;
       const fugaVsl = vslClicks > 0 ? (1 - (vslCheckouts / vslClicks)) * 100 : 0;
 
-      stats.revenue += revenue; stats.cost += cost; stats.profit += profit;
+      stats.revenue += revenue; stats.cost += cost; stats.profit += profit; stats.tax += googleTax;
       stats.conversions += conversions; stats.clicks += clicks; stats.visits += visits;
 
       const dateParts = row.date.split('-');
@@ -431,7 +437,7 @@ export default function ProductDetailPage() {
       }
 
       return {
-        ...row, ...googleCols, ...actionCols, date: fullDate, shortDate, cost, revenue, refunds, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
+        ...row, ...googleCols, ...actionCols, date: fullDate, shortDate, cost, revenue, refunds, google_tax: googleTax, profit, roi, avg_cpc: cpc, budget, cpa, target_cpa: targetValue,
         ctr: Number(row.ctr || 0), account_name: row.account_name || '-', campaign_status: row.campaign_status || 'ENABLED',
         effective_status: row.effective_status || null,
         // Revisão retroativa do Google (cliques inválidos cancelados).
@@ -452,7 +458,7 @@ export default function ProductDetailPage() {
     stats.roi = stats.cost > 0 ? (stats.profit / stats.cost) * 100 : 0;
     const chartData = rows.map(r => ({ day: r.shortDate, lucro: r.profit, custo: r.cost, receita: r.revenue }));
     return { rows: rows.reverse(), chart: chartData, stats };
-  }, [metrics, viewCurrency, startDate, endDate, liveDollar, manualDollar]);
+  }, [metrics, product, viewCurrency, startDate, endDate, liveDollar, manualDollar]);
 
   // Vendas ligadas a um clique rastreado, com grupo, anúncio, palavra-chave,
   // aparelho e país do clique: cada aba conta a venda inteira no item certo.
@@ -842,6 +848,9 @@ export default function ProductDetailPage() {
             <div key={k.label} className={`${bgCard} border rounded-xl p-4`}>
               <p className="text-ink-subtle text-xs font-medium mb-1">{k.label}</p>
               <p className={`text-xl xl:text-2xl font-semibold tabular-nums whitespace-nowrap ${k.tone}`}>{k.value}</p>
+              {k.label === 'Lucro líquido' && stats.tax > 0 && (
+                <p className="text-[11px] text-ink-subtle mt-1" title={googleTaxNote()}>já sem {formatMoney(stats.tax)} de imposto Google</p>
+              )}
             </div>
           ))}
         </div>

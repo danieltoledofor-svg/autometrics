@@ -22,6 +22,7 @@ import { useLiveMetrics } from '@/lib/useLiveMetrics';
 import { fetchAllRows, fetchByProducts } from '@/lib/fetchRows';
 import { useTablePrefs } from '@/app/components/table/useTablePrefs';
 import { cellPad, TableControls, Th, widthStyle } from '@/app/components/table/tableUi';
+import { googleTaxOn, googleTaxNote } from '@/lib/googleAdsTax';
 import { Inter } from 'next/font/google';
 
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
@@ -375,7 +376,7 @@ export default function PlanningPage() {
       supabase.from('financial_goals').select('*').eq('user_id', userId).eq('month_key', currentMonthKey).maybeSingle(),
       supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
       supabase.from('additional_costs').select('*').eq('user_id', userId).gte('date', prevStartStr).lte('date', prevEndStr),
-      fetchAllRows(() => supabase.from('products').select('id, currency, name, mcc_name, account_name').eq('user_id', userId).order('id')),
+      fetchAllRows(() => supabase.from('products').select('id, currency, name, mcc_name, account_name, google_ads_campaign_id').eq('user_id', userId).order('id')),
     ]);
 
     if (goalData) {
@@ -440,7 +441,7 @@ export default function PlanningPage() {
     const filteredMetrics = metrics.filter(m => m.date >= startDate && m.date <= endDate);
     
     const dailyMap: Record<string, any> = {};
-    const campaignMap: Record<string, {name: string, revenue: number, cost: number, refunds: number}> = {};
+    const campaignMap: Record<string, {name: string, revenue: number, cost: number, refunds: number, tax?: number}> = {};
     
     // 1. Ads
     filteredMetrics.forEach(m => {
@@ -459,6 +460,8 @@ export default function PlanningPage() {
       const account = m.account_name || prod?.account_name || 'Desconhecida';
       
       let cost = Number(m.cost || 0); let revenue = Number(m.conversion_value || 0); let refunds = Number(m.refunds || 0);
+      // Imposto do Google Brasil (2027 em diante, contas em reais), na mesma proporção do custo.
+      const taxShare = cost > 0 ? googleTaxOn(cost, m.date, prod) / cost : 0;
       let costInBRL = cost; let revenueInBRL = revenue; let refundsInBRL = refunds;
       if (isUSD) { costInBRL *= liveDollar; revenueInBRL *= manualDollar; refundsInBRL *= manualDollar; }
       else if (isEUR) { costInBRL *= liveEuro; revenueInBRL *= manualEuro; refundsInBRL *= manualEuro; }
@@ -470,6 +473,7 @@ export default function PlanningPage() {
       if (!dailyMap[m.date]) dailyMap[m.date] = { date: m.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, extra_revenue: 0, net_extra: 0, details: [], mccs: {} };
       const day = dailyMap[m.date];
       day.revenue += revenue; day.ads_cost += cost; day.refunds += refunds;
+      day.google_tax = (day.google_tax || 0) + cost * taxShare;
 
       if (!day.mccs[mcc]) day.mccs[mcc] = { name: mcc, revenue: 0, ads_cost: 0, refunds: 0, accounts: {} };
       const mccObj = day.mccs[mcc]; mccObj.revenue += revenue; mccObj.ads_cost += cost; mccObj.refunds += refunds;
@@ -487,6 +491,16 @@ export default function PlanningPage() {
       campaignMap[campaignName].revenue += revenue;
       campaignMap[campaignName].cost += cost;
       campaignMap[campaignName].refunds += refunds;
+      campaignMap[campaignName].tax = (campaignMap[campaignName].tax || 0) + cost * taxShare;
+    });
+
+    // Imposto do Google entra como um extra automático do dia, com nome próprio:
+    // sai do lucro e fica à vista quanto foi para o imposto. Não dá para excluir.
+    Object.values(dailyMap).forEach((day: any) => {
+      if (!(day.google_tax > 0)) return;
+      day.extra_cost += day.google_tax;
+      day.net_extra = day.extra_revenue - day.extra_cost;
+      day.details.push({ id: `google-tax-${day.date}`, desc: 'Imposto Google (2,9%)', val: day.google_tax, auto: true, note: googleTaxNote() });
     });
 
     // 2. Extras
@@ -533,6 +547,8 @@ export default function PlanningPage() {
       const isUSD = prod?.currency === 'USD';
       const isEUR = prod?.currency === 'EUR';
       let cost = Number(m.cost || 0); let revenue = Number(m.conversion_value || 0); let refunds = Number(m.refunds || 0);
+      // Imposto do Google Brasil (2027 em diante, contas em reais), na mesma proporção do custo.
+      const taxShare = cost > 0 ? googleTaxOn(cost, m.date, prod) / cost : 0;
       let costInBRL = cost; let revenueInBRL = revenue; let refundsInBRL = refunds;
       if (isUSD) { costInBRL *= liveDollar; revenueInBRL *= manualDollar; refundsInBRL *= manualDollar; }
       else if (isEUR) { costInBRL *= liveEuro; revenueInBRL *= manualEuro; refundsInBRL *= manualEuro; }
@@ -540,7 +556,7 @@ export default function PlanningPage() {
       if (viewCurrency === 'BRL') { cost = costInBRL; revenue = revenueInBRL; refunds = refundsInBRL; }
       else if (viewCurrency === 'USD') { cost = costInBRL / liveDollar; revenue = revenueInBRL / manualDollar; refunds = refundsInBRL / manualDollar; }
       else if (viewCurrency === 'EUR') { cost = costInBRL / liveEuro; revenue = revenueInBRL / manualEuro; refunds = refundsInBRL / manualEuro; }
-      prevTotals.revenue += revenue; prevTotals.ads_cost += cost; prevTotals.refunds += refunds;
+      prevTotals.revenue += revenue; prevTotals.ads_cost += cost; prevTotals.refunds += refunds; prevTotals.extra_cost += cost * taxShare;
     });
     prevExtraCosts.forEach(c => {
        let amount = Number(c.amount);
@@ -623,7 +639,7 @@ export default function PlanningPage() {
     const adsRoi = totals.ads_cost > 0 ? ((totals.revenue + totals.extra_revenue - totals.refunds - totals.ads_cost) / totals.ads_cost) * 100 : 0;
     
     const campaignsArray = Object.values(campaignMap).map(c => {
-       const profit = c.revenue - c.cost - c.refunds;
+       const profit = c.revenue - c.cost - c.refunds - (c.tax || 0);
        const roi = c.cost > 0 ? (profit / c.cost) * 100 : 0;
        return { ...c, profit, roi };
     }).sort((a, b) => b.profit - a.profit);
@@ -1166,7 +1182,7 @@ export default function PlanningPage() {
                             <span className="text-xs text-ink-muted truncate max-w-[55%]">{d.desc}</span>
                             <div className="flex items-center gap-1">
                               <span className={`text-xs font-medium tabular-nums ${d.val < 0 ? 'text-pos' : 'text-warn'}`}>{formatMoney(Math.abs(d.val))}</span>
-                              {editMode && (
+                              {editMode && !d.auto && (
                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id, d.desc); }} aria-label={`Excluir o extra ${d.desc}`} className="text-neg p-1 rounded hover:bg-neg/10">
                                   <Trash2 size={12} aria-hidden="true" />
                                 </button>
@@ -1260,7 +1276,7 @@ export default function PlanningPage() {
                                                 <span className="text-xs text-ink-subtle break-words min-w-0" title={d.desc}>{d.desc}</span>
                                                 <span className={`text-xs font-medium ${d.val < 0 ? 'text-pos' : 'text-warn'}`}>{formatMoney(Math.abs(d.val))}</span>
                                                 {/* Botão Excluir (Só com Modo Edição) */}
-                                                {editMode && (
+                                                {editMode && !d.auto && (
                                                    <button
                                                      onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id, d.desc); }}
                                                      className="text-neg p-1 rounded hover:bg-neg/10"

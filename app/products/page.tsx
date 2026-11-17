@@ -52,6 +52,7 @@ import { blockOf } from '@/lib/campaignGroups';
 import { useCampaignGroups } from '@/app/components/table/useTablePrefs';
 import { CampaignGroupsBar } from '@/app/components/CampaignGroupsBar';
 import { CampaignTable, DOT, LEVELS, loadLevel, loadSort, saveLevel, saveSort, toneOf, type Level, type Sort, type Tone } from './CampaignTable';
+import { googleTaxOn } from '@/lib/googleAdsTax';
 import { Inter } from 'next/font/google';
 
 // Fonte do guia visual (DESIGN.md), nas telas já migradas.
@@ -287,7 +288,7 @@ export default function ProductsPage() {
        // Os números do período e o status recente saem juntos, cada um com os lotes em paralelo.
        let [{ data: metricsData }, { data: st, error: stErr }] = await Promise.all([
           fetchByProducts(productIds, chunk => supabase.from('daily_metrics')
-            .select('id, product_id, cost, conversion_value, impressions, clicks')
+            .select('id, product_id, date, cost, conversion_value, impressions, clicks')
             .in('product_id', chunk).gte('date', startDateStr).lte('date', endDateStr)
             .order('id')),
           fetchStatus(statusCols),
@@ -297,8 +298,9 @@ export default function ProductsPage() {
           ({ data: st } = await fetchStatus(statusCols));
        }
 
-       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, impressions: number, clicks: number, budget: number, budgetDate?: string, targetCpa?: number}> = {};
-       prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, profit: 0, roi: 0, impressions: 0, clicks: 0, budget: 0 });
+       const metricsMap: Record<string, {cost: number, revenue: number, profit: number, roi: number, tax: number, impressions: number, clicks: number, budget: number, budgetDate?: string, targetCpa?: number}> = {};
+       prodData.forEach((p: any) => metricsMap[p.id] = { cost: 0, revenue: 0, profit: 0, roi: 0, tax: 0, impressions: 0, clicks: 0, budget: 0 });
+       const prodById = new Map(prodData.map((p: any) => [p.id, p]));
        
        {
          metricsData.forEach((m: any) => {
@@ -306,6 +308,8 @@ export default function ProductsPage() {
             const r = Number(m.conversion_value || 0);
             metricsMap[m.product_id].cost += c;
             metricsMap[m.product_id].revenue += r;
+            // Imposto do Google Brasil (2027 em diante, contas em reais): sai do lucro.
+            metricsMap[m.product_id].tax += googleTaxOn(c, m.date, prodById.get(m.product_id) as any);
             metricsMap[m.product_id].impressions += Number(m.impressions || 0);
             metricsMap[m.product_id].clicks += Number(m.clicks || 0);
          });
@@ -339,7 +343,7 @@ export default function ProductsPage() {
 
        const finalProducts = prodData.map((p: any) => {
           const m = metricsMap[p.id];
-          m.profit = m.revenue - m.cost;
+          m.profit = m.revenue - m.cost - m.tax;
           if (m.cost > 0) m.roi = (m.profit / m.cost) * 100;
           m.budget = budgetMap[p.id]?.value || 0;
           m.budgetDate = budgetMap[p.id]?.date || '';
