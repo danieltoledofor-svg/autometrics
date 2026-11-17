@@ -6,7 +6,7 @@ import {
   ArrowLeft, Columns, X, ExternalLink, Calendar, Link as LinkIcon,
   PlayCircle, PauseCircle, RefreshCw, FileText, Sun, Moon,
   Video, NotebookPen, Check, BarChart2, TrendingUp, Tv2, Settings2, Globe, BarChart, Hash,
-  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound, ListChecks, Sparkles, Route
+  SlidersHorizontal, LayoutGrid, Target, Package, Settings, LogOut, AlertTriangle, Layers, Megaphone, KeyRound, ListChecks, Sparkles, Route, Copy, CopyPlus
 } from 'lucide-react';
 import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend
@@ -16,6 +16,7 @@ import { applyTheme } from '@/lib/theme';
 import { useDayInput, isValidDay } from '@/lib/useDayInput';
 import Link from 'next/link';
 import { Logo } from '@/app/components/Logo';
+import { canEdit } from '@/lib/googleAds/editors';
 import { CampaignStatusToggle } from '@/app/components/CampaignStatusToggle';
 import { Inter } from 'next/font/google';
 
@@ -521,6 +522,12 @@ export default function ProductDetailPage() {
   if (loading) return <div className={`min-h-screen ${bgMain} flex items-center justify-center`}>Carregando dados...</div>;
   if (!product) return <div className={`min-h-screen ${bgMain} flex items-center justify-center ${textMuted}`}>Produto não encontrado.</div>;
 
+  // Atalhos para o criador: copiar (usar como modelo) e duplicar, já com esta campanha escolhida.
+  // Só para os logins que podem criar no Google e só em campanha ligada ao Google.
+  const builderLinks = canEdit(userEmail) && product.google_ads_campaign_id
+    ? { copiar: `/criar-campanha?campanha=${product.id}`, duplicar: `/criar-campanha?modo=duplicar&campanha=${product.id}` }
+    : null;
+
   const { rows, stats, chart } = processedData;
 
   // Dias em que o Google mexeu no custo depois do fato. A diferença é somada
@@ -724,6 +731,14 @@ export default function ProductDetailPage() {
           <button onClick={() => setShowManualEntry(true)} className="flex justify-center items-center gap-2 bg-brand hover:bg-brand-hover text-white px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-colors w-full sm:w-auto">
             <FileText size={16} aria-hidden="true" className="sm:w-3.5 sm:h-3.5" /> Lançamento Rápido
           </button>
+          {builderLinks && <>
+            <Link href={builderLinks.copiar} title="Abre o criador já lendo esta campanha do Google, para usar como modelo de uma nova" className="flex justify-center items-center gap-2 border border-brand bg-brand/15 hover:bg-brand/25 text-brand-text px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-colors w-full sm:w-auto">
+              <Copy size={16} aria-hidden="true" className="sm:w-3.5 sm:h-3.5" /> Copiar campanha
+            </Link>
+            <Link href={builderLinks.duplicar} title="Abre a duplicação já com esta campanha, para copiá-la para a mesma conta ou outras contas" className="flex justify-center items-center gap-2 border border-brand bg-brand/15 hover:bg-brand/25 text-brand-text px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-colors w-full sm:w-auto">
+              <CopyPlus size={16} aria-hidden="true" className="sm:w-3.5 sm:h-3.5" /> Duplicar campanha
+            </Link>
+          </>}
 
           {/* SELETOR DE DATA */}
           <div className={`flex flex-col sm:flex-row items-stretch sm:items-center p-2 sm:p-1.5 rounded-xl border ${bgCard} w-full sm:w-auto gap-2 sm:gap-0`}>
@@ -774,6 +789,14 @@ export default function ProductDetailPage() {
           </div>
         </div>
       </header>
+
+      {/* No celular, os atalhos para o criador ficam logo abaixo do cabeçalho. */}
+      {builderLinks && (
+        <div className="md:hidden grid grid-cols-2 gap-2 mb-4">
+          <Link href={builderLinks.copiar} className="flex justify-center items-center gap-2 border border-brand bg-brand/15 text-brand-text px-3 py-2.5 rounded-xl text-sm font-medium"><Copy size={16} aria-hidden="true" /> Copiar</Link>
+          <Link href={builderLinks.duplicar} className="flex justify-center items-center gap-2 border border-brand bg-brand/15 text-brand-text px-3 py-2.5 rounded-xl text-sm font-medium"><CopyPlus size={16} aria-hidden="true" /> Duplicar</Link>
+        </div>
+      )}
 
       {/* MOBILE TAB CHIPS */}
       <div className="md:hidden flex overflow-x-auto gap-2 mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>

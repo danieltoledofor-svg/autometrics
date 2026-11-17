@@ -32,7 +32,7 @@ interface Target {
 const CREATED = 'autometrics_duplicar_criadas';
 const symbolOf = (c?: string | null) => (c === 'BRL' ? 'R$' : c === 'EUR' ? '€' : c === 'USD' || !c ? 'US$' : c);
 
-export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; name: string; account: string; mcc: string }[]; css: Css; api: Api }) {
+export function Duplicate({ campaigns, css, api, preset }: { campaigns: { id: string; name: string; account: string; mcc: string }[]; css: Css; api: Api; preset?: string }) {
   const { card, head, muted, line, soft, label } = css;
   const [filter, setFilter] = useState('');
   const [picked, setPicked] = useState('');
@@ -69,13 +69,25 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
     return (f ? campaigns.filter(c => `${c.name} ${c.account} ${c.mcc}`.toLowerCase().includes(f)) : campaigns).slice(0, 40);
   }, [campaigns, filter]);
 
-  const read = async () => {
+  const read = async (id = picked) => {
     setReading(true); setError(''); setT(null); setS(null); setTargets([]); setStates({}); setStale(false); setFixes([]);
-    const { ok, body } = await api(`/api/campaign-builder?product_id=${picked}`);
+    const { ok, body } = await api(`/api/campaign-builder?product_id=${id}`);
     if (!ok || !body.template) setError(body.error || 'Não foi possível ler a campanha.');
     else { setT(body.template); setCurrency(body.currency || 'USD'); setS(duplicateSettings(body.template)); }
     setReading(false);
   };
+
+  // Veio do botão Duplicar da página da campanha: já escolhe e lê essa campanha, uma vez.
+  const usedPreset = useRef(false);
+  useEffect(() => {
+    if (!preset || usedPreset.current) return;
+    usedPreset.current = true;
+    const found = campaigns.find(c => c.id === preset);
+    if (found) setFilter(found.name);
+    setPicked(preset);
+    read(preset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset]);
 
   // Metas de cada conta escolhida, uma consulta por conta, uma de cada vez.
   useEffect(() => {
@@ -157,7 +169,7 @@ export function Duplicate({ campaigns, css, api }: { campaigns: { id: string; na
           {!shown.length && <div className={`px-3 py-3 text-xs ${muted}`}>Nenhuma campanha ligada ao Google com esse nome.</div>}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button disabled={!picked || reading} onClick={read} className="bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-2">
+          <button disabled={!picked || reading} onClick={() => read()} className="bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-40 inline-flex items-center gap-2">
             {reading && <Loader2 size={13} aria-hidden="true" className="animate-spin" />} Ler do Google
           </button>
           {campaigns.length > 40 && !filter && <span className={`text-xs ${muted}`}>Mostrando 40 de {campaigns.length}; use a busca.</span>}

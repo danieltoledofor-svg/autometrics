@@ -69,7 +69,15 @@ export default function CampaignBuilderPage() {
   const [currency, setCurrency] = useState('USD');
   // Criar, Duplicar e Histórico ficam na mesma tela, em abas separadas; ?modo=duplicar ou ?modo=historico abre direto na aba.
   const [mode, setModeState] = useState<'criar' | 'duplicar' | 'historico'>('criar');
-  useEffect(() => { const m = new URLSearchParams(window.location.search).get('modo'); if (m === 'duplicar' || m === 'historico') setModeState(m); }, []);
+  // ?campanha=<id> vem dos botões Copiar e Duplicar da página da campanha: já abre com ela escolhida e lida do Google.
+  const [preset, setPreset] = useState('');
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const m = url.searchParams.get('modo');
+    if (m === 'duplicar' || m === 'historico') setModeState(m);
+    const c = url.searchParams.get('campanha');
+    if (c) { setPreset(c); url.searchParams.delete('campanha'); window.history.replaceState(null, '', url.toString()); }
+  }, []);
   const setMode = (m: 'criar' | 'duplicar' | 'historico') => {
     setModeState(m);
     const url = new URL(window.location.href);
@@ -111,6 +119,17 @@ export default function CampaignBuilderPage() {
     else setResult(body);
     setReading(false);
   }, []);
+
+  // Copiar a partir da página da campanha: escolhe e lê a campanha uma vez, assim que a lista chega.
+  const usedPreset = React.useRef(false);
+  useEffect(() => {
+    if (!preset || usedPreset.current || !list?.allowed || mode !== 'criar') return;
+    usedPreset.current = true;
+    const found = (list.campaigns || []).find((c: any) => c.id === preset);
+    if (found) setFilter(found.name);
+    setPicked(preset); setStep(0);
+    read(`/api/campaign-builder?product_id=${preset}`);
+  }, [preset, list, mode, read]);
 
   const shown = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -174,7 +193,7 @@ export default function CampaignBuilderPage() {
         )}
 
         {list?.allowed && mode === 'historico' && <History css={css} api={api} />}
-        {list?.allowed && mode === 'duplicar' && <Duplicate campaigns={list.campaigns || []} css={css} api={api} />}
+        {list?.allowed && mode === 'duplicar' && <Duplicate campaigns={list.campaigns || []} css={css} api={api} preset={preset} />}
 
         {/* No celular, só número e nome numa linha que rola para o lado; a descrição de cada passo aparece a partir do tablet. */}
         {creating && <div className="flex gap-1.5 overflow-x-auto sm:grid sm:grid-cols-5 sm:overflow-visible">
