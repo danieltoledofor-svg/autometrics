@@ -618,6 +618,7 @@ export default function DashboardPage() {
       if (!byProduct.has(row.product_id)) byProduct.set(row.product_id, { today: empty(), yesterday: empty() });
       const d = byProduct.get(row.product_id)![row.date === todayStr ? 'today' : 'yesterday'];
       d.cost += Number(row.cost || 0); d.revenue += Number(row.conversion_value || 0); d.refunds += Number(row.refunds || 0); d.sales += Number(row.conversions || 0);
+      d.tax = (d.tax || 0) + googleTaxOn(Number(row.cost || 0), row.date, productById.get(row.product_id));
     }
     const out: any[] = [];
     for (const [id, p] of byProduct) {

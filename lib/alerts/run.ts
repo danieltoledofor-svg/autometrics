@@ -6,6 +6,7 @@ import { userChangeEvents } from '@/lib/analysis/changes';
 import { explainReasons, resolveProductStatus } from '@/lib/campaignStatus';
 import { spendAlert } from './spendRule';
 import { lossAlert, turnAlert } from './marginRules';
+import { googleTaxOn } from '@/lib/googleAdsTax';
 import { isQuiet, resolveSettings, describeRule, RULE_METRICS, RULE_WINDOWS, type AlertSettings } from './catalog';
 import { isOwner } from '@/lib/ai/openrouter';
 import { usageToday, DAILY_QUOTA } from '@/lib/googleAds/sync';
@@ -99,7 +100,7 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
   const link_ = (id: string) => `<a href="${appUrl()}/products/${id}">Abrir a campanha</a>`;
 
   const products = await fetchAll((a, b) => db.from('products')
-    .select('id, name, currency, status, google_status, google_status_reasons').eq('user_id', userId).range(a, b));
+    .select('id, name, currency, google_ads_campaign_id, status, google_status, google_status_reasons').eq('user_id', userId).range(a, b));
   if (!products.length) return 0;
   const byId = new Map(products.map(p => [p.id, p]));
   const ids = products.map(p => p.id);
@@ -110,24 +111,26 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
       .in('product_id', ids.slice(i, i + 150)).gte('date', addDays(day, -30)).lte('date', day).or('cost.gt.0,conversions.gt.0,refunds.gt.0').range(a, b)));
   }
 
-  interface Camp { today: number; sales: number; revenue: number; refunds: number; yesterday: { cost: number; revenue: number; refunds: number; sales: number }; past7: number; days7: number; cost3: number; sales3: number; sales30: number; revenue30: number; lostYesterday: number }
+  interface Camp { today: number; tax: number; sales: number; revenue: number; refunds: number; yesterday: { cost: number; revenue: number; refunds: number; sales: number; tax: number }; past7: number; days7: number; cost3: number; sales3: number; sales30: number; revenue30: number; lostYesterday: number }
   const camps = new Map<string, Camp>();
   const d7 = addDays(day, -7), d3 = addDays(day, -3);
   for (const r of rows) {
-    if (!camps.has(r.product_id)) camps.set(r.product_id, { today: 0, sales: 0, revenue: 0, refunds: 0, yesterday: { cost: 0, revenue: 0, refunds: 0, sales: 0 }, past7: 0, days7: 0, cost3: 0, sales3: 0, sales30: 0, revenue30: 0, lostYesterday: 0 });
+    if (!camps.has(r.product_id)) camps.set(r.product_id, { today: 0, tax: 0, sales: 0, revenue: 0, refunds: 0, yesterday: { cost: 0, revenue: 0, refunds: 0, sales: 0, tax: 0 }, past7: 0, days7: 0, cost3: 0, sales3: 0, sales30: 0, revenue30: 0, lostYesterday: 0 });
     const c = camps.get(r.product_id)!;
+    // Imposto do Google Brasil (2027 em diante, contas em reais): sai do resultado.
+    const tax = googleTaxOn(num(r.cost), r.date, byId.get(r.product_id));
     if (r.date === addDays(day, -1)) {
       c.lostYesterday = num(r.lost_budget);
-      c.yesterday = { cost: num(r.cost), revenue: num(r.conversion_value), refunds: num(r.refunds), sales: num(r.conversions) };
+      c.yesterday = { cost: num(r.cost), revenue: num(r.conversion_value), refunds: num(r.refunds), sales: num(r.conversions), tax };
     }
     const cost = num(r.cost), sales = num(r.conversions);
     c.sales30 += sales; c.revenue30 += num(r.conversion_value);
-    if (r.date === day) { c.today += cost; c.sales += sales; c.revenue += num(r.conversion_value); c.refunds += num(r.refunds); continue; }
+    if (r.date === day) { c.today += cost; c.tax += tax; c.sales += sales; c.revenue += num(r.conversion_value); c.refunds += num(r.refunds); continue; }
     if (r.date >= d7 && cost > 0) { c.past7 += cost; c.days7++; }
     if (r.date >= d3) { c.cost3 += cost; c.sales3 += sales; }
   }
   // Somas por período, para as regras criadas pelo usuário.
-  type Sum = { cost: number; sales: number; revenue: number; refunds: number; clicks: number; impressions: number };
+  type Sum = { cost: number; tax: number; sales: number; revenue: number; refunds: number; clicks: number; impressions: number };
   const windows: Record<string, (date: string) => boolean> = {
     hoje: d => d === day, ontem: d => d === addDays(day, -1),
     d3: d => d < day && d >= addDays(day, -3), d7: d => d < day && d >= addDays(day, -7), d30: d => d < day && d >= addDays(day, -30),
@@ -135,11 +138,11 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
   const sums = new Map<string, Record<string, Sum>>();
   const targetCpa = new Map<string, { date: string; value: number }>();
   for (const r of settings.rules.some(x => x.on) ? rows : []) {
-    if (!sums.has(r.product_id)) sums.set(r.product_id, Object.fromEntries(Object.keys(windows).map(w => [w, { cost: 0, sales: 0, revenue: 0, refunds: 0, clicks: 0, impressions: 0 }])));
+    if (!sums.has(r.product_id)) sums.set(r.product_id, Object.fromEntries(Object.keys(windows).map(w => [w, { cost: 0, tax: 0, sales: 0, revenue: 0, refunds: 0, clicks: 0, impressions: 0 }])));
     for (const w of Object.keys(windows)) {
       if (!windows[w](r.date)) continue;
       const s = sums.get(r.product_id)![w];
-      s.cost += num(r.cost); s.sales += num(r.conversions); s.revenue += num(r.conversion_value); s.refunds += num(r.refunds); s.clicks += num(r.clicks); s.impressions += num(r.impressions);
+      s.cost += num(r.cost); s.tax += googleTaxOn(num(r.cost), r.date, byId.get(r.product_id)); s.sales += num(r.conversions); s.revenue += num(r.conversion_value); s.refunds += num(r.refunds); s.clicks += num(r.clicks); s.impressions += num(r.impressions);
     }
     // Meta de CPA: a mais recente que o Google informou para a campanha.
     if (num(r.target_cpa) > 0 && (!targetCpa.has(r.product_id) || r.date > targetCpa.get(r.product_id)!.date)) targetCpa.set(r.product_id, { date: r.date, value: num(r.target_cpa) });
@@ -185,7 +188,8 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
     }
 
     // Custo empatando ou passando da receita no dia, mesmo com venda.
-    const todaySum = { cost: c.today, revenue: c.revenue, refunds: c.refunds, sales: c.sales };
+    const todaySum = { cost: c.today, revenue: c.revenue, refunds: c.refunds, sales: c.sales, tax: c.tax };
+    const taxNote = (v: number) => (v > 0 ? `, imposto Google ${money(v)}` : '');
     const pct = (v: number) => `${v >= 0 ? '' : '−'}${Math.abs(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`;
     const signed = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`;
     if (on.prejuizo.on) {
@@ -196,7 +200,7 @@ async function userAlerts(link: any, settings: AlertSettings, now: ReturnType<ty
           `${head}
 ${name}
 
-Hoje: custo <b>${money(c.today)}</b>, receita ${money(c.revenue)}${c.refunds > 0 ? ` (${money(c.refunds)} de reembolso)` : ''}, ${String(c.sales).replace('.', ',')} ${c.sales === 1 ? 'venda' : 'vendas'}.
+Hoje: custo <b>${money(c.today)}</b>${taxNote(c.tax)}, receita ${money(c.revenue)}${c.refunds > 0 ? ` (${money(c.refunds)} de reembolso)` : ''}, ${String(c.sales).replace('.', ',')} ${c.sales === 1 ? 'venda' : 'vendas'}.
 Resultado do dia: <b>${signed(a.result)}</b> (${pct(a.margin)} sobre o custo).
 
 ${link_(id)}`,
@@ -213,7 +217,7 @@ ${link_(id)}`,
 ${name}
 
 Ontem fechou com ${signed(a.yesterday)} (${pct(a.yesterdayMargin)} sobre o custo de ${money(c.yesterday.cost)}).
-Hoje até agora: custo <b>${money(c.today)}</b>, receita ${money(c.revenue)}, resultado <b>${signed(a.today)}</b>.
+Hoje até agora: custo <b>${money(c.today)}</b>${taxNote(c.tax)}, receita ${money(c.revenue)}, resultado <b>${signed(a.today)}</b>.
 
 Vale olhar esta campanha. O aviso também ficou na Dashboard.
 
@@ -239,8 +243,8 @@ ${link_(id)}`,
       const got: number | null =
         rule.metric === 'cpa' ? (s.sales > 0 ? s.cost / s.sales : null)
         : rule.metric === 'custo' ? s.cost : rule.metric === 'vendas' ? s.sales : rule.metric === 'receita' ? s.revenue
-        : rule.metric === 'resultado' ? s.revenue - s.refunds - s.cost
-        : rule.metric === 'roi' ? (s.cost > 0 ? ((s.revenue - s.refunds - s.cost) / s.cost) * 100 : null)
+        : rule.metric === 'resultado' ? s.revenue - s.refunds - s.cost - s.tax
+        : rule.metric === 'roi' ? (s.cost > 0 ? ((s.revenue - s.refunds - s.cost - s.tax) / s.cost) * 100 : null)
         : rule.metric === 'cliques' ? s.clicks : rule.metric === 'cpc' ? (s.clicks > 0 ? s.cost / s.clicks : null)
         : s.impressions > 0 ? (s.clicks / s.impressions) * 100 : null;
       if (got === null) continue;
@@ -255,7 +259,7 @@ ${link_(id)}`,
       const show = (v: number) => (RULE_METRICS[rule.metric].money ? money(v) : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}${pctMetric ? '%' : ''}`);
       const basisNote = rule.basis === 'pct_venda' ? ` (${rule.value}% do valor de uma venda, ${money(sale)})` : rule.basis === 'pct_meta' ? ` (${rule.value}% da meta de CPA, ${money(base || 0)})` : '';
       await notify('regra', `${rule.id}:${id}`, id,
-        `🔔 <b>${escapeHtml(rule.name)}</b>\n${name}\n\n${RULE_METRICS[rule.metric].label} ${RULE_WINDOWS[rule.window]}: <b>${show(got)}</b>, ${rule.op === 'acima' ? 'acima' : 'abaixo'} do limite de ${show(limit)}${basisNote}.\nCusto no período: ${money(s.cost)} · vendas: ${String(s.sales).replace('.', ',')}.\n\n<i>${escapeHtml(describeRule(rule))}</i>\n\n${link_(id)}`,
+        `🔔 <b>${escapeHtml(rule.name)}</b>\n${name}\n\n${RULE_METRICS[rule.metric].label} ${RULE_WINDOWS[rule.window]}: <b>${show(got)}</b>, ${rule.op === 'acima' ? 'acima' : 'abaixo'} do limite de ${show(limit)}${basisNote}.\nCusto no período: ${money(s.cost)}${s.tax > 0 ? ` · imposto Google: ${money(s.tax)}` : ''} · vendas: ${String(s.sales).replace('.', ',')}.\n\n<i>${escapeHtml(describeRule(rule))}</i>\n\n${link_(id)}`,
         { rule: rule.id, got, limit });
     }
 
@@ -309,19 +313,19 @@ ${link_(id)}`,
 
   // ── Resumo do dia, uma vez, a partir do horário escolhido ───────────────────
   if (on.resumo.on && hour >= on.resumo.hour) {
-    const byCurrency = new Map<string, { cost: number; sales: number; revenue: number; refunds: number; n: number }>();
+    const byCurrency = new Map<string, { cost: number; tax: number; sales: number; revenue: number; refunds: number; n: number }>();
     for (const [id, c] of camps) {
       if (c.today <= 0 && c.sales <= 0) continue;
       const cur = String(byId.get(id)?.currency || 'BRL');
-      if (!byCurrency.has(cur)) byCurrency.set(cur, { cost: 0, sales: 0, revenue: 0, refunds: 0, n: 0 });
+      if (!byCurrency.has(cur)) byCurrency.set(cur, { cost: 0, tax: 0, sales: 0, revenue: 0, refunds: 0, n: 0 });
       const t = byCurrency.get(cur)!;
-      t.cost += c.today; t.sales += c.sales; t.revenue += c.revenue; t.refunds += c.refunds; t.n++;
+      t.cost += c.today; t.tax += c.tax; t.sales += c.sales; t.revenue += c.revenue; t.refunds += c.refunds; t.n++;
     }
     if (byCurrency.size) {
       const lines = [...byCurrency].map(([cur, t]) => {
         const m = (v: number) => formatMoney(v, cur);
-        const result = t.revenue - t.refunds - t.cost;
-        return `${t.n} ${t.n === 1 ? 'campanha' : 'campanhas'} com gasto\nCusto: <b>${m(t.cost)}</b>\nVendas: <b>${String(t.sales).replace('.', ',')}</b> · receita ${m(t.revenue)}\nCPA: ${t.sales > 0 ? m(t.cost / t.sales) : 'sem venda'}\nResultado: <b>${result >= 0 ? '+' : '−'}${m(Math.abs(result))}</b>`;
+        const result = t.revenue - t.refunds - t.cost - t.tax;
+        return `${t.n} ${t.n === 1 ? 'campanha' : 'campanhas'} com gasto\nCusto: <b>${m(t.cost)}</b>\n${t.tax > 0 ? `Imposto Google: ${m(t.tax)}\n` : ''}Vendas: <b>${String(t.sales).replace('.', ',')}</b> · receita ${m(t.revenue)}\nCPA: ${t.sales > 0 ? m(t.cost / t.sales) : 'sem venda'}\nResultado: <b>${result >= 0 ? '+' : '−'}${m(Math.abs(result))}</b>`;
       });
       await notify('resumo', 'dia', null, `📊 <b>Resumo de hoje, ${ddmm(day)}</b>\n\n${lines.join('\n\n')}\n\n<a href="${appUrl()}/dashboard">Abrir o painel</a>`);
     }

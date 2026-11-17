@@ -1,6 +1,7 @@
 /**
  * Duas regras de margem, as mesmas no Telegram (lib/alerts/run.ts) e no aviso
- * da Dashboard. Resultado = receita − reembolsos − custo, na moeda da conta.
+ * da Dashboard. Resultado = receita − reembolsos − custo − imposto do Google
+ * (2,9% nas contas pagas em reais, de 01/01/2027 em diante), na moeda da conta.
  *
  * - custo passando da receita: hoje a campanha já vendeu, mas o custo empatou
  *   com a receita ou passou dela (lucro abaixo de X% do custo). Sem venda no
@@ -9,9 +10,9 @@
  *   do custo) e hoje, a partir do horário escolhido, o custo já passou da receita.
  */
 
-export interface DaySum { cost: number; revenue: number; refunds: number; sales: number }
+export interface DaySum { cost: number; revenue: number; refunds: number; sales: number; tax?: number }
 
-const result = (d: DaySum) => d.revenue - d.refunds - d.cost;
+const result = (d: DaySum) => d.revenue - d.refunds - d.cost - (d.tax || 0);
 
 export interface LossAlert {
   /** perdendo = custo acima da receita; empatado = lucro abaixo da margem escolhida. */
