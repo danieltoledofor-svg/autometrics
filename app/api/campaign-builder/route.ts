@@ -88,6 +88,44 @@ async function hiddenAccounts(userId: string, accounts: { customer_id: string; l
   return { ids, calls };
 }
 
+/**
+ * Contas que as próprias campanhas dão como suspensas: alguma marcada como conta suspensa ou
+ * encerrada (o Google responde isso de dentro da conta), ou todas as campanhas com status do
+ * Google suspensas por ele.
+ */
+function suspendedByCampaigns(products: { google_ads_customer_id: any; google_status?: string | null; google_status_date?: string | null }[]): Set<string> {
+  // Só marca recente: enquanto a conta segue suspensa, cada leitura renova a data; conta reativada
+  // não fica escondida por uma marca antiga.
+  const since = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+  const byAccount = new Map<string, string[]>();
+  for (const p of products) {
+    const s = String(p.google_status || '').toUpperCase();
+    if (!s || !p.google_status_date || p.google_status_date < since) continue;
+    const id = String(p.google_ads_customer_id).replace(/\D/g, '');
+    if (!byAccount.has(id)) byAccount.set(id, []);
+    byAccount.get(id)!.push(s);
+  }
+  const out = new Set<string>();
+  for (const [id, list] of byAccount) {
+    if (list.some(s => s === 'CONTA_SUSPENSA' || s === 'CONTA_ENCERRADA') || list.every(s => s === 'SUSPENSA')) out.add(id);
+  }
+  return out;
+}
+
+/** Motivo para não subir campanha nesta conta, ou null quando ela pode receber. */
+async function accountBlocked(userId: string, customerId: string): Promise<string | null> {
+  const db = supabaseAdmin();
+  const [{ data: acc }, { data: products }] = await Promise.all([
+    db.from('google_ads_accounts').select('status').eq('user_id', userId).eq('customer_id', customerId).maybeSingle(),
+    db.from('products').select('google_ads_customer_id, google_status, google_status_date').eq('user_id', userId).eq('google_ads_customer_id', customerId).limit(500),
+  ]);
+  const status = String(acc?.status || '').toUpperCase();
+  if (status === 'SUSPENDED') return 'Esta conta está suspensa no Google Ads. Escolha outra conta.';
+  if (status === 'CANCELED' || status === 'CLOSED') return 'Esta conta foi cancelada no Google Ads. Escolha outra conta.';
+  if (suspendedByCampaigns(products || []).has(customerId)) return 'O Google suspendeu esta conta (as campanhas dela aparecem como suspensas). Escolha outra conta.';
+  return null;
+}
+
 let languageCache: { at: number; list: { id: string; nome: string }[] } | null = null;
 
 export async function GET(request: Request) {
@@ -152,8 +190,12 @@ export async function GET(request: Request) {
     // Conta suspensa ou cancelada não recebe campanha: fica fora da lista.
     const [{ data: accounts }, { data: running }] = await Promise.all([
       db.from('google_ads_accounts').select('customer_id, login_customer_id, connection_id, name, mcc_name, status, currency_code').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
-      db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name, status, mcc_name').eq('user_id', user.id).not('google_ads_customer_id', 'is', null).limit(5000),
+      db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name, status, mcc_name, google_status, google_status_date').eq('user_id', user.id).not('google_ads_customer_id', 'is', null).limit(5000),
     ]);
+    // A lista da MCC às vezes ainda dá como ativa uma conta que o Google já suspendeu; as campanhas
+    // dela, lidas de dentro da conta, já dizem. Conta com campanha marcada como conta suspensa ou
+    // encerrada, ou com todas as campanhas suspensas pelo Google, também fica fora.
+    const blocked = suspendedByCampaigns(running || []);
     // Campanhas rodando em cada conta, para não subir duas na mesma conta sem querer.
     // E a MCC como aparece na tela de Campanhas: uma conta que o Google também entrega por outro
     // gerenciador (ou direto) fica guardada com o nome desse outro, e sumiria do grupo certo.
@@ -181,10 +223,11 @@ export async function GET(request: Request) {
       : mccOf.get(a.customer_id) || a.mcc_name || 'Sem MCC');           // conta acessada direto: vale a MCC das campanhas dela
     const hiddenInGoogle = await hiddenAccounts(user.id, accounts || []).catch(() => ({ ids: new Set<string>(), calls: 0 }));
     if (hiddenInGoogle.calls) await addUsage(hiddenInGoogle.calls).catch(() => {});
-    const visible = (accounts || []).filter(a => !hiddenInGoogle.ids.has(a.customer_id));
+    const usable = (accounts || []).filter(a => !blocked.has(a.customer_id));
+    const visible = usable.filter(a => !hiddenInGoogle.ids.has(a.customer_id));
     return NextResponse.json({
       allowed: true,
-      hidden_in_google: (accounts || []).length - visible.length,
+      hidden_in_google: usable.length - visible.length,
       accounts: visible.map(a => ({
         id: a.customer_id, nome: a.name || `Conta ${a.customer_id}`,
         mcc: groupOf(a), moeda: a.currency_code || null,
@@ -247,6 +290,8 @@ export async function POST(request: Request) {
     const draft = body.draft as Draft, line = body.linha || {};
     const accountId = String(line.conta_id || '').replace(/\D/g, '');
     if (!draft?.grupos || !accountId) return NextResponse.json({ error: 'Pedido incompleto.' }, { status: 400 });
+    const blockedWhy = await accountBlocked(user.id, accountId);
+    if (blockedWhy) return NextResponse.json({ error: blockedWhy }, { status: 409 });
     const ctx = await accountContext(user.id, accountId);
     if (!ctx) return NextResponse.json({ error: 'Esta conta não está ligada, ou a ligação expirou. Reconecte em Integração.' }, { status: 409 });
     const ensaio = body.ensaio !== false;
@@ -274,6 +319,8 @@ export async function POST(request: Request) {
     const t = body.modelo as Template, line = body.linha || {}, a = body.ajustes || {};
     const accountId = String(line.conta_id || '').replace(/\D/g, '');
     if (!t?.origem || !Array.isArray(t.grupos) || !accountId) return NextResponse.json({ error: 'Pedido incompleto.' }, { status: 400 });
+    const blockedWhy = await accountBlocked(user.id, accountId);
+    if (blockedWhy) return NextResponse.json({ error: blockedWhy }, { status: 409 });
     const ctx = await accountContext(user.id, accountId);
     if (!ctx) return NextResponse.json({ error: 'Esta conta não está ligada, ou a ligação expirou. Reconecte em Integração.' }, { status: 409 });
     const num = (v: any) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));

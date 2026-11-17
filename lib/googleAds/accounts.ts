@@ -141,6 +141,7 @@ export async function refreshConnectionAccounts(connection: { id: string; user_i
     const { data: existentes } = await db.from('google_ads_accounts')
       .select('customer_id, status').eq('user_id', connection.user_id);
     const statusAnterior = new Map((existentes || []).map(e => [e.customer_id, String(e.status || '').toUpperCase()]));
+    await confirmOwnStatus(refreshToken, accounts, statusAnterior);
     const jaExiste = (a: DiscoveredAccount) => statusAnterior.has(a.customer_id);
     const voltouAtiva = (a: DiscoveredAccount) => statusAnterior.get(a.customer_id) !== 'ENABLED';
     const base = (a: DiscoveredAccount) => ({ ...a, user_id: connection.user_id, connection_id: connection.id, updated_at: now });
@@ -164,6 +165,28 @@ export async function refreshConnectionAccounts(connection: { id: string; user_i
     .eq('id', connection.id);
 
   return { accounts, errors };
+}
+
+/**
+ * A lista da MCC (customer_client) às vezes dá como ativa uma conta que o
+ * Google já suspendeu — de dentro da própria conta, customer.status diz
+ * SUSPENDED. A coleta grava o que leu lá dentro; quando a MCC discorda dessa
+ * situação, pergunta de novo à própria conta, e ela decide. Uma consulta por
+ * conta em desacordo, não por conta.
+ */
+async function confirmOwnStatus(refreshToken: string, accounts: DiscoveredAccount[], statusAnterior: Map<string, string>) {
+  const duvidosas = accounts.filter(a => a.login_customer_id !== a.customer_id
+    && a.status === 'ENABLED' && ['SUSPENDED', 'CANCELED', 'CLOSED'].includes(statusAnterior.get(a.customer_id) || ''));
+  for (const a of duvidosas) {
+    try {
+      const [row] = await search({ refreshToken, customerId: a.customer_id, loginCustomerId: a.login_customer_id },
+        'SELECT customer.status FROM customer LIMIT 1');
+      if (row?.customer?.status) a.status = String(row.customer.status).toUpperCase();
+    } catch {
+      // Sem resposta da conta, vale a última situação lida de dentro dela.
+      a.status = statusAnterior.get(a.customer_id)!;
+    }
+  }
 }
 
 /**

@@ -66,6 +66,8 @@ export interface SyncSummary {
   deep_skipped?: string;
   /** Cliques com gclid gravados (campanhas com player da VTurb). */
   gclid_clicks?: number;
+  /** customer.status lido de dentro da conta (ENABLED/SUSPENDED/CANCELED/CLOSED); UNKNOWN sem campanhas. */
+  account_status?: string;
   errors: string[];
 }
 
@@ -442,6 +444,7 @@ export async function syncAccount(
     currency = r.customer?.currencyCode || currency;
   }
   summary.campaigns = campaigns.size;
+  summary.account_status = accountStatus;
 
   const finalUrls = new Map<string, string>();
   for (const r of adRows) {
@@ -885,8 +888,13 @@ export async function syncAccountRecord(
       deep, force: !!opts.forceDeep, usage, lookbackDays: opts.lookbackDays,
       prev: { mark: last.deep_mark, changeMark: last.change_mark, lastDeepAt: acc.last_deep_sync_at },
     });
+    // A situação lida de dentro da conta vale mais que a da lista da MCC: o Google
+    // às vezes ainda dá como ativa, pela MCC, uma conta que ele já suspendeu.
+    const seen = String(summary.account_status || '').toUpperCase();
+    const statusChanged = seen && seen !== 'UNKNOWN' && seen !== status;
     await db.from('google_ads_accounts').update({
       last_sync_at: now,
+      ...(statusChanged ? { status: seen } : {}),
       ...(summary.deep ? { last_deep_sync_at: now } : {}),
       ...(summary.entities?.ran && summary.entities_full && !summary.errors.some(e => /^(ad_group|ad|keyword)(:| \((itens|métricas)\))/.test(e)) ? { entities_synced_at: now } : {}),
       last_sync_status: summary.errors.length ? 'parcial' : 'ok',
