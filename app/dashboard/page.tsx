@@ -1064,6 +1064,7 @@ export default function DashboardPage() {
                   <th className={th}>Grupo</th>
                   <th className={`${th} text-right`}>Receita</th>
                   <th className={`${th} text-right`}>Custo</th>
+                  <th className={`${th} text-right`} title={googleTaxNote()}>Imposto Google</th>
                   <th className={`${th} text-right`}>Lucro</th>
                   <th className={`${th} text-right`}>ROI</th>
                 </tr>
@@ -1074,6 +1075,7 @@ export default function DashboardPage() {
                     <td className="px-4 py-2.5 font-medium whitespace-nowrap text-ink">{blk.name}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap text-ink-muted">{formatMoney(blk.revenue)}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap text-ink-muted">{formatMoney(blk.cost)}</td>
+                    <td className={`px-4 py-2.5 text-right whitespace-nowrap ${blk.tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{blk.tax > 0 ? formatMoney(blk.tax) : '—'}</td>
                     <td className={`px-4 py-2.5 text-right font-medium whitespace-nowrap ${tone(blk.profit)}`}>{formatMoney(blk.profit)}</td>
                     <td className={`px-4 py-2.5 text-right font-medium ${tone(blk.roi)}`}>{formatPct(blk.roi)}</td>
                   </tr>
@@ -1110,6 +1112,7 @@ export default function DashboardPage() {
                   <th className={th}>Data</th>
                   <th className={`${th} text-right`}>Receita</th>
                   <th className={`${th} text-right`}>Custo</th>
+                  <th className={`${th} text-right`} title={googleTaxNote()}>Imposto Google</th>
                   <th className={`${th} text-right`}>Lucro</th>
                   <th className={`${th} text-right`}>ROI</th>
                 </tr>
@@ -1146,6 +1149,7 @@ export default function DashboardPage() {
                         </td>
                         <td className="px-4 py-2.5 text-right text-ink">{formatMoney(row.revenue)}</td>
                         <td className="px-4 py-2.5 text-right text-ink-muted">{formatMoney(row.cost)}</td>
+                        <td className={`px-4 py-2.5 text-right ${row.tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{row.tax > 0 ? formatMoney(row.tax) : '—'}</td>
                         <td className={`px-4 py-2.5 text-right font-medium ${tone(row.profit)}`}>{formatMoney(row.profit)}</td>
                         <td className={`px-4 py-2.5 text-right font-medium ${tone(row.roi)}`}>{formatPct(row.roi)}</td>
                       </tr>
@@ -1157,6 +1161,7 @@ export default function DashboardPage() {
                           <td className="px-4 py-2 pl-6 text-xs font-medium text-ink">{blk.name}</td>
                           <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(blk.revenue)}</td>
                           <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(blk.cost)}</td>
+                          <td className={`px-4 py-2 text-right ${blk.tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{blk.tax > 0 ? formatMoney(blk.tax) : '—'}</td>
                           <td className={`px-4 py-2 text-right font-medium ${tone(blk.profit)}`}>{formatMoney(blk.profit)}</td>
                           <td className={`px-4 py-2 text-right font-medium ${tone(blk.roi)}`}>{formatPct(blk.roi)}</td>
                         </tr>
@@ -1170,6 +1175,7 @@ export default function DashboardPage() {
                             </td>
                             <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(acc.revenue)}</td>
                             <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(acc.cost)}</td>
+                            <td className={`px-4 py-2 text-right ${acc.tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{acc.tax > 0 ? formatMoney(acc.tax) : '—'}</td>
                             <td className={`px-4 py-2 text-right font-medium ${tone(acc.profit)}`}>{formatMoney(acc.profit)}</td>
                             <td></td>
                           </tr>
@@ -1205,6 +1211,7 @@ export default function DashboardPage() {
                               </td>
                               <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(cmp.revenue)}</td>
                               <td className="px-4 py-2 text-right text-ink-muted">{formatMoney(cmp.cost)}</td>
+                              <td className={`px-4 py-2 text-right ${cmp.tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{cmp.tax > 0 ? formatMoney(cmp.tax) : '—'}</td>
                               <td className={`px-4 py-2 text-right ${tone(cmp.profit)}`}>{formatMoney(cmp.profit)}</td>
                               <td className="px-4 py-2 text-right">
                                 {cmp.productId && quickEntryButton(cmp, row.date)}
@@ -1251,7 +1258,7 @@ export default function DashboardPage() {
                           </span>
                           <span className="block">
                             <span className="block text-sm font-medium text-ink">{fmt}</span>
-                            <span className="block text-xs text-ink-subtle tabular-nums">{formatMoney(row.cost)} de custo</span>
+                            <span className="block text-xs text-ink-subtle tabular-nums">{formatMoney(row.cost)} de custo{row.tax > 0 && <> · {formatMoney(row.tax)} de imposto</>}</span>
                           </span>
                         </span>
                         <span className="block text-right">
