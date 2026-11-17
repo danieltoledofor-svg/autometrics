@@ -200,10 +200,10 @@ const vendasPorItem: Tool = {
     const db = ctx.db;
     const ranged = (q: any) => q.eq('product_id', p.id).gte('date', from).lte('date', to);
 
-    const rows = new Map<string, { nome: string; extra?: Record<string, any>; custo: number; cliques: number; impressoes: number; conversoes_google: number }>();
+    const rows = new Map<string, { nome: string; extra?: Record<string, any>; custo: number; imposto: number; cliques: number; impressoes: number; conversoes_google: number }>();
     const bump = (k: string, nome: string, r: any, extra?: Record<string, any>) => {
-      const cur = rows.get(k) || { nome, extra, custo: 0, cliques: 0, impressoes: 0, conversoes_google: 0 };
-      cur.custo += num(r.cost); cur.cliques += num(r.clicks); cur.impressoes += num(r.impressions);
+      const cur = rows.get(k) || { nome, extra, custo: 0, imposto: 0, cliques: 0, impressoes: 0, conversoes_google: 0 };
+      cur.custo += num(r.cost); cur.imposto += googleTaxOn(num(r.cost), String(r.date || ''), p); cur.cliques += num(r.clicks); cur.impressoes += num(r.impressions);
       cur.conversoes_google += num(r.google_metrics?.conversions ?? r.conversions);
       rows.set(k, cur);
     };
@@ -224,7 +224,7 @@ const vendasPorItem: Tool = {
       }
       keyOf = level === 'grupo' ? adGroupKey : level === 'anuncio' ? adKey(ents) : keywordKey(ents);
     } else if (level === 'dispositivo') {
-      const aud = await fetchAll((a, b) => ranged(db.from('audiences').select('audience_name, cost, clicks, impressions, conversions, google_metrics').eq('audience_type', 'Device')).range(a, b));
+      const aud = await fetchAll((a, b) => ranged(db.from('audiences').select('audience_name, date, cost, clicks, impressions, conversions, google_metrics').eq('audience_type', 'Device')).range(a, b));
       for (const r of aud) bump(`Device|${r.audience_name}`, DEVICE_PT[r.audience_name] || r.audience_name, r);
       keyOf = deviceKey;
     } else if (level === 'pais') {
@@ -232,7 +232,7 @@ const vendasPorItem: Tool = {
       for (const r of locs) bump(String(r.location_name), String(r.location_name), r);
       keyOf = countryKey;
     } else {
-      const terms = await fetchAll((a, b) => ranged(db.from('search_terms').select('search_term, keyword, keyword_match_type, cost, clicks, impressions, conversions, google_metrics')).range(a, b));
+      const terms = await fetchAll((a, b) => ranged(db.from('search_terms').select('search_term, keyword, keyword_match_type, date, cost, clicks, impressions, conversions, google_metrics')).range(a, b));
       for (const r of terms) bump(String(r.search_term), String(r.search_term), r, r.keyword ? { palavra_chave: `${r.keyword}${r.keyword_match_type ? ` (${MATCH_PT[r.keyword_match_type] || r.keyword_match_type})` : ''}` } : undefined);
     }
 
@@ -253,10 +253,10 @@ const vendasPorItem: Tool = {
       const s = keyOf ? sales.get(k) || { vendas: 0, receita: 0, reembolso: 0 } : null;
       return {
         nome: r.nome, ...(r.extra || {}),
-        custo: r2(r.custo), cliques: r.cliques, impressoes: r.impressoes, conversoes_google: r2(r.conversoes_google),
+        custo: r2(r.custo), imposto_google: r2(r.imposto), cliques: r.cliques, impressoes: r.impressoes, conversoes_google: r2(r.conversoes_google),
         custo_por_conversao_google: div(r.custo, r.conversoes_google),
         vendas: s ? s.vendas : null, cpa_real: s ? div(r.custo, s.vendas) : null,
-        receita: s ? r2(s.receita) : null, lucro: s ? r2(s.receita - s.reembolso - r.custo) : null,
+        receita: s ? r2(s.receita) : null, lucro: s ? r2(s.receita - s.reembolso - r.custo - r.imposto) : null,
       };
     }).sort((a, b) => b.custo - a.custo);
     const cut = list.slice(0, limit);

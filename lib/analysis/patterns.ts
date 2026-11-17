@@ -3,6 +3,7 @@ import { MAIN_BLOCK, MAIN_BLOCK_NAME, blockOf, normalizeGroups, type CampaignGro
 import { addDays, todayIn, fetchAll } from './compute';
 import { audienceLabel, deviceLabel, formatMoney, keywordLabel } from './labels';
 import { resolveProductStatus } from '@/lib/campaignStatus';
+import { googleTaxOn } from '@/lib/googleAdsTax';
 import { countryLabel, normalizeLocations } from '@/lib/geoNames';
 import { loadTrackedSales } from '@/lib/tracking/trackedSales';
 import { keywordKey, matchTypeOf } from '@/lib/metrics/itemSales';
@@ -91,7 +92,7 @@ export interface PatternsOptions {
 export async function computePatterns(userId: string, opts: PatternsOptions) {
   const db = supabaseAdmin();
   const [allProducts, prefsRow] = await Promise.all([
-    fetchAll((a, b) => db.from('products').select('id, name, currency, vturb_player_id, mcc_name, account_name, google_status, google_status_reasons, status').eq('user_id', userId).range(a, b)),
+    fetchAll((a, b) => db.from('products').select('id, name, currency, google_ads_campaign_id, vturb_player_id, mcc_name, account_name, google_status, google_status_reasons, status').eq('user_id', userId).range(a, b)),
     db.from('user_ui_prefs').select('prefs').eq('user_id', userId).maybeSingle(),
   ]);
   const groups: CampaignGroup[] = normalizeGroups(prefsRow.data?.prefs?.campaignGroups).list;
@@ -157,10 +158,12 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   const hasReal = days.some(d => num(d.conversions) > 0);
   const salesOf = (d: any) => num(hasReal ? d.conversions : d.google_conversions);
 
-  interface Camp { cost: number; sales: number; revenue: number; refunds: number; clicks: number }
-  const zero = (): Camp => ({ cost: 0, sales: 0, revenue: 0, refunds: 0, clicks: 0 });
-  const add = (c: Camp, d: any) => { c.cost += num(d.cost); c.sales += salesOf(d); c.revenue += num(d.conversion_value); c.refunds += num(d.refunds); c.clicks += num(d.clicks); };
-  const result = (c: Camp) => round(c.revenue - c.refunds - c.cost);
+  interface Camp { cost: number; tax: number; sales: number; revenue: number; refunds: number; clicks: number }
+  const zero = (): Camp => ({ cost: 0, tax: 0, sales: 0, revenue: 0, refunds: 0, clicks: 0 });
+  // Imposto do Google Brasil (2027 em diante, contas em reais): sai do resultado.
+  const taxOf = (d: any) => (d.tax != null ? num(d.tax) : googleTaxOn(num(d.cost), String(d.date || ''), productOf.get(d.product_id)));
+  const add = (c: Camp, d: any) => { c.cost += num(d.cost); c.tax += taxOf(d); c.sales += salesOf(d); c.revenue += num(d.conversion_value); c.refunds += num(d.refunds); c.clicks += num(d.clicks); };
+  const result = (c: Camp) => round(c.revenue - c.refunds - c.cost - c.tax);
 
   const d7from = addDays(today, -7), d7to = addDays(today, -1);
   const life = new Map<string, Camp & { first: string; activeDays: number }>();
@@ -180,16 +183,16 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
   for (const c of inWindow.values()) {
     if (c.cost <= 0 && c.sales <= 0) continue;
     if (c.cost > 0) active++;
-    total.cost += c.cost; total.sales += c.sales; total.revenue += c.revenue; total.refunds += c.refunds; total.clicks += c.clicks;
+    total.cost += c.cost; total.tax += c.tax; total.sales += c.sales; total.revenue += c.revenue; total.refunds += c.refunds; total.clicks += c.clicks;
   }
   const totals = {
-    campaigns: active, cost: round(total.cost), sales: round(total.sales), cpa: cpaOf(total.cost, total.sales),
+    campaigns: active, cost: round(total.cost), tax: round(total.tax), sales: round(total.sales), cpa: cpaOf(total.cost, total.sales),
     revenue: round(total.revenue), result: hasReal ? result(total) : null,
   };
 
   // ── Vale a pena manter? — campanhas com gasto nos últimos 7 dias ou hoje ──
   const lifeTotal = zero();
-  for (const l of life.values()) add(lifeTotal, { cost: l.cost, conversions: l.sales, google_conversions: l.sales, conversion_value: l.revenue, refunds: l.refunds, clicks: l.clicks });
+  for (const l of life.values()) add(lifeTotal, { cost: l.cost, tax: l.tax, conversions: l.sales, google_conversions: l.sales, conversion_value: l.revenue, refunds: l.refunds, clicks: l.clicks });
   const groupSale = lifeTotal.sales > 0 && lifeTotal.revenue > 0 ? lifeTotal.revenue / lifeTotal.sales : 0;
   const todayCost = new Map<string, number>();
   for (const d of days) if (d.date === today) todayCost.set(d.product_id, num(d.cost));
@@ -218,8 +221,8 @@ export async function computePatterns(userId: string, opts: PatternsOptions) {
     return {
       id, name: nameOf.get(id) || '', since: l.first, days: l.activeDays,
       status: { key: st.key, label: st.label, badge: st.badge, dot: st.dot, hint: st.hint },
-      cost: round(l.cost), sales: round(l.sales), cpa: cpaOf(l.cost, l.sales), result: hasReal ? lifeResult : null,
-      cost7: round(w.cost), sales7: round(w.sales), cpa7: cpaOf(w.cost, w.sales), result7: hasReal ? weekResult : null,
+      cost: round(l.cost), tax: round(l.tax), sales: round(l.sales), cpa: cpaOf(l.cost, l.sales), result: hasReal ? lifeResult : null,
+      cost7: round(w.cost), tax7: round(w.tax), sales7: round(w.sales), cpa7: cpaOf(w.cost, w.sales), result7: hasReal ? weekResult : null,
       verdict, reason,
     };
   }).filter((v): v is NonNullable<typeof v> => !!v).sort((a, b) => b.cost7 - a.cost7);
