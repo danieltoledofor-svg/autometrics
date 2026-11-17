@@ -473,35 +473,29 @@ export default function PlanningPage() {
       if (!dailyMap[m.date]) dailyMap[m.date] = { date: m.date, revenue: 0, ads_cost: 0, refunds: 0, extra_cost: 0, extra_revenue: 0, net_extra: 0, details: [], mccs: {} };
       const day = dailyMap[m.date];
       day.revenue += revenue; day.ads_cost += cost; day.refunds += refunds;
-      day.google_tax = (day.google_tax || 0) + cost * taxShare;
+      const tax = cost * taxShare;
+      day.google_tax = (day.google_tax || 0) + tax;
 
-      if (!day.mccs[mcc]) day.mccs[mcc] = { name: mcc, revenue: 0, ads_cost: 0, refunds: 0, accounts: {} };
-      const mccObj = day.mccs[mcc]; mccObj.revenue += revenue; mccObj.ads_cost += cost; mccObj.refunds += refunds;
+      if (!day.mccs[mcc]) day.mccs[mcc] = { name: mcc, revenue: 0, ads_cost: 0, refunds: 0, google_tax: 0, accounts: {} };
+      const mccObj = day.mccs[mcc]; mccObj.revenue += revenue; mccObj.ads_cost += cost; mccObj.refunds += refunds; mccObj.google_tax += tax;
 
-      if (!mccObj.accounts[account]) mccObj.accounts[account] = { name: account, revenue: 0, ads_cost: 0, refunds: 0, campaigns: {} };
-      const accObj = mccObj.accounts[account]; accObj.revenue += revenue; accObj.ads_cost += cost; accObj.refunds += refunds;
+      if (!mccObj.accounts[account]) mccObj.accounts[account] = { name: account, revenue: 0, ads_cost: 0, refunds: 0, google_tax: 0, campaigns: {} };
+      const accObj = mccObj.accounts[account]; accObj.revenue += revenue; accObj.ads_cost += cost; accObj.refunds += refunds; accObj.google_tax += tax;
 
       const campaignName = prod?.name || 'Venda Externa';
-      if (!accObj.campaigns[campaignName]) accObj.campaigns[campaignName] = { name: campaignName, revenue: 0, ads_cost: 0, refunds: 0 };
+      if (!accObj.campaigns[campaignName]) accObj.campaigns[campaignName] = { name: campaignName, revenue: 0, ads_cost: 0, refunds: 0, google_tax: 0 };
       const cmpObj = accObj.campaigns[campaignName];
-      cmpObj.revenue += revenue; cmpObj.ads_cost += cost; cmpObj.refunds += refunds;
+      cmpObj.revenue += revenue; cmpObj.ads_cost += cost; cmpObj.refunds += refunds; cmpObj.google_tax += tax;
 
       // Map para o Widget de Top Campanhas
       if (!campaignMap[campaignName]) campaignMap[campaignName] = { name: campaignName, revenue: 0, cost: 0, refunds: 0 };
       campaignMap[campaignName].revenue += revenue;
       campaignMap[campaignName].cost += cost;
       campaignMap[campaignName].refunds += refunds;
-      campaignMap[campaignName].tax = (campaignMap[campaignName].tax || 0) + cost * taxShare;
+      campaignMap[campaignName].tax = (campaignMap[campaignName].tax || 0) + tax;
     });
 
-    // Imposto do Google entra como um extra automático do dia, com nome próprio:
-    // sai do lucro e fica à vista quanto foi para o imposto. Não dá para excluir.
-    Object.values(dailyMap).forEach((day: any) => {
-      if (!(day.google_tax > 0)) return;
-      day.extra_cost += day.google_tax;
-      day.net_extra = day.extra_revenue - day.extra_cost;
-      day.details.push({ id: `google-tax-${day.date}`, desc: 'Imposto Google (2,9%)', val: day.google_tax, auto: true, note: googleTaxNote() });
-    });
+    // Imposto do Google: coluna própria (não é extra). Sai do lucro de cada linha.
 
     // 2. Extras
     extraCosts.forEach(c => {
@@ -525,15 +519,15 @@ export default function PlanningPage() {
     });
 
     const daysArray = Object.values(dailyMap).sort((a: any, b: any) => b.date.localeCompare(a.date));
-    const totals = { revenue: 0, ads_cost: 0, extra_cost: 0, extra_revenue: 0, net_extra: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
-    daysArray.forEach((d: any) => { totals.revenue += d.revenue; totals.ads_cost += d.ads_cost; totals.extra_cost += d.extra_cost; totals.extra_revenue += d.extra_revenue; totals.refunds += d.refunds; });
+    const totals = { revenue: 0, ads_cost: 0, google_tax: 0, extra_cost: 0, extra_revenue: 0, net_extra: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
+    daysArray.forEach((d: any) => { totals.revenue += d.revenue; totals.ads_cost += d.ads_cost; totals.google_tax += d.google_tax || 0; totals.extra_cost += d.extra_cost; totals.extra_revenue += d.extra_revenue; totals.refunds += d.refunds; });
     totals.net_extra = totals.extra_revenue - totals.extra_cost;
     totals.total_cost = totals.ads_cost + totals.extra_cost;
-    totals.profit = totals.revenue + totals.extra_revenue - totals.total_cost - totals.refunds;
+    totals.profit = totals.revenue + totals.extra_revenue - totals.total_cost - totals.refunds - totals.google_tax;
     totals.roi = totals.ads_cost > 0 ? (totals.profit / totals.ads_cost) * 100 : 0;
     
     // --- Cálculo do Período Anterior ---
-    const prevTotals = { revenue: 0, ads_cost: 0, extra_cost: 0, extra_revenue: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
+    const prevTotals = { revenue: 0, ads_cost: 0, google_tax: 0, extra_cost: 0, extra_revenue: 0, refunds: 0, total_cost: 0, profit: 0, roi: 0 };
     prevMetrics.forEach(m => {
       const prod = products.find(p => p.id === m.product_id);
       
@@ -556,7 +550,7 @@ export default function PlanningPage() {
       if (viewCurrency === 'BRL') { cost = costInBRL; revenue = revenueInBRL; refunds = refundsInBRL; }
       else if (viewCurrency === 'USD') { cost = costInBRL / liveDollar; revenue = revenueInBRL / manualDollar; refunds = refundsInBRL / manualDollar; }
       else if (viewCurrency === 'EUR') { cost = costInBRL / liveEuro; revenue = revenueInBRL / manualEuro; refunds = refundsInBRL / manualEuro; }
-      prevTotals.revenue += revenue; prevTotals.ads_cost += cost; prevTotals.refunds += refunds; prevTotals.extra_cost += cost * taxShare;
+      prevTotals.revenue += revenue; prevTotals.ads_cost += cost; prevTotals.refunds += refunds; prevTotals.google_tax += cost * taxShare;
     });
     prevExtraCosts.forEach(c => {
        let amount = Number(c.amount);
@@ -571,7 +565,7 @@ export default function PlanningPage() {
        else prevTotals.extra_revenue += Math.abs(amount);
     });
     prevTotals.total_cost = prevTotals.ads_cost + prevTotals.extra_cost;
-    prevTotals.profit = prevTotals.revenue + prevTotals.extra_revenue - prevTotals.total_cost - prevTotals.refunds;
+    prevTotals.profit = prevTotals.revenue + prevTotals.extra_revenue - prevTotals.total_cost - prevTotals.refunds - prevTotals.google_tax;
     prevTotals.roi = prevTotals.ads_cost > 0 ? (prevTotals.profit / prevTotals.ads_cost) * 100 : 0;
 
     const variations = {
@@ -636,7 +630,7 @@ export default function PlanningPage() {
     // é o mesmo que lucro ≥ 0. (Antes comparava o ROI já com os extras
     // descontados contra este mínimo, contando os extras duas vezes.)
     const breakEvenRoi = totals.ads_cost > 0 ? (totals.extra_cost / totals.ads_cost) * 100 : 0;
-    const adsRoi = totals.ads_cost > 0 ? ((totals.revenue + totals.extra_revenue - totals.refunds - totals.ads_cost) / totals.ads_cost) * 100 : 0;
+    const adsRoi = totals.ads_cost > 0 ? ((totals.revenue + totals.extra_revenue - totals.refunds - totals.ads_cost - totals.google_tax) / totals.ads_cost) * 100 : 0;
     
     const campaignsArray = Object.values(campaignMap).map(c => {
        const profit = c.revenue - c.cost - c.refunds - (c.tax || 0);
@@ -740,8 +734,8 @@ export default function PlanningPage() {
     { label: 'Receita', value: processedData.totals.revenue, color: chartColor.revenue, data: processedData.daysArray.map((d: any) => d.revenue), isPositiveGood: true, isRoi: false, isResult: false },
     { label: 'Custo Ads', value: processedData.totals.ads_cost, color: chartColor.cost, data: processedData.daysArray.map((d: any) => d.ads_cost), isPositiveGood: false, isRoi: false, isResult: false },
     { label: 'Extras Net', value: processedData.totals.net_extra, color: chartColor.cost, data: processedData.daysArray.map((d: any) => d.net_extra), isPositiveGood: true, isRoi: false, isResult: false },
-    { label: 'Lucro', value: processedData.totals.profit, color: chartColor.profit, data: processedData.daysArray.map((d: any) => d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds), isPositiveGood: true, isRoi: false, isResult: true },
-    { label: 'ROI', value: processedData.totals.roi, color: chartColor.roi, data: processedData.daysArray.map((d: any) => d.ads_cost > 0 ? ((d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds) / d.ads_cost) * 100 : 0), isPositiveGood: true, isRoi: true, isResult: true },
+    { label: 'Lucro', value: processedData.totals.profit, color: chartColor.profit, data: processedData.daysArray.map((d: any) => d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds - (d.google_tax || 0)), isPositiveGood: true, isRoi: false, isResult: true },
+    { label: 'ROI', value: processedData.totals.roi, color: chartColor.roi, data: processedData.daysArray.map((d: any) => d.ads_cost > 0 ? ((d.revenue - d.ads_cost + d.extra_revenue - d.extra_cost - d.refunds - (d.google_tax || 0)) / d.ads_cost) * 100 : 0), isPositiveGood: true, isRoi: true, isResult: true },
   ];
 
   // Variação contra o período anterior; para custo, cair é bom.
@@ -1133,7 +1127,7 @@ export default function PlanningPage() {
       <div className="md:hidden space-y-2 mb-4">
         {processedData.daysArray.map((day: any) => {
           const isExpanded = expandedRows[day.date];
-          const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds;
+          const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds - (day.google_tax || 0);
           const dateParts = day.date.split('-');
           return (
             <div key={day.date} className={`${card} overflow-hidden`}>
@@ -1168,6 +1162,12 @@ export default function PlanningPage() {
                       <div className="text-[11px] text-ink-subtle mb-0.5">Custo dos anúncios</div>
                       <div className="font-medium tabular-nums text-ink">{formatMoney(day.ads_cost)}</div>
                     </div>
+                    {day.google_tax > 0 && (
+                      <div className="p-2 rounded-lg bg-surface-2" title={googleTaxNote()}>
+                        <div className="text-[11px] text-ink-subtle mb-0.5">Imposto Google</div>
+                        <div className="font-medium tabular-nums text-warn">{formatMoney(day.google_tax)}</div>
+                      </div>
+                    )}
                     {day.refunds > 0 && (
                       <div className="p-2 rounded-lg bg-surface-2">
                         <div className="text-[11px] text-ink-subtle mb-0.5">Reembolso</div>
@@ -1182,7 +1182,7 @@ export default function PlanningPage() {
                             <span className="text-xs text-ink-muted truncate max-w-[55%]">{d.desc}</span>
                             <div className="flex items-center gap-1">
                               <span className={`text-xs font-medium tabular-nums ${d.val < 0 ? 'text-pos' : 'text-warn'}`}>{formatMoney(Math.abs(d.val))}</span>
-                              {editMode && !d.auto && (
+                              {editMode && (
                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id, d.desc); }} aria-label={`Excluir o extra ${d.desc}`} className="text-neg p-1 rounded hover:bg-neg/10">
                                   <Trash2 size={12} aria-hidden="true" />
                                 </button>
@@ -1235,6 +1235,7 @@ export default function PlanningPage() {
                      <Th colKey="date" prefs={drePrefs} className={head}>Data</Th>
                      <Th colKey="revenue" prefs={drePrefs} className={`${head} text-right`}>Receita</Th>
                      <Th colKey="ads_cost" prefs={drePrefs} className={`${head} text-right`}>Custo dos anúncios</Th>
+                     <Th colKey="google_tax" prefs={drePrefs} className={`${head} text-right`}><span title={googleTaxNote()}>Imposto Google</span></Th>
                      <Th colKey="extras" prefs={drePrefs} className={`${head} text-right`}>Extras</Th>
                      <Th colKey="refunds" prefs={drePrefs} className={`${head} text-right`}>Reembolso</Th>
                      <Th colKey="profit" prefs={drePrefs} className={`${head} text-right`}>Lucro</Th>
@@ -1244,7 +1245,7 @@ export default function PlanningPage() {
                   {processedData.daysArray.map((day: any) => {
                      const isExpanded = expandedRows[day.date];
                      const cell = `${pad} border-b border-line ${isExpanded ? 'bg-surface-2' : ''} group-hover:bg-surface-2`;
-                     const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds;
+                     const profit = day.revenue - day.ads_cost + day.extra_revenue - day.extra_cost - day.refunds - (day.google_tax || 0);
                      const dateParts = day.date.split('-');
 
                      return (
@@ -1264,6 +1265,7 @@ export default function PlanningPage() {
                               <td className={`${cell} font-medium text-ink`} style={w('date')}>{`${dateParts[2]}/${dateParts[1]}`}</td>
                               <td className={`${cell} text-right text-ink`} style={w('revenue')}>{formatMoney(day.revenue)}</td>
                               <td className={`${cell} text-right text-ink-muted`} style={w('ads_cost')}>{formatMoney(day.ads_cost)}</td>
+                              <td className={`${cell} text-right ${day.google_tax > 0 ? 'text-warn' : 'text-ink-faint'}`} style={w('google_tax')}>{day.google_tax > 0 ? formatMoney(day.google_tax) : '—'}</td>
 
                               {/* EXTRAS */}
                               <td className={`${cell} text-right relative align-top`} style={w('extras')} onClick={(e) => e.stopPropagation()}>
@@ -1276,7 +1278,7 @@ export default function PlanningPage() {
                                                 <span className="text-xs text-ink-subtle break-words min-w-0" title={d.desc}>{d.desc}</span>
                                                 <span className={`text-xs font-medium ${d.val < 0 ? 'text-pos' : 'text-warn'}`}>{formatMoney(Math.abs(d.val))}</span>
                                                 {/* Botão Excluir (Só com Modo Edição) */}
-                                                {editMode && !d.auto && (
+                                                {editMode && (
                                                    <button
                                                      onClick={(e) => { e.stopPropagation(); handleDeleteCost(d.id, d.desc); }}
                                                      className="text-neg p-1 rounded hover:bg-neg/10"
@@ -1307,8 +1309,9 @@ export default function PlanningPage() {
                                     </td>
                                     <td className={`${sub} text-right text-ink-muted`}>{formatMoney(mcc.revenue)}</td>
                                     <td className={`${sub} text-right text-ink-muted`}>{formatMoney(mcc.ads_cost)}</td>
+                                    <td className={`${sub} text-right ${mcc.google_tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{mcc.google_tax > 0 ? formatMoney(mcc.google_tax) : '—'}</td>
                                     <td colSpan={2} className="border-b border-line"></td>
-                                    <td className={`${sub} text-right font-medium ${tone(mcc.revenue - mcc.ads_cost - mcc.refunds)}`}>{formatMoney(mcc.revenue - mcc.ads_cost - mcc.refunds)}</td>
+                                    <td className={`${sub} text-right font-medium ${tone(mcc.revenue - mcc.ads_cost - mcc.refunds - mcc.google_tax)}`}>{formatMoney(mcc.revenue - mcc.ads_cost - mcc.refunds - mcc.google_tax)}</td>
                                  </tr>
                                  {Object.values(mcc.accounts).map((acc: any) => (
                                     <React.Fragment key={acc.name}>
@@ -1319,8 +1322,9 @@ export default function PlanningPage() {
                                           </td>
                                           <td className={`${sub} text-right text-ink-muted`}>{formatMoney(acc.revenue)}</td>
                                           <td className={`${sub} text-right text-ink-muted`}>{formatMoney(acc.ads_cost)}</td>
+                                          <td className={`${sub} text-right ${acc.google_tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{acc.google_tax > 0 ? formatMoney(acc.google_tax) : '—'}</td>
                                           <td colSpan={2} className="border-b border-line"></td>
-                                          <td className={`${sub} text-right ${tone(acc.revenue - acc.ads_cost - acc.refunds)}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds)}</td>
+                                          <td className={`${sub} text-right ${tone(acc.revenue - acc.ads_cost - acc.refunds - acc.google_tax)}`}>{formatMoney(acc.revenue - acc.ads_cost - acc.refunds - acc.google_tax)}</td>
                                        </tr>
                                        {Object.values(acc.campaigns).map((cmp: any) => (
                                           <tr key={cmp.name} className="bg-canvas/40">
@@ -1330,8 +1334,9 @@ export default function PlanningPage() {
                                              </td>
                                              <td className={`${sub} text-right text-ink-muted`}>{formatMoney(cmp.revenue)}</td>
                                              <td className={`${sub} text-right text-ink-muted`}>{formatMoney(cmp.ads_cost)}</td>
+                                             <td className={`${sub} text-right ${cmp.google_tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{cmp.google_tax > 0 ? formatMoney(cmp.google_tax) : '—'}</td>
                                              <td colSpan={2} className="border-b border-line"></td>
-                                             <td className={`${sub} text-right ${tone(cmp.revenue - cmp.ads_cost - cmp.refunds)}`}>{formatMoney(cmp.revenue - cmp.ads_cost - cmp.refunds)}</td>
+                                             <td className={`${sub} text-right ${tone(cmp.revenue - cmp.ads_cost - cmp.refunds - cmp.google_tax)}`}>{formatMoney(cmp.revenue - cmp.ads_cost - cmp.refunds - cmp.google_tax)}</td>
                                           </tr>
                                        ))}
                                     </React.Fragment>
@@ -1348,6 +1353,7 @@ export default function PlanningPage() {
                      <td className={pad}></td>
                      <td className={`${pad} text-right text-ink`}>{formatMoney(processedData.totals.revenue)}</td>
                      <td className={`${pad} text-right text-ink`}>{formatMoney(processedData.totals.ads_cost)}</td>
+                     <td className={`${pad} text-right ${processedData.totals.google_tax > 0 ? 'text-warn' : 'text-ink-faint'}`}>{formatMoney(processedData.totals.google_tax)}</td>
                      <td className={`${pad} text-right ${processedData.totals.net_extra >= 0 ? 'text-ink' : 'text-warn'}`}>{formatMoney(processedData.totals.net_extra)}</td>
                      <td className={`${pad} text-right ${processedData.totals.refunds > 0 ? 'text-neg' : 'text-ink-faint'}`}>{formatMoney(processedData.totals.refunds)}</td>
                      <td className={`${pad} text-right ${tone(processedData.totals.profit)}`}>{formatMoney(processedData.totals.profit)}</td>
