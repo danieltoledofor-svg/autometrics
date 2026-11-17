@@ -1,4 +1,5 @@
 import { search, mutate, mutateAll, type AdsContext, type MutateProblem } from '@/lib/googleAds/client';
+import { baseOf, planOf, validPage, type PagePlace } from '@/lib/googleAds/pageUrl';
 import { count } from '@/lib/campaignBuilder/rules';
 import { placeName } from '@/lib/campaignBuilder/names';
 
@@ -459,4 +460,174 @@ export async function removeCampaignAsset(ctx: AdsContext, campaignId: string, r
   await mutate(ctx, 'campaignAssets', operations, false);
   const after = await readCampaignAssets(ctx, campaignId);
   return { label: `${target.tipo === 'sitelink' ? 'Sitelink' : 'Frase de destaque'} "${target.texto}" retirado`, assets: after.assets, calls: 6 };
+}
+
+// ── Página da campanha: anúncios e sitelinks de uma vez ─────────────────────
+
+const quoteList = (list: string[]) => list.map(x => `'${x.replace(/'/g, '')}'`).join(', ');
+
+/** Detalhes que a troca precisa e a tela não mostra: onde está cada sitelink e o que ele leva. */
+interface PlaceRaw { place: PagePlace; resource: string; link: string; asset: any; parent: string }
+
+async function readPlacesRaw(ctx: AdsContext, campaignId: string): Promise<{ raw: PlaceRaw[]; aviso: string; calls: number }> {
+  const id = Number(campaignId), cid = ctx.customerId, avisos: string[] = [];
+  const sitelinkFields = 'asset.resource_name, asset.final_urls, asset.final_mobile_urls, asset.tracking_url_template, asset.final_url_suffix, asset.sitelink_asset.link_text, asset.sitelink_asset.description1, asset.sitelink_asset.description2';
+  const [ads, campaignLinks, groupLinks] = await Promise.all([
+    search(ctx, `
+      SELECT ad_group.id, ad_group.name, ad_group.status, ad_group_ad.status, ad_group_ad.ad.id, ad_group_ad.ad.type, ad_group_ad.ad.final_urls, ad_group_ad.ad.final_mobile_urls,
+             ad_group_ad.ad.responsive_search_ad.headlines
+      FROM ad_group_ad WHERE campaign.id = ${id} AND ad_group_ad.status != 'REMOVED' AND ad_group.status != 'REMOVED'`),
+    search(ctx, `
+      SELECT campaign.id, campaign_asset.resource_name, campaign_asset.status, ${sitelinkFields}
+      FROM campaign_asset WHERE campaign.id = ${id} AND campaign_asset.field_type = 'SITELINK' AND campaign_asset.status != 'REMOVED'`),
+    search(ctx, `
+      SELECT ad_group.id, ad_group.name, ad_group_asset.resource_name, ad_group_asset.status, ${sitelinkFields}
+      FROM ad_group_asset WHERE ad_group.campaign = 'customers/${cid}/campaigns/${id}' AND ad_group_asset.field_type = 'SITELINK' AND ad_group_asset.status != 'REMOVED' AND ad_group.status != 'REMOVED'`)
+      .catch((e: any) => { avisos.push(`Os sitelinks dos grupos não vieram: ${String(e?.message || e).slice(0, 160)}`); return [] as any[]; }),
+  ]);
+  const raw: PlaceRaw[] = [];
+  for (const r of ads) {
+    const a = r.adGroupAd?.ad || {}, rsa = a.type === 'RESPONSIVE_SEARCH_AD';
+    if (!a.id || !(a.finalUrls || []).length) continue;
+    raw.push({
+      resource: `customers/${cid}/ads/${a.id}`, link: '', asset: null, parent: '',
+      place: {
+        id: `ad:${r.adGroup.id}~${a.id}`, tipo: 'anuncio', nivel: null, nome: String(a.responsiveSearchAd?.headlines?.[0]?.text || `Anúncio ${a.id}`),
+        grupo: String(r.adGroup?.name || ''), status: String(r.adGroupAd?.status || ''), url: String(a.finalUrls?.[0] || ''), celular: String(a.finalMobileUrls?.[0] || ''),
+        editavel: rsa, motivo: rsa ? '' : 'Anúncio de um tipo que o Google não deixa mais editar.', outros: 0,
+      },
+    });
+  }
+  const linkOf = (r: any, nivel: 'campanha' | 'grupo') => {
+    const as = r.asset || {}, link = nivel === 'campanha' ? r.campaignAsset?.resourceName : r.adGroupAsset?.resourceName;
+    if (!link || !as.resourceName) return;
+    raw.push({
+      resource: as.resourceName, link, asset: as, parent: nivel === 'campanha' ? `customers/${cid}/campaigns/${id}` : `customers/${cid}/adGroups/${r.adGroup?.id}`,
+      place: {
+        id: `${nivel === 'campanha' ? 'cs' : 'gs'}:${link}`, tipo: 'sitelink', nivel, nome: String(as.sitelinkAsset?.linkText || ''),
+        grupo: nivel === 'grupo' ? String(r.adGroup?.name || '') : '', status: String((nivel === 'campanha' ? r.campaignAsset?.status : r.adGroupAsset?.status) || ''),
+        url: String(as.finalUrls?.[0] || ''), celular: String(as.finalMobileUrls?.[0] || ''),
+        editavel: !!(as.finalUrls || []).length, motivo: (as.finalUrls || []).length ? '' : 'Sitelink sem página própria.', outros: 0,
+      },
+    });
+  };
+  campaignLinks.forEach(r => linkOf(r, 'campanha'));
+  groupLinks.forEach(r => linkOf(r, 'grupo'));
+
+  // O mesmo sitelink pode estar em outras campanhas, grupos ou na conta toda. Se estiver, mudar o
+  // recurso mudaria lá também; aí a troca põe um sitelink novo igual só aqui e o de lá fica como está.
+  const assets = [...new Set(raw.filter(x => x.place.tipo === 'sitelink').map(x => x.resource))];
+  let calls = 3;
+  if (assets.length) {
+    const inList = quoteList(assets);
+    const links = await Promise.all([
+      search(ctx, `SELECT campaign_asset.resource_name, asset.resource_name FROM campaign_asset WHERE asset.resource_name IN (${inList}) AND campaign_asset.status != 'REMOVED'`),
+      search(ctx, `SELECT ad_group_asset.resource_name, asset.resource_name FROM ad_group_asset WHERE asset.resource_name IN (${inList}) AND ad_group_asset.status != 'REMOVED'`),
+      search(ctx, `SELECT customer_asset.resource_name, asset.resource_name FROM customer_asset WHERE asset.resource_name IN (${inList}) AND customer_asset.status != 'REMOVED'`),
+    ]).catch((e: any) => { avisos.push(`Não deu para ver se os sitelinks estão em outras campanhas (${String(e?.message || e).slice(0, 120)}); por segurança, cada um entra como sitelink novo.`); return null; });
+    calls += 3;
+    const uses = new Map<string, Set<string>>();
+    for (const r of (links || []).flat()) {
+      const a = r.asset?.resourceName, l = r.campaignAsset?.resourceName || r.adGroupAsset?.resourceName || r.customerAsset?.resourceName;
+      if (a && l) uses.set(a, (uses.get(a) || new Set()).add(l));
+    }
+    for (const x of raw) if (x.place.tipo === 'sitelink') {
+      const u = uses.get(x.resource);
+      x.place.outros = links ? [...(u || [])].filter(l => l !== x.link).length : 1;
+    }
+  }
+  return { raw, aviso: avisos.join(' '), calls };
+}
+
+/** Onde a página aparece na campanha hoje: cada anúncio e cada sitelink, com a página de cada um. */
+export async function readPagePlaces(ctx: AdsContext, campaignId: string) {
+  const { raw, aviso, calls } = await readPlacesRaw(ctx, campaignId);
+  const order = (p: PagePlace) => (p.tipo === 'anuncio' ? 0 : 1);
+  const places = raw.map(x => x.place).sort((a, b) => order(a) - order(b) || (a.status === 'ENABLED' ? 0 : 1) - (b.status === 'ENABLED' ? 0 : 1) || a.grupo.localeCompare(b.grupo, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'));
+  return { places, aviso, calls };
+}
+
+/** A página nova abre? Só um aviso: páginas que barram robôs podem responder erro e abrir normal para as pessoas. */
+export async function checkPage(url: string): Promise<{ ok: boolean; texto: string }> {
+  if (!validPage(url)) return { ok: false, texto: 'A página precisa começar com https:// e não pode ter espaços.' };
+  const host = (url.trim().match(/^https:\/\/([^/?#:]+)/i)?.[1] || '').toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') || /^[\d.]+$/.test(host) || host.includes('[')) return { ok: false, texto: 'Use o endereço do site (com domínio), não um IP ou endereço interno.' };
+  try {
+    const res = await fetch(url.trim(), { redirect: 'follow', signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' } });
+    const moved = res.url && baseOf(res.url) !== baseOf(url) ? ` e levou para ${res.url.slice(0, 120)}` : '';
+    return res.status < 400 ? { ok: true, texto: `A página abriu (código ${res.status})${moved}.` } : { ok: false, texto: `A página respondeu com erro ${res.status}${moved}. Confira antes de trocar: o Google reprova anúncio com página que não abre.` };
+  } catch (e: any) {
+    return { ok: false, texto: `A página não abriu em 8 segundos (${String(e?.message || e).slice(0, 80)}). Confira antes de trocar: o Google reprova anúncio com página que não abre.` };
+  }
+}
+
+/**
+ * Troca a página nos lugares escolhidos, num pedido só ao Google: entra tudo ou nada.
+ * `itens` traz o que a prévia mostrou (id e a página de cada um naquela hora); se algo mudou
+ * no Google desde a prévia, nada é enviado e a pessoa vê a prévia de novo.
+ */
+export async function swapPage(ctx: AdsContext, campaignId: string, input: { de: string; para: string; itens: { id: string; url: string }[] }) {
+  const from = String(input.de || '').trim(), to = String(input.para || '').trim();
+  if (!validPage(from)) throw new Error('Escolha a página de hoje.');
+  if (!validPage(to)) throw new Error('A página nova precisa começar com https:// e não pode ter espaços.');
+  if (from === to) throw new Error('A página nova é igual à de hoje.');
+  const wanted = new Map((input.itens || []).map(x => [String(x.id), String(x.url || '')]));
+  if (!wanted.size) throw new Error('Marque pelo menos um anúncio ou sitelink.');
+  const { raw, calls } = await readPlacesRaw(ctx, campaignId);
+  const byId = new Map(raw.map(x => [x.place.id, x]));
+  for (const [id, url] of wanted) {
+    const x = byId.get(id);
+    if (!x) throw new Error('Algo mudou no Google desde a prévia (um anúncio ou sitelink saiu da campanha). Veja a prévia de novo.');
+    if (x.place.url !== url) throw new Error(`A página de "${x.place.nome}" mudou no Google desde a prévia. Veja a prévia de novo.`);
+    if (!x.place.editavel) throw new Error(`"${x.place.nome}": ${x.place.motivo}`);
+  }
+  const cid = ctx.customerId;
+  const chosen = raw.filter(x => wanted.has(x.place.id)).map(x => ({ x, plan: planOf(x.place, from, to, true) })).filter(c => c.plan.muda);
+  if (!chosen.length) throw new Error('Nada muda: os lugares marcados já estão com a página nova.');
+
+  const build = (newSitelinkForAll: boolean) => {
+    const removes: any[] = [], creates: any[] = [], links: any[] = [], updates: any[] = [];
+    let temp = 0;
+    for (const { x, plan } of chosen) {
+      const urls = { finalUrls: [plan.depois], ...(x.place.celular ? { finalMobileUrls: [plan.celular] } : {}) };
+      const mask = x.place.celular ? 'final_urls,final_mobile_urls' : 'final_urls';
+      if (x.place.tipo === 'anuncio') { updates.push({ adOperation: { update: { resourceName: x.resource, ...urls }, updateMask: mask } }); continue; }
+      if (!newSitelinkForAll && x.place.outros === 0) { updates.push({ assetOperation: { update: { resourceName: x.resource, ...urls }, updateMask: mask } }); continue; }
+      // Compartilhado: um sitelink novo igual, com a página nova, só neste lugar; o de lá fica como está.
+      const as = x.asset, asset = `customers/${cid}/assets/${-(++temp)}`, sl = as.sitelinkAsset || {};
+      creates.push({ assetOperation: { create: {
+        resourceName: asset, ...urls,
+        ...(as.trackingUrlTemplate ? { trackingUrlTemplate: as.trackingUrlTemplate } : {}), ...(as.finalUrlSuffix ? { finalUrlSuffix: as.finalUrlSuffix } : {}),
+        sitelinkAsset: { linkText: sl.linkText, ...(sl.description1 && sl.description2 ? { description1: sl.description1, description2: sl.description2 } : {}) },
+      } } });
+      if (x.place.nivel === 'campanha') {
+        removes.push({ campaignAssetOperation: { remove: x.link } });
+        links.push({ campaignAssetOperation: { create: { campaign: x.parent, asset, fieldType: 'SITELINK', ...(x.place.status === 'PAUSED' ? { status: 'PAUSED' } : {}) } } });
+      } else {
+        removes.push({ adGroupAssetOperation: { remove: x.link } });
+        links.push({ adGroupAssetOperation: { create: { adGroup: x.parent, asset, fieldType: 'SITELINK', ...(x.place.status === 'PAUSED' ? { status: 'PAUSED' } : {}) } } });
+      }
+    }
+    return [...removes, ...creates, ...links, ...updates];
+  };
+
+  // Primeiro tenta mudar o próprio sitelink (guarda os números dele). Se o Google não aceitar a
+  // mudança no recurso, refaz o ensaio pondo um sitelink novo no lugar de cada um.
+  let operations = build(false), rehearsal = await mutateAll(ctx, operations, true), rehearsals = 1, recreated = false;
+  if (rehearsal.problems.length && operations.some(o => o.assetOperation?.update)) {
+    const second = build(true), again = await mutateAll(ctx, second, true);
+    rehearsals++;
+    if (!again.problems.length) { operations = second; rehearsal = again; recreated = true; }
+  }
+  if (rehearsal.problems.length) throw new Refused(explain(rehearsal.problems));
+  const done = await mutateAll(ctx, operations, false);
+  if (done.problems.length) throw new Refused(explain(done.problems));
+
+  const ads = chosen.filter(c => c.x.place.tipo === 'anuncio'), sitelinks = chosen.filter(c => c.x.place.tipo === 'sitelink');
+  const fresh = sitelinks.filter(c => recreated || c.x.place.outros > 0).length;
+  return {
+    label: `${from} → ${to}: ${ads.length} ${ads.length === 1 ? 'anúncio' : 'anúncios'} e ${sitelinks.length} ${sitelinks.length === 1 ? 'sitelink' : 'sitelinks'}${fresh ? ` (${fresh} como sitelink novo)` : ''}`,
+    ads: ads.map(c => ({ key: c.x.place.id.slice(3), url: c.plan.depois })),
+    calls: calls + rehearsals + 1,
+  };
 }

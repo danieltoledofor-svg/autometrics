@@ -3,7 +3,7 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { addUsage } from '@/lib/googleAds/sync';
 import { GoogleAdsError, search } from '@/lib/googleAds/client';
 import { campaignAccess, canEdit, setKeywordStatus } from '@/lib/googleAds/edit';
-import { addCampaignAsset, addKeywords, changeKeywordMatch, addLocation, createAd, createGroup, readAdDetail, readAds, readCampaignAssets, readLocations, Refused, removeCampaignAsset, removeLocation, renameGroup, setAdStatus, setGroupStatus, updateAd, type Match } from '@/lib/googleAds/manage';
+import { addCampaignAsset, addKeywords, changeKeywordMatch, addLocation, createAd, createGroup, readAdDetail, readAds, readCampaignAssets, readLocations, readPagePlaces, checkPage, swapPage, Refused, removeCampaignAsset, removeLocation, renameGroup, setAdStatus, setGroupStatus, updateAd, type Match } from '@/lib/googleAds/manage';
 import { adviseAd } from '@/lib/googleAds/adAdvice';
 import { aiEnabled } from '@/lib/ai/openrouter';
 
@@ -18,6 +18,7 @@ export const maxDuration = 60;
  * GET  ?product_id=…&ver=locais     os locais incluídos e excluídos
  * GET  ?product_id=…&ver=anuncio&ad=grupo~anúncio   um anúncio com o que cada título e descrição rendeu em 30 dias
  * GET  ?product_id=…&ver=recursos   sitelinks e frases de destaque da campanha, com impressões e cliques
+ * GET  ?product_id=…&ver=paginas[&testar=url]   cada anúncio e sitelink com a página dele (e se a página nova abre)
  * POST { product_id, action, … }
  *   palavra_nova     { group_id, texts[], match }          inclui palavras-chave num grupo (também a partir de um termo de pesquisa)
  *   palavra_status   { keyword: "grupo~palavra", status }  pausa ou reativa uma palavra-chave
@@ -31,6 +32,7 @@ export const maxDuration = 60;
  *   anuncio_ia       { ad }                                 a IA lê o desempenho de cada texto e sugere o que trocar (não altera nada)
  *   recurso_novo     { tipo: 'sitelink' | 'destaque', texto, desc1?, desc2?, url? }
  *   recurso_remover  { resource }
+ *   pagina_trocar    { de, para, itens: [{ id, url }] }    troca a página nos anúncios e sitelinks marcados, num pedido só
  *   local_novo       { geo_id, excluir }
  *   local_remover    { id, confirmar_mundo? }
  *
@@ -57,6 +59,12 @@ export async function GET(request: Request) {
     if (what === 'anuncios') { const ads = await readAds(ctx, campaignId); await addUsage(1).catch(() => {}); return NextResponse.json({ allowed: true, ads }); }
     if (what === 'anuncio') { const ad = await readAdDetail(ctx, campaignId, q.get('ad') || ''); await addUsage(ad.calls).catch(() => {}); return NextResponse.json({ allowed: true, ad, ai: aiEnabled() }); }
     if (what === 'recursos') { const r = await readCampaignAssets(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, assets: r.assets, aviso: r.aviso }); }
+    if (what === 'paginas') {
+      const testar = q.get('testar') || '';
+      const [r, pagina] = await Promise.all([readPagePlaces(ctx, campaignId), testar ? checkPage(testar) : Promise.resolve(null)]);
+      await addUsage(r.calls).catch(() => {});
+      return NextResponse.json({ allowed: true, places: r.places, aviso: r.aviso, pagina });
+    }
     if (what === 'locais') { const r = await readLocations(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, locations: r.locations }); }
     const rows = await search(ctx, `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.target_cpa_micros FROM ad_group WHERE campaign.id = ${Number(campaignId)} AND ad_group.status != 'REMOVED'`);
     await addUsage(1).catch(() => {});
@@ -159,6 +167,15 @@ export async function POST(request: Request) {
     } else if (action === 'recurso_remover') {
       const r = await removeCampaignAsset(ctx, campaignId, String(body.resource || ''));
       target = r.label; key = String(body.resource); calls = r.calls; extra = { assets: r.assets };
+    } else if (action === 'pagina_trocar') {
+      const itens = (Array.isArray(body.itens) ? body.itens : []).slice(0, 500).map((x: any) => ({ id: String(x?.id || ''), url: String(x?.url || '') }));
+      const r = await swapPage(ctx, campaignId, { de: String(body.de || ''), para: String(body.para || ''), itens });
+      kind = 'trocar_pagina'; target = r.label; calls = r.calls; extra = { ads: r.ads.length };
+      if (r.ads.length) {
+        const { data: rows } = await db.from('google_ads_entities').select('entity_id, details').eq('product_id', productId).eq('level', 'ad').in('entity_id', r.ads.map(a => a.key));
+        const urlOf = new Map(r.ads.map(a => [a.key, a.url]));
+        await Promise.all((rows || []).map(row => patch('ad', row.entity_id, { details: { ...(row.details || {}), final_url: urlOf.get(row.entity_id), approval: 'UNDER_REVIEW' } })));
+      }
     } else if (action === 'local_novo') {
       const r = await addLocation(ctx, campaignId, String(body.geo_id || ''), body.excluir === true);
       target = r.label; key = String(body.geo_id); calls = r.calls; extra = { locations: r.locations };

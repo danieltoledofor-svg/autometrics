@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { Loader2, Plus, X } from 'lucide-react';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { SweepPicker, type PickKind } from '@/app/components/SweepPicker';
+import { currentPages, planOf, validPage, type PagePlace } from '@/lib/googleAds/pageUrl';
 
 /**
  * Montagem da campanha pelas abas (grupos, anúncios, palavras-chave, termos e
@@ -549,5 +550,143 @@ export function LocationsBox({ manage, ui, productId }: { manage: Manage; ui: Ui
       )}
       <ResultLine result={result} />
     </div>
+  );
+}
+
+// ── Trocar a página da campanha (anúncios e sitelinks de uma vez) ───────────
+
+const STATUS_LABEL: Record<string, string> = { ENABLED: 'ativo', PAUSED: 'pausado' };
+
+export function PageSwapBox({ manage, ui, productId, onClose, onDone }: { manage: Manage; ui: Ui; productId: string; onClose: () => void; onDone: () => void }) {
+  const s = styles(ui), { call } = manage;
+  const [places, setPlaces] = useState<PagePlace[] | null>(null);
+  const [error, setError] = useState('');
+  const [aviso, setAviso] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  // A prévia vale para a página nova que estava escrita quando foi pedida; mudou o texto, pede de novo.
+  const [preview, setPreview] = useState<null | { para: string; de: string; pagina: { ok: boolean; texto: string } | null }>(null);
+  const [chosen, setChosen] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<'' | 'previa' | 'trocar'>('');
+  const [result, setResult] = useState<Result>(null);
+
+  const load = useCallback(async (testar?: string) => {
+    const { ok, body } = await call(`/api/google-ads/manage?product_id=${productId}&ver=paginas${testar ? `&testar=${encodeURIComponent(testar)}` : ''}`);
+    if (!ok || !body.places) { setError(body.error || 'O Google não respondeu.'); return null; }
+    setError(''); setPlaces(body.places); setAviso(body.aviso || '');
+    return body as { places: PagePlace[]; pagina: { ok: boolean; texto: string } | null };
+  }, [call, productId]);
+  useEffect(() => { load().then(b => { if (b) setFrom(f => f || currentPages(b.places)[0]?.url || ''); }); }, [load]);
+
+  const pages = places ? currentPages(places) : [];
+  const valid = validPage(to) && to.trim() !== from.trim();
+  const stale = !!preview && (preview.para !== to.trim() || preview.de !== from);
+
+  const askPreview = async () => {
+    setBusy('previa'); setResult(null); setChosen({});
+    const b = await load(to.trim());
+    setBusy('');
+    if (b) setPreview({ para: to.trim(), de: from, pagina: b.pagina });
+  };
+
+  const rows = preview && places ? places.map(p => ({ p, plan: planOf(p, preview.de, preview.para, chosen[p.id]) })) : [];
+  const changing = rows.filter(r => r.plan.muda);
+  const nAds = changing.filter(r => r.p.tipo === 'anuncio').length, nLinks = changing.filter(r => r.p.tipo === 'sitelink').length;
+  const shared = changing.filter(r => r.p.tipo === 'sitelink' && r.p.outros > 0).length;
+
+  const submit = async () => {
+    if (!preview) return;
+    const what = [nAds && `${nAds} ${nAds === 1 ? 'anúncio' : 'anúncios'}`, nLinks && `${nLinks} ${nLinks === 1 ? 'sitelink' : 'sitelinks'}`].filter(Boolean).join(' e ');
+    if (!window.confirm(`Trocar a página em ${what}?\n\nDe: ${preview.de}\nPara: ${preview.para}\n\nVai tudo num pedido só: se o Google recusar qualquer parte, nada muda.`)) return;
+    setBusy('trocar'); setResult(null);
+    const r = await manage.send('pagina_trocar', { de: preview.de, para: preview.para, itens: changing.map(x => ({ id: x.p.id, url: x.p.url })) });
+    setBusy('');
+    setResult({ ok: r.ok, text: r.ok ? `Feito: ${r.text}.` : r.text });
+    if (r.ok) { onDone(); setPreview(null); setChosen({}); const b = await load(); if (b) setFrom(preview.para); setTo(''); }
+  };
+
+  const section = (tipo: PagePlace['tipo'], title: string) => {
+    const list = rows.filter(r => r.p.tipo === tipo);
+    if (!list.length) return <div className={`text-xs ${ui.textMuted}`}>{tipo === 'anuncio' ? 'Nenhum anúncio com página nesta campanha.' : 'A campanha não tem sitelinks.'}</div>;
+    return (
+      <div>
+        <div className={`text-xs font-semibold ${ui.textHead} mb-1`}>{title} ({list.filter(r => r.plan.muda).length} de {list.length} mudam)</div>
+        {list.map(({ p, plan }) => (
+          <label key={p.id} className={`flex items-start gap-2.5 border-t ${ui.borderCol} py-2 text-[13px] ${p.editavel ? 'cursor-pointer' : 'opacity-60'}`}>
+            <input type="checkbox" className="mt-1 accent-brand" checked={plan.marked} disabled={!p.editavel || busy !== ''}
+              onChange={e => setChosen(c => ({ ...c, [p.id]: e.target.checked }))} aria-label={`Trocar a página de ${p.nome}`} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2">
+                <span className={`font-medium ${ui.textHead}`}>{p.nome}</span>
+                <span className={`text-[11px] ${ui.textMuted}`}>
+                  {p.tipo === 'sitelink' ? (p.nivel === 'grupo' ? `sitelink do grupo ${p.grupo}` : 'sitelink da campanha') : `grupo ${p.grupo}`}
+                  {STATUS_LABEL[p.status] && p.status !== 'ENABLED' ? ` · ${STATUS_LABEL[p.status]}` : ''}
+                </span>
+              </div>
+              {plan.muda ? (
+                <div className="mt-0.5 space-y-0.5 font-mono text-[11.5px] break-all">
+                  <div className={`${ui.textMuted} line-through`}>{p.url}</div>
+                  <div className="text-pos">→ {plan.depois}</div>
+                  {p.celular && plan.celular !== p.celular && <div className={ui.textMuted}>celular: {plan.celular}</div>}
+                </div>
+              ) : (
+                <div className={`mt-0.5 font-mono text-[11.5px] break-all ${ui.textMuted}`}>{p.url}</div>
+              )}
+              <div className={`text-[11px] mt-0.5 ${ui.textMuted}`}>
+                {!p.editavel ? p.motivo
+                  : !plan.muda && p.url === preview?.para ? 'Já está na página nova.'
+                  : !plan.marked && !plan.same ? 'Outra página: fica como está. Marque para trocar pela página nova inteira.'
+                  : !plan.marked ? 'Desmarcado: fica como está.'
+                  : plan.muda && p.tipo === 'sitelink' && p.outros > 0 ? `Este sitelink também está em ${p.outros} ${p.outros === 1 ? 'outro lugar' : 'outros lugares'} (outra campanha, grupo ou a conta): aqui entra um sitelink novo igual, só com a página nova; o de lá fica como está e os números deste recomeçam.`
+                  : plan.muda && plan.depois !== preview?.para ? 'Manteve o que é próprio dele (âncora ou parâmetro).' : ''}
+              </div>
+            </div>
+          </label>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <Frame title="Trocar a página da campanha" onClose={onClose} ui={ui}>
+      <div className={`text-xs ${ui.textMuted}`}>Troca a página nos anúncios e nos sitelinks ao mesmo tempo, num pedido só ao Google: entra tudo ou nada.</div>
+      {error && <div className="text-xs text-neg">{error}</div>}
+      {!places && !error && <div className={`text-xs ${ui.textMuted} inline-flex items-center gap-1.5`}><Loader2 size={13} className="animate-spin" /> Lendo os anúncios e sitelinks no Google…</div>}
+      {places && (
+        <div className="space-y-2">
+          <div>
+            <div className={`text-xs font-medium ${ui.textMuted} mb-1`}>Página de hoje</div>
+            <select value={from} onChange={e => setFrom(e.target.value)} aria-label="Página de hoje" className={`${s.input} w-full font-mono text-[12px]`}>
+              {pages.map(pg => <option key={pg.url} value={pg.url}>{pg.url} ({pg.total} {pg.total === 1 ? 'anúncio' : 'anúncios'}{pg.ativos !== pg.total ? `, ${pg.ativos} ativos` : ''})</option>)}
+            </select>
+          </div>
+          <div>
+            <div className={`text-xs font-medium ${ui.textMuted} mb-1`}>Página nova</div>
+            <div className="flex flex-wrap gap-2">
+              <input value={to} onChange={e => setTo(e.target.value)} placeholder="https://… (com os parâmetros de rastreamento)" aria-label="Página nova" className={`${s.input} flex-1 min-w-[260px] font-mono text-[12px]`} />
+              <button onClick={askPreview} disabled={!valid || busy !== ''} className={s.solid}>{busy === 'previa' && <Loader2 size={13} className="animate-spin" />} Ver prévia</button>
+            </div>
+            {to.trim() && !validPage(to) && <div className="text-xs text-neg mt-1">A página precisa começar com https:// e não pode ter espaços.</div>}
+            {to.trim() && to.trim() === from.trim() && <div className="text-xs text-neg mt-1">É a mesma página de hoje.</div>}
+          </div>
+          {aviso && <div className="text-xs text-warn">{aviso}</div>}
+        </div>
+      )}
+      {preview && !stale && (
+        <div className="space-y-3">
+          {preview.pagina && <div className={`text-xs ${preview.pagina.ok ? 'text-pos' : 'text-warn'}`}>{preview.pagina.texto}</div>}
+          {section('anuncio', 'Anúncios')}
+          {section('sitelink', 'Sitelinks')}
+          <div className={`border-t ${ui.borderCol} pt-3 flex flex-wrap items-center justify-between gap-3`}>
+            <div className={`text-xs ${ui.textMuted} max-w-[60ch]`}>
+              {changing.length ? <>Vai mudar: <b className={ui.textHead}>{nAds} {nAds === 1 ? 'anúncio' : 'anúncios'}</b> e <b className={ui.textHead}>{nLinks} {nLinks === 1 ? 'sitelink' : 'sitelinks'}</b>{shared ? ` (${shared} como sitelink novo)` : ''}. Cada anúncio trocado volta para a análise do Google; os números dele continuam.</> : 'Nada marcado para mudar.'}
+            </div>
+            <button onClick={submit} disabled={!changing.length || busy !== ''} className={s.solid}>{busy === 'trocar' && <Loader2 size={13} className="animate-spin" />} Trocar em {changing.length} {changing.length === 1 ? 'lugar' : 'lugares'}</button>
+          </div>
+        </div>
+      )}
+      {preview && stale && <div className={`text-xs ${ui.textMuted}`}>A página mudou: clique em "Ver prévia" de novo.</div>}
+      <ResultLine result={result} />
+    </Frame>
   );
 }

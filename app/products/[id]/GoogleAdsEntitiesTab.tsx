@@ -10,7 +10,7 @@ import type { DayRow } from '@/lib/metrics/dimension';
 import { adGroupKey, adKey, groupSales, keywordKey, type TrackedSales } from '@/lib/metrics/itemSales';
 import { useGoogleControls } from './useGoogleControls';
 import { CpaCell } from './BidCell';
-import { AdForm, AddButton, AssetsBox, GroupForm, KeywordForm, ResultLine, RowAction, useManage, type AdSeed, type ManageGroup, type Result } from './ManageBox';
+import { AdForm, AddButton, AssetsBox, PageSwapBox, GroupForm, KeywordForm, ResultLine, RowAction, useManage, type AdSeed, type ManageGroup, type Result } from './ManageBox';
 
 /**
  * Abas de grupos de anúncios, anúncios e palavras-chave.
@@ -127,7 +127,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
   const symbol = google.currency === 'BRL' ? 'R$' : google.currency === 'EUR' ? '€' : 'US$';
   // Montagem da campanha pelo Autometrics (só para os logins liberados): formulário aberto, linha ocupada e o resultado.
   const manage = useManage(supabase, productId);
-  const [form, setForm] = useState<null | { type: 'grupo'; copyFrom?: ManageGroup; rename?: ManageGroup } | { type: 'anuncio'; mode: 'novo' | 'copia' | 'editar'; seed?: AdSeed; adKey?: string } | { type: 'palavra' } | { type: 'recursos' }>(null);
+  const [form, setForm] = useState<null | { type: 'grupo'; copyFrom?: ManageGroup; rename?: ManageGroup } | { type: 'anuncio'; mode: 'novo' | 'copia' | 'editar'; seed?: AdSeed; adKey?: string } | { type: 'palavra' } | { type: 'recursos' } | { type: 'pagina' }>(null);
   const [rowBusy, setRowBusy] = useState('');
   const [rowResult, setRowResult] = useState<Result>(null);
   const [reload, setReload] = useState(0);
@@ -416,6 +416,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
     {manage.allowed && form?.type === 'grupo' && <GroupForm key={`${form.copyFrom?.id || ''}${form.rename?.id || ''}`} manage={manage} ui={ui} copyFrom={form.copyFrom} rename={form.rename} onClose={() => setForm(null)} onDone={done} />}
     {manage.allowed && form?.type === 'anuncio' && <AdForm key={`${form.mode}${form.adKey || ''}`} manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} mode={form.mode} seed={form.seed} adKey={form.adKey} onClose={() => setForm(null)} onDone={done} />}
     {manage.allowed && form?.type === 'recursos' && <AssetsBox manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} defaultUrl={blankAd()?.url || ''} onClose={() => setForm(null)} />}
+    {manage.allowed && form?.type === 'pagina' && <PageSwapBox manage={manage} ui={ui} productId={productId} onClose={() => setForm(null)} onDone={done} />}
     {manage.allowed && form?.type === 'palavra' && <KeywordForm manage={manage} ui={ui} groupId={props.adGroupFilter || undefined} onClose={() => setForm(null)} onDone={done} />}
     <ResultLine result={rowResult} />
     <DimensionTable
@@ -440,6 +441,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
         {manage.allowed && !isPmax && level === 'ad_group' && <AddButton label="Novo grupo" ui={ui} onClick={() => setForm({ type: 'grupo' })} />}
         {manage.allowed && !isPmax && level === 'ad' && <AddButton label="Novo anúncio" ui={ui} onClick={() => setForm({ type: 'anuncio', mode: 'novo', seed: blankAd() })} />}
         {manage.allowed && !isPmax && level === 'ad' && <button onClick={() => setForm({ type: 'recursos' })} className={`text-sm rounded-lg px-3 py-1.5 border ${borderCol} bg-surface-2 text-ink hover:border-brand`}>Sitelinks e frases</button>}
+        {manage.allowed && !isPmax && level === 'ad' && <button onClick={() => setForm({ type: 'pagina' })} className="text-sm font-medium rounded-lg px-3 py-1.5 border border-brand text-brand-text bg-surface-2 hover:bg-brand hover:text-white">Trocar página</button>}
         {manage.allowed && !isPmax && level === 'keyword' && <AddButton label="Palavra-chave" ui={ui} onClick={() => setForm({ type: 'palavra' })} />}
         {level !== 'ad_group' && adGroups.length > 0 && (
           <select value={props.adGroupFilter} onChange={e => props.onAdGroupFilter(e.target.value)} className={`${selectCls} max-w-[240px]`}>
