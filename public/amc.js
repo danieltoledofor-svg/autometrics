@@ -1,6 +1,6 @@
 /**
  * AutoMetrics — Checkout da BuyGoods (v1). Vai em BuyGoods → My profile → Funnel pixels → Checkout:
- *   <script src="https://autometrics.cloud/amc.js" data-uid="SEU_CODIGO" async></script>
+ *   <script src="https://autometrics.cloud/amc.js?subid={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}" data-uid="SEU_CODIGO" async></script>
  *
  * Roda na página do checkout (às vezes dentro de um iframe da BuyGoods) e avisa o
  * Autometrics que a pessoa chegou nele, com o que liga ao clique: os subids que o
@@ -40,6 +40,10 @@
       } catch (e) {}
     }
     function name(w) { try { var m = String(w.name || '').match(SESSION); if (m) add(m[0]); } catch (e) {} }
+    // Os subids no endereço do próprio script: a BuyGoods troca {SUBID}…{SUBID5} pelos valores
+    // ao montar a página. É o que funciona no checkout Express (desde 17/11/2026), onde o
+    // script roda isolado e não vê o endereço do checkout nem a página anterior.
+    scan(tag.src);
     scan(location.href);
     // Checkout dentro de um iframe: a página da BuyGoods em volta tem os subids (mesmo site, ou pelo referrer).
     try { if (window.parent !== window) scan(window.parent.location.href); } catch (e) {}

@@ -195,7 +195,8 @@ export function InstallTab({ isDark, userId }: { isDark: boolean; userId: string
   type CheckoutSetup = { postback: string; details: { label: string; value: string }[]; steps: React.ReactNode[] }
     | { snippet: string; steps: React.ReactNode[] } | { script: React.ReactNode };
   // BuyGoods: o checkout tem um campo próprio para script (Funnel pixels → Checkout); o public/amc.js avisa a chegada.
-  const checkoutScript = `<script src="https://autometrics.cloud/amc.js" data-uid="${userId}" async></script>`;
+  // Os subids vão no endereço do script: a BuyGoods troca {SUBID}…{SUBID5} pelos valores, e é o que funciona no checkout Express.
+  const checkoutScript = `<script src="https://autometrics.cloud/amc.js?subid={SUBID}&subid2={SUBID2}&subid3={SUBID3}&subid4={SUBID4}&subid5={SUBID5}" data-uid="${userId}" async></script>`;
   const scriptOnly = (name: string) => ({ script: <>A {name} não avisa o checkout por postback. O checkout é contado pelo <strong>script das páginas</strong>: cada pessoa que clica no link de compra (ou no botão do vídeo) entra como checkout da campanha do clique.</> });
   const checkouts: Record<keyof typeof platforms, CheckoutSetup> = {
     buygoods: {
