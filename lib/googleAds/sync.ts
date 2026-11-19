@@ -7,6 +7,7 @@ import { ACTION_SELECT, ACTION_WHERE, addActionRow, stableActions } from './conv
 import type { ActionCounts } from '@/lib/metrics/dimension';
 import { syncEntities, EntitySyncResult } from './entities';
 import { syncAssets } from './assets';
+import { syncCampaignSettings } from './settings';
 import { syncClicks } from './clicks';
 import { GEO_NAMES } from '@/lib/geoNames';
 
@@ -56,6 +57,8 @@ export interface SyncSummary {
   entities_full?: boolean;
   /** Sitelinks, frases de destaque e promoções gravados. */
   assets?: number;
+  /** Campanhas com a configuração guardada (idiomas, negativas, locais…), só nas rodadas que releem a estrutura. */
+  campaign_settings?: number;
   /** Dias passados que ganharam orçamento/meta pelo histórico de alterações. */
   backfilled_days?: number;
   /** Retrato do que o diagnóstico leu por último; igual = nada novo para ler. */
@@ -793,6 +796,8 @@ export async function syncAccount(
         selectable: fields => selectableFields(refreshToken, fields, usage),
         errors,
       });
+      // Idiomas, negativas, locais… quase não mudam: só quando a estrutura é relida.
+      if (structure) summary.campaign_settings = await syncCampaignSettings(q, { productIdFor: cid => productByCampaign.get(cid), errors });
     }
   }
 

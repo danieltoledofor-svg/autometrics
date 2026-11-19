@@ -23,6 +23,7 @@ const FIELDS = [
   'asset.sitelink_asset.link_text',
   'asset.sitelink_asset.description1',
   'asset.sitelink_asset.description2',
+  'asset.final_urls',
   'asset.callout_asset.callout_text',
   'asset.promotion_asset.promotion_target',
   'asset.structured_snippet_asset.header',
@@ -39,7 +40,7 @@ function describe(r: any): { name: string; details: Record<string, any> } {
   const type = r.campaignAsset?.fieldType || a.type || 'ASSET';
   if (type === 'SITELINK') {
     const s = a.sitelinkAsset || {};
-    return { name: s.linkText || `Sitelink ${a.id}`, details: { field_type: type, description1: s.description1 || null, description2: s.description2 || null } };
+    return { name: s.linkText || `Sitelink ${a.id}`, details: { field_type: type, description1: s.description1 || null, description2: s.description2 || null, urls: a.finalUrls || [] } };
   }
   if (type === 'CALLOUT') return { name: a.calloutAsset?.calloutText || `Frase ${a.id}`, details: { field_type: type } };
   if (type === 'PROMOTION') return { name: a.promotionAsset?.promotionTarget || `Promoção ${a.id}`, details: { field_type: type } };

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/googleAds/server';
 import { countryId, countryLabel } from '@/lib/geoNames';
 import type { Template } from './template';
+import type { CampaignSettings } from '@/lib/googleAds/settings';
 
 /**
  * Modelo de campanha montado só com o que o Autometrics já guardou, sem consultar o Google.
@@ -13,8 +14,10 @@ import type { Template } from './template';
  * daily_metrics que tem orçamento) e os países onde a campanha apareceu (locations, os 60 dias até
  * o último em que rodou).
  *
- * Não está guardado e entra pelo padrão do criador: idioma (inglês), redes (só Pesquisa), aparelhos,
- * horários, negativas, públicos e a meta de conversão. Cada falta vira um aviso para conferir.
+ * A configuração (idiomas, negativas, locais configurados, aparelhos, horários, redes, rastreamento e
+ * meta de conversão) vem da linha level = 'campaign' (lib/googleAds/settings), gravada desde 19/11/2026.
+ * Campanha sem essa linha vai pelo padrão do criador (inglês, só Pesquisa, sem negativas nem horários)
+ * e os países onde apareceu. Públicos não são copiados. Cada falta vira um aviso para conferir.
  */
 
 const PAGE = 1000;
@@ -47,7 +50,7 @@ export async function storedTemplate(userId: string, productId: string): Promise
   const since = lastPlace?.date ? new Date(new Date(`${lastPlace.date}T12:00:00Z`).getTime() - 60 * 86400000).toISOString().slice(0, 10) : null;
   const [entities, metric, places] = await Promise.all([
     all<any>((a, b) => db.from('google_ads_entities').select('level, entity_id, ad_group_id, name, status, details')
-      .eq('product_id', productId).in('level', ['ad_group', 'ad', 'keyword', 'asset']).neq('status', 'REMOVED').range(a, b)),
+      .eq('product_id', productId).in('level', ['campaign', 'ad_group', 'ad', 'keyword', 'asset']).neq('status', 'REMOVED').range(a, b)),
     db.from('daily_metrics').select('date, budget_micros, target_cpa, bidding_strategy').eq('product_id', productId)
       .gt('budget_micros', 0).order('date', { ascending: false }).limit(1).maybeSingle().then(r => r.data, () => null),
     since ? all<any>((a, b) => db.from('locations').select('location_name, impressions').eq('product_id', productId).gte('date', since).range(a, b)).catch(() => []) : [],
@@ -65,7 +68,9 @@ export async function storedTemplate(userId: string, productId: string): Promise
   const usesCpa = strategy === 'TARGET_CPA' || strategy === 'MAXIMIZE_CONVERSIONS';
   if (!metric) avisos.push('Orçamento e meta de CPA não estão guardados: preencha na cópia.');
 
-  // Países por impressões. É onde a campanha apareceu, não a lista exata configurada nela.
+  const cfg: CampaignSettings | null = entities.find(e => e.level === 'campaign' && String(e.entity_id) === String(product.google_ads_campaign_id))?.details || null;
+
+  // Sem a configuração guardada: países por impressões. É onde a campanha apareceu, não a lista exata configurada nela.
   const byCountry = new Map<string, { nome: string; i: number }>();
   for (const p of places) {
     const id = countryId(p.location_name);
@@ -74,11 +79,16 @@ export async function storedTemplate(userId: string, productId: string): Promise
     cur.i += Number(p.impressions || 0);
     byCountry.set(id, cur);
   }
-  const locais = [...byCountry].sort((a, b) => b[1].i - a[1].i).map(([id, c]) => ({ id, nome: c.nome, excluido: false, ajuste: 0 }));
-  avisos.push(locais.length
-    ? `Países: entram os ${locais.length} em que a campanha apareceu nos últimos 60 dias em que rodou. Confira se falta algum.`
-    : 'Países não estão guardados: escolha os países na cópia.');
-  avisos.push('Idioma, negativas, horários e aparelhos não estão guardados: a cópia vai com inglês, só rede de Pesquisa, sem negativas e sem horários. Confira antes de subir.');
+  const locais = cfg?.locais?.length ? cfg.locais
+    : [...byCountry].sort((a, b) => b[1].i - a[1].i).map(([id, c]) => ({ id, nome: c.nome, excluido: false, ajuste: 0 }));
+  if (cfg) {
+    avisos.push('Idiomas, negativas, locais, horários e redes vêm da configuração guardada na última coleta. Os públicos (idade, gênero, renda) não são copiados.');
+  } else {
+    avisos.push(locais.length
+      ? `Países: entram os ${locais.length} em que a campanha apareceu nos últimos 60 dias em que rodou. Confira se falta algum.`
+      : 'Países não estão guardados: escolha os países na cópia.');
+    avisos.push('Idioma, negativas, horários e aparelhos não estão guardados: a cópia vai com inglês, só rede de Pesquisa, sem negativas e sem horários. Confira antes de subir.');
+  }
 
   const t: Template = {
     origem: {
@@ -95,18 +105,18 @@ export async function storedTemplate(userId: string, productId: string): Promise
         limite_cpc: null,
       },
       orcamento_diario: metric ? money(Number(metric.budget_micros) / 1e6) : null,
-      redes: { pesquisa: true, parceiros: false, display: false },
-      local_incluir: 'PRESENCE',
-      local_excluir: 'PRESENCE',
+      redes: cfg?.redes || { pesquisa: true, parceiros: false, display: false },
+      local_incluir: cfg?.local_incluir || 'PRESENCE',
+      local_excluir: cfg?.local_excluir || 'PRESENCE',
       ia_max: { ligada: false, personalizar_texto: false, expandir_url: false },
       anuncio_politico_ue: false,
-      modelo_rastreamento: null,
-      sufixo_url: null,
-      meta_conversao: null,
+      modelo_rastreamento: cfg?.modelo_rastreamento || null,
+      sufixo_url: cfg?.sufixo_url || null,
+      meta_conversao: cfg?.meta_conversao || null,
     },
     locais,
-    idiomas: [ENGLISH],
-    aparelhos: [], horarios: [], negativas: [],
+    idiomas: cfg?.idiomas?.length ? cfg.idiomas : cfg ? [] : [ENGLISH],
+    aparelhos: cfg?.aparelhos || [], horarios: cfg?.horarios || [], negativas: cfg?.negativas || [],
     grupos: [],
     recursos: { sitelinks: [], destaques: [], nome_empresa: null },
     metas_da_conta: [],
@@ -117,7 +127,7 @@ export async function storedTemplate(userId: string, productId: string): Promise
   for (const g of groups) {
     byGroup.set(String(g.entity_id), {
       id: String(g.entity_id), nome: g.name || '', status: g.status || '',
-      meta_cpa: money(g.details?.target_cpa), palavras: [], negativas: [], publicos: [], anuncios: [],
+      meta_cpa: money(g.details?.target_cpa), palavras: [], negativas: cfg?.negativas_grupo?.[String(g.entity_id)] || [], publicos: [], anuncios: [],
     });
   }
   for (const e of entities) {
@@ -144,13 +154,13 @@ export async function storedTemplate(userId: string, productId: string): Promise
     const type = e.details?.field_type;
     if (type === 'SITELINK' && !seen.has(`s|${e.name}`)) {
       seen.add(`s|${e.name}`);
-      t.recursos.sitelinks.push({ texto: e.name, desc1: e.details?.description1 || '', desc2: e.details?.description2 || '', urls: [], nivel: 'campanha' });
+      t.recursos.sitelinks.push({ texto: e.name, desc1: e.details?.description1 || '', desc2: e.details?.description2 || '', urls: Array.isArray(e.details?.urls) ? e.details.urls : [], nivel: 'campanha' });
     } else if (type === 'CALLOUT' && !seen.has(`c|${e.name}`)) {
       seen.add(`c|${e.name}`);
       t.recursos.destaques.push({ texto: e.name, nivel: 'campanha' });
     }
   }
-  if (t.recursos.sitelinks.length) avisos.push('Sitelinks vão com o endereço do primeiro anúncio: o endereço próprio de cada um não está guardado.');
+  if (t.recursos.sitelinks.some(sl => !sl.urls.length)) avisos.push('Sitelinks sem endereço guardado vão com o endereço do primeiro anúncio.');
 
   return t;
 }
