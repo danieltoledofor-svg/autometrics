@@ -63,7 +63,7 @@ export default function CampaignBuilderPage() {
   const [picked, setPicked] = useState('');
   const [reading, setReading] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ template: Template; currency?: string; migration?: boolean } | null>(null);
+  const [result, setResult] = useState<{ template: Template; currency?: string; migration?: boolean; fonte?: 'guardado' | 'banco' } | null>(null);
   const [step, setStep] = useState(0);
   const [draft, setDraftState] = useState<Draft | null>(null);
   const [currency, setCurrency] = useState('USD');
@@ -282,7 +282,7 @@ export default function CampaignBuilderPage() {
             {result?.migration && <div className="text-xs text-warn">Este modelo não ficou salvo: rode migration_criador.sql no Supabase.</div>}
             {t.avisos.length > 0 && (
               <div className={`${card} border !border-warn/40 rounded-xl p-4 text-xs text-warn space-y-1`}>
-                <div className="font-medium">O Google não devolveu tudo</div>
+                <div className="font-medium">{result?.fonte ? 'Modelo sem leitura do Google (conta suspensa)' : 'O Google não devolveu tudo'}</div>
                 {t.avisos.map((a, i) => <div key={i}>{a}</div>)}
               </div>
             )}

@@ -16,6 +16,7 @@ import type { Draft } from '@/lib/campaignBuilder/draft';
 import { duplicateCampaign, type DuplicateSettings } from '@/lib/campaignBuilder/duplicate';
 import { campaignHistory } from '@/lib/campaignBuilder/history';
 import type { Template } from '@/lib/campaignBuilder/template';
+import { storedTemplate } from '@/lib/campaignBuilder/storedTemplate';
 import { decryptSecret } from '@/lib/googleAds/server';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,8 @@ export const maxDuration = 60;
  * Criador de campanhas (por enquanto só a leitura do modelo).
  *
  * GET                      campanhas do usuário ligadas ao Google e os modelos já lidos
- * GET ?product_id=…        lê a campanha inteira do Google e guarda como modelo
+ * GET ?product_id=…        lê a campanha inteira do Google e guarda como modelo; se o Google não
+ *                          deixar (conta suspensa), usa o modelo guardado ou monta pelo banco (fonte)
  * GET ?template=<id>       devolve um modelo guardado, sem consultar o Google
  * GET ?local=<texto>       locais do Google que batem com o texto (país, estado, cidade)
  * GET ?idiomas=1           idiomas que o Google aceita, com o nome em português
@@ -264,8 +266,28 @@ export async function GET(request: Request) {
     });
   }
 
+  // O Google não deixou ler (conta suspensa, cancelada ou sem ligação): vale o modelo completo
+  // guardado da última leitura; sem ele, o modelo montado com o que a coleta guardou no banco.
+  const fromDatabase = async (why: string, status: number) => {
+    const [{ data: saved }, { data: product }] = await Promise.all([
+      db.from('campaign_templates').select('id, funnel, data, updated_at').eq('user_id', user.id).eq('source_product_id', productId).maybeSingle()
+        .then(r => r, () => ({ data: null })),
+      db.from('products').select('currency').eq('id', productId).eq('user_id', user.id).maybeSingle(),
+    ]);
+    const currency = product?.currency || 'USD';
+    if (saved?.data?.grupos?.length) {
+      const template = saved.data as Template;
+      const when = new Date(template.origem?.lido_em || saved.updated_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      template.avisos = [`O Google não deixa ler esta campanha agora (${why}). Este é o modelo completo guardado na leitura de ${when}.`, ...(template.avisos || [])];
+      return NextResponse.json({ allowed: true, template, currency, saved: { id: saved.id, funnel: saved.funnel, updated_at: saved.updated_at }, fonte: 'guardado' });
+    }
+    const template = await storedTemplate(user.id, productId).catch(() => null);
+    if (template) return NextResponse.json({ allowed: true, template, currency, saved: null, fonte: 'banco' });
+    return NextResponse.json({ allowed: true, error: `${why} E não há estrutura guardada desta campanha no Autometrics.` }, { status });
+  };
+
   const access = await campaignAccess(user.id, productId);
-  if ('error' in access) return NextResponse.json({ allowed: true, error: access.error }, { status: 409 });
+  if ('error' in access) return fromDatabase(String(access.error), 409);
   try {
     const { template, calls } = await readTemplate(access.ctx, access.campaignId);
     await addUsage(calls).catch(() => {});
@@ -275,7 +297,7 @@ export async function GET(request: Request) {
     }, { onConflict: 'user_id,source_product_id' }).select('id, funnel, updated_at').maybeSingle();
     return NextResponse.json({ allowed: true, template, currency: access.currency, saved: error ? null : saved, migration: !!error });
   } catch (e: any) {
-    return NextResponse.json({ allowed: true, error: `O Google não respondeu: ${e.message}` }, { status: 502 });
+    return fromDatabase(`o Google respondeu: ${String(e.message).slice(0, 200)}.`, 502);
   }
 }
 

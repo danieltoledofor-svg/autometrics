@@ -40,6 +40,8 @@ export function Duplicate({ campaigns, css, api, preset }: { campaigns: { id: st
   const [error, setError] = useState('');
   const [t, setT] = useState<Template | null>(null);
   const [currency, setCurrency] = useState('USD');
+  /** De onde veio o modelo quando o Google não deixou ler: o guardado da última leitura ou o montado pelo banco. */
+  const [source, setSource] = useState<'guardado' | 'banco' | null>(null);
   const [s, setS] = useState<DuplicateSettings | null>(null);
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [open, setOpen] = useState(false);
@@ -73,7 +75,7 @@ export function Duplicate({ campaigns, css, api, preset }: { campaigns: { id: st
     setReading(true); setError(''); setT(null); setS(null); setTargets([]); setStates({}); setStale(false); setFixes([]);
     const { ok, body } = await api(`/api/campaign-builder?product_id=${id}`);
     if (!ok || !body.template) setError(body.error || 'Não foi possível ler a campanha.');
-    else { setT(body.template); setCurrency(body.currency || 'USD'); setS(duplicateSettings(body.template)); }
+    else { setT(body.template); setCurrency(body.currency || 'USD'); setSource(body.fonte || null); setS(duplicateSettings(body.template)); }
     setReading(false);
   };
 
@@ -289,7 +291,7 @@ export function Duplicate({ campaigns, css, api, preset }: { campaigns: { id: st
             <div className={muted}>Valem para todas as cópias desta duplicação. A campanha original não muda. Para desfazer, leia a campanha de novo.</div>
           </div>
         )}
-        {t.avisos.length > 0 && <div className="text-xs text-warn space-y-0.5"><div className="font-medium">O Google não devolveu tudo na leitura</div>{t.avisos.map((a, i) => <div key={i}>{a}</div>)}</div>}
+        {t.avisos.length > 0 && <div className="text-xs text-warn space-y-0.5"><div className="font-medium">{source ? 'Modelo sem leitura do Google (conta suspensa)' : 'O Google não devolveu tudo na leitura'}</div>{t.avisos.map((a, i) => <div key={i}>{a}</div>)}</div>}
       </div>
 
       <Block title="Ajustes de lance que NÃO vão para a cópia" hint="A campanha nova começa limpa: sem ajuste por aparelho, local, horário, idade, gênero ou renda. Os locais e horários entram, só sem o ajuste." css={css}>
