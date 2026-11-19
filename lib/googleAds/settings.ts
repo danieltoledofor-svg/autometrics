@@ -3,7 +3,7 @@ import { languageName, placeName } from '@/lib/campaignBuilder/names';
 
 /**
  * Configuração de cada campanha que as outras coletas não guardam: idiomas, negativas (da campanha
- * e dos grupos), locais configurados, aparelhos, horários, redes, tipo de local, rastreamento e a
+ * e dos grupos), públicos dos grupos (idade, gênero, renda), locais configurados, aparelhos, horários, redes, tipo de local, rastreamento e a
  * meta de conversão.
  *
  * Fica em google_ads_entities com level = 'campaign' (uma linha por campanha, entity_id = id da
@@ -21,6 +21,8 @@ export interface CampaignSettings {
   negativas: { texto: string; tipo: string }[];
   /** Negativas de cada grupo, pelo id do grupo. */
   negativas_grupo: Record<string, { texto: string; tipo: string }[]>;
+  /** Públicos de cada grupo (idade, gênero, renda), pelo id do grupo. Desde 19/11/2026. */
+  publicos_grupo?: Record<string, { tipo: string; faixa: string; ajuste: number; excluido: boolean }[]>;
   aparelhos: { tipo: string; ajuste: number }[];
   horarios: { dia: string; inicio: string; fim: string; ajuste: number }[];
   redes: { pesquisa: boolean; parceiros: boolean; display: boolean };
@@ -41,7 +43,7 @@ export async function syncCampaignSettings(
   opts: { productIdFor: (campaignId: string) => string | undefined; errors: string[] },
 ): Promise<number> {
   const fail = (label: string) => (e: any) => { opts.errors.push(`configuração (${label}): ${e.message}`); return null; };
-  const [camps, criteria, groupNegatives, goalConfig, goals] = await Promise.all([
+  const [camps, criteria, groupNegatives, audiences, goalConfig, goals] = await Promise.all([
     q(`SELECT campaign.id, campaign.network_settings.target_google_search, campaign.network_settings.target_search_network,
               campaign.network_settings.target_content_network, campaign.geo_target_type_setting.positive_geo_target_type,
               campaign.geo_target_type_setting.negative_geo_target_type, campaign.tracking_url_template, campaign.final_url_suffix
@@ -58,6 +60,11 @@ export async function syncCampaignSettings(
        FROM ad_group_criterion
        WHERE campaign.status != 'REMOVED' AND campaign.advertising_channel_type = 'SEARCH' AND ad_group.status != 'REMOVED'
          AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = TRUE AND ad_group_criterion.status != 'REMOVED'`).catch(fail('negativas dos grupos')),
+    q(`SELECT campaign.id, ad_group.id, ad_group_criterion.type, ad_group_criterion.negative, ad_group_criterion.bid_modifier,
+              ad_group_criterion.age_range.type, ad_group_criterion.gender.type, ad_group_criterion.income_range.type
+       FROM ad_group_criterion
+       WHERE campaign.status != 'REMOVED' AND campaign.advertising_channel_type = 'SEARCH' AND ad_group.status != 'REMOVED'
+         AND ad_group_criterion.type IN ('AGE_RANGE', 'GENDER', 'INCOME_RANGE') AND ad_group_criterion.status != 'REMOVED'`).catch(fail('públicos dos grupos')),
     q(`SELECT campaign.id, conversion_goal_campaign_config.goal_config_level, conversion_goal_campaign_config.custom_conversion_goal
        FROM conversion_goal_campaign_config WHERE campaign.status != 'REMOVED'`).catch(fail('meta de conversão')),
     q(`SELECT custom_conversion_goal.id, custom_conversion_goal.name FROM custom_conversion_goal`).catch(fail('metas da conta')),
@@ -81,7 +88,7 @@ export async function syncCampaignSettings(
   for (const r of camps) {
     const c = r.campaign || {};
     byCampaign.set(String(c.id), {
-      idiomas: [], locais: [], negativas: [], negativas_grupo: {}, aparelhos: [], horarios: [],
+      idiomas: [], locais: [], negativas: [], negativas_grupo: {}, publicos_grupo: {}, aparelhos: [], horarios: [],
       redes: { pesquisa: c.networkSettings?.targetGoogleSearch !== false, parceiros: !!c.networkSettings?.targetSearchNetwork, display: !!c.networkSettings?.targetContentNetwork },
       local_incluir: c.geoTargetTypeSetting?.positiveGeoTargetType || 'PRESENCE_OR_INTEREST',
       local_excluir: c.geoTargetTypeSetting?.negativeGeoTargetType || 'PRESENCE',
@@ -89,6 +96,7 @@ export async function syncCampaignSettings(
       sufixo_url: c.finalUrlSuffix || null,
       meta_conversao: null,
     });
+    if (!audiences) delete byCampaign.get(String(c.id))!.publicos_grupo;
   }
   for (const r of criteria) {
     const s = byCampaign.get(String(r.campaign?.id)), cc = r.campaignCriterion || {};
@@ -102,8 +110,12 @@ export async function syncCampaignSettings(
   for (const r of groupNegatives) {
     const s = byCampaign.get(String(r.campaign?.id)), k = r.adGroupCriterion?.keyword;
     if (!s || !k?.text) continue;
-    const g = String(r.adGroup?.id || '');
-    (s.negativas_grupo[g] ||= []).push({ texto: k.text, tipo: k.matchType || '' });
+    (s.negativas_grupo[String(r.adGroup?.id || '')] ||= []).push({ texto: k.text, tipo: k.matchType || '' });
+  }
+  for (const r of audiences || []) {
+    const s = byCampaign.get(String(r.campaign?.id)), c = r.adGroupCriterion || {};
+    if (!s) continue;
+    (s.publicos_grupo![String(r.adGroup?.id || '')] ||= []).push({ tipo: c.type, faixa: c.ageRange?.type || c.gender?.type || c.incomeRange?.type || '', ajuste: pct(c.bidModifier), excluido: !!c.negative });
   }
   for (const r of goalConfig || []) {
     const s = byCampaign.get(String(r.campaign?.id)), cfg = r.conversionGoalCampaignConfig;

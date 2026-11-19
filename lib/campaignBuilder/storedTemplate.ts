@@ -17,7 +17,7 @@ import type { CampaignSettings } from '@/lib/googleAds/settings';
  * A configuração (idiomas, negativas, locais configurados, aparelhos, horários, redes, rastreamento e
  * meta de conversão) vem da linha level = 'campaign' (lib/googleAds/settings), gravada desde 19/11/2026.
  * Campanha sem essa linha vai pelo padrão do criador (inglês, só Pesquisa, sem negativas nem horários)
- * e os países onde apareceu. Públicos não são copiados. Cada falta vira um aviso para conferir.
+ * e os países onde apareceu. Cada falta vira um aviso para conferir.
  */
 
 const PAGE = 1000;
@@ -82,7 +82,7 @@ export async function storedTemplate(userId: string, productId: string): Promise
   const locais = cfg?.locais?.length ? cfg.locais
     : [...byCountry].sort((a, b) => b[1].i - a[1].i).map(([id, c]) => ({ id, nome: c.nome, excluido: false, ajuste: 0 }));
   if (cfg) {
-    avisos.push('Idiomas, negativas, locais, horários e redes vêm da configuração guardada na última coleta. Os públicos (idade, gênero, renda) não são copiados.');
+    avisos.push('Idiomas, negativas, locais, horários e redes vêm da configuração guardada na última coleta.');
   } else {
     avisos.push(locais.length
       ? `Países: entram os ${locais.length} em que a campanha apareceu nos últimos 60 dias em que rodou. Confira se falta algum.`
@@ -127,7 +127,7 @@ export async function storedTemplate(userId: string, productId: string): Promise
   for (const g of groups) {
     byGroup.set(String(g.entity_id), {
       id: String(g.entity_id), nome: g.name || '', status: g.status || '',
-      meta_cpa: money(g.details?.target_cpa), palavras: [], negativas: cfg?.negativas_grupo?.[String(g.entity_id)] || [], publicos: [], anuncios: [],
+      meta_cpa: money(g.details?.target_cpa), palavras: [], negativas: cfg?.negativas_grupo?.[String(g.entity_id)] || [], publicos: cfg?.publicos_grupo?.[String(g.entity_id)] || [], anuncios: [],
     });
   }
   for (const e of entities) {
