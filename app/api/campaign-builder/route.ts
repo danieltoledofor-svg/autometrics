@@ -191,8 +191,8 @@ export async function GET(request: Request) {
   if (q.get('contas')) {
     // Conta suspensa ou cancelada não recebe campanha: fica fora da lista.
     const [{ data: accounts }, { data: running }] = await Promise.all([
-      db.from('google_ads_accounts').select('customer_id, login_customer_id, connection_id, name, mcc_name, status, currency_code').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
-      db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name, status, mcc_name, google_status, google_status_date').eq('user_id', user.id).not('google_ads_customer_id', 'is', null).limit(5000),
+      db.from('google_ads_accounts').select('customer_id, login_customer_id, connection_id, name, mcc_name, status, currency_code, created_at').eq('user_id', user.id).eq('status', 'ENABLED').order('mcc_name').order('name').limit(2000),
+      db.from('products').select('google_ads_customer_id, google_ads_campaign_name, name, status, mcc_name, google_status, google_status_date, created_at').eq('user_id', user.id).not('google_ads_customer_id', 'is', null).limit(5000),
     ]);
     // A lista da MCC às vezes ainda dá como ativa uma conta que o Google já suspendeu; as campanhas
     // dela, lidas de dentro da conta, já dizem. Conta com campanha marcada como conta suspensa ou
@@ -202,8 +202,14 @@ export async function GET(request: Request) {
     // E a MCC como aparece na tela de Campanhas: uma conta que o Google também entrega por outro
     // gerenciador (ou direto) fica guardada com o nome desse outro, e sumiria do grupo certo.
     const active = new Map<string, string[]>(), mccOf = new Map<string, string>();
+    // Idade da conta: o Google não informa quando a conta foi criada. Vale o mais antigo entre a
+    // primeira campanha dela no Autometrics e o dia em que a conta foi ligada. Conta mais antiga
+    // já passou da verificação e já teve testes: aparece primeiro dentro da MCC.
+    const since = new Map<string, string>();
+    for (const a of accounts || []) if (a.created_at) since.set(a.customer_id, a.created_at);
     for (const p of running || []) {
       const id = String(p.google_ads_customer_id).replace(/\D/g, '');
+      if (p.created_at && (!since.has(id) || p.created_at < since.get(id)!)) since.set(id, p.created_at);
       if (p.mcc_name && !mccOf.has(id)) mccOf.set(id, p.mcc_name);
       if (p.status !== 'active') continue;
       if (!active.has(id)) active.set(id, []);
@@ -226,7 +232,9 @@ export async function GET(request: Request) {
     const hiddenInGoogle = await hiddenAccounts(user.id, accounts || []).catch(() => ({ ids: new Set<string>(), calls: 0 }));
     if (hiddenInGoogle.calls) await addUsage(hiddenInGoogle.calls).catch(() => {});
     const usable = (accounts || []).filter(a => !blocked.has(a.customer_id));
-    const visible = usable.filter(a => !hiddenInGoogle.ids.has(a.customer_id));
+    const visible = usable.filter(a => !hiddenInGoogle.ids.has(a.customer_id))
+      .sort((x, y) => (since.get(x.customer_id) || '9999').localeCompare(since.get(y.customer_id) || '9999')
+        || String(x.name || '').localeCompare(String(y.name || ''), 'pt-BR', { numeric: true }));
     return NextResponse.json({
       allowed: true,
       hidden_in_google: usable.length - visible.length,
