@@ -104,6 +104,8 @@ export interface Offer {
   garantia_dias?: number | null;
   oficial?: boolean;
   variacoes: number[];
+  /** Palavras-chave da campanha (sem os sinais de correspondência). */
+  palavras?: string[];
 }
 
 /** O que a IA do topo de funil recebe além da página. */
@@ -131,7 +133,38 @@ export interface Rewrite { direcao: string; titulos: string[]; descricoes: strin
 
 export interface Item { texto: string; pt: string; bloco?: string; grupo?: string }
 export interface Sitelink { tema: string; texto: Item; desc1: Item; desc2: Item }
-export interface ResourcePack { funnel: Funnel; titulos: Item[]; descricoes: Item[]; sitelinks: Sitelink[]; destaques: Item[]; descartados: number }
+/** Quantos itens de cada tipo usam alguma palavra-chave da campanha, contado por código: [com palavra-chave, total]. */
+export interface Coverage { titulos: [number, number]; descricoes: [number, number]; sitelinks: [number, number]; destaques: [number, number] }
+export interface ResourcePack { funnel: Funnel; titulos: Item[]; descricoes: Item[]; sitelinks: Sitelink[]; destaques: Item[]; descartados: number; cobertura?: Coverage | null }
+
+const plain = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+const SMALL = new Set(['the', 'and', 'for', 'with', 'how', 'what', 'you', 'your', 'que', 'com', 'para', 'por', 'como', 'dos', 'das', 'uma', 'del', 'los', 'las', 'con', 'une', 'des', 'les', 'pour', 'avec', 'und', 'der', 'die', 'das', 'mit']);
+const stem = (w: string) => w.replace(/(es|s)$/, '');
+
+/**
+ * Um texto usa a palavra-chave quando traz a frase inteira ou, nas de várias
+ * palavras, pelo menos duas das palavras que importam (plural não conta).
+ */
+export function usesKeyword(text: string, keyword: string): boolean {
+  const t = ` ${plain(text)} `, k = plain(keyword);
+  if (!k) return false;
+  if (t.includes(` ${k} `)) return true;
+  const words = [...new Set(k.split(' ').filter(w => w.length >= 3 && !SMALL.has(w)).map(stem))];
+  if (!words.length) return false;
+  const have = new Set(t.trim().split(' ').map(stem));
+  return words.filter(w => have.has(w)).length >= Math.min(2, words.length);
+}
+
+export function coverageOf(p: Pick<ResourcePack, 'titulos' | 'descricoes' | 'sitelinks' | 'destaques'>, keywords?: string[]): Coverage | null {
+  const list = (keywords || []).filter(Boolean);
+  if (!list.length) return null;
+  const hit = (t: string) => list.some(k => usesKeyword(t, k));
+  const of = (items: string[]): [number, number] => [items.filter(hit).length, items.length];
+  return {
+    titulos: of(p.titulos.map(i => i.texto)), descricoes: of(p.descricoes.map(i => i.texto)),
+    sitelinks: of(p.sitelinks.map(s => `${s.texto.texto} ${s.desc1.texto} ${s.desc2.texto}`)), destaques: of(p.destaques.map(i => i.texto)),
+  };
+}
 
 // ── Regras fixas do usuário, nos dois modelos ───────────────────────────────
 
@@ -148,6 +181,14 @@ const FIXED_RULES = `Regras fixas, sem exceção:
 - Cada item vem em par: "texto" no idioma do anúncio e "pt" com a tradução em português do Brasil. Nunca misture idiomas no "texto". Nunca traduza o nome do produto.
 - Respeite os limites de letras de cada formato, contando espaços e símbolos. Na dúvida, escreva mais curto.
 - Nada de frase repetida nem de duas frases que só trocam uma palavra.`;
+
+const KEYWORDS_RULE = `Palavras-chave da campanha (quando vierem no pedido, são elas que mandam; os termos que já converteram são só apoio):
+- O anúncio aparece para quem busca essas palavras-chave, então o texto tem de responder a elas com as mesmas palavras. Escreva a palavra-chave quase igual (pode mudar plural, ordem ou completar a frase; nunca o sentido) e sem os sinais [ ] ou " ".
+- Pelo menos 2 de cada 3 títulos trazem uma palavra-chave. No campo "grupo" do título, escreva a palavra-chave que ele atende.
+- Toda descrição usa uma palavra-chave na primeira frase.
+- Cada sitelink responde a uma palavra-chave ou a um grupo delas: o texto do link ou as linhas de descrição trazem as palavras dela.
+- Pelo menos metade das frases de destaque usa palavras das palavras-chave.
+- Distribua por todas as palavras-chave, com mais peso nas primeiras; não fique só em uma. Palavra-chave que cita remédio pelo nome ou causa/"por quê" continua proibida no texto: use o assunto dela sem essas palavras.`;
 
 const OUTPUT = `Responda só com JSON, neste formato:
 {"titulos": [{"bloco": "nome do bloco", "grupo": "grupo de busca, se houver", "texto": "...", "pt": "..."}],
@@ -199,6 +240,8 @@ ${titles}
 
 ${limitsText(f)}
 
+${KEYWORDS_RULE}
+
 ${FIXED_RULES}
 
 ${OUTPUT}`;
@@ -214,6 +257,7 @@ export function userForOffer(o: Offer): string {
     line('FRETE', o.frete === 'gratis' ? 'grátis' : o.frete ? `envio ${o.frete}` : ''),
     line('GARANTIA', o.garantia_dias ? `${o.garantia_dias} dias` : ''), line('SITE OFICIAL', o.oficial ? 'sim' : ''),
     `TONS PEDIDOS:\n${tones.join('\n')}`,
+    `PALAVRAS-CHAVE DA CAMPANHA (o anúncio tem de responder a elas):\n${(o.palavras || []).slice(0, 60).join(' · ') || '(não informadas)'}`,
   ].join('\n');
 }
 
@@ -222,8 +266,8 @@ export function userForTop(c: TopContext): string {
   const groups = c.grupos.slice(0, 8).map((g, i) => `${i + 1}. ${g.nome}: ${g.termos.slice(0, 8).join(' · ')}`);
   return [
     `IDIOMA DO ANÚNCIO: ${c.idioma}`, `PAÍS: ${c.pais}`,
-    `GRUPOS DE BUSCA (do mais importante para o menos):\n${groups.join('\n') || '(não vieram separados: monte você de 3 a 6 grupos pela intenção de quem busca, a partir das palavras-chave e dos termos abaixo)'}`,
-    `PALAVRAS-CHAVE DA CAMPANHA:\n${(c.palavras || []).slice(0, 30).join(' · ') || '(não informadas)'}`,
+    `GRUPOS DE BUSCA (do mais importante para o menos):\n${groups.join('\n') || '(não vieram separados: monte você de 3 a 6 grupos pela intenção de quem busca a partir das PALAVRAS-CHAVE DA CAMPANHA; os termos que converteram só completam os grupos, e só viram grupo próprio se não houver palavra-chave)'}`,
+    `PALAVRAS-CHAVE DA CAMPANHA (o anúncio tem de responder a elas; da mais importante para a menos):\n${(c.palavras || []).slice(0, 60).join(' · ') || '(não informadas)'}`,
     `TERMOS DE PESQUISA QUE MAIS CONVERTERAM EM CAMPANHAS PARECIDAS:\n${(c.termos || []).slice(0, 40).join(' · ') || '(sem histórico)'}`,
     `PÁGINA (código-fonte, separado em blocos: cabeçalho, dados declarados, texto, botões, imagens):\n${String(c.pagina || '(não enviada)').slice(0, 16000)}`,
     `VSL (transcrição completa):\n${String(c.vsl || '(não enviada)')}`,

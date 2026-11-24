@@ -1,6 +1,6 @@
 import { askJson } from '@/lib/ai/openrouter';
 import { writingMemoryFor } from '@/lib/analysis/userMemory';
-import { extrasFor, review, systemFor, userForOffer, userForTop, type Funnel, type Item, type Offer, type ResourcePack, type Rewrite, type TopContext } from './rules';
+import { coverageOf, extrasFor, review, systemFor, userForOffer, userForTop, type Funnel, type Item, type Offer, type ResourcePack, type Rewrite, type TopContext } from './rules';
 
 /**
  * A parte que chama a IA para escrever os recursos (só no servidor). As regras,
@@ -34,7 +34,7 @@ export async function generateResources(ids: { userId: string; productId?: strin
     for (const s of second.good.sitelinks) if (!themes.has(s.texto.texto.toLowerCase())) good.sitelinks.push(s);
     discarded = Math.max(0, first.bad.length - (second.good.titulos.length + second.good.descricoes.length + second.good.destaques.length + second.good.sitelinks.length));
   }
-  return { funnel: f, ...good, descartados: discarded };
+  return { funnel: f, ...good, descartados: discarded, cobertura: coverageOf(good, input.palavras) };
 }
 
 // ── Leitura da página do produto (fundo de funil) ───────────────────────────

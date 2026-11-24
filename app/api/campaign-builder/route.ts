@@ -463,6 +463,7 @@ export async function POST(request: Request) {
           desconto_valor: text(o.desconto_valor, 30), desconto_pct: text(o.desconto_pct, 10),
           frete: ['gratis', 'rapido', 'imediato', 'expresso'].includes(o.frete) ? o.frete : '', garantia_dias: Number(o.garantia_dias) > 0 ? Math.round(Number(o.garantia_dias)) : null,
           oficial: o.oficial === true, variacoes: (Array.isArray(o.variacoes) ? o.variacoes : [0]).map(Number).filter((n: number) => n >= 0 && n <= 9).slice(0, 9),
+          palavras: strings(o.palavras, 60, 80),
         };
         return NextResponse.json({ pack: await generateResources({ userId: user.id }, 'fundo', offer, rewrite) });
       }
@@ -475,7 +476,7 @@ export async function POST(request: Request) {
         page_read: !!page,
         pack: await generateResources({ userId: user.id }, 'topo', {
           idioma: text(t.idioma, 40) || 'inglês', pais: text(t.pais, 60) || 'Estados Unidos', grupos: [],
-          palavras: list(t.palavras, 30), termos: list(t.termos, 40), pagina: page, vsl: text(t.vsl, VSL_MAX),
+          palavras: list(t.palavras, 60), termos: list(t.termos, 40), pagina: page, vsl: text(t.vsl, VSL_MAX),
           angulos: (Array.isArray(t.angulos) ? t.angulos : []).map(Number).filter((k: number) => TOP_ANGLES[k]).slice(0, 9),
           modelos: { copiar: (Array.isArray(m.copiar) ? m.copiar : []).slice(0, 6).map(model), evitar: (Array.isArray(m.evitar) ? m.evitar : []).slice(0, 4).map(model) },
         }, rewrite),

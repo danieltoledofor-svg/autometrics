@@ -138,10 +138,12 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
       direcao: direction.trim(), titulos: pack.titulos.map(t => t.texto), descricoes: pack.descricoes.map(t => t.texto),
       escolhidos: [...draft.anuncio.titulos, ...draft.anuncio.descricoes].filter(Boolean),
     } : undefined;
+    // As palavras-chave vão sem os sinais de correspondência: a IA escreve o texto delas, não [exata] ou "frase".
+    const palavras = [...new Set(draft.palavras.map(k => k.texto.trim()).filter(Boolean))];
     const payload = draft.funil === 'fundo'
-      ? { action: 'recursos', funil: 'fundo', oferta: { ...o, idioma: draft.ia.idioma, pais: draft.ia.pais }, reescrita }
+      ? { action: 'recursos', funil: 'fundo', oferta: { ...o, idioma: draft.ia.idioma, pais: draft.ia.pais, palavras }, reescrita }
       : { action: 'recursos', funil: 'topo', reescrita, topo: {
-        url: draft.ia.url, fonte: source, idioma: draft.ia.idioma, pais: draft.ia.pais, vsl: draft.ia.vsl, palavras: draft.palavras.map(keyword), termos: (similar?.termos || []).map(t => t.texto),
+        url: draft.ia.url, fonte: source, idioma: draft.ia.idioma, pais: draft.ia.pais, vsl: draft.ia.vsl, palavras, termos: (similar?.termos || []).map(t => t.texto),
         angulos: draft.ia.angulos || [0], modelos: sweep ? { copiar: sweep.copiar.map(asModel), evitar: sweep.evitar.map(asModel) } : undefined,
       } };
     const { ok, body } = await api('/api/campaign-builder', payload);
@@ -287,7 +289,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
       </Block>
 
       <Block css={css} title={`Recursos escritos pela IA · ${draft.funil === 'fundo' ? 'fundo de funil' : 'topo de funil'}`}
-        hint={draft.funil === 'fundo' ? 'A página é lida pelo código-fonte, para achar preço, garantia e frete mesmo quando não estão no texto. A IA usa só os valores abaixo: o que ficar em branco não entra no anúncio e nada é calculado. Cada pedido é uma consulta paga à IA (poucos centavos).' : 'A IA lê o código-fonte da página, a transcrição da VSL, as palavras-chave, os termos que mais converteram nas campanhas parecidas (busque acima antes), os anúncios do mesmo mecanismo e o que você guardou na memória dela. Cada pedido é uma consulta paga à IA (poucos centavos).'}>
+        hint={draft.funil === 'fundo' ? 'A página é lida pelo código-fonte, e os recursos são escritos para responder às palavras-chave da campanha, para achar preço, garantia e frete mesmo quando não estão no texto. A IA usa só os valores abaixo: o que ficar em branco não entra no anúncio e nada é calculado. Cada pedido é uma consulta paga à IA (poucos centavos).' : 'A IA lê o código-fonte da página, a transcrição da VSL, as palavras-chave da campanha (títulos, descrições, sitelinks e frases são escritos para responder a elas), os termos que mais converteram nas campanhas parecidas (busque acima antes), os anúncios do mesmo mecanismo e o que você guardou na memória dela. Cada pedido é uma consulta paga à IA (poucos centavos).'}>
         <div className="flex gap-2">
           <input value={draft.ia.url} onChange={e => setIa({ url: e.target.value })} placeholder={draft.funil === 'fundo' ? 'Página do produto: https://…' : 'Página do anúncio: https://…'} aria-label="Página para a IA ler" className={`flex-1 ${field}`} />
           {draft.funil === 'fundo' && <button onClick={readOffer} disabled={busy !== '' || !/^https?:\/\//i.test(draft.ia.url.trim())} className={`px-3 rounded-lg border ${line} text-xs font-medium ${muted} hover:text-ink disabled:opacity-40 inline-flex items-center gap-1.5`}>{busy === 'oferta' && <Loader2 size={12} aria-hidden="true" className="animate-spin" />} Ler a página</button>}
@@ -432,6 +434,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
           <button onClick={() => generate()} disabled={busy !== '' || (draft.funil === 'fundo' && !String(o.produto || '').trim())} className={solid}>{busy === 'recursos' ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Sparkles size={13} aria-hidden="true" />} {pack ? 'Gerar de novo' : 'Gerar recursos'}</button>
           {busy === 'recursos' && <span className={`text-xs ${muted}`}>A IA está escrevendo e as letras estão sendo conferidas; leva até um minuto.</span>}
           {pack && busy === '' && <span className={`text-xs ${muted}`}>{pack.titulos.length} títulos, {pack.descricoes.length} descrições, {pack.sitelinks.length} sitelinks e {pack.destaques.length} frases{pack.descartados ? ` · ${pack.descartados} fora da regra foram descartados` : ''}</span>}
+          {pack?.cobertura && busy === '' && <span className={`text-xs ${muted}`} title="Contado pelo Autometrics: o item traz a palavra-chave inteira ou duas das palavras dela.">Usam suas palavras-chave: {pack.cobertura.titulos[0]}/{pack.cobertura.titulos[1]} títulos · {pack.cobertura.descricoes[0]}/{pack.cobertura.descricoes[1]} descrições · {pack.cobertura.sitelinks[0]}/{pack.cobertura.sitelinks[1]} sitelinks · {pack.cobertura.destaques[0]}/{pack.cobertura.destaques[1]} frases</span>}
         </div>
         {error && <div className="text-xs text-neg">{error}</div>}
         {pack && (
