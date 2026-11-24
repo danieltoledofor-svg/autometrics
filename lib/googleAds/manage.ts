@@ -102,6 +102,39 @@ export async function changeKeywordMatch(ctx: AdsContext, campaignId: string, en
   return { before: keywordLabel(text, old.keyword?.matchType), label: keywordLabel(text, match), text, key, status: create.status as string, group: group.name, calls: 4 };
 }
 
+/**
+ * As palavras-chave de cada grupo da campanha (ativas e pausadas), com o que cada uma fez nos últimos 30 dias:
+ * é de onde a tela copia para um grupo novo.
+ */
+export async function readGroupKeywords(ctx: AdsContext, campaignId: string) {
+  const id = Number(campaignId);
+  const [rows, numbers] = await Promise.all([
+    search(ctx, `
+      SELECT ad_group.id, ad_group.name, ad_group.status, ad_group_criterion.criterion_id, ad_group_criterion.status, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type
+      FROM ad_group_criterion
+      WHERE campaign.id = ${id} AND ad_group.status != 'REMOVED' AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'`),
+    search(ctx, `
+      SELECT ad_group.id, ad_group_criterion.criterion_id, metrics.clicks, metrics.conversions, metrics.cost_micros
+      FROM keyword_view WHERE campaign.id = ${id} AND segments.date DURING LAST_30_DAYS`).catch(() => [] as any[]),
+  ]);
+  const stat = new Map<string, { cliques: number; conversoes: number; custo: number }>();
+  for (const r of numbers) {
+    const k = `${r.adGroup?.id}~${r.adGroupCriterion?.criterionId}`, m = r.metrics || {}, s = stat.get(k) || { cliques: 0, conversoes: 0, custo: 0 };
+    stat.set(k, { cliques: s.cliques + Number(m.clicks || 0), conversoes: s.conversoes + Number(m.conversions || 0), custo: s.custo + Number(m.costMicros || 0) / 1e6 });
+  }
+  const groups = new Map<string, { id: string; nome: string; status: string; palavras: { texto: string; tipo: Match; status: string; cliques: number; conversoes: number; custo: number }[] }>();
+  for (const r of rows) {
+    const g = r.adGroup || {}, c = r.adGroupCriterion || {};
+    if (!g.id || !c.keyword?.text) continue;
+    const entry = groups.get(String(g.id)) || { id: String(g.id), nome: String(g.name || `Grupo ${g.id}`), status: String(g.status || ''), palavras: [] };
+    entry.palavras.push({ texto: String(c.keyword.text), tipo: (MATCH.has(c.keyword.matchType) ? c.keyword.matchType : 'BROAD') as Match, status: String(c.status || ''),
+      ...(stat.get(`${g.id}~${c.criterionId}`) || { cliques: 0, conversoes: 0, custo: 0 }) });
+    groups.set(String(g.id), entry);
+  }
+  for (const g of groups.values()) g.palavras.sort((a, b) => b.conversoes - a.conversoes || b.cliques - a.cliques || a.texto.localeCompare(b.texto));
+  return { groups: [...groups.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')), calls: 2 };
+}
+
 // ── Grupos de anúncios ──────────────────────────────────────────────────────
 
 export async function setGroupStatus(ctx: AdsContext, campaignId: string, groupId: string, status: 'PAUSED' | 'ENABLED') {
@@ -126,14 +159,48 @@ export async function renameGroup(ctx: AdsContext, campaignId: string, groupId: 
   return { before: group.name, label: name, calls: 3 };
 }
 
+export interface GroupKeyword { text: string; match: Match }
+export interface GroupAsset { tipo: 'sitelink' | 'destaque'; texto: string; desc1?: string; desc2?: string; url?: string }
+
+/** O que impede uma palavra-chave de entrar: tamanho, número de palavras e símbolos. */
+function keywordProblem(t: string): string | null {
+  return count(t) > 80 || t.split(' ').length > 10 || /[!@%^*()={};~`<>?\\|]/.test(t) ? `"${t.slice(0, 40)}": a palavra-chave tem até 80 letras e 10 palavras, sem símbolos como ! @ % * ( ).` : null;
+}
+/** O que impede um sitelink ou uma frase de destaque de entrar. */
+function assetProblem(a: GroupAsset): string | null {
+  const text = clean(a.texto), d1 = clean(a.desc1), d2 = clean(a.desc2), link = a.tipo === 'sitelink';
+  if (!text || count(text) > 25) return `"${text.slice(0, 30)}": o texto ${link ? 'do sitelink' : 'da frase de destaque'} tem de 1 a 25 letras.`;
+  if (!link) return null;
+  if (!!d1 !== !!d2) return `Sitelink "${text}": as duas linhas de descrição vão juntas (ou nenhuma).`;
+  if (count(d1) > 35 || count(d2) > 35) return `Sitelink "${text}": cada linha de descrição tem até 35 letras.`;
+  if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(clean(a.url))) return `Sitelink "${text}": a página precisa começar com https://`;
+  return null;
+}
+
 /**
- * Grupo novo na campanha. Com `copyFrom`, leva junto as palavras-chave (ativas e pausadas, como estão), as
- * negativas do grupo e os anúncios de pesquisa responsivos que não foram removidos. A meta de CPA é a informada,
- * ou a do grupo copiado quando nada é informado; em branco, o grupo segue a meta da campanha.
+ * Grupo novo na campanha. Sem `copyFrom`, o grupo nasce já com as palavras-chave (pelo menos uma) e o anúncio
+ * informados, e com os sitelinks e frases de destaque escolhidos, ligados só a este grupo: tudo num pedido só,
+ * que entra inteiro ou não entra. Com `copyFrom`, leva junto as palavras-chave (ativas e pausadas, como estão),
+ * as negativas do grupo e os anúncios de pesquisa responsivos que não foram removidos. A meta de CPA é a
+ * informada, ou a do grupo copiado quando nada é informado; em branco, o grupo segue a meta da campanha.
  */
-export async function createGroup(ctx: AdsContext, campaignId: string, input: { name: string; target?: number | null; copyFrom?: string; paused?: boolean }) {
+export async function createGroup(ctx: AdsContext, campaignId: string, input: { name: string; target?: number | null; copyFrom?: string; paused?: boolean; keywords?: GroupKeyword[]; ad?: AdInput | null; assets?: GroupAsset[] }) {
   const name = clean(input.name);
   if (!name || count(name) > 255) throw new Error('Dê um nome ao grupo.');
+  const ownKeywords = [...new Map((input.keywords || []).map(k => ({ text: clean(k.text), match: MATCH.has(k.match) ? k.match : 'PHRASE' as Match }))
+    .filter(k => k.text).map(k => [`${k.text.toLowerCase()}|${k.match}`, k])).values()];
+  const ownAssets = (input.assets || []).filter(a => clean(a.texto)).slice(0, 40);
+  if (!input.copyFrom) {
+    if (!ownKeywords.length) throw new Error('O grupo novo precisa de pelo menos uma palavra-chave.');
+    if (ownKeywords.length > 200) throw new Error('No máximo 200 palavras-chave no grupo novo.');
+    for (const k of ownKeywords) { const p = keywordProblem(k.text); if (p) throw new Error(p); }
+    if (!input.ad) throw new Error('O grupo novo precisa de um anúncio.');
+    const p = adProblem(input.ad);
+    if (p) throw new Error(p);
+    for (const a of ownAssets) { const q = assetProblem(a); if (q) throw new Error(q); }
+    const seen = new Set<string>();
+    for (const a of ownAssets) { const k = `${a.tipo}|${clean(a.texto).toLowerCase()}`; if (seen.has(k)) throw new Error(`"${clean(a.texto)}" aparece duas vezes.`); seen.add(k); }
+  }
   const cid = ctx.customerId, id = Number(campaignId);
   let calls = 1;
   const groups = await search(ctx, `SELECT ad_group.id, ad_group.name, ad_group.type, ad_group.target_cpa_micros, campaign.bidding_strategy_type FROM ad_group WHERE campaign.id = ${id} AND ad_group.status != 'REMOVED'`);
@@ -182,10 +249,41 @@ export async function createGroup(ctx: AdsContext, campaignId: string, input: { 
       ads++;
     }
   }
+  let titles: string[] = [], descs: string[] = [], sitelinks = 0, callouts = 0;
+  if (!source && input.ad) {
+    for (const k of ownKeywords) operations.push({ adGroupCriterionOperation: { create: { adGroup: group, status: 'ENABLED', keyword: { text: k.text, matchType: k.match } } } });
+    keywords = ownKeywords.length;
+    const ad = input.ad;
+    titles = ad.titulos.map(clean).filter(Boolean); descs = ad.descricoes.map(clean).filter(Boolean);
+    operations.push({ adGroupAdOperation: { create: { adGroup: group, status: 'ENABLED', ad: {
+      finalUrls: [clean(ad.url)],
+      responsiveSearchAd: {
+        headlines: titles.map(text => ({ text })), descriptions: descs.map(text => ({ text })),
+        ...(ad.caminho1 ? { path1: ad.caminho1 } : {}), ...(ad.caminho1 && ad.caminho2 ? { path2: ad.caminho2 } : {}),
+      },
+    } } } });
+    ads = 1;
+    ownAssets.forEach((a, i) => {
+      const asset = `customers/${cid}/assets/-${i + 10}`, link = a.tipo === 'sitelink';
+      const text = clean(a.texto), d1 = clean(a.desc1), d2 = clean(a.desc2);
+      operations.push({ assetOperation: { create: link
+        ? { resourceName: asset, finalUrls: [clean(a.url)], sitelinkAsset: { linkText: text, ...(d1 && d2 ? { description1: d1, description2: d2 } : {}) } }
+        : { resourceName: asset, calloutAsset: { calloutText: text } } } });
+      operations.push({ adGroupAssetOperation: { create: { adGroup: group, asset, fieldType: link ? 'SITELINK' : 'CALLOUT' } } });
+      if (link) sitelinks++; else callouts++;
+    });
+  }
   const results = await both(ctx, operations);
   calls += operations.length * 2;
   const created = results.map(r => r.adGroupResult?.resourceName).find(Boolean) as string | undefined;
-  return { label: name, group_id: created ? created.split('/').pop()! : null, keywords, ads, copied: source ? String(source.name) : null, target: target && usesCpa ? target : null, calls };
+  // "grupo~palavra" e "grupo~anúncio", como a tela identifica cada um.
+  const keyOf = (r: string | undefined) => String(r || '').split('/').pop() || '';
+  const keywordKeys = results.map(r => keyOf(r.adGroupCriterionResult?.resourceName)).filter(k => /^\d+~\d+$/.test(k));
+  const adKey = results.map(r => keyOf(r.adGroupAdResult?.resourceName)).find(k => /^\d+~\d+$/.test(k)) || null;
+  return {
+    label: name, group_id: created ? created.split('/').pop()! : null, keywords, ads, sitelinks, callouts, copied: source ? String(source.name) : null, target: target && usesCpa ? target : null, calls,
+    created_keywords: !source ? ownKeywords.map((k, i) => ({ ...k, key: keywordKeys[i] || '' })) : [], ad: adKey, titles, descs,
+  };
 }
 
 // ── Anúncios ────────────────────────────────────────────────────────────────

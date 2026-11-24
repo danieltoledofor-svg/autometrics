@@ -6,6 +6,7 @@ import { Loader2, Plus, X } from 'lucide-react';
 import type { Ui } from '@/app/components/metrics/ColumnPicker';
 import { SweepPicker, type PickKind } from '@/app/components/SweepPicker';
 import { currentPages, planOf, validPage, type PagePlace } from '@/lib/googleAds/pageUrl';
+import { AiWriter, KeywordsField, parseKeywords, keywordProblem, type AssetPick, type Match } from './NewGroupParts';
 
 /**
  * Montagem da campanha pelas abas (grupos, anúncios, palavras-chave, termos e
@@ -102,10 +103,109 @@ const GroupSelect = ({ groups, value, onChange, cls }: { groups: ManageGroup[]; 
   </select>
 );
 
+/** Põe o texto no lugar de `atual`, ou na primeira vaga livre. Sem vaga, devolve null. */
+function placeIn(list: string[], text: string, atual?: string): string[] | null {
+  let at = atual ? list.findIndex(t => t.trim().toLowerCase() === atual.trim().toLowerCase()) : -1;
+  if (at < 0) at = list.findIndex(t => !t.trim());
+  return at < 0 ? null : list.map((x, j) => (j === at ? text : x));
+}
+/** Clicar num texto que já está no anúncio tira; senão põe na primeira vaga livre. */
+function toggleIn(list: string[], text: string): string[] | null {
+  const at = list.findIndex(t => t.trim().toLowerCase() === text.trim().toLowerCase());
+  return at >= 0 ? list.map((x, j) => (j === at ? '' : x)) : placeIn(list, text);
+}
+/** Preenche as vagas vazias com os textos que ainda não estão no anúncio, na ordem. */
+function fillEmpty(list: string[], candidates: string[]): string[] {
+  const have = new Set(list.map(t => t.trim().toLowerCase()).filter(Boolean));
+  const queue = candidates.filter(t => !have.has(t.trim().toLowerCase()));
+  return list.map(x => (x.trim() ? x : queue.shift() || ''));
+}
+
+/** A página e os caminhos do anúncio ativo mais comum da campanha: é o ponto de partida de um anúncio novo. */
+function useUsualAd(manage: Manage, productId: string, enabled: boolean) {
+  const [usual, setUsual] = useState<{ url: string; caminho1: string; caminho2: string } | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    manage.call(`/api/google-ads/manage?product_id=${productId}&ver=anuncios`).then(({ ok, body }) => {
+      const ads: any[] = ok && Array.isArray(body.ads) ? body.ads.filter((a: any) => a.url) : [];
+      if (!ads.length) return;
+      const pool = ads.some(a => a.status === 'ENABLED') ? ads.filter(a => a.status === 'ENABLED') : ads;
+      const tally = new Map<string, number>();
+      for (const a of pool) tally.set(a.url, (tally.get(a.url) || 0) + 1);
+      const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const ad = pool.find(a => a.url === best);
+      setUsual({ url: best, caminho1: ad?.caminho1 || '', caminho2: ad?.caminho2 || '' });
+    });
+  }, [enabled, productId]); // eslint-disable-line react-hooks/exhaustive-deps
+  return usual;
+}
+
+/** Títulos, descrições, página e caminhos do anúncio, com a varredura das campanhas parecidas. */
+function AdFields({ manage, ui, campaignName, titles, setTitles, descs, setDescs, url, setUrl, path1, setPath1, path2, setPath2, onToggle, stat }: {
+  manage: Manage; ui: Ui; campaignName?: string;
+  titles: string[]; setTitles: (l: string[]) => void; descs: string[]; setDescs: (l: string[]) => void;
+  url: string; setUrl: (v: string) => void; path1: string; setPath1: (v: string) => void; path2: string; setPath2: (v: string) => void;
+  onToggle: (kind: 'titulo' | 'descricao', text: string) => void; stat?: (text: string) => React.ReactNode;
+}) {
+  const s = styles(ui);
+  const filledTitles = titles.filter(t => t.trim()), filledDescs = descs.filter(t => t.trim());
+  const set = (list: string[], apply: (l: string[]) => void, i: number, v: string) => apply(list.map((x, j) => (j === i ? v : x)));
+  const counter = (text: string, max: number) => <span className={`text-[11px] tabular-nums w-10 text-right flex-shrink-0 ${count(text) > max ? 'text-neg font-medium' : ui.textMuted}`}>{count(text)}/{max}</span>;
+  const freeSlot = (kind: PickKind) => !(kind === 'titulo' ? titles : descs).some(t => !t.trim());
+  return (
+    <>
+      <SweepPicker api={manage.call} initial={tagOf(campaignName)} kinds="textos" symbol={symbolOf(manage.currency)}
+        isOn={(kind, text) => (kind === 'titulo' ? titles : descs).some(t => t.trim().toLowerCase() === text.toLowerCase())}
+        full={freeSlot} onPick={(kind, item) => onToggle(kind as 'titulo' | 'descricao', item.texto)} />
+      <div className="grid lg:grid-cols-2 gap-x-6 gap-y-3">
+        <div className="space-y-1.5">
+          <div className={`text-xs font-medium ${ui.textHead}`}>Títulos ({filledTitles.length} de 15, mínimo 3)</div>
+          {titles.map((t, i) => (
+            <div key={i}>
+              <div className="flex items-center gap-2">
+                <input value={t} onChange={e => set(titles, setTitles, i, e.target.value)} placeholder={`Título ${i + 1}`} aria-label={`Título ${i + 1}`} className={`${s.input} flex-1 min-w-0`} />{counter(t, 30)}
+              </div>
+              {stat?.(t)}
+            </div>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          <div className={`text-xs font-medium ${ui.textHead}`}>Descrições ({filledDescs.length} de 4, mínimo 2)</div>
+          {descs.map((t, i) => (
+            <div key={i}>
+              <div className="flex items-start gap-2">
+                <textarea value={t} onChange={e => set(descs, setDescs, i, e.target.value)} rows={2} placeholder={`Descrição ${i + 1}`} aria-label={`Descrição ${i + 1}`} className={`${s.input} flex-1 min-w-0`} />{counter(t, 90)}
+              </div>
+              {stat?.(t)}
+            </div>
+          ))}
+          <div className={`text-xs font-medium pt-2 ${ui.textHead}`}>Página do anúncio</div>
+          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://… (com os parâmetros de rastreamento)" aria-label="Página do anúncio" className={`${s.input} w-full`} />
+          <div className="flex items-center gap-2">
+            <span className={`text-xs ${ui.textMuted}`}>Caminho</span>
+            <input value={path1} onChange={e => setPath1(e.target.value)} placeholder="caminho 1" aria-label="Caminho 1" className={`${s.input} w-32`} />{counter(path1, 15)}
+            <input value={path2} onChange={e => setPath2(e.target.value)} placeholder="caminho 2" aria-label="Caminho 2" className={`${s.input} w-32`} />{counter(path2, 15)}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+/** O que falta para o anúncio poder ser criado. */
+function adMissing(titles: string[], descs: string[], url: string, path1: string, path2: string): string {
+  const ft = titles.filter(t => t.trim()), fd = descs.filter(t => t.trim());
+  const tooLong = titles.some(t => count(t) > 30) || descs.some(t => count(t) > 90) || count(path1) > 15 || count(path2) > 15;
+  return ft.length < 3 ? 'Faltam títulos: o anúncio precisa de pelo menos 3.' : fd.length < 2 ? 'Faltam descrições: o anúncio precisa de pelo menos 2.'
+    : new Set(ft.map(t => t.trim().toLowerCase())).size !== ft.length ? 'Há títulos repetidos.'
+    : !/^https:\/\//i.test(url.trim()) ? 'A página precisa começar com https://' : tooLong ? 'Há texto acima do limite de letras.' : '';
+}
+const pad = (list: string[], size: number) => [...list, ...Array(Math.max(0, size - list.length)).fill('')].slice(0, size);
+
 // ── Grupo novo, cópia de grupo e nome do grupo ───────────────────────────────
 
-export function GroupForm({ manage, ui, copyFrom, rename, onClose, onDone }: { manage: Manage; ui: Ui; copyFrom?: ManageGroup; rename?: ManageGroup; onClose: () => void; onDone: () => void }) {
+export function GroupForm({ manage, ui, productId, campaignName, copyFrom, rename, onClose, onDone }: { manage: Manage; ui: Ui; productId: string; campaignName?: string; copyFrom?: ManageGroup; rename?: ManageGroup; onClose: () => void; onDone: () => void }) {
   const s = styles(ui);
+  const fresh = !rename && !copyFrom;
   const [name, setName] = useState(rename ? rename.nome : copyFrom ? `${copyFrom.nome} (cópia)` : '');
   const [target, setTarget] = useState('');
   const [copy, setCopy] = useState(!!copyFrom);
@@ -113,15 +213,63 @@ export function GroupForm({ manage, ui, copyFrom, rename, onClose, onDone }: { m
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result>(null);
   const symbol = manage.currency === 'BRL' ? 'R$' : manage.currency === 'EUR' ? '€' : 'US$';
+  // Grupo novo: palavras-chave, anúncio e (opcional) sitelinks e frases de destaque do próprio grupo.
+  const [kwText, setKwText] = useState('');
+  const [plain, setPlain] = useState<Match>('PHRASE');
+  const [titles, setTitles] = useState<string[]>(pad([], 15));
+  const [descs, setDescs] = useState<string[]>(pad([], 4));
+  const [url, setUrl] = useState('');
+  const [path1, setPath1] = useState('');
+  const [path2, setPath2] = useState('');
+  const [assets, setAssets] = useState<AssetPick[]>([]);
+  const [linkDraft, setLinkDraft] = useState({ texto: '', desc1: '', desc2: '' });
+  const [calloutDraft, setCalloutDraft] = useState('');
+  const [note, setNote] = useState('');
+  const usual = useUsualAd(manage, productId, fresh);
+  useEffect(() => { if (usual && !url) { setUrl(usual.url); setPath1(p => p || usual.caminho1); setPath2(p => p || usual.caminho2); } }, [usual]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const keywords = parseKeywords(kwText, plain);
+  const kwProblem = keywords.map(k => keywordProblem(k.text)).find(Boolean);
+  const adGap = adMissing(titles, descs, url, path1, path2);
+  const linkCount = assets.filter(a => a.tipo === 'sitelink').length;
+  const missing = !name.trim() ? 'Dê um nome ao grupo.' : !fresh ? ''
+    : !keywords.length ? 'Inclua pelo menos uma palavra-chave.' : kwProblem ? `Palavra-chave ${kwProblem}.` : adGap ? `Anúncio: ${adGap}` : '';
+
+  const toggle = (kind: 'titulo' | 'descricao', text: string) => {
+    const [list, apply] = kind === 'titulo' ? [titles, setTitles] as const : [descs, setDescs] as const;
+    const next = toggleIn(list, text);
+    if (next) { apply(next); setNote(''); } else setNote(`Não há vaga livre para ${kind === 'titulo' ? 'outro título' : 'outra descrição'}: apague um antes.`);
+  };
+  const assetKey = (a: AssetPick) => `${a.tipo}|${a.texto.trim().toLowerCase()}`;
+  const isAssetOn = (a: AssetPick) => assets.some(x => assetKey(x) === assetKey(a));
+  const toggleAsset = (a: AssetPick) => setAssets(list => (list.some(x => assetKey(x) === assetKey(a)) ? list.filter(x => assetKey(x) !== assetKey(a)) : [...list, a]));
+  const linkOk = linkDraft.texto.trim() && count(linkDraft.texto) <= 25 && count(linkDraft.desc1) <= 35 && count(linkDraft.desc2) <= 35 && !!linkDraft.desc1.trim() === !!linkDraft.desc2.trim();
 
   const submit = async () => {
     setBusy(true); setResult(null);
+    const page = url.trim();
     const r = rename ? await manage.send('grupo_nome', { group_id: rename.id, name })
-      : await manage.send('grupo_novo', { name, target: Number(target.replace(',', '.')) || null, copy_from: copy && copyFrom ? copyFrom.id : null, paused });
+      : await manage.send('grupo_novo', {
+        name, target: Number(target.replace(',', '.')) || null, copy_from: copy && copyFrom ? copyFrom.id : null, paused,
+        ...(fresh ? {
+          keywords: keywords.map(k => ({ text: k.text, match: k.match })),
+          ad: { titulos: titles.filter(t => t.trim()), descricoes: descs.filter(t => t.trim()), url: page, caminho1: path1.trim(), caminho2: path2.trim() },
+          assets: assets.map(a => ({ ...a, url: page })),
+        } : {}),
+      });
     setBusy(false);
-    setResult({ ok: r.ok, text: r.ok ? `${rename ? 'Grupo renomeado' : 'Grupo criado'}: ${r.text}${!rename && copy ? '. As palavras-chave e os anúncios copiados aparecem nas abas na próxima coleta (até 1 hora).' : ''}` : r.text });
+    setResult({ ok: r.ok, text: r.ok ? `${rename ? 'Grupo renomeado' : 'Grupo criado'}: ${r.text}.${!rename && copy ? ' As palavras-chave e os anúncios copiados aparecem nas abas na próxima coleta (até 1 hora).' : ''}${fresh ? ' O Google ainda vai analisar o anúncio.' : ''}` : r.text });
     if (r.ok) { await manage.loadGroups(); onDone(); }
   };
+  const step = (n: number, title: string, hint?: string) => (
+    <div className={`flex flex-wrap items-baseline gap-2 border-t ${ui.borderCol} pt-3`}>
+      <span className="text-xs font-semibold text-brand-text">{n}.</span>
+      <span className={`text-[13px] font-semibold ${ui.textHead}`}>{title}</span>
+      {hint && <span className={`text-[11px] ${ui.textMuted}`}>{hint}</span>}
+    </div>
+  );
+  const counter = (text: string, max: number) => <span className={`text-[11px] tabular-nums w-10 text-right flex-shrink-0 ${count(text) > max ? 'text-neg font-medium' : ui.textMuted}`}>{count(text)}/{max}</span>;
+
   return (
     <Frame title={rename ? `Renomear o grupo ${rename.nome}` : copyFrom ? `Duplicar o grupo ${copyFrom.nome}` : 'Novo grupo de anúncios'} onClose={onClose} ui={ui}>
       <div className="flex flex-wrap gap-2">
@@ -135,11 +283,61 @@ export function GroupForm({ manage, ui, copyFrom, rename, onClose, onDone }: { m
           <label className="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={paused} onChange={e => setPaused(e.target.checked)} /> Criar pausado</label>
         </div>
       )}
-      {!rename && <div className={`text-[11px] ${ui.textMuted}`}>Meta em branco: {copyFrom ? `usa a do grupo copiado${copyFrom.meta_cpa ? ` (${symbol} ${copyFrom.meta_cpa.toFixed(2).replace('.', ',')})` : ', que segue a da campanha'}` : 'o grupo segue a meta da campanha'}. A meta do grupo só vale se a campanha também tiver meta de CPA.{!copyFrom ? ' Grupo novo nasce vazio: inclua palavras-chave e um anúncio depois.' : ''}</div>}
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={submit} disabled={busy || !name.trim()} className={s.solid}>{busy && <Loader2 size={13} className="animate-spin" />} {rename ? 'Renomear' : 'Criar grupo'}</button>
+      {!rename && <div className={`text-[11px] ${ui.textMuted}`}>Meta em branco: {copyFrom ? `usa a do grupo copiado${copyFrom.meta_cpa ? ` (${symbol} ${copyFrom.meta_cpa.toFixed(2).replace('.', ',')})` : ', que segue a da campanha'}` : 'o grupo segue a meta da campanha'}. A meta do grupo só vale se a campanha também tiver meta de CPA.</div>}
+
+      {fresh && (
+        <>
+          {step(1, 'Palavras-chave', 'obrigatório: pelo menos uma')}
+          <KeywordsField call={manage.call} productId={productId} ui={ui} cls={s} text={kwText} setText={setKwText} plain={plain} setPlain={setPlain} />
+
+          {step(2, 'Anúncio', 'obrigatório: 3 a 15 títulos e 2 a 4 descrições')}
+          <AiWriter call={manage.call} ui={ui} cls={s} campaignName={campaignName} url={url} keywords={[...new Set(keywords.map(k => k.text))]}
+            isOn={(kind, text) => (kind === 'titulo' ? titles : descs).some(t => t.trim().toLowerCase() === text.toLowerCase())}
+            onPick={toggle} onFill={(t, d) => { setTitles(fillEmpty(titles, t)); setDescs(fillEmpty(descs, d)); }}
+            assets="grupo" isAssetOn={isAssetOn} onToggleAsset={toggleAsset} />
+          {note && <div className="text-xs text-warn">{note}</div>}
+          <AdFields manage={manage} ui={ui} campaignName={campaignName} titles={titles} setTitles={setTitles} descs={descs} setDescs={setDescs}
+            url={url} setUrl={setUrl} path1={path1} setPath1={setPath1} path2={path2} setPath2={setPath2} onToggle={toggle} />
+
+          {step(3, 'Sitelinks e frases de destaque do grupo', 'opcional')}
+          {assets.length > 0 && (
+            <div>
+              {assets.map(a => (
+                <div key={assetKey(a)} className={`flex items-center justify-between gap-2 border-t ${ui.borderCol} py-1.5 text-[13px]`}>
+                  <span className={ui.textHead}><span className={`text-[11px] ${ui.textMuted}`}>{a.tipo === 'sitelink' ? 'Sitelink' : 'Frase de destaque'}:</span> {a.texto}{a.desc1 ? <span className={`text-xs ${ui.textMuted}`}> · {a.desc1} · {a.desc2}</span> : null}</span>
+                  <RowAction label="Tirar" danger onClick={() => toggleAsset(a)} />
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="grid lg:grid-cols-2 gap-x-6 gap-y-2">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2"><input value={linkDraft.texto} onChange={e => setLinkDraft({ ...linkDraft, texto: e.target.value })} placeholder="Texto do sitelink" aria-label="Texto do sitelink" className={`${s.input} flex-1 min-w-0`} />{counter(linkDraft.texto, 25)}</div>
+              <div className="flex items-center gap-2"><input value={linkDraft.desc1} onChange={e => setLinkDraft({ ...linkDraft, desc1: e.target.value })} placeholder="Linha 1 (opcional)" aria-label="Linha 1 do sitelink" className={`${s.input} flex-1 min-w-0`} />{counter(linkDraft.desc1, 35)}</div>
+              <div className="flex items-center gap-2"><input value={linkDraft.desc2} onChange={e => setLinkDraft({ ...linkDraft, desc2: e.target.value })} placeholder="Linha 2 (opcional)" aria-label="Linha 2 do sitelink" className={`${s.input} flex-1 min-w-0`} />{counter(linkDraft.desc2, 35)}</div>
+              <button type="button" disabled={!linkOk} onClick={() => { toggleAsset({ tipo: 'sitelink', texto: linkDraft.texto.trim(), desc1: linkDraft.desc1.trim(), desc2: linkDraft.desc2.trim() }); setLinkDraft({ texto: '', desc1: '', desc2: '' }); }} className={s.ghost}>+ Sitelink</button>
+            </div>
+            <div className="flex items-start gap-2">
+              <input value={calloutDraft} onChange={e => setCalloutDraft(e.target.value)} placeholder="Frase de destaque" aria-label="Frase de destaque" className={`${s.input} flex-1 min-w-0`} />{counter(calloutDraft, 25)}
+              <button type="button" disabled={!calloutDraft.trim() || count(calloutDraft) > 25} onClick={() => { toggleAsset({ tipo: 'destaque', texto: calloutDraft.trim(), desc1: '', desc2: '' }); setCalloutDraft(''); }} className={s.ghost}>+ Frase</button>
+            </div>
+          </div>
+          <SweepPicker api={manage.call} initial={tagOf(campaignName)} kinds="recursos" symbol={symbolOf(manage.currency)}
+            isOn={(kind, text) => assets.some(a => a.tipo === kind && a.texto.toLowerCase() === text.toLowerCase())}
+            onPick={(kind, item) => toggleAsset(kind === 'sitelink' ? { tipo: 'sitelink', texto: item.texto, desc1: item.desc1 || '', desc2: item.desc2 || '' } : { tipo: 'destaque', texto: item.texto, desc1: '', desc2: '' })} />
+          <div className={`text-[11px] ${ui.textMuted}`}>
+            Os sitelinks e as frases daqui ficam só neste grupo e abrem a página do anúncio. Quando o grupo tem os próprios, o Google mostra os do grupo no lugar dos da campanha.
+            {linkCount === 1 ? ' O Google só mostra sitelinks quando há pelo menos 2.' : ''} Sem nenhum aqui, o grupo usa os da campanha.
+          </div>
+        </>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 border-t pt-3 border-transparent">
+        <button onClick={submit} disabled={busy || !!missing} className={s.solid}>{busy && <Loader2 size={13} className="animate-spin" />} {rename ? 'Renomear' : fresh ? `Criar grupo com ${keywords.length} ${keywords.length === 1 ? 'palavra-chave' : 'palavras-chave'} e o anúncio` : 'Criar grupo'}</button>
         <button onClick={onClose} className={s.ghost}>{result?.ok ? 'Fechar' : 'Cancelar'}</button>
+        {missing && <span className="text-xs text-warn">{missing}</span>}
       </div>
+      {fresh && <div className={`text-[11px] ${ui.textMuted}`}>Vai tudo num pedido só ao Google: grupo, palavras-chave, anúncio{assets.length ? ', sitelinks e frases' : ''}. Se ele recusar qualquer parte, nada é criado e o motivo aparece aqui.</div>}
       <ResultLine result={result} />
     </Frame>
   );
@@ -205,7 +403,6 @@ const n = (v: number) => Math.round(v).toLocaleString('pt-BR');
  */
 export function AdForm({ manage, ui, productId, campaignName, mode, seed, adKey, onClose, onDone }: { manage: Manage; ui: Ui; productId: string; campaignName?: string; mode: 'novo' | 'copia' | 'editar'; seed?: AdSeed; adKey?: string; onClose: () => void; onDone: () => void }) {
   const s = styles(ui);
-  const pad = (list: string[], size: number) => [...list, ...Array(Math.max(0, size - list.length)).fill('')].slice(0, size);
   const [titles, setTitles] = useState<string[]>(pad(mode === 'novo' ? [] : seed?.titulos || [], 15));
   const [descs, setDescs] = useState<string[]>(pad(mode === 'novo' ? [] : seed?.descricoes || [], 4));
   const [url, setUrl] = useState(seed?.url || '');
@@ -224,6 +421,17 @@ export function AdForm({ manage, ui, productId, campaignName, mode, seed, adKey,
   const [aiError, setAiError] = useState('');
   const [used, setUsed] = useState<string[]>([]);
   useEffect(() => { if (!group && manage.groups[0]) setGroup(manage.groups[0].id); }, [group, manage.groups]);
+  const usual = useUsualAd(manage, productId, mode === 'novo');
+  // As palavras-chave ativas de cada grupo: a IA escreve para as do grupo escolhido.
+  const [kwByGroup, setKwByGroup] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    if (mode === 'editar') return;
+    manage.call(`/api/google-ads/manage?product_id=${productId}&ver=palavras`).then(({ ok, body }) => {
+      if (ok && Array.isArray(body.groups)) setKwByGroup(Object.fromEntries(body.groups.map((g: any) => [g.id, g.palavras.filter((p: any) => p.status === 'ENABLED').map((p: any) => String(p.texto))])));
+    });
+  }, [mode, productId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const groupKeywords = [...new Set(kwByGroup[group] || [])];
+  useEffect(() => { if (usual && !url) { setUrl(usual.url); setPath1(p => p || usual.caminho1); setPath2(p => p || usual.caminho2); } }, [usual]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!adKey) return;
     manage.call(`/api/google-ads/manage?product_id=${productId}&ver=anuncio&ad=${adKey}`).then(({ ok, body }) => {
@@ -238,10 +446,7 @@ export function AdForm({ manage, ui, productId, campaignName, mode, seed, adKey,
   }, [adKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filledTitles = titles.filter(t => t.trim()), filledDescs = descs.filter(t => t.trim());
-  const tooLong = titles.some(t => count(t) > 30) || descs.some(t => count(t) > 90) || count(path1) > 15 || count(path2) > 15;
-  const missing = filledTitles.length < 3 ? 'Faltam títulos: o anúncio precisa de pelo menos 3.' : filledDescs.length < 2 ? 'Faltam descrições: o anúncio precisa de pelo menos 2.' : !/^https:\/\//i.test(url.trim()) ? 'A página precisa começar com https://' : tooLong ? 'Há texto acima do limite de letras.' : '';
-  const set = (list: string[], apply: (l: string[]) => void, i: number, v: string) => apply(list.map((x, j) => (j === i ? v : x)));
-  const counter = (text: string, max: number) => <span className={`text-[11px] tabular-nums w-10 text-right flex-shrink-0 ${count(text) > max ? 'text-neg font-medium' : ui.textMuted}`}>{count(text)}/{max}</span>;
+  const missing = adMissing(titles, descs, url, path1, path2);
   const NOTE_TONE: Record<string, string> = { melhor: 'text-pos', bom: 'text-pos', baixo: 'text-neg' };
   const maxImp = stats ? Math.max(0, ...[...stats.values()].map(x => x.impressoes)) : 0;
   const stat = (text: string) => {
@@ -269,10 +474,9 @@ export function AdForm({ manage, ui, productId, campaignName, mode, seed, adKey,
   /** Põe o texto sugerido no lugar do atual, ou na primeira vaga livre. */
   const use = (tipo: 'titulo' | 'descricao', novo: string, atual?: string) => {
     const [list, apply] = tipo === 'titulo' ? [titles, setTitles] as const : [descs, setDescs] as const;
-    let at = atual ? list.findIndex(t => t.trim().toLowerCase() === atual.trim().toLowerCase()) : -1;
-    if (at < 0) at = list.findIndex(t => !t.trim());
-    if (at < 0) { setAiError(`Não há vaga livre para ${tipo === 'titulo' ? 'outro título' : 'outra descrição'}: apague um antes.`); return; }
-    apply(list.map((x, j) => (j === at ? novo : x)));
+    const next = placeIn(list, novo, atual);
+    if (!next) { setAiError(`Não há vaga livre para ${tipo === 'titulo' ? 'outro título' : 'outra descrição'}: apague um antes.`); return; }
+    apply(next);
     setUsed(u => [...u, novo]);
   };
   const addAsset = async (item: Advice['novos'][number]) => {
@@ -288,12 +492,10 @@ export function AdForm({ manage, ui, productId, campaignName, mode, seed, adKey,
     setResult({ ok: r.ok, text: r.ok ? `${mode === 'editar' ? 'Anúncio alterado' : `Anúncio criado${paused ? ', pausado' : ''}`}: ${r.text}. O Google ainda vai analisar o texto.` : r.text });
     if (r.ok) onDone();
   };
-  const freeSlot = (kind: PickKind) => !(kind === 'titulo' ? titles : descs).some(t => !t.trim());
-  const pickText = (kind: PickKind, text: string) => {
+  const pickText = (kind: 'titulo' | 'descricao', text: string) => {
     const [list, apply] = kind === 'titulo' ? [titles, setTitles] as const : [descs, setDescs] as const;
-    const at = list.findIndex(t => t.trim().toLowerCase() === text.toLowerCase());
-    if (at >= 0) apply(list.map((x, j) => (j === at ? '' : x)));     // já estava: clicar tira
-    else use(kind as 'titulo' | 'descricao', text);
+    const next = toggleIn(list, text);
+    if (next) apply(next); else setAiError(`Não há vaga livre para ${kind === 'titulo' ? 'outro título' : 'outra descrição'}: apague um antes.`);
   };
   const TYPE: Record<string, string> = { titulo: 'Título', descricao: 'Descrição', sitelink: 'Sitelink', destaque: 'Frase de destaque' };
   const useLink = (label: string, onClick: () => void, text: string) => (used.includes(text) ? <span className="text-xs text-pos whitespace-nowrap">feito</span> : <RowAction label={label} onClick={onClick} />);
@@ -337,40 +539,15 @@ export function AdForm({ manage, ui, productId, campaignName, mode, seed, adKey,
           )}
         </div>
       )}
-      <SweepPicker api={manage.call} initial={tagOf(campaignName)} kinds="textos" symbol={symbolOf(manage.currency)}
-        isOn={(kind, text) => (kind === 'titulo' ? titles : descs).some(t => t.trim().toLowerCase() === text.toLowerCase())}
-        full={freeSlot} onPick={(kind, item) => pickText(kind, item.texto)} />
-      <div className="grid lg:grid-cols-2 gap-x-6 gap-y-3">
-        <div className="space-y-1.5">
-          <div className={`text-xs font-medium ${ui.textHead}`}>Títulos ({filledTitles.length} de 15, mínimo 3)</div>
-          {titles.map((t, i) => (
-            <div key={i}>
-              <div className="flex items-center gap-2">
-                <input value={t} onChange={e => set(titles, setTitles, i, e.target.value)} placeholder={`Título ${i + 1}`} aria-label={`Título ${i + 1}`} className={`${s.input} flex-1 min-w-0`} />{counter(t, 30)}
-              </div>
-              {stat(t)}
-            </div>
-          ))}
-        </div>
-        <div className="space-y-1.5">
-          <div className={`text-xs font-medium ${ui.textHead}`}>Descrições ({filledDescs.length} de 4, mínimo 2)</div>
-          {descs.map((t, i) => (
-            <div key={i}>
-              <div className="flex items-start gap-2">
-                <textarea value={t} onChange={e => set(descs, setDescs, i, e.target.value)} rows={2} placeholder={`Descrição ${i + 1}`} aria-label={`Descrição ${i + 1}`} className={`${s.input} flex-1 min-w-0`} />{counter(t, 90)}
-              </div>
-              {stat(t)}
-            </div>
-          ))}
-          <div className={`text-xs font-medium pt-2 ${ui.textHead}`}>Página do anúncio</div>
-          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://… (com os parâmetros de rastreamento)" aria-label="Página do anúncio" className={`${s.input} w-full`} />
-          <div className="flex items-center gap-2">
-            <span className={`text-xs ${ui.textMuted}`}>Caminho</span>
-            <input value={path1} onChange={e => setPath1(e.target.value)} placeholder="caminho 1" aria-label="Caminho 1" className={`${s.input} w-32`} />{counter(path1, 15)}
-            <input value={path2} onChange={e => setPath2(e.target.value)} placeholder="caminho 2" aria-label="Caminho 2" className={`${s.input} w-32`} />{counter(path2, 15)}
-          </div>
-        </div>
-      </div>
+      {mode !== 'editar' && (
+        <AiWriter call={manage.call} ui={ui} cls={s} campaignName={campaignName} url={url} keywords={groupKeywords}
+          isOn={(kind, text) => (kind === 'titulo' ? titles : descs).some(t => t.trim().toLowerCase() === text.toLowerCase())}
+          onPick={pickText} onFill={(t, d) => { setTitles(fillEmpty(titles, t)); setDescs(fillEmpty(descs, d)); }}
+          assets="campanha" onAddAsset={async a => { const r = await manage.send('recurso_novo', { ...a, url: url.trim() }); return r.ok ? null : r.text; }} />
+      )}
+      {mode !== 'editar' && aiError && !adKey && <div className="text-xs text-warn">{aiError}</div>}
+      <AdFields manage={manage} ui={ui} campaignName={campaignName} titles={titles} setTitles={setTitles} descs={descs} setDescs={setDescs}
+        url={url} setUrl={setUrl} path1={path1} setPath1={setPath1} path2={path2} setPath2={setPath2} onToggle={pickText} stat={stat} />
       <div className="flex flex-wrap items-center gap-3">
         {mode !== 'editar' && <GroupSelect groups={manage.groups} value={group} onChange={setGroup} cls={`${s.input} max-w-[260px]`} />}
         {mode !== 'editar' && <label className={`inline-flex items-center gap-1.5 text-xs cursor-pointer ${ui.textHead}`}><input type="checkbox" checked={paused} onChange={e => setPaused(e.target.checked)} /> Criar pausado</label>}

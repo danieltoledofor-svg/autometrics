@@ -3,7 +3,7 @@ import { supabaseAdmin, getRequestUser } from '@/lib/googleAds/server';
 import { addUsage } from '@/lib/googleAds/sync';
 import { GoogleAdsError, search } from '@/lib/googleAds/client';
 import { campaignAccess, canEdit, setKeywordStatus } from '@/lib/googleAds/edit';
-import { addCampaignAsset, addKeywords, changeKeywordMatch, addLocation, createAd, createGroup, readAdDetail, readAds, readCampaignAssets, readLocations, readPagePlaces, checkPage, swapPage, Refused, removeCampaignAsset, removeLocation, renameGroup, setAdStatus, setGroupStatus, updateAd, type Match } from '@/lib/googleAds/manage';
+import { addCampaignAsset, addKeywords, changeKeywordMatch, addLocation, createAd, createGroup, readAdDetail, readAds, readCampaignAssets, readGroupKeywords, readLocations, readPagePlaces, checkPage, swapPage, Refused, removeCampaignAsset, removeLocation, renameGroup, setAdStatus, setGroupStatus, updateAd, type Match } from '@/lib/googleAds/manage';
 import { adviseAd } from '@/lib/googleAds/adAdvice';
 import { aiEnabled } from '@/lib/ai/openrouter';
 
@@ -16,6 +16,7 @@ export const maxDuration = 60;
  * GET  ?product_id=…&ver=grupos     os grupos de anúncios da campanha, como estão no Google agora
  * GET  ?product_id=…&ver=anuncios   os anúncios com o texto inteiro (para copiar)
  * GET  ?product_id=…&ver=locais     os locais incluídos e excluídos
+ * GET  ?product_id=…&ver=palavras   as palavras-chave de cada grupo, com cliques e conversões de 30 dias (para copiar num grupo novo)
  * GET  ?product_id=…&ver=anuncio&ad=grupo~anúncio   um anúncio com o que cada título e descrição rendeu em 30 dias
  * GET  ?product_id=…&ver=recursos   sitelinks e frases de destaque da campanha, com impressões e cliques
  * GET  ?product_id=…&ver=paginas[&testar=url]   cada anúncio e sitelink com a página dele (e se a página nova abre)
@@ -23,7 +24,10 @@ export const maxDuration = 60;
  *   palavra_nova     { group_id, texts[], match }          inclui palavras-chave num grupo (também a partir de um termo de pesquisa)
  *   palavra_status   { keyword: "grupo~palavra", status }  pausa ou reativa uma palavra-chave
  *   palavra_tipo     { keyword: "grupo~palavra", match }   troca exata / frase / ampla (cria a nova e retira a antiga, num pedido só)
- *   grupo_novo       { name, target?, copy_from?, paused? } cria um grupo; com copy_from leva palavras-chave e anúncios
+ *   grupo_novo       { name, target?, copy_from?, paused?, keywords?, ad?, assets? }
+ *                    cria um grupo; com copy_from leva palavras-chave e anúncios; sem copy_from, palavras-chave
+ *                    ([{ text, match }], pelo menos uma) e anúncio ({ titulos, descricoes, url, caminho1, caminho2 }) são
+ *                    obrigatórios, e assets ([{ tipo, texto, desc1, desc2, url }]) entram como sitelinks e frases do grupo
  *   grupo_status     { group_id, status }
  *   grupo_nome       { group_id, name }
  *   anuncio_novo     { group_id, titulos[], descricoes[], url, caminho1?, caminho2?, paused? }
@@ -65,6 +69,7 @@ export async function GET(request: Request) {
       await addUsage(r.calls).catch(() => {});
       return NextResponse.json({ allowed: true, places: r.places, aviso: r.aviso, pagina });
     }
+    if (what === 'palavras') { const r = await readGroupKeywords(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, groups: r.groups }); }
     if (what === 'locais') { const r = await readLocations(ctx, campaignId); await addUsage(r.calls).catch(() => {}); return NextResponse.json({ allowed: true, locations: r.locations }); }
     const rows = await search(ctx, `SELECT ad_group.id, ad_group.name, ad_group.status, ad_group.target_cpa_micros FROM ad_group WHERE campaign.id = ${Number(campaignId)} AND ad_group.status != 'REMOVED'`);
     await addUsage(1).catch(() => {});
@@ -119,9 +124,26 @@ export async function POST(request: Request) {
       kind = status === 'PAUSED' ? 'pausar_palavra' : 'ativar_palavra'; target = r.label; key = r.resource; calls = r.calls;
       await patch('keyword', String(body.keyword), { status });
     } else if (action === 'grupo_novo') {
-      const r = await createGroup(ctx, campaignId, { name: String(body.name || ''), target: Number(body.target) > 0 ? Number(body.target) : null, copyFrom: body.copy_from ? String(body.copy_from) : undefined, paused: body.paused === true });
-      target = `${r.label}${r.copied ? ` (cópia de ${r.copied}: ${r.keywords} palavras-chave, ${r.ads} ${r.ads === 1 ? 'anúncio' : 'anúncios'})` : ''}`; key = r.group_id || ''; calls = r.calls; extra = r;
-      if (r.group_id) await mirror([{ level: 'ad_group', entity_id: r.group_id, ad_group_id: r.group_id, name: r.label, status: body.paused === true ? 'PAUSED' : 'ENABLED', details: { type: 'SEARCH_STANDARD', target_cpa: r.target } }]);
+      const a = body.ad && typeof body.ad === 'object' ? body.ad : null;
+      const r = await createGroup(ctx, campaignId, {
+        name: String(body.name || ''), target: Number(body.target) > 0 ? Number(body.target) : null, copyFrom: body.copy_from ? String(body.copy_from) : undefined, paused: body.paused === true,
+        keywords: (Array.isArray(body.keywords) ? body.keywords : []).slice(0, 250).map((k: any) => ({ text: String(k?.text || ''), match: String(k?.match || 'PHRASE') as Match })),
+        ad: a ? { titulos: list(a.titulos, 20), descricoes: list(a.descricoes, 8), url: String(a.url || ''), caminho1: String(a.caminho1 || '').trim(), caminho2: String(a.caminho2 || '').trim() } : null,
+        assets: (Array.isArray(body.assets) ? body.assets : []).slice(0, 40).map((x: any) => ({ tipo: x?.tipo === 'destaque' ? 'destaque' as const : 'sitelink' as const, texto: String(x?.texto || ''), desc1: String(x?.desc1 || ''), desc2: String(x?.desc2 || ''), url: String(x?.url || '') })),
+      });
+      const parts = [`${r.keywords} ${r.keywords === 1 ? 'palavra-chave' : 'palavras-chave'}`, `${r.ads} ${r.ads === 1 ? 'anúncio' : 'anúncios'}`,
+        r.sitelinks ? `${r.sitelinks} ${r.sitelinks === 1 ? 'sitelink' : 'sitelinks'}` : '', r.callouts ? `${r.callouts} ${r.callouts === 1 ? 'frase de destaque' : 'frases de destaque'}` : ''].filter(Boolean).join(', ');
+      target = `${r.label} (${r.copied ? `cópia de ${r.copied}: ` : ''}${parts})`; key = r.group_id || ''; calls = r.calls;
+      extra = { group_id: r.group_id, keywords: r.keywords, ads: r.ads, sitelinks: r.sitelinks, callouts: r.callouts, copied: r.copied, target: r.target };
+      const st = body.paused === true ? 'PAUSED' : 'ENABLED';
+      if (r.group_id) await mirror([
+        { level: 'ad_group', entity_id: r.group_id, ad_group_id: r.group_id, name: r.label, status: st, details: { type: 'SEARCH_STANDARD', target_cpa: r.target } },
+        ...r.created_keywords.filter(k => k.key).map(k => ({ level: 'keyword', entity_id: k.key, ad_group_id: r.group_id!, name: k.text, status: 'ENABLED', details: { match_type: k.match } })),
+        ...(r.ad && a ? [{ level: 'ad', entity_id: r.ad, ad_group_id: r.group_id, name: r.titles[0], status: 'ENABLED', details: {
+          ad_id: r.ad.split('~')[1], type: 'RESPONSIVE_SEARCH_AD', ad_strength: 'PENDING', approval: 'UNDER_REVIEW', final_url: String(a.url || '').trim(),
+          path1: String(a.caminho1 || '').trim() || null, path2: String(a.caminho2 || '').trim() || null, headlines: r.titles.map(text => ({ text })), descriptions: r.descs.map(text => ({ text })),
+        } }] : []),
+      ]);
     } else if (action === 'grupo_status') {
       const r = await setGroupStatus(ctx, campaignId, String(body.group_id || ''), status);
       kind = status === 'PAUSED' ? 'pausar_grupo' : 'ativar_grupo'; target = r.label; key = String(body.group_id); calls = r.calls;

@@ -413,7 +413,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
 
   return (
     <div className="space-y-4">
-    {manage.allowed && form?.type === 'grupo' && <GroupForm key={`${form.copyFrom?.id || ''}${form.rename?.id || ''}`} manage={manage} ui={ui} copyFrom={form.copyFrom} rename={form.rename} onClose={() => setForm(null)} onDone={done} />}
+    {manage.allowed && form?.type === 'grupo' && <GroupForm key={`${form.copyFrom?.id || ''}${form.rename?.id || ''}`} manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} copyFrom={form.copyFrom} rename={form.rename} onClose={() => setForm(null)} onDone={done} />}
     {manage.allowed && form?.type === 'anuncio' && <AdForm key={`${form.mode}${form.adKey || ''}`} manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} mode={form.mode} seed={form.seed} adKey={form.adKey} onClose={() => setForm(null)} onDone={done} />}
     {manage.allowed && form?.type === 'recursos' && <AssetsBox manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} defaultUrl={blankAd()?.url || ''} onClose={() => setForm(null)} />}
     {manage.allowed && form?.type === 'pagina' && <PageSwapBox manage={manage} ui={ui} productId={productId} onClose={() => setForm(null)} onDone={done} />}
