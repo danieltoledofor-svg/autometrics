@@ -417,7 +417,7 @@ export function GoogleAdsEntitiesTab(props: Props) {
     {manage.allowed && form?.type === 'anuncio' && <AdForm key={`${form.mode}${form.adKey || ''}`} manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} mode={form.mode} seed={form.seed} adKey={form.adKey} onClose={() => setForm(null)} onDone={done} />}
     {manage.allowed && form?.type === 'recursos' && <AssetsBox manage={manage} ui={ui} productId={productId} campaignName={props.campaignName} defaultUrl={blankAd()?.url || ''} onClose={() => setForm(null)} />}
     {manage.allowed && form?.type === 'pagina' && <PageSwapBox manage={manage} ui={ui} productId={productId} onClose={() => setForm(null)} onDone={done} />}
-    {manage.allowed && form?.type === 'palavra' && <KeywordForm manage={manage} ui={ui} groupId={props.adGroupFilter || undefined} onClose={() => setForm(null)} onDone={done} />}
+    {manage.allowed && form?.type === 'palavra' && <KeywordForm manage={manage} ui={ui} productId={productId} groupId={props.adGroupFilter || undefined} onClose={() => setForm(null)} onDone={done} />}
     <ResultLine result={rowResult} />
     <DimensionTable
       tableId={level}

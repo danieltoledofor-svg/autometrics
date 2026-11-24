@@ -288,7 +288,7 @@ export function GroupForm({ manage, ui, productId, campaignName, copyFrom, renam
       {fresh && (
         <>
           {step(1, 'Palavras-chave', 'obrigatório: pelo menos uma')}
-          <KeywordsField call={manage.call} productId={productId} ui={ui} cls={s} text={kwText} setText={setKwText} plain={plain} setPlain={setPlain} />
+          <KeywordsField call={manage.call} productId={productId} ui={ui} cls={s} symbol={symbol} text={kwText} setText={setKwText} plain={plain} setPlain={setPlain} />
 
           {step(2, 'Anúncio', 'obrigatório: 3 a 15 títulos e 2 a 4 descrições')}
           <AiWriter call={manage.call} ui={ui} cls={s} campaignName={campaignName} url={url} keywords={[...new Set(keywords.map(k => k.text))]}
@@ -349,37 +349,55 @@ export function GroupForm({ manage, ui, productId, campaignName, copyFrom, renam
  * `list` e `onList` deixam a lista nas mãos de quem abriu o formulário: na aba de termos, cada clique em
  * "+ Palavra-chave" junta mais um termo à lista, e o pedido ao Google é um só.
  */
-export function KeywordForm({ manage, ui, initial, list, onList, groupId, onClose, onDone }: { manage: Manage; ui: Ui; initial?: string; list?: string; onList?: (text: string) => void; groupId?: string; onClose: () => void; onDone: () => void }) {
+export function KeywordForm({ manage, ui, productId, initial, list, onList, groupId, onClose, onDone }: { manage: Manage; ui: Ui; productId?: string; initial?: string; list?: string; onList?: (text: string) => void; groupId?: string; onClose: () => void; onDone: () => void }) {
   const s = styles(ui);
   const [own, setOwn] = useState(initial || '');
   const fromTerms = list !== undefined;
+  // Sem termo de pesquisa: as palavras podem ser escritas ou coladas de outro grupo, cada uma com o seu tipo.
+  const picker = !fromTerms && !initial && !!productId;
   const text = fromTerms ? list : own;
   const setText = (v: string) => (onList ? onList(v) : setOwn(v));
-  const [match, setMatch] = useState('PHRASE');
+  const [match, setMatch] = useState<Match>('PHRASE');
   const [group, setGroup] = useState(groupId || manage.groups.find(g => g.status === 'ENABLED')?.id || manage.groups[0]?.id || '');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result>(null);
   useEffect(() => { if (!group && manage.groups[0]) setGroup(manage.groups[0].id); }, [group, manage.groups]);
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const items = picker ? parseKeywords(text, match) : [];
+  const size = picker ? items.length : lines.length;
+  const problem = picker ? items.map(k => keywordProblem(k.text)).find(Boolean) : null;
+  const groupName = manage.groups.find(g => g.id === group)?.nome || '';
 
   const submit = async () => {
     setBusy(true); setResult(null);
-    const r = await manage.send('palavra_nova', { group_id: group, texts: lines, match });
+    const r = await manage.send('palavra_nova', picker ? { group_id: group, items } : { group_id: group, texts: lines, match });
     setBusy(false);
-    setResult({ ok: r.ok, text: r.ok ? `${lines.length > 1 ? 'Incluídas' : 'Incluída'}: ${r.text}${r.body.skipped ? `. ${r.body.skipped} já ${r.body.skipped === 1 ? 'estava' : 'estavam'} no grupo.` : ''}` : r.text });
+    setResult({ ok: r.ok, text: r.ok ? `${size > 1 ? 'Incluídas' : 'Incluída'}: ${r.text}${r.body.skipped ? `. ${r.body.skipped} já ${r.body.skipped === 1 ? 'estava' : 'estavam'} no grupo.` : ''}` : r.text });
     if (r.ok) { setText(''); onDone(); }
   };
   return (
     <Frame title={fromTerms ? `Incluir termos como palavras-chave${lines.length ? ` · ${lines.length} na lista` : ''}` : initial ? 'Incluir o termo como palavra-chave' : 'Novas palavras-chave'} onClose={onClose} ui={ui}>
-      <textarea value={text} onChange={e => setText(e.target.value)} rows={fromTerms ? Math.min(10, Math.max(2, text.split('\n').length)) : initial ? 1 : 3} placeholder="Uma palavra-chave por linha" aria-label="Palavras-chave novas" className={`${s.input} w-full font-mono`} />
+      {picker && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-xs font-medium ${ui.textHead}`}>Colar no grupo</span>
+          <GroupSelect groups={manage.groups} value={group} onChange={setGroup} cls={`${s.input} max-w-[300px]`} />
+        </div>
+      )}
+      {picker
+        ? <KeywordsField call={manage.call} productId={productId!} ui={ui} cls={s} symbol={symbolOf(manage.currency)} text={text} setText={setText} plain={match} setPlain={setMatch} targetGroup={group} />
+        : <textarea value={text} onChange={e => setText(e.target.value)} rows={fromTerms ? Math.min(10, Math.max(2, text.split('\n').length)) : initial ? 1 : 3} placeholder="Uma palavra-chave por linha" aria-label="Palavras-chave novas" className={`${s.input} w-full font-mono`} />}
+      {problem && <div className="text-xs text-neg">Palavra-chave {problem}.</div>}
       <div className="flex flex-wrap items-center gap-2">
-        <select value={match} onChange={e => setMatch(e.target.value)} aria-label="Tipo de correspondência" className={s.input}>
-          <option value="PHRASE">Frase: &quot;palavra&quot;</option><option value="EXACT">Exata: [palavra]</option><option value="BROAD">Ampla: palavra</option>
-        </select>
-        <GroupSelect groups={manage.groups} value={group} onChange={setGroup} cls={`${s.input} max-w-[260px]`} />
-        <button onClick={submit} disabled={busy || !lines.length || !group} className={s.solid}>{busy && <Loader2 size={13} className="animate-spin" />} Incluir {lines.length > 1 ? `${lines.length} palavras-chave` : 'palavra-chave'}</button>
+        {!picker && (
+          <select value={match} onChange={e => setMatch(e.target.value as Match)} aria-label="Tipo de correspondência" className={s.input}>
+            <option value="PHRASE">Frase: &quot;palavra&quot;</option><option value="EXACT">Exata: [palavra]</option><option value="BROAD">Ampla: palavra</option>
+          </select>
+        )}
+        {!picker && <GroupSelect groups={manage.groups} value={group} onChange={setGroup} cls={`${s.input} max-w-[260px]`} />}
+        <button onClick={submit} disabled={busy || !size || !group || !!problem} className={s.solid}>{busy && <Loader2 size={13} className="animate-spin" />} Incluir {size > 1 ? `${size} palavras-chave` : 'palavra-chave'}{picker && groupName ? ` no grupo ${groupName}` : ''}</button>
+        {picker && <button onClick={onClose} className={s.ghost}>{result?.ok ? 'Fechar' : 'Cancelar'}</button>}
       </div>
-      <div className={`text-[11px] ${ui.textMuted}`}>{fromTerms ? 'Clique em "+ Palavra-chave" em outros termos da tabela para juntar à lista, ou escreva uma por linha, e peça tudo de uma vez. ' : ''}Escreva só o texto, sem aspas nem colchetes: o tipo escolhido cuida disso. A palavra-chave entra ativa.</div>
+      <div className={`text-[11px] ${ui.textMuted}`}>{fromTerms ? 'Clique em "+ Palavra-chave" em outros termos da tabela para juntar à lista, ou escreva uma por linha, e peça tudo de uma vez. ' : ''}{picker ? 'As coladas de outro grupo entram com o mesmo tipo de lá. ' : 'Escreva só o texto, sem aspas nem colchetes: o tipo escolhido cuida disso. '}A palavra-chave entra ativa.</div>
       <ResultLine result={result} />
     </Frame>
   );

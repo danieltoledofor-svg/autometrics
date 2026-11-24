@@ -21,7 +21,8 @@ export const maxDuration = 60;
  * GET  ?product_id=…&ver=recursos   sitelinks e frases de destaque da campanha, com impressões e cliques
  * GET  ?product_id=…&ver=paginas[&testar=url]   cada anúncio e sitelink com a página dele (e se a página nova abre)
  * POST { product_id, action, … }
- *   palavra_nova     { group_id, texts[], match }          inclui palavras-chave num grupo (também a partir de um termo de pesquisa)
+ *   palavra_nova     { group_id, texts[], match } ou { group_id, items: [{ text, match }] }
+ *                    inclui palavras-chave num grupo (também a partir de um termo de pesquisa ou copiadas de outro grupo)
  *   palavra_status   { keyword: "grupo~palavra", status }  pausa ou reativa uma palavra-chave
  *   palavra_tipo     { keyword: "grupo~palavra", match }   troca exata / frase / ampla (cria a nova e retira a antiga, num pedido só)
  *   grupo_novo       { name, target?, copy_from?, paused?, keywords?, ad?, assets? }
@@ -110,7 +111,11 @@ export async function POST(request: Request) {
   try {
     if (action === 'palavra_nova') {
       const match = (['EXACT', 'PHRASE', 'BROAD'].includes(body.match) ? body.match : 'PHRASE') as Match;
-      const r = await addKeywords(ctx, campaignId, String(body.group_id || ''), list(body.texts, 60), match);
+      // `items` traz cada palavra com o seu tipo (cópia de outro grupo); `texts` usa o mesmo tipo para todas.
+      const items = Array.isArray(body.items)
+        ? body.items.slice(0, 250).map((k: any) => ({ text: String(k?.text || ''), match: (['EXACT', 'PHRASE', 'BROAD'].includes(k?.match) ? k.match : 'PHRASE') as Match }))
+        : list(body.texts, 200).map(text => ({ text, match }));
+      const r = await addKeywords(ctx, campaignId, String(body.group_id || ''), items);
       target = `${r.added.slice(0, 6).join(', ')}${r.added.length > 6 ? ` e mais ${r.added.length - 6}` : ''} (grupo ${r.group})`; calls = r.calls; extra = { added: r.added.length, skipped: r.skipped };
       await mirror(r.items.map(k => ({ level: 'keyword', entity_id: k.key, ad_group_id: k.key.split('~')[0], name: k.text, status: 'ENABLED', details: { match_type: k.match } })));
     } else if (action === 'palavra_tipo') {

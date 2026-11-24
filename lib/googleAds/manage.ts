@@ -44,28 +44,31 @@ async function groupOf(ctx: AdsContext, campaignId: string, groupId: string): Pr
   return { name: String(g.name || `Grupo ${groupId}`), resource: g.resourceName, status: g.status, target: money(g.targetCpaMicros) };
 }
 
-/** Inclui palavras-chave num grupo. Uma por linha; as que o grupo já tem ficam de fora. */
-export async function addKeywords(ctx: AdsContext, campaignId: string, groupId: string, texts: string[], match: Match) {
-  if (!MATCH.has(match)) throw new Error('Tipo de correspondência não reconhecido.');
-  const wanted = [...new Map(texts.map(clean).filter(Boolean).map(t => [t.toLowerCase(), t])).values()];
+/**
+ * Inclui palavras-chave num grupo, cada uma com o seu tipo (frase, exata, ampla): escritas, vindas de um termo de
+ * pesquisa ou copiadas de outro grupo. As que o grupo já tem, com o mesmo tipo, ficam de fora.
+ */
+export async function addKeywords(ctx: AdsContext, campaignId: string, groupId: string, items: { text: string; match: Match }[]) {
+  if (items.some(k => !MATCH.has(k.match))) throw new Error('Tipo de correspondência não reconhecido.');
+  const wanted = [...new Map(items.map(k => ({ text: clean(k.text), match: k.match })).filter(k => k.text).map(k => [`${k.text.toLowerCase()}|${k.match}`, k])).values()];
   if (!wanted.length) throw new Error('Escreva pelo menos uma palavra-chave.');
-  if (wanted.length > 50) throw new Error('No máximo 50 palavras-chave por vez.');
-  const bad = wanted.find(t => count(t) > 80 || t.split(' ').length > 10 || /[!@%^*()={};~`<>?\\|]/.test(t));
-  if (bad) throw new Error(`"${bad.slice(0, 40)}": a palavra-chave tem até 80 letras e 10 palavras, sem símbolos como ! @ % * ( ).`);
+  if (wanted.length > 200) throw new Error('No máximo 200 palavras-chave por vez.');
+  const bad = wanted.find(k => count(k.text) > 80 || k.text.split(' ').length > 10 || /[!@%^*()={};~`<>?\\|]/.test(k.text));
+  if (bad) throw new Error(`"${bad.text.slice(0, 40)}": a palavra-chave tem até 80 letras e 10 palavras, sem símbolos como ! @ % * ( ).`);
   const group = await groupOf(ctx, campaignId, groupId);
   const existing = await search(ctx, `
     SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type
     FROM ad_group_criterion
     WHERE ad_group.id = ${Number(groupId)} AND ad_group_criterion.type = 'KEYWORD' AND ad_group_criterion.negative = FALSE AND ad_group_criterion.status != 'REMOVED'`);
   const have = new Set(existing.map(r => `${String(r.adGroupCriterion?.keyword?.text || '').toLowerCase()}|${r.adGroupCriterion?.keyword?.matchType}`));
-  const fresh = wanted.filter(t => !have.has(`${t.toLowerCase()}|${match}`));
+  const fresh = wanted.filter(k => !have.has(`${k.text.toLowerCase()}|${k.match}`));
   if (!fresh.length) throw new Error(wanted.length === 1 ? 'Esta palavra-chave já está no grupo, com esse tipo de correspondência.' : 'Todas essas palavras-chave já estão no grupo.');
-  const operations = fresh.map(text => ({ create: { adGroup: group.resource, status: 'ENABLED', keyword: { text, matchType: match } } }));
+  const operations = fresh.map(k => ({ create: { adGroup: group.resource, status: 'ENABLED', keyword: { text: k.text, matchType: k.match } } }));
   await mutate(ctx, 'adGroupCriteria', operations, true);
   const done = await mutate(ctx, 'adGroupCriteria', operations, false);
   // "grupo~palavra" de cada uma, na ordem do pedido: é como a tela identifica a palavra-chave.
-  const items = fresh.map((text, i) => ({ text, match, key: String(done?.results?.[i]?.resourceName || '').split('/').pop() || '' })).filter(x => /^\d+~\d+$/.test(x.key));
-  return { added: fresh.map(t => keywordLabel(t, match)), items, skipped: wanted.length - fresh.length, group: group.name, calls: 4 };
+  const out = fresh.map((k, i) => ({ text: k.text, match: k.match, key: String(done?.results?.[i]?.resourceName || '').split('/').pop() || '' })).filter(x => /^\d+~\d+$/.test(x.key));
+  return { added: fresh.map(k => keywordLabel(k.text, k.match)), items: out, skipped: wanted.length - fresh.length, group: group.name, calls: 4 };
 }
 
 /**

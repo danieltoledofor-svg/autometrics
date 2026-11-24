@@ -47,100 +47,124 @@ export function keywordProblem(t: string): string | null {
   return sym ? `"${t.slice(0, 40)}" tem o símbolo ${sym[0]}, que o Google não aceita` : null;
 }
 
-// ── Palavras-chave do grupo novo ─────────────────────────────────────────────
+// ── Palavras-chave: escritas ou coladas de outros grupos ─────────────────────
 
 interface GroupKw { id: string; nome: string; status: string; palavras: { texto: string; tipo: Match; status: string; cliques: number; conversoes: number; custo: number }[] }
+interface SourceRow { k: Kw; grupos: string[]; rodando: boolean; cliques: number; conversoes: number; custo: number }
 
-export function KeywordsField({ call, productId, ui, cls, text, setText, plain, setPlain }: {
-  call: Call; productId: string; ui: Ui; cls: Cls; text: string; setText: (v: string) => void; plain: Match; setPlain: (m: Match) => void;
+/**
+ * As palavras-chave do grupo, numa lista de uma por linha. Em cima, as palavras dos outros grupos da campanha
+ * (aberto de cara), com o que cada uma fez em 30 dias: um clique cola a palavra na lista, outro tira.
+ * `targetGroup` é o grupo que vai receber (no "+ Palavra-chave"): as que ele já tem aparecem como "já está".
+ */
+export function KeywordsField({ call, productId, ui, cls, symbol, text, setText, plain, setPlain, targetGroup }: {
+  call: Call; productId: string; ui: Ui; cls: Cls; symbol: string; text: string; setText: (v: string) => void; plain: Match; setPlain: (m: Match) => void; targetGroup?: string;
 }) {
   const [groups, setGroups] = useState<GroupKw[] | null>(null);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [shown, setShown] = useState<string>('');
+  const [source, setSource] = useState('todos');
+  const [filter, setFilter] = useState<'rodando' | 'converteram' | 'todas'>('rodando');
   const list = useMemo(() => parseKeywords(text, plain), [text, plain]);
   const have = new Set(list.map(keyOf));
   const problem = list.map(k => keywordProblem(k.text)).find(Boolean);
 
-  const load = async () => {
-    setOpen(o => !o);
-    if (groups || loading) return;
-    setLoading(true); setError('');
-    const { ok, body } = await call(`/api/google-ads/manage?product_id=${productId}&ver=palavras`);
-    setLoading(false);
-    if (ok && body.groups) { setGroups(body.groups); setShown(body.groups[0]?.id || ''); } else setError(body.error || 'O Google não respondeu.');
-  };
-  /** Junta as palavras à lista (as que já estão ficam como estão). */
+  useEffect(() => {
+    call(`/api/google-ads/manage?product_id=${productId}&ver=palavras`).then(({ ok, body }) => {
+      if (ok && body.groups) setGroups(body.groups); else setError(body.error || 'O Google não respondeu.');
+    });
+  }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const inTarget = new Set((groups || []).filter(g => g.id === targetGroup).flatMap(g => g.palavras.map(p => keyOf({ text: p.texto, match: p.tipo }))));
+  const others = (groups || []).filter(g => g.id !== targetGroup && g.palavras.length);
+  const rows: SourceRow[] = useMemo(() => {
+    const merged = new Map<string, SourceRow>();
+    for (const g of others) {
+      if (source !== 'todos' && g.id !== source) continue;
+      for (const p of g.palavras) {
+        const k: Kw = { text: p.texto, match: p.tipo }, key = keyOf(k);
+        const r = merged.get(key) || { k, grupos: [], rodando: false, cliques: 0, conversoes: 0, custo: 0 };
+        r.grupos.push(g.nome); r.rodando = r.rodando || (p.status === 'ENABLED' && g.status === 'ENABLED');
+        r.cliques += p.cliques; r.conversoes += p.conversoes; r.custo += p.custo;
+        merged.set(key, r);
+      }
+    }
+    return [...merged.values()]
+      .filter(r => filter === 'todas' || (filter === 'rodando' ? r.rodando : r.conversoes > 0))
+      .sort((a, b) => b.conversoes - a.conversoes || b.cliques - a.cliques || a.k.text.localeCompare(b.k.text));
+  }, [groups, source, filter, targetGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Junta as palavras à lista (as que já estão, ou que o grupo já tem, ficam de fora). */
   const add = (items: Kw[]) => {
-    const fresh = items.filter(k => !have.has(keyOf(k)));
-    if (!fresh.length) return;
-    setText([text.trimEnd(), ...fresh.map(label)].filter(Boolean).join('\n'));
+    const fresh = items.filter(k => !have.has(keyOf(k)) && !inTarget.has(keyOf(k)));
+    if (fresh.length) setText([text.trimEnd(), ...fresh.map(label)].filter(Boolean).join('\n'));
   };
-  const remove = (k: Kw) => {
-    const lines = text.split('\n').filter(l => { const p = parseKeywords(l, plain)[0]; return !p || keyOf(p) !== keyOf(k); });
-    setText(lines.join('\n'));
-  };
-  const asKw = (p: GroupKw['palavras'][number]): Kw => ({ text: p.texto, match: p.tipo });
-  const g = groups?.find(x => x.id === shown);
+  const remove = (k: Kw) => setText(text.split('\n').filter(l => { const p = parseKeywords(l, plain)[0]; return !p || keyOf(p) !== keyOf(k); }).join('\n'));
+  const pending = rows.filter(r => !have.has(keyOf(r.k)) && !inTarget.has(keyOf(r.k)));
+  const money = (v: number) => `${symbol} ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const tag = (r: SourceRow) => r.conversoes > 0
+    ? <span className="rounded px-1.5 py-0.5 text-[11px] font-medium bg-pos/10 text-pos whitespace-nowrap">{(Math.round(r.conversoes * 10) / 10).toLocaleString('pt-BR')} conv.{r.custo > 0 ? ` · CPA ${money(r.custo / r.conversoes)}` : ''}</span>
+    : r.custo > 0 ? <span className="rounded px-1.5 py-0.5 text-[11px] font-medium bg-neg/10 text-neg whitespace-nowrap">gastou {money(r.custo)} sem conversão</span>
+    : <span className={`text-[11px] ${ui.textMuted} whitespace-nowrap`}>sem gasto</span>;
+  const chip = (on: boolean) => `px-2 py-1 rounded-md text-xs border ${on ? 'border-brand text-brand-text bg-brand/10 font-medium' : `${ui.borderCol} ${ui.textHead}`}`;
 
   return (
     <div className="space-y-2">
-      <textarea value={text} onChange={e => setText(e.target.value)} rows={Math.min(10, Math.max(3, text.split('\n').length + 1))}
-        placeholder={'Uma por linha. Ex.:\n"natural remedy for neuropathy"\n[neuropathy treatment]'} aria-label="Palavras-chave do grupo" className={`${cls.input} w-full font-mono`} />
+      <div className={`rounded-lg border ${ui.borderCol} p-3 space-y-2`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Copy size={14} className="text-brand-text" />
+          <span className={`text-[13px] font-semibold ${ui.textHead}`}>Copiar de outros grupos</span>
+          <span className={`text-[11px] ${ui.textMuted}`}>clique na palavra para colar (clique de novo para tirar) · números dos últimos 30 dias</span>
+        </div>
+        {error && <div className="text-xs text-neg">{error}</div>}
+        {!groups && !error && <div className={`text-xs ${ui.textMuted}`}><Loader2 size={12} className="inline animate-spin mr-1" /> lendo as palavras-chave dos grupos no Google…</div>}
+        {groups && !others.length && <div className={`text-xs ${ui.textMuted}`}>Nenhum outro grupo da campanha tem palavras-chave.</div>}
+        {groups && others.length > 0 && (
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={() => setSource('todos')} className={chip(source === 'todos')}>Todos os grupos</button>
+              {others.map(g => <button key={g.id} type="button" onClick={() => setSource(g.id)} className={chip(source === g.id)}>{g.nome}{g.status !== 'ENABLED' ? ' (pausado)' : ''} · {g.palavras.length}</button>)}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {([['rodando', 'Rodando agora'], ['converteram', 'Que converteram'], ['todas', 'Todas']] as const).map(([v, l]) => (
+                <button key={v} type="button" onClick={() => setFilter(v)} className={chip(filter === v)}>{l}</button>
+              ))}
+              <button type="button" disabled={!pending.length} onClick={() => add(pending.map(r => r.k))} className={`${cls.solid} ml-auto`}>Colar as {pending.length} mostradas</button>
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {!rows.length && <div className={`text-xs ${ui.textMuted} py-2`}>{filter === 'rodando' ? 'Nenhuma palavra ativa em grupo ativo aqui.' : filter === 'converteram' ? 'Nenhuma palavra converteu nos últimos 30 dias aqui.' : 'Nada aqui.'}</div>}
+              {rows.map(r => {
+                const key = keyOf(r.k), on = have.has(key), already = inTarget.has(key);
+                return (
+                  <button key={key} type="button" disabled={already} onClick={() => (on ? remove(r.k) : add([r.k]))}
+                    className={`w-full flex flex-wrap items-center justify-between gap-2 border-t ${ui.borderCol} py-1.5 px-1 text-left text-[13px] rounded ${on ? 'bg-brand/10' : 'hover:bg-surface-2'} disabled:opacity-50`}>
+                    <span className="min-w-0">
+                      <span className={`font-mono ${on ? 'text-brand-text font-medium' : ui.textHead}`}>{already ? '• ' : on ? '✓ ' : '+ '}{label(r.k)}</span>
+                      <span className={`ml-2 text-[11px] ${ui.textMuted}`}>{already ? 'já está no grupo' : `${r.grupos.join(', ')}${r.rodando ? '' : ' · pausada'}`}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      {tag(r)}
+                      <span className={`text-[11px] ${ui.textMuted} whitespace-nowrap`}>{r.cliques.toLocaleString('pt-BR')} cliques</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
-        <label className={`text-xs ${ui.textMuted} inline-flex items-center gap-1.5`}>Linha sem sinal entra como
+        <span className={`text-xs font-medium ${ui.textHead}`}>Vão entrar no grupo</span>
+        <span className={`text-xs ${list.length ? 'text-pos' : 'text-warn'}`}>{list.length ? `${list.length} ${list.length === 1 ? 'palavra-chave' : 'palavras-chave'}` : 'nenhuma ainda'}</span>
+        {list.length > 0 && <button type="button" onClick={() => setText('')} className="text-xs font-semibold text-warn hover:underline">Tirar todas</button>}
+        <label className={`ml-auto text-xs ${ui.textMuted} inline-flex items-center gap-1.5`}>Linha escrita sem sinal entra como
           <select value={plain} onChange={e => setPlain(e.target.value as Match)} aria-label="Tipo das linhas sem sinal" className={cls.input}>
             <option value="PHRASE">Frase</option><option value="EXACT">Exata</option><option value="BROAD">Ampla</option>
           </select>
         </label>
-        <button type="button" onClick={load} className={cls.ghost}>{loading ? <Loader2 size={13} className="animate-spin" /> : <Copy size={13} />} Copiar de outro grupo</button>
-        <span className={`text-xs ${list.length ? 'text-pos' : 'text-warn'}`}>{list.length ? `${list.length} ${list.length === 1 ? 'palavra-chave' : 'palavras-chave'}` : 'Nenhuma palavra-chave ainda: obrigatório.'}</span>
       </div>
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={Math.min(10, Math.max(3, text.split('\n').length + 1))}
+        placeholder={'Cole de outro grupo acima, ou escreva uma por linha:\n"frase entre aspas"\n[exata entre colchetes]'} aria-label="Palavras-chave do grupo" className={`${cls.input} w-full font-mono`} />
       {problem && <div className="text-xs text-neg">{problem}.</div>}
-      <div className={`text-[11px] ${ui.textMuted}`}>&quot;entre aspas&quot; = frase · [entre colchetes] = exata · sem sinal = o tipo escolhido ao lado.</div>
-      {open && (
-        <div className={`rounded-lg border ${ui.borderCol} p-3 space-y-2`}>
-          {error && <div className="text-xs text-neg">{error}</div>}
-          {loading && <div className={`text-xs ${ui.textMuted}`}><Loader2 size={12} className="inline animate-spin mr-1" /> lendo as palavras-chave dos grupos no Google…</div>}
-          {groups && !groups.length && <div className={`text-xs ${ui.textMuted}`}>Nenhum grupo da campanha tem palavras-chave.</div>}
-          {groups && groups.length > 0 && (
-            <>
-              <div className="flex flex-wrap gap-1.5">
-                {groups.map(x => (
-                  <button key={x.id} type="button" onClick={() => setShown(x.id)}
-                    className={`px-2 py-1 rounded-md text-xs border ${x.id === shown ? 'border-brand text-brand-text bg-brand/10' : `${ui.borderCol} ${ui.textHead}`}`}>
-                    {x.nome}{x.status !== 'ENABLED' ? ' (pausado)' : ''} · {x.palavras.length}
-                  </button>
-                ))}
-              </div>
-              {g && (
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" onClick={() => add(g.palavras.filter(p => p.status === 'ENABLED').map(asKw))} className={cls.solid}>Copiar as {g.palavras.filter(p => p.status === 'ENABLED').length} ativas</button>
-                    {g.palavras.some(p => p.conversoes > 0) && <button type="button" onClick={() => add(g.palavras.filter(p => p.conversoes > 0).map(asKw))} className={cls.ghost}>Só as que converteram ({g.palavras.filter(p => p.conversoes > 0).length})</button>}
-                    <span className={`text-[11px] ${ui.textMuted}`}>ou clique em cada uma · números dos últimos 30 dias</span>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {g.palavras.map(p => {
-                      const k = asKw(p), on = have.has(keyOf(k));
-                      return (
-                        <button key={keyOf(k)} type="button" onClick={() => (on ? remove(k) : add([k]))}
-                          className={`w-full flex flex-wrap items-center justify-between gap-2 border-t ${ui.borderCol} py-1.5 text-left text-[13px]`}>
-                          <span className={`font-mono ${on ? 'text-brand-text font-medium' : ui.textHead}`}>{on ? '✓ ' : '+ '}{label(k)}{p.status !== 'ENABLED' ? <span className={`ml-1.5 text-[11px] ${ui.textMuted}`}>(pausada)</span> : null}</span>
-                          <span className={`text-[11px] ${p.conversoes > 0 ? 'text-pos font-medium' : ui.textMuted}`}>
-                            {p.conversoes > 0 ? `${(Math.round(p.conversoes * 10) / 10).toLocaleString('pt-BR')} conv. · ` : ''}{p.cliques.toLocaleString('pt-BR')} cliques
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
