@@ -155,6 +155,9 @@ export function usesKeyword(text: string, keyword: string): boolean {
   return words.filter(w => have.has(w)).length >= Math.min(2, words.length);
 }
 
+/** Quanto de cada tipo tem de usar palavra-chave; abaixo disso, a IA reescreve só a diferença (resources.ts). */
+export const KEYWORD_TARGET = { titulos: 2 / 3, descricoes: 1, sitelinks: 0.7, destaques: 8 / 15 } as const;
+
 export function coverageOf(p: Pick<ResourcePack, 'titulos' | 'descricoes' | 'sitelinks' | 'destaques'>, keywords?: string[]): Coverage | null {
   const list = (keywords || []).filter(Boolean);
   if (!list.length) return null;
@@ -186,9 +189,9 @@ const KEYWORDS_RULE = `Palavras-chave da campanha (quando vierem no pedido, são
 - O anúncio aparece para quem busca essas palavras-chave, então o texto tem de responder a elas com as mesmas palavras. Escreva a palavra-chave quase igual (pode mudar plural, ordem ou completar a frase; nunca o sentido) e sem os sinais [ ] ou " ".
 - Pelo menos 2 de cada 3 títulos trazem uma palavra-chave. No campo "grupo" do título, escreva a palavra-chave que ele atende.
 - Toda descrição usa uma palavra-chave na primeira frase.
-- Cada sitelink responde a uma palavra-chave ou a um grupo delas: o texto do link ou as linhas de descrição trazem as palavras dela.
-- Pelo menos metade das frases de destaque usa palavras das palavras-chave.
-- Distribua por todas as palavras-chave, com mais peso nas primeiras; não fique só em uma. Palavra-chave que cita remédio pelo nome ou causa/"por quê" continua proibida no texto: use o assunto dela sem essas palavras.`;
+- Pelo menos 7 de cada 10 sitelinks trazem a palavra-chave escrita no texto do link ou numa das linhas de descrição (não basta falar do assunto: as palavras têm de estar lá). Os outros podem ter tema livre.
+- Pelo menos 8 de cada 15 frases de destaque trazem a palavra-chave ou duas palavras dela (ex.: "Baking Soda Shot Routine").
+- Distribua por todas as palavras-chave, com mais peso nas primeiras; não fique só em uma. Nunca escreva que o produto ou o método causa, provoca ou aumenta o problema (ex.: "triggers fat"): fale do que ele resolve. Palavra-chave que cita remédio pelo nome ou causa/"por quê" continua proibida no texto: use o assunto dela sem essas palavras.`;
 
 const OUTPUT = `Responda só com JSON, neste formato:
 {"titulos": [{"bloco": "nome do bloco", "grupo": "grupo de busca, se houver", "texto": "...", "pt": "..."}],

@@ -1,6 +1,6 @@
 import { askJson } from '@/lib/ai/openrouter';
 import { writingMemoryFor } from '@/lib/analysis/userMemory';
-import { coverageOf, extrasFor, review, systemFor, userForOffer, userForTop, type Funnel, type Item, type Offer, type ResourcePack, type Rewrite, type TopContext } from './rules';
+import { KEYWORD_TARGET, coverageOf, usesKeyword, extrasFor, review, systemFor, userForOffer, userForTop, type Funnel, type Item, type Offer, type ResourcePack, type Rewrite, type TopContext } from './rules';
 
 /**
  * A parte que chama a IA para escrever os recursos (só no servidor). As regras,
@@ -34,7 +34,48 @@ export async function generateResources(ids: { userId: string; productId?: strin
     for (const s of second.good.sitelinks) if (!themes.has(s.texto.texto.toLowerCase())) good.sitelinks.push(s);
     discarded = Math.max(0, first.bad.length - (second.good.titulos.length + second.good.descricoes.length + second.good.destaques.length + second.good.sitelinks.length));
   }
+  await fillKeywords(good, input.palavras || [], user, ask, f);
   return { funnel: f, ...good, descartados: discarded, cobertura: coverageOf(good, input.palavras) };
+}
+
+type Good = ReturnType<typeof review>['good'];
+
+/**
+ * Segunda passada, contada por código: se algum tipo ficou abaixo da meta de
+ * palavra-chave (KEYWORD_TARGET), pede à IA só a diferença, já com as
+ * palavras-chave, e troca os itens sem palavra-chave do fim da lista pelos novos
+ * que passarem na conferência e trouxerem mesmo a palavra-chave.
+ */
+async function fillKeywords(good: Good, keywords: string[], user: string, ask: (t: string) => Promise<any>, f: Funnel) {
+  const list = keywords.filter(Boolean);
+  if (!list.length) return;
+  const hit = (t: string) => list.some(k => usesKeyword(t, k));
+  const siteText = (x: Good['sitelinks'][number]) => `${x.texto.texto} ${x.desc1.texto} ${x.desc2.texto}`;
+  const kinds = [
+    { key: 'titulos' as const, nome: 'títulos', text: (x: any) => x.texto },
+    { key: 'descricoes' as const, nome: 'descrições', text: (x: any) => x.texto },
+    { key: 'sitelinks' as const, nome: 'sitelinks', text: siteText as (x: any) => string },
+    { key: 'destaques' as const, nome: 'frases de destaque', text: (x: any) => x.texto },
+  ];
+  const missing = kinds.map(k => {
+    const items: any[] = good[k.key];
+    const need = Math.ceil(items.length * KEYWORD_TARGET[k.key]) - items.filter(i => hit(k.text(i))).length;
+    return { ...k, need: Math.max(0, need) };
+  }).filter(k => k.need > 0);
+  if (!missing.length) return;
+  const ask2 = `${user}\n\nFALTOU PALAVRA-CHAVE. Escreva só estes itens novos, no mesmo formato de resposta e dentro dos limites; cada um traz uma palavra-chave da campanha escrita quase igual (pode mudar plural ou ordem), espalhando entre elas e sem repetir o que já existe:\n${missing.map(m => `- ${m.need + 2} ${m.nome}`).join('\n')}\nPalavras-chave: ${list.slice(0, 60).join(' · ')}`;
+  const extra = review(f, await ask(ask2).catch(() => ({}))).good;
+  for (const m of missing) {
+    const items: any[] = good[m.key];
+    const seen = new Set(items.map(i => m.text(i).toLowerCase()));
+    const fresh = (extra[m.key] as any[]).filter(i => hit(m.text(i)) && !seen.has(m.text(i).toLowerCase())).slice(0, m.need);
+    for (const n of fresh) {
+      let j = items.length - 1;
+      while (j >= 0 && hit(m.text(items[j]))) j--;
+      if (j < 0) break;
+      items[j] = n;
+    }
+  }
 }
 
 // ── Leitura da página do produto (fundo de funil) ───────────────────────────

@@ -432,7 +432,7 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
         )}
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={() => generate()} disabled={busy !== '' || (draft.funil === 'fundo' && !String(o.produto || '').trim())} className={solid}>{busy === 'recursos' ? <Loader2 size={13} aria-hidden="true" className="animate-spin" /> : <Sparkles size={13} aria-hidden="true" />} {pack ? 'Gerar de novo' : 'Gerar recursos'}</button>
-          {busy === 'recursos' && <span className={`text-xs ${muted}`}>A IA está escrevendo e as letras estão sendo conferidas; leva até um minuto.</span>}
+          {busy === 'recursos' && <span className={`text-xs ${muted}`}>A IA está escrevendo, as letras e as palavras-chave estão sendo conferidas; leva de um a dois minutos.</span>}
           {pack && busy === '' && <span className={`text-xs ${muted}`}>{pack.titulos.length} títulos, {pack.descricoes.length} descrições, {pack.sitelinks.length} sitelinks e {pack.destaques.length} frases{pack.descartados ? ` · ${pack.descartados} fora da regra foram descartados` : ''}</span>}
           {pack?.cobertura && busy === '' && <span className={`text-xs ${muted}`} title="Contado pelo Autometrics: o item traz a palavra-chave inteira ou duas das palavras dela.">Usam suas palavras-chave: {pack.cobertura.titulos[0]}/{pack.cobertura.titulos[1]} títulos · {pack.cobertura.descricoes[0]}/{pack.cobertura.descricoes[1]} descrições · {pack.cobertura.sitelinks[0]}/{pack.cobertura.sitelinks[1]} sitelinks · {pack.cobertura.destaques[0]}/{pack.cobertura.destaques[1]} frases</span>}
         </div>
