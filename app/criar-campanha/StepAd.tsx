@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { BookmarkPlus, Check, ChevronDown, ChevronRight, Loader2, Plus, ScanSearch, Sparkles, Trash2, Undo2, Wand2, X } from 'lucide-react';
-import { AD_MAX, adProblems, keywordProblem, type Draft } from '@/lib/campaignBuilder/draft';
+import { AD_MAX, VSL_MAX, adProblems, cleanVsl, keywordProblem, type Draft } from '@/lib/campaignBuilder/draft';
 import { LIMITS, TOP_ANGLES, VARIATIONS, count, problemOf, type Item, type Offer, type ResourceKind } from '@/lib/campaignBuilder/rules';
 import type { Similar, SimilarRow } from '@/lib/campaignBuilder/similar';
 import type { Sweep, SweepAd, SweepText } from '@/lib/campaignBuilder/sweep';
@@ -330,7 +330,16 @@ export function StepAd({ draft, setDraft, symbol, css, api, onNext }: {
           </>
         ) : (
           <>
-            <textarea value={draft.ia.vsl} onChange={e => setIa({ vsl: e.target.value })} rows={3} maxLength={20000} placeholder="Transcrição da VSL (opcional, mas é o que faz o anúncio falar a mesma língua do vídeo)" aria-label="Transcrição da VSL" className={`w-full resize-y ${field}`} />
+            <div>
+              <textarea value={draft.ia.vsl} onChange={e => setIa({ vsl: e.target.value.slice(0, VSL_MAX) })} onPaste={e => { const t = e.clipboardData.getData('text'); if (!/(^|\n)\s*\d{1,2}:\d{2}\s*(\n|$)/.test(t)) return; e.preventDefault(); const el = e.currentTarget; setIa({ vsl: cleanVsl(el.value.slice(0, el.selectionStart) + '\n' + t + '\n' + el.value.slice(el.selectionEnd)) }); }} rows={3} placeholder="Transcrição da VSL (opcional, mas é o que faz o anúncio falar a mesma língua do vídeo)" aria-label="Transcrição da VSL" className={`w-full resize-y ${field}`} />
+              <div className={`flex items-center justify-between gap-3 mt-1 text-xs ${muted}`}>
+                <label className="underline underline-offset-2 cursor-pointer hover:text-ink">
+                  Enviar arquivo .txt da transcrição
+                  <input type="file" accept=".txt,.srt,.vtt,text/plain" className="hidden" onChange={async e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setIa({ vsl: cleanVsl(await f.text()) }); }} />
+                </label>
+                <span>{draft.ia.vsl ? `${draft.ia.vsl.length.toLocaleString('pt-BR')} caracteres · a IA lê tudo` : 'As marcas de tempo (0:00) saem sozinhas.'}</span>
+              </div>
+            </div>
             <div>
               <div className={`${label} mb-1.5`}>Ângulos dos títulos</div>
               <div className="flex flex-wrap gap-1.5">

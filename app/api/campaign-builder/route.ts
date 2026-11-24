@@ -12,7 +12,7 @@ import { readPageSource } from '@/lib/campaignBuilder/pageSource';
 import { improveProblems } from '@/lib/campaignBuilder/explain';
 import { aiEnabled } from '@/lib/ai/openrouter';
 import { createCampaign } from '@/lib/campaignBuilder/create';
-import type { Draft } from '@/lib/campaignBuilder/draft';
+import { VSL_MAX, type Draft } from '@/lib/campaignBuilder/draft';
 import { duplicateCampaign, type DuplicateSettings } from '@/lib/campaignBuilder/duplicate';
 import { campaignHistory } from '@/lib/campaignBuilder/history';
 import type { Template } from '@/lib/campaignBuilder/template';
@@ -475,7 +475,7 @@ export async function POST(request: Request) {
         page_read: !!page,
         pack: await generateResources({ userId: user.id }, 'topo', {
           idioma: text(t.idioma, 40) || 'inglês', pais: text(t.pais, 60) || 'Estados Unidos', grupos: [],
-          palavras: list(t.palavras, 30), termos: list(t.termos, 40), pagina: page, vsl: text(t.vsl, 20000),
+          palavras: list(t.palavras, 30), termos: list(t.termos, 40), pagina: page, vsl: text(t.vsl, VSL_MAX),
           angulos: (Array.isArray(t.angulos) ? t.angulos : []).map(Number).filter((k: number) => TOP_ANGLES[k]).slice(0, 9),
           modelos: { copiar: (Array.isArray(m.copiar) ? m.copiar : []).slice(0, 6).map(model), evitar: (Array.isArray(m.evitar) ? m.evitar : []).slice(0, 4).map(model) },
         }, rewrite),

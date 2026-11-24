@@ -165,3 +165,14 @@ export function adProblems(d: Draft): string[] {
   return out;
 }
 export { LIMITS };
+
+/** Tamanho máximo da transcrição da VSL guardada e enviada à IA (uma VSL de ~1 hora cabe folgada). */
+export const VSL_MAX = 100_000;
+
+/** Limpa a transcrição copiada do YouTube ou de um .txt: tira as linhas que são só tempo ("12:34"), os ">>" de troca de fala e junta as quebras do meio da frase. */
+export function cleanVsl(raw: string): string {
+  const lines = String(raw || '').replace(/\r\n?/g, '\n').split('\n')
+    .map(l => l.replace(/^\s*>>\s*/, '').trim())
+    .filter(l => !/^\d{1,2}(:\d{2}){1,2}$/.test(l));
+  return lines.join(' ').replace(/[ \t]+/g, ' ').trim().slice(0, VSL_MAX);
+}

@@ -226,7 +226,7 @@ export function userForTop(c: TopContext): string {
     `PALAVRAS-CHAVE DA CAMPANHA:\n${(c.palavras || []).slice(0, 30).join(' · ') || '(não informadas)'}`,
     `TERMOS DE PESQUISA QUE MAIS CONVERTERAM EM CAMPANHAS PARECIDAS:\n${(c.termos || []).slice(0, 40).join(' · ') || '(sem histórico)'}`,
     `PÁGINA (código-fonte, separado em blocos: cabeçalho, dados declarados, texto, botões, imagens):\n${String(c.pagina || '(não enviada)').slice(0, 16000)}`,
-    `VSL (transcrição, começo):\n${String(c.vsl || '(não enviada)').slice(0, 9000)}`,
+    `VSL (transcrição completa):\n${String(c.vsl || '(não enviada)')}`,
     `ÂNGULOS PEDIDOS:\n${angles.join('\n')}`,
     models(c.modelos),
   ].filter(Boolean).join('\n\n');
